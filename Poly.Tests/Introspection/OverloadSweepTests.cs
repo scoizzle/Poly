@@ -114,9 +114,44 @@ public class OverloadSweepTests {
          "L-03c: every generated factory records the instance it created with the open action scope"),
     ];
 
+    /// <summary>
+    /// Entries whose error count depends on what the run has loaded, compared on their identities only. T-22a: the C# reader
+    /// unit <c>(Customer)(-c)</c> names a type <c>Customer</c> no assembly of the test project declares; the registry's bare-name
+    /// lookup resolves it to a class another test compiled and loaded earlier in the run (so <c>-c</c> is undefined, one error,
+    /// as in C#), and to nothing when the unit runs alone (no type, not judged, no error). The unit has no call site.
+    /// </summary>
+    private static readonly (string Key, string Why)[] RunDependentErrorCounts = [
+        ("csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #10",
+         "T-22a judges unary minus by the provider; 'Customer' resolves only when an earlier test loaded a type of that name"),
+    ];
+
+    private static string WithoutRunDependentErrorCount(string key, string body) =>
+        RunDependentErrorCounts.Any(r => r.Key == key)
+            ? string.Concat(body.Split('\n').Where(static l => l.Length > 0 && !l.StartsWith("  errors:", StringComparison.Ordinal)).Select(static l => l + "\n"))
+            : body;
+
+    /// <summary>
+    /// Identities of single-overload methods whose sites a slice adds, removes or moves: the filter hides both the presence
+    /// and the absence of these members, not only a move, in documents the baseline already has them
+    /// in (L-04b: every generated <c>Create</c> and <c>Create{Nav}</c> is a root-scope wrapper, so the
+    /// <c>Commit</c>, <c>Rollback</c> and <c>IsSuccess</c> sites of an action wrapper now appear in every entity's factory and
+    /// the first occurrence of those lines moves). Like <see cref="ExplainedAdditions"/> the lines are dropped before comparing,
+    /// from the run AND from the baseline, so every other line of every entry is still compared and a changed winner anywhere
+    /// else still fails. Pinned below.
+    /// </summary>
+    private static readonly (string Identity, string Why)[] ExplainedSites = [
+        ("Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)",
+         "L-04b: every generated factory is a root-scope wrapper that commits on success"),
+        ("Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)",
+         "L-04b: every generated factory is a root-scope wrapper that rolls back a failed or thrown create"),
+        ("Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()",
+         "L-04b: the factory wrapper reads the body's result"),
+    ];
+
     private static string WithoutExplainedAdditions(string body) =>
         string.Concat(body.Split('\n')
-            .Where(line => !ExplainedAdditions.Any(a => line == "  " + a.Identity))
+            .Where(line => !ExplainedAdditions.Any(a => line == "  " + a.Identity)
+                && !ExplainedSites.Any(a => line == "  " + a.Identity))
             .Select(line => line + "\n"))[..^1];
 
     private const string GoldenPrefix = "Poly.Tests/DomainModeling/Compile/EmitGolden/";
@@ -196,7 +231,13 @@ public class OverloadSweepTests {
         await Assert.That(run.Sum(static e => e.Body.Split('\n').Count(static l => l.StartsWith("  ", StringComparison.Ordinal) && !l.StartsWith("  errors:", StringComparison.Ordinal) && !l.StartsWith("  status:", StringComparison.Ordinal))))
             .IsGreaterThan(0).Because("a run that records no identity proves nothing");
 
-        var comparison = Compare(baseline, run);
+        // The explained sites also leave the baseline (after the deltas above, whose text they may sit in).
+        baseline = [.. baseline.Select(static e => (e.Key, WithoutExplainedAdditions(e.Body)))];
+        foreach (var (key, why) in RunDependentErrorCounts)
+            await Assert.That(baseline.Any(e => e.Key == key && e.Body.Split('\n').All(static l => l.Length == 0 || l.StartsWith("  errors:", StringComparison.Ordinal)))).IsTrue().Because(why);
+        var comparison = Compare(
+            [.. baseline.Select(static e => (e.Key, WithoutRunDependentErrorCount(e.Key, e.Body)))],
+            [.. run.Select(static e => (e.Key, WithoutRunDependentErrorCount(e.Key, e.Body)))]);
         if (comparison.Added.Count > 0)
             Console.WriteLine($"OverloadSweep: {comparison.Added.Count} entries not in the baseline (reported, not compared):\n  " + string.Join("\n  ", comparison.Added));
         await Assert.That(comparison.Missing).IsEmpty();
@@ -220,6 +261,20 @@ public class OverloadSweepTests {
         }
         await Assert.That(WithoutExplainedAdditions("  errors: 0\n  " + ExplainedAdditions[0].Identity + "\n  X.M(Int32)\n"))
             .IsEqualTo("  errors: 0\n  X.M(Int32)\n");
+    }
+
+    // Each explained site is a real identity of the run, of a method with one overload, so a line can only appear or move.
+    [Test]
+    public async Task ExplainedSites_AreSitesOfASingleOverloadMethod() {
+        var run = Run();
+        foreach (var (identity, why) in ExplainedSites) {
+            await Assert.That(run.Any(e => e.Body.Split('\n').Contains("  " + identity))).IsTrue().Because(why);
+            var open = identity.IndexOf('(', StringComparison.Ordinal);
+            var dot = identity.LastIndexOf('.', open);
+            var type = typeof(Poly.Runtime.ActionScope).Assembly.GetType(identity[..dot])!;
+            var overloads = type.GetMethods().Count(m => m.Name == identity[(dot + 1)..open]);
+            await Assert.That(overloads).IsEqualTo(1).Because(why);
+        }
     }
 
     [Test]

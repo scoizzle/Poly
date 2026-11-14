@@ -119,7 +119,7 @@ internal static class ConstraintCheckWriter {
     /// All constraint checks for one property. The style selects the order: create
     /// uses declaration order (required, then constraints, then enum); assign uses
     /// its historical category order (required, range, length, pattern, equality, enum).
-    /// <paramref name="nullableValue"/> is the create slot's optionality;
+    /// <paramref name="nullableValue"/> is the slot's optionality (create, or assign to an optional property);
     /// <paramref name="valueHasDefault"/> suppresses the create enum slot guard;
     /// <paramref name="includeRequired"/> is create's <c>!default</c> gate (assign
     /// always passes true).
@@ -139,9 +139,9 @@ internal static class ConstraintCheckWriter {
         var isNumber = IsNumber(prop);
         var isAssign = style.Presence == PresencePolicy.AssignValue;
 
-        // Create optional slot: value constraints only apply when a value was supplied.
+        // Optional slot (create, or assign to an optional property): value constraints only apply to a present value.
         Node? CreatePresence() =>
-            !isAssign && nullableValue ? new NotEqual(value, new Constant(null)) : null;
+            nullableValue ? new NotEqual(value, new Constant(null)) : null;
 
         if (includeRequired && RequiredApplies(entity, prop, domain, analysis)) {
             checks.Add(isText

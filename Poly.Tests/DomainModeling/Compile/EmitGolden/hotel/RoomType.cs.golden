@@ -20,6 +20,29 @@ internal class RoomType : Poly.Runtime.IActionScoped
     public long MaxOccupancy { get; private set; }
     internal static DomainResult<RoomType> Create(string name, decimal nightlyRate, long maxOccupancy)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = RoomType.__BodyOfCreate(name, nightlyRate, maxOccupancy);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<RoomType> __BodyOfCreate(string name, decimal nightlyRate, long maxOccupancy)
+    {
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "RoomType.Name"));

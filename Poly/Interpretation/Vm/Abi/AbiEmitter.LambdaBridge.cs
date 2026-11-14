@@ -424,7 +424,7 @@ public static partial class AbiEmitter {
         for (int i = 0; i < invokeParameters.Length; i++)
             parameters[i] = Parameter(invokeParameters[i].ParameterType, invokeParameters[i].Name);
         var argsArray = NewArrayInit(typeof(long),
-            parameters.Select(p => (Expression)Call(null, BoxToAbiInfo, ctx.HeapLocal, Convert(p, typeof(object)))));
+            parameters.Select(p => RingCodec.WriteAs(p, p.Type, ctx.HeapLocal)));
 
         // A forwarded parameter may hold a host delegate rather than a VM closure.
         // Dispatch on the target: only the host arm materializes the object array,
@@ -434,7 +434,7 @@ public static partial class AbiEmitter {
         Expression raw = Condition(
             TypeIs(targetLocal, typeof(object[])),
             Call(null, InvokeHeapClosureInfo, ctx.State, closureLocal, table, argsArray),
-            Call(null, InvokeHostDelegateInfo, targetLocal, hostArgsArray, ctx.HeapLocal));
+            Call(null, InvokeHostDelegateInfo, targetLocal, hostArgsArray, Constant(returnType, typeof(Type)), ctx.HeapLocal));
         Expression body;
         if (returnType == typeof(void)) {
             body = Block(raw, Empty());
@@ -1032,7 +1032,7 @@ public static partial class AbiEmitter {
     /// Invoke a host delegate reached through a bridged parameter: a forwarded
     /// parameter may hold a real CLR delegate rather than a VM closure.
     /// </summary>
-    private static long InvokeHostDelegate(object? target, object?[] args, VmManagedObjectHeap heap) {
+    private static long InvokeHostDelegate(object? target, object?[] args, Type returnType, VmManagedObjectHeap heap) {
         if (target is null)
             throw new InvalidOperationException("VM: invoke of null.");
         if (target is not Delegate hostDelegate)
@@ -1046,7 +1046,7 @@ public static partial class AbiEmitter {
             ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
             throw;
         }
-        return RingCodec.ToRing(result, heap);
+        return LocalType.Write(result, returnType, heap);
     }
 
     private static readonly MethodInfo InvokeHostDelegateInfo =

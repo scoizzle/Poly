@@ -16,10 +16,16 @@ internal readonly record struct ExprType(ITypeDefinition? Definition, bool Optio
     public bool IsResolved => Definition is not null;
 
     /// <summary>
-    /// The type of the literal <c>null</c>: no definition, optional. Compatible with Text and Guid only
-    /// (the analyzer's rule today); T-06 replaces it with the real null rule.
+    /// The type of the literal <c>null</c>: no definition, optional. It assigns only into an optional target, and it
+    /// compares with an optional operand or with a Text, Guid, entity, value-type or Binary operand.
     /// </summary>
     public static ExprType NullLiteral => new(null, Optional: true, null);
 
     public bool IsNullLiteral => Definition is null && Optional;
+
+    /// <summary>
+    /// This type, marked as possibly absent when <paramref name="optional"/> is true. Only a resolved type takes the
+    /// mark: an unresolved type that did would read as <see cref="NullLiteral"/>.
+    /// </summary>
+    public ExprType AsOptional(bool optional = true) => optional && IsResolved ? this with { Optional = true } : this;
 }

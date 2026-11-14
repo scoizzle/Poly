@@ -6,10 +6,11 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// What the .NET platform leaves to its compiler: the conversions and operators C# defines for the simple types and
 /// string, which the CLR types declare no member for (C# standard v7 §10.2.3, §10.3.2, §10.2.8–9, §12.4.7, §12.9–§12.14),
 /// and the native-sized integers <c>nint</c> and <c>nuint</c> as C# 11 defines them (their IntPtr/UIntPtr members stand
-/// down: <see cref="IsNativeInteger"/>). The only source of the interface's built-in conversion and operator answers.
-/// Decimal's conversions and operators are CLR-declared members and are not repeated here, except a native integer's
-/// conversion to and from decimal, which the CLR does not declare. Deliberately none: enum, lifted, reference-equality,
-/// delegate and object operators.
+/// down: <see cref="IsNativeInteger"/>), and C#'s reference and delegate equality (<see cref="ReferenceEquality"/>). The only source of
+/// the interface's built-in conversion and operator answers. Decimal's conversions and operators are CLR-declared members
+/// and are not repeated here, except a native integer's conversion to and from decimal, which the CLR does not declare.
+/// Deliberately none: enum and lifted operators. One named, permanent Poly policy widens C# here (C# rejects,
+/// Poly defines), beside Text + X concatenation: <see cref="IsPolicyShiftCount"/>.
 /// </summary>
 internal static class ClrBuiltInRules {
     /// <summary>
@@ -62,6 +63,62 @@ internal static class ClrBuiltInRules {
     private static bool IsNumeric(PrimitiveType type) => ImplicitNumeric.ContainsKey(type);
 
     private static bool IsIntegral(PrimitiveType type) => type is P.Int32 or P.UInt32 or P.Int64 or P.UInt64 or P.NInt or P.NUInt;
+
+    /// <summary>
+    /// Poly policy, permanent (owner ruling, #677, 2026-11-13; C# rejects, Poly defines): a shift count may be any built-in
+    /// integer type. C# (§12.11) defines a shift only for a count that converts implicitly to <c>int</c>; this names the
+    /// others, <c>long</c>, <c>uint</c>, <c>ulong</c>, <c>nint</c> and <c>nuint</c>. Their operator takes the count as its
+    /// own type and its result is the left operand's as for an <c>int</c> count. The count is converted to <c>int</c>
+    /// unchecked, then masked by the shift: 5 bits for a 32-bit left operand, 6 for a 64-bit one. The lowered tree states the
+    /// conversion as a cast.
+    /// </summary>
+    public static bool IsPolicyShiftCount(PrimitiveType type) => type is P.Int64 or P.UInt32 or P.UInt64 or P.NInt or P.NUInt;
+
+    /// <summary>
+    /// C# 12.12.7, reference type equality: <c>bool ==(object, object)</c> and <c>!=</c>, declared by <c>object</c>, when both
+    /// operands are reference types and a reference conversion exists between them in either direction: an identity or
+    /// implicit one (a base class, an implemented interface, array covariance, <c>object</c>), or an explicit one through an
+    /// interface (an interface beside another interface or beside a class that is not sealed). Two unrelated classes have
+    /// none. A value-type operand never has it (C# boxes no value for reference equality); the null literal is the caller's.
+    /// Overload resolution prefers a type's own equality: <c>string == string</c> stays <c>String.op_Equality</c>.
+    /// Two delegate operands are C# 12.12.9 instead, as Roslyn binds it: one delegate type <c>D</c> on both sides has
+    /// <c>bool ==(D, D)</c>, declared by <c>D</c>, which compares invocation lists; two different delegate types have none
+    /// (CS0019). A delegate beside <c>object</c> or <c>System.Delegate</c> is reference equality.
+    /// </summary>
+    public static DeclaredOperator? ReferenceEquality(ClrTypeDefinition owner, ITypeDefinition? other, ClrTypeDefinitionRegistry provider, OperatorKind kind) {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(provider);
+        if (kind is not (OperatorKind.Equal or OperatorKind.NotEqual))
+            return null;
+        var left = owner.RuntimeType;
+        var right = other is null ? left : other is ClrTypeDefinition clr ? clr.RuntimeType : null;
+        if (right is null || !IsReference(left) || !IsReference(right))
+            return null;
+        if (IsDelegateType(left) && IsDelegateType(right)) {
+            if (left != right)
+                return null;
+            return new DeclaredOperator(
+                new ClrIntrinsicOperator(kind, owner, provider.GetTypeDefinition(typeof(bool)), [owner, owner]),
+                PlatformApplied: true);
+        }
+        if (!ReferenceConversionExists(left, right))
+            return null;
+        var objectDefinition = provider.GetTypeDefinition(typeof(object));
+        return new DeclaredOperator(
+            new ClrIntrinsicOperator(kind, objectDefinition, provider.GetTypeDefinition(typeof(bool)), [objectDefinition, objectDefinition]),
+            PlatformApplied: true);
+    }
+
+    private static bool IsReference(Type type) =>
+        !type.IsValueType && !type.IsPointer && !type.IsByRef && !type.IsGenericParameter;
+
+    /// <summary>A delegate type (<c>Action</c>, <c>Func&lt;T&gt;</c>, …), not <c>System.Delegate</c> or <c>MulticastDelegate</c> themselves.</summary>
+    private static bool IsDelegateType(Type type) => type.IsSubclassOf(typeof(MulticastDelegate));
+
+    private static bool ReferenceConversionExists(Type left, Type right) =>
+        left.IsAssignableFrom(right) || right.IsAssignableFrom(left)
+        || (left.IsInterface && (right.IsInterface || !right.IsSealed))
+        || (right.IsInterface && !left.IsSealed);
 
     /// <summary>
     /// Numeric promotion over the thirteen non-decimal numeric types: the type both operands convert to, or null when
@@ -153,9 +210,13 @@ internal static class ClrBuiltInRules {
                     yield return (bitwise, [bitwise, bitwise], bitwise);
                 break;
             case OperatorKind.ShiftLeft or OperatorKind.ShiftRight:
-                // §12.11: the count converts implicitly to int; GetOperator checks it like any operand.
-                if (IsIntegral(own))
+                // §12.11: the count converts implicitly to int; GetOperator checks it like any operand. A wider integer
+                // count is Poly's policy (IsPolicyShiftCount): the operator takes it as it is.
+                if (IsIntegral(own)) {
                     yield return (own, [own, P.Int32], own);
+                    if (other is { } count && IsPolicyShiftCount(count))
+                        yield return (own, [own, count], own);
+                }
                 break;
             case OperatorKind.UnaryPlus:
                 yield return (own, [own], own);

@@ -31,10 +31,41 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// <summary>An operand compared with an optional property is stamped <see cref="CheckSite.OptionalOperand"/> (#484: no door compares an optional).</summary>
     private void StampOperand(
         AnalysisContext context, DomainExpression operand, DomainExpression other,
-        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) =>
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        var otherType = InferType(context, other, props, parameters, enumTypes);
         StampSite(context, operand,
-            IsOptionalProperty(context, other, props) ? CheckSite.OptionalOperand : CheckSite.Operand,
-            SiteTypeName(InferType(context, other, props, parameters, enumTypes)));
+            OptionalOperand(context, other, otherType, props, parameters) ? CheckSite.OptionalOperand : CheckSite.Operand,
+            SiteTypeName(otherType));
+    }
+
+    /// <summary>
+    /// The one optionality question of the temporal rules. A direct read is optional as its inferred type says
+    /// (<see cref="ExprType.Optional"/>). A path or binder read (<c>part Gap</c>, <c>line Due</c>) is optional only when the
+    /// member it reaches is DECLARED optional: through a to-one link <c>Optional</c> also marks a required member so that
+    /// <c>== null</c> stays accepted, and such a read cannot be absent at run time.
+    /// </summary>
+    private static bool OptionalOperand(
+        AnalysisContext context, DomainExpression expr, ExprType type,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters) {
+        if (expr is not RelationshipNavigation navigation)
+            return type.Optional;
+        var target = NavigationRoot(context, navigation.RelationshipName, props, parameters);
+        var hop = navigation.TargetProperty;
+        while (EntityNamed(context, target) is { } current) {
+            switch (hop) {
+                case PropertyAccess leaf:
+                    return current.Properties.FirstOrDefault(p => string.Equals(p.Name, leaf.Name, StringComparison.Ordinal))
+                        is { } declared && !EntityStructureAnalyzer.IsRequired(declared);
+                case RelationshipNavigation next:
+                    target = ToOneTarget(current, next.RelationshipName);
+                    hop = next.TargetProperty;
+                    continue;
+                default:
+                    return false;
+            }
+        }
+        return false;
+    }
 
     private static bool IsLeaf(DomainExpression expr) => !expr.Children.OfType<DomainExpression>().Any();
 
@@ -48,7 +79,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             props, parameters, enumTypes,
             Site: stamp?.Site ?? CheckSite.Default,
             SiteTypeName: stamp?.TypeName,
-            IsOptional: name => IsOptionalProperty(context, DomainExpression.Property(name), props));
+            IsOptional: name => IsOptionalProperty(name, props));
     }
 
     /// <summary>
@@ -57,7 +88,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// </summary>
     private bool CheckTemporalOffset(
         AnalysisContext context, DomainExpression node, DomainExpression left, ExprType leftType,
-        ExprType rightType, Dictionary<string, string> props) {
+        ExprType rightType, Dictionary<string, string> props, Dictionary<string, string>? parameters) {
         if (!IsDate(leftType))
             return false;
         if (Family(rightType) is TypeFamily.Duration) {
@@ -68,7 +99,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
         if (!IsNumeric(rightType))
             return false;
-        if (IsOptionalProperty(context, left, props))
+        if (OptionalOperand(context, left, leftType, props, parameters))
             Report(context, node, OptionalDateMessage(left));
         else if (IsRefusedCount(rightType))
             Report(context, node,
@@ -89,10 +120,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     /// <summary>R3 (#648): the operands of a date difference may not be optional; neither door computes with an unset date.</summary>
     private void CheckDateDifferenceOperands(
-        AnalysisContext context, Subtract difference, Dictionary<string, string> props) {
-        if (IsOptionalProperty(context, difference.Left, props))
+        AnalysisContext context, Subtract difference, ExprType leftType, ExprType rightType,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters) {
+        if (OptionalOperand(context, difference.Left, leftType, props, parameters))
             Report(context, difference, OptionalDateMessage(difference.Left));
-        if (IsOptionalProperty(context, difference.Right, props))
+        if (OptionalOperand(context, difference.Right, rightType, props, parameters))
             Report(context, difference, OptionalDateMessage(difference.Right));
     }
 

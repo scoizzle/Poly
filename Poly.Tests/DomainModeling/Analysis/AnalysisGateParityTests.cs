@@ -208,6 +208,32 @@ public class AnalysisGateParityTests {
         await Assert.That(result.Holds).IsTrue().Because($"{shape}: {result}");
     }
 
+    /// <summary>
+    /// The optional-operand row above, evaluated (T-06a): <c>Opt &gt; A</c> is the lifted comparison, false when Opt is
+    /// absent and the ordering's answer when it is present, on the simulator and on the generated C#.
+    /// </summary>
+    [Test]
+    [Arguments(null, "False")]
+    [Arguments(5L, "True")]
+    [Arguments(0L, "False")]
+    public async Task Ordering_OfAnOptionalOperand_IsFalseWhenAbsent_OnBothHosts(long? opt, string answer) {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain T
+            OptOrderItem: entity {
+              A: Number
+              Opt: Number optional
+              P: policy { Opt > A }
+            }
+            """, "OrderingOptionalOperand").AssertAgree(side => {
+            if (opt is { } present)
+                side.Create("OptOrderItem", ("A", 1L), ("Opt", present));
+            else
+                side.Create("OptOrderItem", ("A", 1L));
+            side.EvaluatePolicy("P");
+        });
+        await Assert.That(outcomes[^1].State["P"]).IsEqualTo(answer);
+    }
+
     private const string ValueEqualityDomain = """
         domain T
         Money: value {
@@ -273,6 +299,8 @@ public class AnalysisGateParityTests {
     /// <c>ModuleInstanceExecutor.Coercion</c>) and compares it with <c>object.Equals</c> (<c>AbiEmitter.Expressions</c>), so
     /// two equal values written with the fields in another order, or <c>2</c> against <c>2.0</c> for a Decimal field, are
     /// unequal there and equal on the generated C#. Whitespace is not a difference (the surface re-serialises compactly).
+    /// A .NET caller that passes equal values as dictionaries to <c>ModuleInstanceExecutor.Invoke</c> gets them unequal on
+    /// the simulator too.
     /// </summary>
     [Test]
     [Arguments("EqP", """{"a":{"X":1,"Y":2},"b":{"X":1,"Y":2}}""", """{"a":{"X":1,"Y":2},"b":{"Y":2,"X":1}}""")]
@@ -501,6 +529,47 @@ public class AnalysisGateParityTests {
 
         await Assert.That(outcomes[^1].Success).IsTrue();
         await Assert.That(outcomes[^1].State["Elapsed"]).IsEqualTo(TimeSpan.FromDays(4).ToString());
+    }
+
+    /// <summary>
+    /// T-06a's <c>ExprType.Optional</c> closes the path-read gap: a bare duration compared with an optional Duration reached
+    /// through a to-one link is refused (#484), while the same read of a REQUIRED member runs on every door and stays accepted
+    /// (a to-one read is "optional" in analysis only so that <c>== null</c> is accepted; it cannot be absent at run time).
+    /// </summary>
+    [Test]
+    [Arguments("a required Duration through a to-one link", "Go: policy { advisor Len > 1 Hours }", "")]
+    [Arguments("an optional Duration through a to-one link", "Go: policy { advisor Gap > 1 Hours }", "#484")]
+    [Arguments("the duration on the left", "Go: policy { 1 Hours < advisor Gap }", "#484")]
+    [Arguments("a Date offset read through a link", "Go: action { assign OutD to advisor Due + 3 Days }", "F-11")]
+    public async Task OptionalDurationThroughALink_IsRefused_RequiredOneRuns(string row, string members, string refusal) {
+        var dsl = $$"""
+            domain T
+            uses temporal
+            Person: entity {
+              Due: Date
+              Len: Duration
+              Gap: Duration optional
+            }
+            Job: entity {
+              advisor: Person
+              OutD: Date optional
+              {{members}}
+            }
+            """;
+        const string person = """{"Due":"2026-01-01","Len":"01:00:00","Gap":"02:00:00"}""";
+        SimStep[] steps = [
+            SimStep.Create("Person", person, "p"), SimStep.Create("Job", null, "j"), SimStep.Link("j", "advisor", "p"),
+            members.Contains("policy", StringComparison.Ordinal) ? SimStep.Evaluate("Job", "Go", "j") : SimStep.Invoke("j", "Go"),
+        ];
+        var result = GateParity.Check(dsl, steps);
+
+        if (refusal.Length == 0) {
+            await Assert.That(result.Analysis).IsTrue().Because($"{row}: {result}");
+            await Assert.That(result.Holds).IsTrue().Because($"{row}: {result}");
+            return;
+        }
+        await Assert.That(result.Analysis).IsFalse().Because($"{row}: {result}");
+        await Assert.That(result.AnalysisSummary).Contains(refusal).Because($"{row}: {result}");
     }
 
     /// <summary>R6: the earlier date on the left is a negative difference, the same on both hosts.</summary>

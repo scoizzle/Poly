@@ -22,6 +22,30 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Fine> CreateFines(long amount, string reason)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateFines(amount, reason);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Fine> __BodyOfCreateFines(long amount, string reason)
+    {
         var fineResult = Fine.Create(amount, reason, this);
         if (!fineResult.IsSuccess)
         {
@@ -73,6 +97,29 @@ internal class Patron : Poly.Runtime.IActionScoped
     public bool HasFineCount() => this.Fines.Count > 0;
     public bool NoFines() => this.Fines.Count == 0;
     internal static DomainResult<Patron> Create(string name, IEnumerable<Fine>? fines = null)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Patron.__BodyOfCreate(name, fines);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Patron> __BodyOfCreate(string name, IEnumerable<Fine>? fines)
     {
         if (string.IsNullOrEmpty(name))
         {

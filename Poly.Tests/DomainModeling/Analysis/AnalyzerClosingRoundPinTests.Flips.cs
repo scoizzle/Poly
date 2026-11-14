@@ -25,9 +25,9 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// rejects (the undeclared legacy name's DMSEM005).</item>
 /// </list>
 /// <para>
-/// Not a row (seam N2, owner T-06): <c>null</c> compared with a path-prefix, binder or owned read, with a
-/// <c>match</c> that has a <c>null</c> arm, or with arithmetic over an optional property keeps master's answer,
-/// accepted, because those types carry no optionality yet. The two <c>A-sum</c> loosenings are API-only (a DSL
+/// Not a row: <c>null</c> compared with a path-prefix, binder or owned read, with a <c>match</c> that has a
+/// <c>null</c> arm, or with arithmetic over an optional property keeps master's answer, accepted (since T-06 because
+/// those types carry optionality; <see cref="FlipsT06"/>). The two <c>A-sum</c> loosenings are API-only (a DSL
 /// document cannot declare an alias) and are not run through GateParity. Nor is a date minus a date of two properties:
 /// master's exemption for that one shape, the shape lowering rewrites to <c>Subtract</c>, stays (removing row T-10b),
 /// so a typed date operand of any other shape meets the arithmetic rule (<c>A-arithmetic</c>; review F1, where
@@ -1563,6 +1563,51 @@ public partial class AnalyzerClosingRoundPinTests {
     ];
 
     /// <summary>
+    /// T-06 (#606, the null rule): <c>T06-null-arm</c>, a <c>match</c> with a <c>null</c> arm into a required target is
+    /// refused at that arm at every assignment site (class c2); <c>T06-null-into-required</c>, <c>null</c> assigned to a
+    /// required Text, Uuid, entity or Binary property (class c); <c>T06-null-id</c>, a <c>null</c> cell already refused
+    /// whose code changes to the type mismatch; <c>T06-null-compare</c>, <c>null</c> compares with an optional operand
+    /// (class e); <c>T06-nav-condition</c>, a navigation to a condition is typed in the target's scope, where the outer
+    /// name it compares with does not exist (both hosts failed on it). Updated by hand, one row per cell that flips.
+    /// </summary>
+    internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsT06 = [
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | assign Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | assign Decimal", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | create Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | create Decimal", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | invoke Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | invoke Decimal", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | call Number", "ok", "DMFUN003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | call Decimal", "ok", "DMFUN003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | return Number", "DMFUN005", "DMFUN005+DMFUN006", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | return Decimal", "DMFUN005", "DMFUN005+DMFUN006", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | match arm into Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | match arm into Decimal", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | onEntry assign Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("OptionalNull", "Qty is not null", "DMSEM003", "ok", "T06-null-compare"),
+        ("OptionalNull", "Qty is null", "DMSEM003", "ok", "T06-null-compare"),
+        ("OptionalNull", "Qty == null", "DMSEM003", "ok", "T06-null-compare"),
+        ("NameByLiteralBare", "Text", "Text     SS5S5", "Text     SS5SS", "T06-null-id"),
+        ("NameByLiteralBare", "String", "String   SS5S5", "String   SS5SS", "T06-null-id"),
+        ("NameByLiteralBare", "Uuid", "Uuid     SSSS5", "Uuid     SSSSS", "T06-null-id"),
+        ("NameByLiteralBare", "Guid", "Guid     SSSS5", "Guid     SSSSS", "T06-null-id"),
+        ("NameByLiteralBare", "Widget", "Widget   RRRR.", "Widget   RRRRR", "T06-null-into-required"),
+        ("NameByLiteralBare", "Money", "Money    XXXXV", "Money    XXXXX", "T06-null-id"),
+        ("NameByLiteralBare", "Bin", "Bin      RRRR.", "Bin      RRRRR", "T06-null-into-required"),
+        ("NameByLiteralBare", "string", "string   SS5S5", "string   SS5SS", "T06-null-id"),
+        ("NameByLiteralDeclared", "Text", "Text     RR.R.", "Text     RR.RR", "T06-null-into-required"),
+        ("NameByLiteralDeclared", "String", "String   SS5S5", "String   SS5SS", "T06-null-id"),
+        ("NameByLiteralDeclared", "Uuid", "Uuid     RRRR.", "Uuid     RRRRR", "T06-null-into-required"),
+        ("NameByLiteralDeclared", "Guid", "Guid     SSSS5", "Guid     SSSSS", "T06-null-id"),
+        ("NameByLiteralDeclared", "Widget", "Widget   RRRR.", "Widget   RRRRR", "T06-null-into-required"),
+        ("NameByLiteralDeclared", "Money", "Money    XXXXV", "Money    XXXXX", "T06-null-id"),
+        ("NameByLiteralDeclared", "Bin", "Bin      RRRR.", "Bin      RRRRR", "T06-null-into-required"),
+        ("NameByLiteralDeclared", "string", "string   SS5S5", "string   SS5SS", "T06-null-id"),
+        ("Residual", "part book Qty (to-one hops, control) | form ==", "ok", "DMSEM005", "T06-nav-condition"),
+        ("Residual", "p book Qty (binder hops) | form ==", "ok", "DMSEM005", "T06-nav-condition")
+    ];
+
+    /// <summary>
     /// <paramref name="master"/> with every <see cref="FlipsA"/> row, then every <see cref="FlipsB"/> row, of <paramref name="grid"/> applied. A row whose
     /// cell is missing, or whose <c>Before</c> is not the master verdict, throws: the table must describe master.
     /// A line is <c>cell = verdict</c>; the verdict follows the last <c> = </c>.
@@ -1572,7 +1617,7 @@ public partial class AnalyzerClosingRoundPinTests {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 1; i < lines.Length; i++)
             index.Add(CellOf(lines[i]), i);
-        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT10a).Where(f => f.Grid == grid)) {
+        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT06).Concat(FlipsT10a).Where(f => f.Grid == grid)) {
             if (!index.TryGetValue(flip.Cell, out var at))
                 throw new InvalidOperationException($"Flip row '{grid}/{flip.Cell}' names no cell of the grid.");
             var verdict = VerdictOf(lines[at]);

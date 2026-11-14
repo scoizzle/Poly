@@ -60,6 +60,30 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     public OpportunityStage CurrentStage { get; private set; }
     internal DomainResult<Activity> CreateActivities(string subject, DateOnly? dueOn = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateActivities(subject, dueOn);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Activity> __BodyOfCreateActivities(string subject, DateOnly? dueOn)
+    {
         var activityResult = Activity.Create(subject, this, dueOn);
         if (!activityResult.IsSuccess)
         {
@@ -75,6 +99,30 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Line> CreateLines(long qty, decimal unitPrice, Product? product = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateLines(qty, unitPrice, product);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Line> __BodyOfCreateLines(long qty, decimal unitPrice, Product? product)
+    {
         var lineResult = Line.Create(qty, unitPrice, product, this);
         if (!lineResult.IsSuccess)
         {
@@ -89,6 +137,30 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         this._lines.Add(child);
     }
     internal DomainResult<Quote> CreateQuotes(string title, decimal amount)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateQuotes(title, amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Quote> __BodyOfCreateQuotes(string title, decimal amount)
     {
         var quoteResult = Quote.Create(title, amount, this, new List<QuoteLine>());
         if (!quoteResult.IsSuccess)
@@ -599,6 +671,29 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Opportunity> Create(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Opportunity.__BodyOfCreate(title, amount, account, contact, activities, lines, quotes, closeBy);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Opportunity> __BodyOfCreate(string title, decimal amount, Account? account, Contact? contact, IEnumerable<Activity>? activities, IEnumerable<Line>? lines, IEnumerable<Quote>? quotes, DateOnly? closeBy)
     {
         if (string.IsNullOrEmpty(title))
         {

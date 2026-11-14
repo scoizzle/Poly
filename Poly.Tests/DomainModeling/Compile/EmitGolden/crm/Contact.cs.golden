@@ -94,6 +94,29 @@ internal class Contact : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Contact> Create(string name, string email, Poly.Runtime.IStoragePort db, Account? account = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Contact.__BodyOfCreate(name, email, account, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Contact> __BodyOfCreate(string name, string email, Account? account, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Contact.Name"));

@@ -95,6 +95,29 @@ internal class Activity : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Activity> Create(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Activity.__BodyOfCreate(subject, opportunity, dueOn);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Activity> __BodyOfCreate(string subject, Opportunity? opportunity, DateOnly? dueOn)
+    {
         if (string.IsNullOrEmpty(subject))
         {
             return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Required("'Subject' is required.", "Activity.Subject"));

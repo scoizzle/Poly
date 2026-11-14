@@ -271,6 +271,230 @@ public class ValueRepresentationEmitTests {
 
         await Assert.That(exec.GetValue<decimal>()).IsEqualTo(2.5m);
     }
+
+    private static string Answer(Node node, params object?[] args) {
+        try {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node), args);
+            return exec.Result.Value is { } value ? $"{value.GetType().Name} {value}" : "null";
+        }
+        catch (InvalidOperationException ex) {
+            return ex.Message;
+        }
+    }
+
+    private static Parameter P<T>(string name) => new(name, TypeReference.To<T>());
+
+    private static Invoke NullableCall(string method, bool present) =>
+        new(new Member(new ClrTypeReference(typeof(NullableProbe)), method), new Constant(present));
+
+    /// <summary>
+    /// Unary minus and <c>~</c> on a value held behind a handle (issue 832): a struct wider than a word, and a nullable
+    /// that arrives as a word (a call result). The type's own operator runs; the handle is never the operand. A struct
+    /// with no such operator is refused by the analysis at the node (T-22a), where the VM used to negate the handle.
+    /// </summary>
+    [Test]
+    public async Task UnaryOnAHandleHeldValue_IsTheTypesOperator_OrRefused() {
+        var answers = new[] {
+            Answer(new UnaryMinus(P<decimal>("d")), 0.1m),
+            Answer(new UnaryMinus(P<decimal?>("d")), 0.1m),
+            Answer(new UnaryMinus(P<decimal?>("d")), (object?)null),
+            Answer(new UnaryMinus(P<TimeSpan>("t")), TimeSpan.FromHours(1)),
+            Answer(new UnaryMinus(P<TimeSpan?>("t")), TimeSpan.FromHours(1)),
+            Answer(new UnaryMinus(P<Int128>("i")), (Int128)5),
+            Answer(new BitwiseNot(P<Int128>("i")), (Int128)5),
+            Answer(new BitwiseNot(P<UInt128>("i")), (UInt128)5),
+            Answer(new UnaryMinus(P<System.Numerics.BigInteger>("b")), new System.Numerics.BigInteger(5)),
+            Answer(new UnaryMinus(NullableCall(nameof(NullableProbe.FiveOrNull), true))),
+            Answer(new UnaryMinus(NullableCall(nameof(NullableProbe.FiveOrNull), false))),
+            Answer(new BitwiseNot(NullableCall(nameof(NullableProbe.FiveOrNull), true))),
+            Answer(new UnaryMinus(NullableCall(nameof(NullableProbe.FiveDecimalOrNull), true))),
+            Answer(new UnaryMinus(P<Guid>("g")), Guid.Empty),
+            Answer(new UnaryMinus(P<DateTimeOffset>("o")), DateTimeOffset.UnixEpoch),
+            Answer(new BitwiseNot(P<Guid>("g")), Guid.Empty),
+        };
+        await Assert.That(answers).IsEquivalentTo(new[] {
+            Shown(-0.1m),
+            Shown(-(decimal?)0.1m),
+            Shown(null),
+            Shown(-TimeSpan.FromHours(1)),
+            Shown(-(TimeSpan?)TimeSpan.FromHours(1)),
+            Shown(-(Int128)5),
+            Shown(~(Int128)5),
+            Shown(~(UInt128)5),
+            Shown(-new System.Numerics.BigInteger(5)),
+            Shown(-NullableProbe.FiveOrNull(true)),
+            Shown(-NullableProbe.FiveOrNull(false)),
+            Shown(~NullableProbe.FiveOrNull(true)),
+            Shown(-NullableProbe.FiveDecimalOrNull(true)),
+            "VM compile rejected: operator UnaryMinus is not defined for 'Guid': no UnaryMinus operator for this type",
+            "VM compile rejected: operator UnaryMinus is not defined for 'DateTimeOffset': no UnaryMinus operator for this type",
+            "VM compile rejected: operator BitwiseNot is not defined for 'Guid': no BitwiseNot operator for this type",
+        }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    private static string Shown(object? value) => value is null ? "null" : $"{value.GetType().Name} {value}";
+
+    /// <summary>The edges of each operator are the platform's: <c>-TimeSpan.MinValue</c> overflows (the VM throws the
+    /// same <see cref="OverflowException"/>), <c>-decimal.MinValue</c> is exact, <c>-Int128.MinValue</c> wraps, and
+    /// <c>-0m</c> is the platform's negative zero.</summary>
+    [Test]
+    public async Task UnaryOnAHandleHeldValue_Edges_AreThePlatforms() {
+        var timeMin = TimeSpan.MinValue;
+        await Assert.That(() => _ = -timeMin).Throws<OverflowException>();
+        await Assert.That(() => Answer(new UnaryMinus(P<TimeSpan>("t")), TimeSpan.MinValue)).Throws<OverflowException>();
+        var decimalMin = decimal.MinValue;
+        await Assert.That(Answer(new UnaryMinus(P<decimal>("d")), decimalMin)).IsEqualTo(Shown(-decimalMin));
+        var int128Min = Int128.MinValue;
+        await Assert.That(Answer(new UnaryMinus(P<Int128>("i")), int128Min)).IsEqualTo(Shown(-int128Min));
+        var zero = 0m;
+        await Assert.That(Answer(new UnaryMinus(P<decimal>("d")), zero)).IsEqualTo(Shown(-zero));
+    }
+
+    private static readonly Analyzer AnalyzerWithoutOperandChecks = new AnalyzerBuilder()
+        .UseTypeDefinitionNodeAnalyzer()
+        .UseThisReferenceContext()
+        .UseVariableScopeValidator()
+        .UseTypeAndMemberResolver()
+        .UseSideEffectAnalysis()
+        .UseJumpTargetResolution()
+        .UseConstantFolding()
+        .UseControlFlowAnalysis()
+        .UseExceptionRegionAnalysis()
+        .UseLambdaReturnTypeResolution()
+        .UseCallSiteCatalog()
+        .UseDefiniteAssignmentAnalysis()
+        .Build();
+
+    /// <summary>The emitter's own refusal of a unary operator a struct does not define. Analysis refuses the operator
+    /// first (row T-22); a caller-built analysis without the operand checks reaches the emitter, which fails closed.</summary>
+    [Test]
+    public async Task UnaryOnAStructWithNoOperator_PastAnAnalysisWithoutOperandChecks_IsRefusedAtEmit() {
+        var node = new UnaryMinus(P<Guid>("g"));
+        await Assert.That(() => Interpreter.Compile(node, AnalyzerWithoutOperandChecks.Analyze(node)))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("no unary '-' operator for 'Guid'");
+    }
+
+    private static string StoreNull<T>(T[] host) {
+        var node = new Block([
+            new Assignment(new IndexAccess(P<T[]>("arr"), new Constant(0)), new Constant(null)),
+            new Constant(0)
+        ]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node), (object)host);
+        return Shown(host[0]);
+    }
+
+    /// <summary><c>arr[0] = null</c> stores null into a host array of a reference or a nullable element (the base
+    /// stored a boxed <c>0L</c> or threw), and a nullable element reads back as its value.</summary>
+    [Test]
+    public async Task NullLiteral_StoredIntoAnArrayElement_IsNull_AndANullableElementReadsBack() {
+        await Assert.That(StoreNull(new string?[] { "x" })).IsEqualTo(Shown(null));
+        await Assert.That(StoreNull(new object?[] { 7 })).IsEqualTo(Shown(null));
+        await Assert.That(StoreNull(new long?[] { 5 })).IsEqualTo(Shown(null));
+        await Assert.That(Answer(new IndexAccess(P<long?[]>("arr"), new Constant(0)), (object)new long?[] { 5 }))
+            .IsEqualTo(Shown((long?)5));
+    }
+
+    /// <summary>
+    /// The tree the domain lowering gives a date minus a decimal day count, <c>Start.AddDays((Int32)-Days)</c>, built
+    /// through the API (the DSL refuses a decimal day count from T-10a on). The decimal is negated, not its handle.
+    /// </summary>
+    [Test]
+    public async Task DateMinusDecimalDays_AddDaysOfTheNegatedCount_IsTheEarlierDate() {
+        var node = new Invoke(new Member(P<DateOnly>("start"), nameof(DateOnly.AddDays)),
+            new TypeCast(new UnaryMinus(P<decimal>("days")), TypeReference.To<int>()));
+        await Assert.That(Answer(node, new DateOnly(2024, 2, 28), 2m)).IsEqualTo($"DateOnly {new DateOnly(2024, 2, 26)}");
+    }
+
+    private static string Constructed<T>(Node argument, params object?[] args) =>
+        Answer(new Member(new New(new ClrTypeReference(typeof(T)), argument), nameof(CtorProbe.ObjectBox.Text)), args);
+
+    /// <summary>A CLR constructor argument is the value its parameter's type reads from the word, as a call argument is:
+    /// a scalar for an <c>object</c> parameter is the boxed value, an IEEE word is the double, a decimal or optional handle
+    /// is the value it holds.</summary>
+    [Test]
+    public async Task ConstructorArgument_IsTheValueForTheParameterType() {
+        var answers = new[] {
+            Constructed<CtorProbe.ObjectBox>(new Constant(7)),
+            Constructed<CtorProbe.ObjectBox>(new Constant("x")),
+            Constructed<CtorProbe.DoubleBox>(new Constant(1.5)),
+            Constructed<CtorProbe.DoubleBox>(P<double>("d"), 1.5),
+            Constructed<CtorProbe.DecimalBox>(new Constant(1.5m)),
+            Constructed<CtorProbe.NullableIntBox>(P<int?>("n"), 5),
+            Constructed<CtorProbe.NullableIntBox>(P<int?>("n"), (object?)null),
+            Constructed<CtorProbe.BoolBox>(new Constant(true)),
+        };
+        await Assert.That(answers).IsEquivalentTo(new[] {
+            "String Int32:7", "String String:x", "String 1.5", "String 1.5", "String 1.5", "String 5", "String <null>", "String True",
+        }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    private static Invoke ToText(Node value) =>
+        new(new Member(new ClrTypeReference(typeof(Convert)), nameof(Convert.ToString)), value);
+
+    private static Parameter ObjectParameter(string name) => new(name, new ClrTypeReference(typeof(object)));
+
+    private static string HostArrayAfter(Node stored) {
+        var host = new object?[] { null };
+        var node = new Block([new Assignment(new IndexAccess(P<object[]>("arr"), new Constant(0)), stored), new Constant(0)]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node), (object)host);
+        return host[0] is { } value ? $"{value.GetType().Name}:{value}" : "null";
+    }
+
+    private static string NameDispatched(Type type, object argument) {
+        var typeDef = new TypeDefinitionNode(Name: "BoundaryPerson", Methods: [
+            new MethodDefinitionNode("Take", new TypeReference("void"),
+                Parameters: [new Parameter("x", new ClrTypeReference(type))], Body: new Block([]))]);
+        var context = AnalysisContext.CreateDefault();
+        new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
+        var taker = new BoundaryProbe.Taker();
+        var node = new Invoke(new Member(new Parameter("e", new TypeReference("BoundaryPerson")), "Take"),
+            new Parameter("v", new ClrTypeReference(type)));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, context.TypeDefinitions), taker, argument);
+        return taker.Seen;
+    }
+
+    /// <summary>
+    /// Every boundary where a value crosses between a frame word and a CLR object carries the value, by the static
+    /// type on the word's side: an <c>object[]</c> element read and written, a <c>foreach</c> element with no declared
+    /// type, a bridged delegate's <c>object</c> parameter, a forwarded host delegate's <c>object</c> result, and a
+    /// name-dispatched call's argument. Each used to carry the word (a boxed long, the IEEE bits or a handle's number).
+    /// </summary>
+    [Test]
+    public async Task BoundarySites_CarryTheValue_NotTheWord() {
+        var element = new Variable("e");
+        var text = new Variable("r");
+        var forEach = new Block([
+            new Assignment(text, new Constant("")),
+            new ForEachLoop(element, P<List<object>>("list"), new Assignment(text, ToText(element))),
+            text
+        ], [text]);
+        var array = new Variable("v");
+        var vmArray = new Block([
+            new Assignment(array, new NewArray(new ClrTypeReference(typeof(object)), new Constant(1))),
+            new Assignment(new IndexAccess(array, new Constant(0)), new Constant(7)),
+            ToText(new IndexAccess(array, new Constant(0)))
+        ], [array]);
+        var o = ObjectParameter("o");
+        var forwarded = P<Func<object>>("g");
+        var answers = new[] {
+            Answer(ToText(new IndexAccess(P<object[]>("arr"), new Constant(0))), (object)new object[] { 7 }),
+            Answer(vmArray),
+            HostArrayAfter(new Constant(7)),
+            HostArrayAfter(new Constant("s")),
+            Answer(forEach, new List<object> { 7 }),
+            Answer(new Invoke(new Member(new ClrTypeReference(typeof(BoundaryProbe)), nameof(BoundaryProbe.Apply)), new Lambda([o], ToText(o)))),
+            Answer(new Invoke(new Lambda([forwarded], new Invoke(new Member(new ClrTypeReference(typeof(BoundaryProbe)), nameof(BoundaryProbe.CallIt)), forwarded)),
+                P<Func<object>>("f")), (object)(Func<object>)(static () => 7)),
+            NameDispatched(typeof(bool), true),
+            NameDispatched(typeof(int), 7),
+            NameDispatched(typeof(double), 1.5),
+        };
+        await Assert.That(answers).IsEquivalentTo(new[] {
+            "String 7", "String 7", "Int32:7", "String:s", "String 7", "String 7", "String 7",
+            "Boolean:True", "Int32:7", "Double:1.5",
+        }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
 }
 
 public static class RepresentationProbe {
@@ -289,4 +513,43 @@ public static class NullableProbe {
     }
 
     public static int Id(int? value) => value ?? -1;
+
+    public static int? FiveOrNull(bool present) => present ? 5 : null;
+
+    public static decimal? FiveDecimalOrNull(bool present) => present ? 5m : null;
+}
+
+public static class CtorProbe {
+    public sealed class ObjectBox(object? value) {
+        public string Text { get; } = value is null ? "<null>" : $"{value.GetType().Name}:{value}";
+    }
+
+    public sealed class DoubleBox(double value) {
+        public string Text { get; } = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public sealed class DecimalBox(decimal value) {
+        public string Text { get; } = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public sealed class NullableIntBox(int? value) {
+        public string Text { get; } = value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "<null>";
+    }
+
+    public sealed class BoolBox(bool value) {
+        public string Text { get; } = value.ToString();
+    }
+}
+
+public static class BoundaryProbe {
+    public sealed class Taker {
+        public string Seen { get; private set; } = "";
+
+        public void Take(object? value) =>
+            Seen = value is null ? "null" : $"{value.GetType().Name}:{Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    public static string Apply(Func<object, string> f) => f(7);
+
+    public static string CallIt(Func<object> f) => Convert.ToString(f()) ?? "<null>";
 }

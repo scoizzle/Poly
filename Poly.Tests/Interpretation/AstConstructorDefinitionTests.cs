@@ -101,7 +101,8 @@ public class AstConstructorDefinitionTests {
                     Parameters: [new Parameter("total", new PrimitiveTypeReference(PrimitiveType.Int64))],
                     AccessModifier: AccessModifier.Private)
             ]);
-        var newNode = new New(new TypeReference("Sample.Order"), new Parameter("total"));
+        // An argument whose type does not resolve (an untyped parameter is object since T-21a).
+        var newNode = new New(new TypeReference("Sample.Order"), new Default(null));
         var root = new Block([typeNode, newNode]);
 
         var analysis = new AnalyzerBuilder()

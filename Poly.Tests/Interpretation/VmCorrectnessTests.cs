@@ -26,12 +26,15 @@ public class VmCorrectnessTests {
     //  A. Structured Combinatorial
     // ═══════════════════════════════════════════════════════════════
 
+    /// <summary>An <c>int</c> has no null: a null argument for an <c>int</c> parameter is refused at the door, not
+    /// read as 0 (T-21a).</summary>
     [Test]
-    public async Task SetArgs_NullArg_ReturnsZero() {
+    public async Task SetArgs_NullForAnIntParameter_IsRefused() {
         var x = new Parameter("x", TypeReference.To<int>());
         var body = new Invoke(new Lambda([x], x));
-        var (_, result) = ExecVm(body, s => s.SetArgs(new object?[] { null }));
-        await Assert.That(result).IsEqualTo(0L);
+        await Assert.That(() => ExecVm(body, s => s.SetArgs(new object?[] { null })))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("null is not a 'Int32'");
     }
 
     [Test]

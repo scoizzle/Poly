@@ -126,4 +126,37 @@ public class CompatibilityDslParityTests {
             .Throws<InvalidOperationException>()
             .WithMessageContaining("a Decimal day count is refused");
     }
+
+    const string OptionalFlag = """
+        domain Opt
+        OptTask: entity {
+          Done: Boolean
+          Flag: Boolean optional
+          Out: Boolean optional
+          Ok: policy { Done and Flag }
+          Copy: action { assign Out to Done and Flag }
+          Check: action require Ok { assign Out to true }
+        }
+        """;
+
+    /// <summary>
+    /// Issue 862: an optional Boolean beside <c>and</c> is read as <c>Flag == true</c> (the owner's ruling), so a stored false
+    /// blocks the guard and absent is not true. Before T-21a the interpreter read the optional's presence and a stored false
+    /// let <c>Check</c> through. Since T-06 lowers the explicit <c>== true</c> the printed C# compiles too (before, CS0019:
+    /// <c>&amp;&amp;</c> on bool and bool?), so both hosts run it and must agree.
+    /// </summary>
+    [Test]
+    [Arguments(true, "Copy: success=True; Out=True | Check: success=True; guard=")]
+    [Arguments(false, "Copy: success=True; Out=False | Check: success=False; guard=Ok")]
+    [Arguments(null, "Copy: success=True; Out=False | Check: success=False; guard=Ok")]
+    public async Task OptionalBooleanBesideAnd_IsReadAsEqualsTrue_OnBothHosts(bool? flag, string expected) {
+        var outcomes = await ParityScenario.FromDsl(OptionalFlag, "T21OptionalFlag").AssertAgree(side => {
+            side.Create("OptTask", flag is null ? [("Done", true)] : [("Done", true), ("Flag", flag)]);
+            side.Invoke("Copy");
+            side.Invoke("Check");
+        });
+        var (copy, check) = (outcomes[1], outcomes[2]);
+        await Assert.That($"Copy: success={copy.Success}; Out={copy.State["Out"]} | Check: success={check.Success}; guard={check.FailureGuard}")
+            .IsEqualTo(expected);
+    }
 }

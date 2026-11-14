@@ -20,6 +20,29 @@ internal class Book : Poly.Runtime.IActionScoped
     public long Copies { get; private set; }
     internal static DomainResult<Book> Create(string title, string isbn, Poly.Runtime.IStoragePort db, long copies = 1L)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Book.__BodyOfCreate(title, isbn, copies, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Book> __BodyOfCreate(string title, string isbn, long copies, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(title))
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Book.Title"));

@@ -101,8 +101,10 @@ Open or newly decided, named by the contract (an open item names the slice that 
   §12.11), unary minus and plus, the Boolean operators, and `string + object` (§12.10.5). Nine `OperatorKind`s
   were added for modulo, unary minus and plus, bitwise and shift. The C# runtime binder is the test oracle: 51
   implicit and 81 explicit of the 132 ordered numeric pairs, and 3,584 operator cells. Decimal's conversions and
-  operators stay the CLR's declared members. Deliberately none: enum, lifted, reference-equality, delegate and
-  object operators.
+  operators stay the CLR's declared members. Deliberately none: enum and lifted operators. T-22a added reference
+  equality (C# 12.12.7), delegate equality (12.12.9), and Poly's permanent shift-count policy: a count of any built-in
+  integer type is converted to `int` unchecked, then masked by the shift: 5 bits for a 32-bit left operand, 6 for a
+  64-bit one.
 - **`nint` and `nuint` are built-in numeric types** — decided by T-18b: C# 11 gives them the operators and
   conversions of a simple type and does not consult IntPtr's members, so neither does the provider (`nint + int` is
   the built-in `(nint, nint)` operator, not `IntPtr.op_Addition`; `nint` to `long` is implicit). The oracle is

@@ -118,7 +118,9 @@ public class CompatibilityProviderTests {
     /// does (<c>NullableCharProofTests</c>). T-18b defines the native integers: the IntPtr family's 4,136 cells are 1,768
     /// accepted and defined (it was 24, IntPtr's declared members), 24 rejected and defined (Duration times or divided by
     /// a native integer: <c>VmExecutesDeclaredOperator</c>, T-21; it was 96), the 24 date-offset cells T-10 fences, and
-    /// 2,320 rejected and undefined (it was 3,992).
+    /// 2,320 rejected and undefined (it was 3,992). T-21d: a nullable Date, DateTime, Time, Duration or DateTimeOffset beside the
+    /// same required type (5 types × 6 comparison operators × 2 sides = 60 cells) moved from rejected to accepted: the veto now
+    /// fires only when the unwrapped types differ.
     /// </summary>
     private static readonly Dictionary<string, (int Count, string Checksum)> ExpectedBuckets = new(StringComparer.Ordinal) {
         ["DateTimeOffset|accepts|defined"] = (20, "b83fed908612bc49"),
@@ -133,9 +135,9 @@ public class CompatibilityProviderTests {
         ["IntPtr|accepts|none"] = (24, "6c0426819d4a7d42"),
         ["IntPtr|rejects|defined"] = (24, "36842c99eaa50dc8"),
         ["IntPtr|rejects|none"] = (2320, "4d1107bf57bceb0c"),
-        ["Nullable|accepts|defined"] = (4448, "2de1f3caa17904d4"),
+        ["Nullable|accepts|defined"] = (4508, "06a2bbdc3d3f1019"),
         ["Nullable|accepts|none"] = (78, "f788f25092bfd0cd"),
-        ["Nullable|rejects|defined"] = (231, "cb4b463a4d1108f3"),
+        ["Nullable|rejects|defined"] = (171, "45341c48249ba6a0"),
         ["Nullable|rejects|none"] = (7564, "49cbcd4ee4e1228f"),
     };
 

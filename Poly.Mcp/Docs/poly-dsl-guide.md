@@ -1399,7 +1399,23 @@ Product sessions load Temporal implicitly at Load. A raw `SessionBuilder` that n
 `36 Hours`; a date plus or minus a Duration *value* (`Due + Len`: not supported yet, F-11, #550); a count offset whose left
 is not a date property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
 `default(Now + 7 Days)` (a date operation has no default lowering: use `default(Now)` or `default(Today)`); and a bare
-duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration compared with an `optional` Duration property is rejected (#484), and so is one too long for a `TimeSpan`.
+duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration one too long for a `TimeSpan` is rejected. An `optional` Date, DateTime, Time or Duration compared with a required value of the same type (`OptDue < Today`, `OptLen > 1 Hours`) is C#'s lifted comparison on every door: an absent operand makes `<`, `<=`, `>`, `>=` and `==` false and `!=` true.
+
+So a policy such as `OptDue >= Opened` used as an action's `require` is false while `OptDue` is absent, and the action is refused; `not (OptDue < Today)` is true while it is absent; and two optional values that are both absent are `==` but neither `<=` nor `>=`. To accept an absent value write `OptDue is null or OptDue >= Opened`; to demand a present one write `OptDue is not null and OptDue >= Opened`. (There is no entity-level constraint expression: a policy is the form that carries one, and a stage `require` is not checked when an instance is created, #576.)
+
+<!-- poly-verify: valid -->
+```poly
+domain Tasks
+uses temporal
+Task: entity {
+  Opened: Date
+  OptDue: Date optional
+  Done: Number optional
+  Accepting: policy { OptDue is null or OptDue >= Opened }
+  Demanding: policy { OptDue is not null and OptDue >= Opened }
+  Finish: action require Accepting { assign Done to 1 }
+}
+```
 
 **Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
 `default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create /

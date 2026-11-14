@@ -151,7 +151,7 @@ public class CompatibilitySweepTests {
     }
 
     // Pinned on 0f79ba45 (70), +1 for V-14's DMDEP002 guide fence: the golden catalog and the guide's poly fences.
-    private const int SweepDocumentCount = 71;
+    private const int SweepDocumentCount = 72;
 
     /// <summary>
     /// Two prints of one document are equal, so a before/after difference is a change. The guide documents keep it

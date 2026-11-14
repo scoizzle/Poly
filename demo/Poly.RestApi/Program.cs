@@ -257,6 +257,8 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
     {
         return StatusProblem(404, "Not Found", "Loan not found for this Patron");
     }
+    await db.Entry(entity).Reference(e => e.Book).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Borrower).LoadAsync();
     try
     {
         var result = entity.Renew();
@@ -293,6 +295,8 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
     {
         return StatusProblem(404, "Not Found", "Loan not found for this Patron");
     }
+    await db.Entry(entity).Reference(e => e.Book).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Borrower).LoadAsync();
     try
     {
         var result = entity.Return();
@@ -329,6 +333,7 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
     {
         return StatusProblem(404, "Not Found", "Fine not found for this Patron");
     }
+    await db.Entry(entity).Reference(e => e.Patron).LoadAsync();
     try
     {
         var result = entity.Pay();
@@ -365,6 +370,7 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
     {
         return StatusProblem(404, "Not Found", "Fine not found for this Patron");
     }
+    await db.Entry(entity).Reference(e => e.Patron).LoadAsync();
     try
     {
         var result = entity.Waive();

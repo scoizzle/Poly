@@ -132,17 +132,22 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// can be typed. Every other caller passes a plain map, and those forms stay Unresolved there.
     /// </summary>
     private sealed class EntityScope : Dictionary<string, string> {
-        /// <param name="throughHop">
-        /// The entity is read through a navigation to a condition, so every property but a Boolean may find nothing: lowering
-        /// guards that hop (<c>rel != null &amp;&amp; …</c>), so a Boolean there keeps its own optionality.
-        /// </param>
-        public EntityScope(Entity entity, bool throughHop = false)
+        public EntityScope(Entity entity)
             : base(entity.Properties.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal), StringComparer.Ordinal) {
             EntityName = entity.Name;
             Binders = new Dictionary<string, string>(StringComparer.Ordinal);
-            Optional = entity.Properties
-                .Where(p => !EntityStructureAnalyzer.IsRequired(p) || throughHop && CanonicalName(p.Type.TypeName) is not "Boolean")
+            Optional = entity.Properties.Where(p => !EntityStructureAnalyzer.IsRequired(p))
                 .Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        }
+
+        /// <summary>
+        /// The scope of a hop's condition (<c>advisor where Age &lt; line Qty</c>): <paramref name="entity"/>'s properties
+        /// with their declared optionality (the target exists while its condition is evaluated) and the enclosing scope's
+        /// binders, which lowering resolves inside the hop too.
+        /// </summary>
+        public EntityScope(Entity entity, IReadOnlyDictionary<string, string> outerBinders) : this(entity) {
+            Binders = new Dictionary<string, string>(outerBinders, StringComparer.Ordinal);
+            ThroughHop = true;
         }
 
         private EntityScope(EntityScope outer, string binder, string entityTypeName) : base(outer, StringComparer.Ordinal) {
@@ -157,6 +162,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
         /// <summary>The entity's properties declared <c>optional</c>.</summary>
         public IReadOnlySet<string> Optional { get; }
+
+        /// <summary>True for the scope of a hop's condition (see <c>NullEqualityInsideHop</c>).</summary>
+        public bool ThroughHop { get; }
 
         public EntityScope WithBinder(string binder, string entityTypeName) => new(this, binder, entityTypeName);
     }
@@ -224,10 +232,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static bool IsNavigationToCondition(RelationshipNavigation navigation) => IsCondition(navigation.TargetProperty);
 
     /// <summary>
-    /// A navigation to a condition is a condition on the entity its hops reach: it is walked in that entity's scope, its
-    /// reads through the hop (so a value may find nothing). `line Qty == null` stays accepted; a Number against Text, an
-    /// ordering against `null` and a name the entity does not declare are refused as anywhere else (each failed on a host
-    /// unchecked).
+    /// A navigation to a condition is a condition on the entity its hops reach: it is walked in that entity's scope, with the
+    /// enclosing binders and the action's parameters visible as lowering sees them. A Number against Text, an ordering
+    /// against `null` and a name the entity does not declare are refused as anywhere else (each failed on a host
+    /// unchecked); `line Qty == null` is kept (<c>NullEqualityInsideHop</c>).
     /// </summary>
     private void CheckNavigationCondition(
         AnalysisContext context, RelationshipNavigation navigation,
@@ -240,7 +248,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             hop = next.TargetProperty;
         }
         if (EntityNamed(context, target) is { } entity)
-            WalkExpression(context, hop, new EntityScope(entity, throughHop: true), parameters, enumTypes);
+            WalkExpression(context, hop, new EntityScope(entity,
+                props is EntityScope outer ? outer.Binders : new Dictionary<string, string>(StringComparer.Ordinal)), parameters, enumTypes);
     }
 
     /// <summary>The entity declared under <paramref name="name"/>, first declaration first (the provider's order).</summary>

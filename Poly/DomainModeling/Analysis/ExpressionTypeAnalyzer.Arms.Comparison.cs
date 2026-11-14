@@ -45,7 +45,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             StampOptionalBoolean(context, cmp.Left, left);
         // The null rule is for `==` and `!=`: an ordering against `null` is never defined.
         if (MixedDateGranularity(left, right)
-            || (IsTyped(left) && IsTyped(right) && !Compatible(left, right))
+            || (IsTyped(left) && IsTyped(right) && !Compatible(left, right) && !NullEqualityInsideHop(cmp, left, right, props))
             || (IsOrdering(cmp.Kind) && (Family(left) is TypeFamily.Null || Family(right) is TypeFamily.Null)))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
@@ -57,6 +57,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         WalkExpression(context, cmp.Left, props, parameters, enumTypes);
         WalkExpression(context, cmp.Right, props, parameters, enumTypes);
     }
+
+    /// <summary>
+    /// Kept because it runs today: inside a hop's condition (<c>line Qty == null</c>, <c>advisor where Ok == null</c>) any
+    /// read compares with <c>null</c> by <c>==</c> or <c>!=</c>, and every host answers by the stored value (always false, or
+    /// always true, for a required property). The owner may remove it. An ordering against <c>null</c> is not kept.
+    /// </summary>
+    private static bool NullEqualityInsideHop(Comparison cmp, ExprType left, ExprType right, Dictionary<string, string> props) =>
+        props is EntityScope { ThroughHop: true } && !IsOrdering(cmp.Kind) && left.IsNullLiteral != right.IsNullLiteral;
 
     private static bool IsOrdering(ComparisonKind kind) =>
         kind is ComparisonKind.LessThan or ComparisonKind.LessThanOrEqual

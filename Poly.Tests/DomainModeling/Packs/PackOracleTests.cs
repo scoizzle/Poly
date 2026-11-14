@@ -1093,6 +1093,292 @@ public class PackOracleTests {
             j => { j["Label"] = ""; return j; }, s => { s["Label"] = ""; return s; }, succeeds: true);
     }
 
+    // ── P-13b (ii) (#912): the host loads what an action reads, at any depth ──
+
+    /// <summary>One step of a row, run on the simulator and over HTTP. <c>@Entity:key</c> in either argument string is the
+    /// instance id (simulator) or the key (HTTP) of an entity an earlier step made.</summary>
+    private sealed record DepthStep(string Entity, string Key, string? Action, string Path, string HttpBody, string? SimArgs, string? Makes = null, string? MakesKey = null);
+
+    private static DepthStep Make(string entity, string key, string path, string properties = "") =>
+        new(entity, key, null, path, $$"""{"Code":"{{key}}"{{properties}}}""", $$"""{"Code":"{{key}}"{{properties}}}""");
+
+    /// <summary>An action on a stored instance. <paramref name="makes"/> is the <c>Entity:key</c> of the instance it returns.</summary>
+    private static DepthStep Act(string entity, string key, string action, string path, string? makes = null, string http = "{}", string sim = "{}") =>
+        new(entity, key, action, path, http, sim, makes?.Split(':')[0], makes?.Split(':')[1]);
+
+    private sealed record DepthRead(string Entity, string Key, string Path, string Property, string? Expected);
+
+    /// <summary>Runs <paramref name="steps"/> on the simulator, then over HTTP, and compares each step's outcome (success, and the
+    /// failed guard) and every read back by value. The simulator is the authority; <c>Expected</c> pins it, so a row cannot pass
+    /// by both sides being wrong in the same way.</summary>
+    private static async Task RunDepthRowAsync(PackOracleDomain fixture, IReadOnlyList<DepthStep> steps, IReadOnlyList<DepthRead> reads) {
+        var harness = PolySurfaceHarness.New();
+        var workspace = harness.Open("depth");
+        var defined = harness.Define(workspace, fixture.Poly);
+        await Assert.That(defined.Success).IsTrue().Because(defined.Summary + string.Join("; ", defined.Findings.Select(f => f.ToString())));
+        var ids = new Dictionary<string, string>(StringComparer.Ordinal);
+        string Sim(string text) => System.Text.RegularExpressions.Regex.Replace(text, "@(\\w+:\\w+)", m => ids[m.Groups[1].Value]);
+        string Http(string text) => System.Text.RegularExpressions.Regex.Replace(text, "@\\w+:(\\w+)", "$1");
+
+        var simulated = new List<InvokeOutcome?>();
+        foreach (var step in steps) {
+            if (step.Action is null) {
+                var made = harness.Create(workspace, step.Entity, Sim(step.SimArgs!));
+                await Assert.That(made.Ok).IsTrue().Because($"simulator create {step.Entity}:{step.Key}: {made.Summary}");
+                ids[$"{step.Entity}:{step.Key}"] = made.InstanceId;
+                simulated.Add(null);
+                continue;
+            }
+            var outcome = harness.Invoke(workspace, ids[$"{step.Entity}:{step.Key}"], step.Action, Sim(step.SimArgs!)).Result;
+            simulated.Add(outcome);
+            if (step.Makes is not null && outcome.Succeeded)
+                ids[$"{step.Makes}:{step.MakesKey}"] = outcome.ReturnInstanceId!;
+        }
+
+        var simulatedReads = new List<string?>();
+        foreach (var read in reads) {
+            if (!ids.ContainsKey($"{read.Entity}:{read.Key}")) {
+                var listed = harness.List(workspace, read.Entity).Data;
+                var candidates = (listed?["instances"] as System.Text.Json.Nodes.JsonArray)?.Select(i => i?["instanceId"]?.GetValue<string>()).OfType<string>() ?? [];
+                ids[$"{read.Entity}:{read.Key}"] = candidates.FirstOrDefault(id =>
+                        (harness.Get(workspace, id).Data?["instance"]?["properties"] as System.Text.Json.Nodes.JsonArray)?
+                            .Any(p => p?["name"]?.GetValue<string>() == "Code" && p["value"]?.GetValue<string>() == read.Key) == true)
+                    ?? throw new InvalidOperationException($"No simulated {read.Entity} with Code {read.Key}: {listed?.ToJsonString()}");
+            }
+            var snapshot = harness.Get(workspace, ids[$"{read.Entity}:{read.Key}"]);
+            var value = (snapshot.Data?["instance"]?["properties"] as System.Text.Json.Nodes.JsonArray)?
+                .FirstOrDefault(p => p?["name"]?.GetValue<string>() == read.Property)?["value"]?.GetValue<string>();
+            if (value == "(null)")
+                value = null;
+            simulatedReads.Add(value);
+            await Assert.That(value?.ToLowerInvariant()).IsEqualTo(read.Expected?.ToLowerInvariant())
+                .Because($"simulator {read.Entity}:{read.Key}.{read.Property}");
+        }
+
+        await using var oracle = await PackOracle.BootAsync(fixture);
+        for (var i = 0; i < steps.Count; i++) {
+            var step = steps[i];
+            using var response = await oracle.Client.PostAsync(step.Path, new StringContent(Http(step.HttpBody), Encoding.UTF8, "application/json"));
+            var body = await response.Content.ReadAsStringAsync();
+            var label = $"step {i} {step.Entity}:{step.Key} {step.Action ?? "create"} -> {(int)response.StatusCode} {body}";
+            if (step.Action is null) {
+                await Assert.That((int)response.StatusCode).IsEqualTo(201).Because(label);
+                continue;
+            }
+            await Assert.That(response.IsSuccessStatusCode).IsEqualTo(simulated[i]!.Succeeded).Because(label);
+            if (!simulated[i]!.Succeeded && simulated[i]!.FailedGuards.Count > 0) {
+                using var problem = JsonDocument.Parse(body);
+                await Assert.That(problem.RootElement.TryGetProperty("guard", out var guard) ? guard.GetString() : null).IsEqualTo(simulated[i]!.FailedGuards.Single()).Because(label);
+            }
+        }
+
+        for (var i = 0; i < reads.Count; i++) {
+            var read = reads[i];
+            using var row = JsonDocument.Parse(await oracle.Client.GetStringAsync(read.Path));
+            var property = char.ToLowerInvariant(read.Property[0]) + read.Property[1..];
+            var value = row.RootElement.TryGetProperty(property, out var element) && element.ValueKind != JsonValueKind.Null ? element.ToString() : null;
+            await Assert.That(value?.ToLowerInvariant()).IsEqualTo(simulatedReads[i]?.ToLowerInvariant())
+                .Because($"HTTP {read.Entity}:{read.Key}.{read.Property}");
+        }
+    }
+
+    private static readonly DepthStep[] DepthSetup = [
+        Make("Order", "o1", "/api/orders"),
+        Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+        Act("Customer", "c1", "MakeRegion", "/api/orders/o1/customer/makeregion", makes: "Region:r1"),
+    ];
+
+    private static readonly DepthStep[] DepthSetupWithZone = [.. DepthSetup,
+        Act("Region", "r1", "MakeZone", "/api/customers/c1/region/makezone", makes: "Zone:z1"),
+    ];
+
+    private static IEnumerable<DepthStep> Then(DepthStep[] setup, params DepthStep[] steps) => setup.Concat(steps);
+
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_GuardAndReadThroughTwoLinks_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [.. Then(DepthSetup, Act("Order", "o1", "TwoHop", "/api/orders/o1/twohop"))],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", "n0")]);
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_ReadThroughThreeLinks_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [.. Then(DepthSetupWithZone, Act("Order", "o1", "ThreeHop", "/api/orders/o1/threehop"))],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", "zl")]);
+    }
+
+    /// <summary>The region is linked and its zone is not: an unlinked link in the middle of a three-link path. Whatever the simulator
+    /// answers (success or a failed guard), and whatever it leaves in <c>Note</c>, the host answers by value; no exception escapes.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_ReadThroughAnUnlinkedLinkMidPath_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [.. Then(DepthSetup, Act("Order", "o1", "ThreeHop", "/api/orders/o1/threehop"))],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", null)]);
+    }
+
+    private static DepthStep Product(string key, string name) =>
+        Make("Product", key, "/api/products", $",\"Name\":\"{name}\"");
+
+    private static DepthStep AddLine(string line, string product) =>
+        Act("Order", "o1", "AddLine", "/api/orders/o1/addline", makes: $"Line:{line}",
+            http: $$"""{"C":"{{line}}","PId":"@Product:{{product}}"}""", sim: $$"""{"c":"{{line}}","p":"@Product:{{product}}"}""");
+
+    /// <summary>Two items, the matching product on the SECOND: a loader that loads only the first item's link answers wrong (or 500).
+    /// <c>all</c> is the negative direction: the first item does not match, so it is false.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_QuantifierBodyReadingEachItemsLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p2"), AddLine("l2", "p1"),
+             Act("Order", "o1", "AnyNamed", "/api/orders/o1/anynamed"),
+             Act("Order", "o1", "AllNamed", "/api/orders/o1/allnamed")],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Flag", "true"),
+             new DepthRead("Order", "o1", "/api/orders/o1", "Every", "false")]);
+    }
+
+    /// <summary>Two items, each linked to its own product: each item's own value, not the first item's.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_FanOutIntoItemsThatReadTheirOwnLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p1"), AddLine("l2", "p2"),
+             Act("Order", "o1", "FanOut", "/api/orders/o1/fanout")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "pn"),
+             new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Seen", "pm")]);
+    }
+
+    /// <summary>A nested route (<c>/orders/{code}/lines/{lineCode}/showcustomer</c>) whose body reads through the PARENT:
+    /// <c>order customer region Name</c>. The subtree below the parent's own link loads on the route parent.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_NestedRouteReadingThroughItsParentsLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "MakeRegion", "/api/orders/o1/customer/makeregion", makes: "Region:r1"),
+             AddLine("l1", "p1"),
+             Act("Line", "l1", "ShowCustomer", "/api/orders/o1/lines/l1/showcustomer")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "n0")]);
+    }
+
+    /// <summary>A collection UNDER a to-one (<c>invoke customer.NoteNamed</c>, which iterates the customer's notes), the matching product on the second note.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_CollectionUnderAToOne_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "AddNote", "/api/orders/o1/customer/addnote", makes: "Note:n1",
+                 http: """{"C":"n1","PId":"@Product:p2"}""", sim: """{"c":"n1","p":"@Product:p2"}"""),
+             Act("Customer", "c1", "AddNote", "/api/orders/o1/customer/addnote", makes: "Note:n2",
+                 http: """{"C":"n2","PId":"@Product:p1"}""", sim: """{"c":"n2","p":"@Product:p1"}"""),
+             Act("Order", "o1", "NoteNamed", "/api/orders/o1/notenamed")],
+            [new DepthRead("Customer", "c1", "/api/orders/o1/customer", "Flag", "true")]);
+    }
+
+    /// <summary>Two different navigation paths whose concatenated local names are equal (<c>Customer</c> + <c>Region</c> and
+    /// <c>CustomerRegion</c>): the generated host must compile, and the action answers as the simulator does.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_NavigationPathsWhoseLocalNamesCollide_CompileAndAnswerAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.Names912,
+            [Make("Order", "o1", "/api/orders"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "MakeRegion", "/api/orders/o1/customer/makeregion", makes: "Region:r1"),
+             Act("Region", "r1", "MakeZone", "/api/customers/c1/region/makezone", makes: "Zone:z1"),
+             Act("Order", "o1", "MakeOther", "/api/orders/o1/makeother", makes: "Other:x1"),
+             Act("Other", "x1", "MakeZone", "/api/orders/o1/customerregion/makezone", makes: "Zone:z2"),
+             Act("Order", "o1", "Both", "/api/orders/o1/both")],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", "first"),
+             new DepthRead("Order", "o1", "/api/orders/o1", "Second", "second")]);
+    }
+
+    private static DepthStep AddTag(string line, string tag, string product) =>
+        Act("Line", line, "AddTag", $"/api/orders/o1/lines/{line}/addtag", makes: $"Tag:{tag}",
+            http: $$"""{"C":"{{tag}}","PId":"@Product:{{product}}"}""", sim: $$"""{"c":"{{tag}}","p":"@Product:{{product}}"}""");
+
+    /// <summary>A collection IN a collection: two lines, two tags each. Line 1 has a matching tag only second, line 2 has none.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_CollectionInACollection_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p1"), AddLine("l2", "p1"),
+             AddTag("l1", "t1", "p2"), AddTag("l1", "t2", "p1"), AddTag("l2", "t3", "p2"), AddTag("l2", "t4", "p2"),
+             Act("Order", "o1", "FanTags", "/api/orders/o1/fantags")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Flag", "true"),
+             new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Flag", "false")]);
+    }
+
+    /// <summary>The handler of a subscriber registered in the same request reads through a link: the add answered 500.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_WhenHandlerRegisteredInTheSameRequest_ReadsThroughALink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.Watch912,
+            [Make("Watcher", "w1", "/api/watchers"),
+             Act("Watcher", "w1", "MakeRegion", "/api/watchers/w1/makeregion", makes: "Region:r1"),
+             Act("Region", "r1", "MakeZone", "/api/watchers/w1/region/makezone", makes: "Zone:z1"),
+             Act("Watcher", "w1", "AddItem", "/api/watchers/w1/additem")],
+            [new DepthRead("Region", "r1", "/api/watchers/w1/region", "Name", "zl")]);
+    }
+
+    /// <summary>Fix round 2's case: the client passes the order's own product as <c>p</c>, so the line's handler (registered on
+    /// <c>p</c>, fired through <c>this.Product</c>) reads one row through two paths.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_ParameterThatIsTheSameRowAsALink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.SameRow912,
+            [Make("Order", "o1", "/api/orders"),
+             Act("Order", "o1", "MakeProduct", "/api/orders/o1/makeproduct", makes: "Product:p1"),
+             Act("Product", "p1", "MakeZone", "/api/orders/o1/product/makezone", makes: "Zone:z1", http: """{"Code":"zl"}""", sim: """{"code":"zl"}"""),
+             Act("Order", "o1", "Go", "/api/orders/o1/go", http: """{"PId":"@Product:p1"}""", sim: """{"p":"@Product:p1"}""")],
+            [new DepthRead("Product", "p1", "/api/orders/o1/product", "Name", "zl")]);
+    }
+
+    /// <summary>Two parameters of one entity type: each is looked up and loaded under its own name.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_TwoParametersOfOneEntityType_AnswerAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.TwoParams912,
+            [Make("Order", "o1", "/api/orders"),
+             Make("Product", "p1", "/api/products", ",\"Name\":\"n1\""),
+             Make("Product", "p2", "/api/products", ",\"Name\":\"n2\""),
+             Act("Order", "o1", "Both", "/api/orders/o1/both",
+                 http: """{"AId":"@Product:p1","BId":"@Product:p2"}""", sim: """{"a":"@Product:p1","b":"@Product:p2"}""")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "n1"),
+             new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Seen", "n2")]);
+    }
+
     private static async Task<HttpResponseMessage> PostJsonAsync(PackOracle oracle, string path, string member, JsonNode? value) {
         var body = new JsonObject { [member] = value }.ToJsonString();
         return await oracle.Client.PostAsync(path, new StringContent(body, Encoding.UTF8, "application/json"));

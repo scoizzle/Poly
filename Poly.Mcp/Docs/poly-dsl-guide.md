@@ -2007,14 +2007,19 @@ route value.
 
 ### HTTP actions: what the host loads (`uses http`)
 
-An action route answers from what the host loaded before the module runs. The host loads the entity's collections and
-its **single links** (the to-one navigations), and on a nested route the route parent's single links too; a link that
-is empty in the database is empty to the module. So an action that reads or fills a link (`create in next`, a policy
-`account exists`) sees the stored link and answers as the simulator does. An action that reads **further** is not loaded
-yet and keeps today's behaviour (the read sees an empty link): a link of a link (`customer region Name`), a link of a
-collection item, or a related entity's own links reached by `invoke`. Loading those is the next slice (P-13b). Separately,
-`when` handlers do not fire over HTTP yet (#560): the host never wires an entity's subscribers after loading it, so an
-action's `when` effects on another entity do not run in a generated app, though they do in the simulator.
+An action route answers from what the host loaded before the module runs, and the host loads **everything the action's
+body can read, at any depth**: a link of a link (`customer region Name`), a link read through each item of a collection
+(`any lines where product Name is "x"`, `for lines as l invoke l.Look` where `Look` reads its own link), a related
+entity's own links reached by `invoke`, the links of an entity-typed parameter, and the reads of a `when` handler whose
+subscriber is registered in the same request (a `create in` whose new child starts in a stage the owner watches). So
+such an action answers as the simulator does. A link that is empty in the database is empty to the module and the load
+skips it. The host always also loads the entity's own collections and single links, whether or not the action reads them,
+and the loads may include more than the action reads (an over-load never changes an answer).
+
+Limits. A handler that watches a **stored** entity's later transition does not fire over HTTP (#560), though it does in the
+simulator: the host never wires an entity's subscribers after loading it, so an action's `when` effects on another entity
+run in a generated app only for subscribers registered in the same request. An action the generator cannot follow is
+**refused when the app is generated** (`polyc` exits non-zero, naming the action), never served with less than it reads: an action the generator cannot follow, for example a `when` handler chain that keeps registering subscribers (a handler that creates a child which registers the same owner again). Create routes (the POST of a root) read no stored link.
 
 ## 12. Dual Authoring Path
 

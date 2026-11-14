@@ -525,8 +525,8 @@ public class OverloadScoringTests {
         await Assert.That(Trim(EnumMatrix())).IsEqualTo(AfterT16(MasterEnumMatrix));
 
     [Test]
-    public async Task Acceptance_NullableLift_IsUnchanged() =>
-        await Assert.That(Trim(NullableMatrix())).IsEqualTo(AfterT16(MasterNullableMatrix));
+    public async Task Acceptance_NullableLift_IsMasterPlusTheLiftedImplicitPairs() =>
+        await Assert.That(Trim(NullableMatrix())).IsEqualTo(AfterT21c(AfterT16(MasterNullableMatrix)));
 
     [Test]
     public async Task Delta_IsExactly_TheRemovedWideningsAndTheEnumPairs() {
@@ -548,9 +548,9 @@ public class OverloadScoringTests {
 
     [Test]
     public async Task AnalyzerArgumentMatches_AgreesWithTheScorer_OnEveryPair() {
-        await Assert.That(Trim(AnalyzerMatrix())).IsEqualTo(AfterT16(MasterAnalyzerMatrix));
+        await Assert.That(Trim(AnalyzerMatrix())).IsEqualTo(AfterT21c(AfterT16(MasterAnalyzerMatrix)));
         await Assert.That(Trim(AnalyzerMatrix())).IsEqualTo(
-            AfterT16(MasterPrimitiveMatrix) + "\n" + AfterT16(MasterEnumMatrix) + "\n" + AfterT16(MasterNullableMatrix));
+            AfterT16(MasterPrimitiveMatrix) + "\n" + AfterT16(MasterEnumMatrix) + "\n" + AfterT21c(AfterT16(MasterNullableMatrix)));
     }
 
     [Test]
@@ -785,5 +785,167 @@ public class OverloadScoringTests {
         await Assert.That(bag.IsAssignableWithoutConversion(crate)).IsFalse();
         await Assert.That(bags.IsAssignableWithoutConversion(freshBags)).IsTrue();
         await Assert.That(Clr(typeof(object)).IsAssignableWithoutConversion(bag)).IsTrue();
+    }
+
+    // ---- T-21c: C#'s implicit nullable conversion (10.6.1) is stated by the provider, with no method ----
+
+    /// <summary>The cells T-21c moves, argument then parameter: each was refused on master and C# accepts it.</summary>
+    private static readonly (string Argument, string Parameter)[] LiftedPairs = [
+        ("Int32", "NullableInt64"), ("NullableInt32", "NullableInt64"),
+        ("Int32", "NullableDecimal"), ("Int64", "NullableDecimal"),
+        ("NullableInt32", "NullableDecimal"), ("NullableInt64", "NullableDecimal"),
+    ];
+
+    /// <summary>The closed T-21c delta, applied after <see cref="AfterT16"/>: the lifted implicit pairs accept. Nothing else moves.</summary>
+    internal static string AfterT21c(string t16Matrix) {
+        var arguments = Array.Empty<string>();
+        var output = new List<string>();
+        foreach (var line in t16Matrix.Split('\n')) {
+            if (line.StartsWith("args:", StringComparison.Ordinal)) {
+                arguments = line["args:".Length..].Split(',');
+                output.Add(line);
+                continue;
+            }
+            var space = line.IndexOf(' ');
+            var parameter = line[..space];
+            var cells = line[(space + 1)..].ToCharArray();
+            for (var i = 0; i < cells.Length; i++)
+                if (LiftedPairs.Contains((arguments[i], parameter)))
+                    cells[i] = 'A';
+            output.Add($"{parameter} {new string(cells)}");
+        }
+        return string.Join('\n', output);
+    }
+
+    private static readonly Type[] NullableParameters = [typeof(int?), typeof(long?), typeof(decimal?)];
+
+    private static readonly Dictionary<string, Type> NullableUniverse = Nullables.ToDictionary(ParameterName);
+
+    [Test]
+    public async Task LiftedImplicit_IsStatedWithNoMethod_AndIsNotAssignment() {
+        foreach (var (from, to) in new[] {
+            (typeof(long), typeof(decimal?)), (typeof(int), typeof(long?)), (typeof(int), typeof(decimal?)),
+            (typeof(int?), typeof(long?)), (typeof(long?), typeof(decimal?)), (typeof(int?), typeof(decimal?)),
+        }) {
+            var conversion = Clr(to).ResolveConversionFrom(Clr(from));
+            await Assert.That(conversion is { Kind: ConversionOperatorKind.Implicit, Method: null }).IsTrue().Because($"{from.Name} -> {to.Name}");
+            // Assignment, casts and type tests are not loosened: a method-less conversion is never assignability.
+            await Assert.That(Clr(to).IsAssignableFrom(Clr(from))).IsFalse().Because($"{from.Name} -> {to.Name}");
+            await Assert.That(Clr(to).IsAssignableWithoutConversion(Clr(from))).IsFalse().Because($"{from.Name} -> {to.Name}");
+        }
+        await Assert.That(Clr(typeof(decimal?)).IsAssignableFrom(Clr(typeof(long)))).IsFalse();
+    }
+
+    [Test]
+    public async Task LiftedImplicit_IsOnlyForANullableTarget_AndOnlyWhereTheUnderlyingConversionIsImplicit() {
+        // A non-nullable target never takes the lifted arm; a nullable source into a non-nullable target stays refused.
+        await Assert.That(Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(long?)))).IsNull();
+        await Assert.That(Clr(typeof(long)).ResolveConversionFrom(Clr(typeof(int?)))).IsNull();
+        // An explicit or absent underlying conversion lifts to nothing implicit.
+        await Assert.That(Clr(typeof(decimal?)).ResolveConversionFrom(Clr(typeof(double)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(Clr(typeof(int?)).ResolveConversionFrom(Clr(typeof(long)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(Clr(typeof(long?)).ResolveConversionFrom(Clr(typeof(ulong)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
+        // T -> T? keeps the method Nullable<T> declares (op_Implicit(T)): the lifted arm never replaces a declared conversion.
+        await Assert.That(Clr(typeof(decimal?)).ResolveConversionFrom(Clr(typeof(decimal)))?.Method).IsNotNull();
+        await Assert.That(Clr(typeof(decimal?)).ResolveConversionFrom(Clr(typeof(decimal?)))).IsNull();
+    }
+
+    [Test]
+    public async Task Acceptance_EveryNullableCell_AgreesWithCSharp() {
+        var disagreements = new List<string>();
+        foreach (var parameter in NullableParameters)
+            foreach (var argument in Nullables) {
+                var accepts = Accepts(ParameterName(parameter), argument) == "A";
+                var analyzer = AnalyzerAccepts(ParameterName(parameter), argument) == "A";
+                var csharp = CSharpCallOracle.Binds(argument, parameter);
+                if (accepts != csharp || analyzer != csharp)
+                    disagreements.Add($"{ParameterName(parameter)} <- {ParameterName(argument)}: scorer={accepts} analyzer={analyzer} C#={csharp}");
+            }
+        await Assert.That(disagreements).IsEmpty();
+    }
+
+    [Test]
+    public async Task LiftedDelta_IsExactlySixCells_EachRefusedOnMaster_AndAcceptedByCSharp() {
+        var names = NullableUniverse;
+        var before = AfterT16(MasterNullableMatrix).Split('\n');
+        var after = AfterT21c(AfterT16(MasterNullableMatrix)).Split('\n');
+        var arguments = before[0]["args:".Length..].Split(',');
+        var moved = new List<(string Argument, string Parameter)>();
+        for (var row = 1; row < before.Length; row++) {
+            var parameter = before[row][..before[row].IndexOf(' ')];
+            var (oldCells, newCells) = (before[row][(parameter.Length + 1)..], after[row][(parameter.Length + 1)..]);
+            for (var i = 0; i < oldCells.Length; i++)
+                if (oldCells[i] != newCells[i])
+                    moved.Add((arguments[i], parameter));
+        }
+        await Assert.That(moved.Count).IsEqualTo(6);
+        foreach (var (argument, parameter) in moved) {
+            await Assert.That(CSharpCallOracle.Binds(names[argument], names[parameter])).IsTrue().Because($"{parameter} <- {argument}");
+            await Assert.That(before.Single(line => line.StartsWith(parameter + " ", StringComparison.Ordinal))[(parameter.Length + 1 + Array.IndexOf(arguments, argument))]).IsEqualTo('.');
+        }
+    }
+
+    // ---- an overload tie the lifted arm creates: C# picks the better conversion target, the scorer keeps both ----
+
+    public static class NullableOverloads {
+        // decimal? first on purpose: a tie must not be won by declaration order unnoticed.
+        public static string LongVsDecimal(decimal? x) => "decimal?";
+        public static string LongVsDecimal(long? x) => "long?";
+    }
+
+    [Test]
+    public async Task Winner_NullableLongVersusNullableDecimalWithInt32_TiesWhereCSharpPicksLong_PinnedUntilRow847() {
+        // C# 12.6.4: long? is the better conversion target (long? converts implicitly to decimal?, not back), so C# binds
+        // M(long?). Both candidates are tier 2 here (a built-in lifted conversion, no method), so the scorer keeps both and the
+        // resolution pass takes the first by declaration order. Overload tie-breaking is row #847 (owner ruling); the deviation is pinned.
+        await Assert.That(CSharpCallOracle.Chosen([typeof(decimal?), typeof(long?)], typeof(int))).IsEqualTo("long?");
+        var winners = Clr(typeof(NullableOverloads)).FindMatchingMethodOverloads("LongVsDecimal", [Clr(typeof(int))])
+            .Select(static method => method.Parameters.Single().ParameterTypeDefinition.GetRuntimeType()!).ToArray();
+        await Assert.That(winners).IsEquivalentTo(new[] { typeof(decimal?), typeof(long?) });
+    }
+}
+
+/// <summary>Roslyn as the oracle for a call's binding: one tiny compilation per question, C# 12.</summary>
+internal static class CSharpCallOracle {
+    private static readonly Lazy<Microsoft.CodeAnalysis.MetadataReference[]> References = new(static () => [
+        .. ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!.Split(Path.PathSeparator)
+            .Where(static path => Path.GetFileName(path) is "System.Private.CoreLib.dll" or "System.Runtime.dll")
+            .Select(static path => (Microsoft.CodeAnalysis.MetadataReference)Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path)),
+        Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(typeof(CSharpCallOracle).Assembly.Location),
+    ]);
+
+    public static string Spell(Type type) =>
+        Nullable.GetUnderlyingType(type) is { } underlying ? Spell(underlying) + "?" : "global::" + type.FullName!.Replace('+', '.');
+
+    private static Microsoft.CodeAnalysis.Compilation Compile(string members) {
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(
+            "class C {\n" + members + "\n}",
+            new Microsoft.CodeAnalysis.CSharp.CSharpParseOptions(Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp12));
+        return Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
+            "CallOracle", [tree], References.Value,
+            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+    }
+
+    private static bool HasErrors(Microsoft.CodeAnalysis.Compilation compilation) =>
+        compilation.GetDiagnostics().Any(static d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
+
+    /// <summary>True when C# binds <c>Take(a)</c> for a variable <c>a</c> of <paramref name="argument"/> and a parameter of <paramref name="parameter"/>.</summary>
+    public static bool Binds(Type argument, Type parameter) =>
+        !HasErrors(Compile($"static void Take({Spell(parameter)} p) {{}}\nstatic void Call({Spell(argument)} a) => Take(a);"));
+
+    /// <summary>True when C# binds <c>Take(expression)</c>, a literal or constant, for a parameter of <paramref name="parameter"/>.</summary>
+    public static bool BindsExpression(string expression, Type parameter) =>
+        !HasErrors(Compile($"static void Take({Spell(parameter)} p) {{}}\nstatic void Call() => Take({expression});"));
+
+    /// <summary>The parameter type of the overload C# picks for <c>M(a)</c>, <c>a</c> of <paramref name="argument"/>.</summary>
+    public static string Chosen(Type[] parameters, Type argument) {
+        var members = string.Concat(parameters.Select(static p => $"static void M({Spell(p)} p) {{}}\n")) + $"static void Call({Spell(argument)} a) => M(a);";
+        var compilation = Compile(members);
+        if (HasErrors(compilation))
+            return "error";
+        var tree = compilation.SyntaxTrees.Single();
+        var invocation = tree.GetRoot().DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax>().Last();
+        var method = (Microsoft.CodeAnalysis.IMethodSymbol)Microsoft.CodeAnalysis.CSharp.CSharpExtensions.GetSymbolInfo(compilation.GetSemanticModel(tree), invocation).Symbol!;
+        return method.Parameters[0].Type.ToDisplayString();
     }
 }

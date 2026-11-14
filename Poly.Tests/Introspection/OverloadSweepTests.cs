@@ -115,6 +115,22 @@ public class OverloadSweepTests {
     ];
 
     /// <summary>
+    /// Entries whose error count depends on what the run has loaded, compared on their identities only. T-22a: the C# reader
+    /// unit <c>(Customer)(-c)</c> names a type <c>Customer</c> no assembly of the test project declares; the registry's bare-name
+    /// lookup resolves it to a class another test compiled and loaded earlier in the run (so <c>-c</c> is undefined, one error,
+    /// as in C#), and to nothing when the unit runs alone (no type, not judged, no error). The unit has no call site.
+    /// </summary>
+    private static readonly (string Key, string Why)[] RunDependentErrorCounts = [
+        ("csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #10",
+         "T-22a judges unary minus by the provider; 'Customer' resolves only when an earlier test loaded a type of that name"),
+    ];
+
+    private static string WithoutRunDependentErrorCount(string key, string body) =>
+        RunDependentErrorCounts.Any(r => r.Key == key)
+            ? string.Concat(body.Split('\n').Where(static l => l.Length > 0 && !l.StartsWith("  errors:", StringComparison.Ordinal)).Select(static l => l + "\n"))
+            : body;
+
+    /// <summary>
     /// Identities of single-overload methods whose sites a slice adds, removes or moves: the filter hides both the presence
     /// and the absence of these members, not only a move, in documents the baseline already has them
     /// in (L-04b: every generated <c>Create</c> and <c>Create{Nav}</c> is a root-scope wrapper, so the
@@ -217,7 +233,11 @@ public class OverloadSweepTests {
 
         // The explained sites also leave the baseline (after the deltas above, whose text they may sit in).
         baseline = [.. baseline.Select(static e => (e.Key, WithoutExplainedAdditions(e.Body)))];
-        var comparison = Compare(baseline, run);
+        foreach (var (key, why) in RunDependentErrorCounts)
+            await Assert.That(baseline.Any(e => e.Key == key && e.Body.Split('\n').All(static l => l.Length == 0 || l.StartsWith("  errors:", StringComparison.Ordinal)))).IsTrue().Because(why);
+        var comparison = Compare(
+            [.. baseline.Select(static e => (e.Key, WithoutRunDependentErrorCount(e.Key, e.Body)))],
+            [.. run.Select(static e => (e.Key, WithoutRunDependentErrorCount(e.Key, e.Body)))]);
         if (comparison.Added.Count > 0)
             Console.WriteLine($"OverloadSweep: {comparison.Added.Count} entries not in the baseline (reported, not compared):\n  " + string.Join("\n  ", comparison.Added));
         await Assert.That(comparison.Missing).IsEmpty();

@@ -114,13 +114,47 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
         return resolved == name ? DomainToCSharpExporter.ToPascalCase(name) : resolved;
     }
 
-    private static bool IsPathPrefixPredicate(DomainExpression expr) => expr switch {
-        Ontology.Comparison or Ontology.And or Ontology.Or or Ontology.Not
-            or Ontology.Exists or Ontology.NotExists
-            or Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr => true,
-        RelationshipNavigation inner => IsPathPrefixPredicate(inner.TargetProperty),
+    private static bool IsPathPrefixPredicate(DomainExpression expr) => ExpressionTypeAnalyzer.IsCondition(expr);
+
+    /// <summary>
+    /// True when the value lowered for <paramref name="value"/> can be absent at run time: <c>null</c>, a read of an optional
+    /// property (on this entity, or the final member of a to-one or binder hop), a <c>match</c> with such an arm, or arithmetic
+    /// over such an operand. A parameter, a literal, a required read or a condition is never absent; an assign guard tests
+    /// presence only for a value that can be absent (<c>!= null</c> over a non-nullable value is CS0472, always true).
+    /// <paramref name="binderEntity"/> names the entity a <c>for</c> binder iterates; an unknown one counts as absent.
+    /// </summary>
+    internal bool MayBeAbsent(DomainExpression value, Func<string, string?>? binderEntity = null) => value switch {
+        Literal { Value: null } => true,
+        PropertyAccess property => !_parameters.ContainsKey(property.Name)
+            && _actionParameterNames?.Contains(property.Name) != true
+            && IsOptionalMember(_context.SourceEntityName, property.Name),
+        RelationshipNavigation navigation => !IsPathPrefixPredicate(navigation.TargetProperty)
+            && NavigationReadMayBeAbsent(navigation, binderEntity),
+        MatchExpr match => match.Arms.Select(a => a.Value).Append(match.Else).Any(arm => MayBeAbsent(arm, binderEntity)),
+        Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide =>
+            value.Children.OfType<DomainExpression>().Any(operand => MayBeAbsent(operand, binderEntity)),
         _ => false,
     };
+
+    private bool NavigationReadMayBeAbsent(RelationshipNavigation navigation, Func<string, string?>? binderEntity) {
+        var entityName = _parameters.ContainsKey(navigation.RelationshipName)
+            ? binderEntity?.Invoke(navigation.RelationshipName)
+            : ResolveRelationshipTarget(navigation.RelationshipName);
+        var hop = navigation.TargetProperty;
+        while (hop is RelationshipNavigation next && EntityOf(entityName) is { } current) {
+            entityName = current.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, next.RelationshipName, StringComparison.Ordinal))?.Target.TypeName;
+            hop = next.TargetProperty;
+        }
+        return hop is not PropertyAccess leaf || EntityOf(entityName) is null || IsOptionalMember(entityName, leaf.Name);
+    }
+
+    private Entity? EntityOf(string? name) =>
+        name is null ? null : _domain.Types.OfType<Entity>().FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+
+    private bool IsOptionalMember(string? entityName, string member) =>
+        EntityOf(entityName)?.Properties.FirstOrDefault(p => string.Equals(p.Name, member, StringComparison.Ordinal))
+            is { } property && !EntityStructureAnalyzer.IsRequired(property);
 
     private LoweredExpression Route(DomainExpression expr, Node subject) {
         var saved = _currentSubject;
@@ -147,10 +181,10 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     /// <paramref name="entityName"/> as the entity whose members the subject exposes
     /// (that entity's SourceEntityName and enum map). Path-prefix hops and quantifier
     /// bodies share this so nested resolution sees the target. Shares this pass's
-    /// local-name generator.
+    /// local-name generator. A quantifier body is a <paramref name="condition"/>.
     /// </summary>
     private LoweredExpression LowerAgainstEntity(
-        string? entityName, DomainExpression expression, Node subject) {
+        string? entityName, DomainExpression expression, Node subject, bool condition = false) {
         IReadOnlyDictionary<string, string>? enums = _context.EnumPropertyNames;
         if (entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
@@ -163,7 +197,7 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
             EnumPropertyNames = enums,
             SourceEntityName = entityName ?? _context.SourceEntityName
         });
-        return nested.LowerExpression(expression, subject);
+        return condition ? nested.LowerCondition(expression, subject) : nested.LowerExpression(expression, subject);
     }
 
     /// <summary>
@@ -185,6 +219,8 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     private LoweredExpression Adapt(DomainExpression value, DomainTypeReference target) {
         if (value is MatchExpr match)
             return LowerMatch(match, target);
+        if (value is Literal { Value: null })
+            return LoweredExpression.Of(TargetTypeAdapter.Adapt(new Constant(null), target, _context));
 
         if (EffectLoweringPass.LowerDefaultExpression(
                 value, new NamedTypeReference(target.TypeName), EffectiveMeaning, EffectiveForms) is { } runtime)

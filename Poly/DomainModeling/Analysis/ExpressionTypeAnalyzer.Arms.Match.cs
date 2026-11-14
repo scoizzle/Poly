@@ -31,6 +31,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 context.ReportError(match,
                     $"'match' arm condition must be Boolean (got '{Describe(condition)}'){where}.",
                     DomainModelDiagnosticCodes.MatchConditionNotBoolean);
+            StampOptionalBoolean(context, arm.Condition, condition);
             WalkExpression(context, arm.Condition, props, parameters, enumTypes);
             WalkExpression(context, arm.Value, props, parameters, enumTypes);
             CheckMatchNames(context, match, arm.Condition, props, parameters, enumTypes, where);
@@ -133,8 +134,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// The unified value type of a <c>match</c>: the first arm type that is known and not null; Unresolved when an arm
-    /// has no type. <paramref name="hint"/> is the target's type, which a bare enum member arm takes first (A6).
+    /// The unified value type of a <c>match</c>: the first arm type that is known and not null, optional when an arm is
+    /// <c>null</c> or optional; Unresolved when an arm has no type. <paramref name="hint"/> is the target's type, which a
+    /// bare enum member arm takes first (A6).
     /// </summary>
     private ExprType InferMatch(
         AnalysisContext context, MatchExpr match,
@@ -145,8 +147,20 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (!types.All(IsTyped))
             return ExprType.Unresolved;
         // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
-        return types.Cast<ExprType?>().FirstOrDefault(t => Family(t!.Value) is not TypeFamily.Null) ?? TextFamily;
+        var unified = types.Cast<ExprType?>().FirstOrDefault(t => Family(t!.Value) is not TypeFamily.Null) ?? TextFamily;
+        return unified.AsOptional(types.Any(t => t.Optional));
     }
+
+    /// <summary>
+    /// The first <c>null</c> arm value of <paramref name="value"/> when it is a <c>match</c>, nested arms included:
+    /// the position a <c>null</c> arm into a required target is reported at (#606). Null otherwise.
+    /// </summary>
+    private static Literal? NullArm(DomainExpression value) =>
+        value is not MatchExpr match
+            ? null
+            : match.Arms.Select(a => a.Value).Append(match.Else)
+                .Select(arm => arm is Literal { Value: null } literal ? literal : NullArm(arm))
+                .FirstOrDefault(found => found is not null);
 
     /// <summary>
     /// A match arm value's type. A bare name that is no property or parameter is an enum member (A6): of the hint's enum

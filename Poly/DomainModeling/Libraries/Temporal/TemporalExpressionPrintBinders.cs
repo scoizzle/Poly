@@ -35,8 +35,7 @@ public static class TemporalExpressionPrintBinders {
             || !match.Captures.TryGetValue("unit", out var units) || units.Count == 0)
             throw new InvalidOperationException("Duration match is missing amount/unit captures.");
         // The duration row captures 'amount' with a Number value and 'unit' with an identifier predicate.
-        if (!long.TryParse(amounts[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
-            throw new InvalidOperationException($"Duration amount '{DslTokenText.Shown(amounts[0])}' is not an integer.");
+        var amount = DslNumberText.ParseDurationAmount(amounts[0]);
         if (!DurationUnits.TryGetUnit(units[0].Span, out var unit))
             throw new FormatException($"Unknown duration unit '{DslTokenText.Shown(units[0])}'.");
         return new Duration(amount, unit);
@@ -48,6 +47,7 @@ public static class TemporalExpressionPrintBinders {
         forms.RegisterPrintMapping(new NowBinder());
         forms.RegisterPrintMapping(new TodayBinder());
         forms.RegisterPrintMapping(new DateOperationBinder());
+        forms.RegisterPrintMapping(new DurationBinder());
     }
 
     /// <summary>Optional: bind duration fold onto the core duration pattern.</summary>
@@ -81,6 +81,26 @@ public static class TemporalExpressionPrintBinders {
                 return false;
             }
             binding = new PrintMapping("expr-primary", "ident", Fill: ctx => ctx.Emit("Today"));
+            return true;
+        }
+    }
+
+    /// <summary>Prints a bare <see cref="Duration"/> as its <c>&lt;n&gt; &lt;unit&gt;</c> primary, so an assign or a comparison round-trips.</summary>
+    private sealed class DurationBinder : IExpressionPrintMapping {
+        public Type ExpressionType => typeof(Duration);
+
+        public bool TryMap(DomainExpression expression, out PrintMapping binding) {
+            if (expression is not Duration duration) {
+                binding = default;
+                return false;
+            }
+            binding = new PrintMapping(
+                "expr-primary",
+                "duration",
+                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) {
+                    ["amount"] = DslNumberText.Format(duration.Amount),
+                    ["unit"] = DurationForm.Spell(DurationForm.ToKind(duration.Unit)),
+                });
             return true;
         }
     }

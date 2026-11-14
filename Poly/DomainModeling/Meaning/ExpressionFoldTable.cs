@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
@@ -72,15 +70,6 @@ public sealed class ExpressionFoldTable {
             throw new InvalidOperationException($"Fold '{match.PatternName}' matched no tokens.");
         // The 'number' rows match a Number token.
         var token = match.Tokens[0];
-        var numText = token.Span;
-        if (long.TryParse(numText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longVal))
-            return DomainExpression.Literal(longVal, line: token.Line, col: token.Col);
-        if (decimal.TryParse(numText, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec)) {
-            // 1.0 is integral. A fraction is decimal. Never a double.
-            if (dec == decimal.Truncate(dec) && dec >= long.MinValue && dec <= long.MaxValue)
-                return DomainExpression.Literal((long)dec, line: token.Line, col: token.Col);
-            return DomainExpression.Literal(dec, line: token.Line, col: token.Col);
-        }
-        return DomainExpression.Literal(numText.ToString(), line: token.Line, col: token.Col);
+        return DomainExpression.Literal(DslNumberText.ParseLiteral(token), line: token.Line, col: token.Col);
     }
 }

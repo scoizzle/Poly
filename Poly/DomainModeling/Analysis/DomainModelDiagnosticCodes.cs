@@ -85,6 +85,12 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string SemanticUntypedExpression = "DMSEM006";
 
+    /// <summary>
+    /// An integral division is stored into a Decimal (T-07a, #657): the quotient truncates before it widens, so
+    /// <c>assign D to 7 / 2</c> stores 3. A warning; give one operand a Decimal to divide exactly.
+    /// </summary>
+    public const string NumericIntegerDivisionIntoDecimal = "DMNUM001";
+
     // #406 function calls (DMFUN): a declared function is callable from a domain expression.
 
     /// <summary>A call names a function the domain does not declare.</summary>

@@ -85,8 +85,13 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         if (ch == '"')
             return ScanString();
 
-        if (char.IsDigit(ch))
+        if (char.IsAsciiDigit(ch))
             return ScanNumber();
+
+        if (char.GetUnicodeCategory(ch) == UnicodeCategory.DecimalDigitNumber) {
+            var (digitLine, digitCol) = Source.GetLineColumn(_pos);
+            throw GrammarError.Error($"Numeric literal contains non-ASCII digit 'U+{(int)ch:X4}'; use 0-9.", digitLine, digitCol);
+        }
 
         if (IsWordStart(ch)) {
             while (_pos < _text.Length && IsWordPart(_text[_pos]))
@@ -151,13 +156,13 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
     }
 
     private DslToken ScanNumber() {
-        while (_pos < _text.Length && char.IsDigit(PeekChar()))
+        while (_pos < _text.Length && char.IsAsciiDigit(PeekChar()))
             _pos++;
         // Fractional bounds (range(0.01, 1.0)): consume a `.` and trailing digits.
         if (_pos < _text.Length && PeekChar() == '.'
-            && _pos + 1 < _text.Length && char.IsDigit(_text[_pos + 1])) {
+            && _pos + 1 < _text.Length && char.IsAsciiDigit(_text[_pos + 1])) {
             _pos++;
-            while (_pos < _text.Length && char.IsDigit(PeekChar()))
+            while (_pos < _text.Length && char.IsAsciiDigit(PeekChar()))
                 _pos++;
         }
         return Make(DslTokenKind.Number);

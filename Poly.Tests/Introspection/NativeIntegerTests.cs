@@ -677,10 +677,21 @@ public class NativeIntegerTests {
         await Assert.That(IntPtr.Size).IsEqualTo(8);
         var mismatches = new List<string>();
         var defined = 0;
+        var policy = 0;
         foreach (var (kind, left, right) in CSharpOperatorOracle.Universe()) {
             if (!CSharpOperatorOracle.Numeric.Contains(left) || (right is not null && !CSharpOperatorOracle.Numeric.Contains(right)))
                 continue;
             var oracle = CSharpOperatorOracle.Answer(kind, left, right);
+            // Poly's shift-count policy (C# rejects, Poly defines): Roslyn rejects the cell, and the provider types it as C#
+            // types the shift by an int count.
+            if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight && right!.GetPrimitiveType() is { } count
+                && ClrBuiltInRules.IsPolicyShiftCount(count) && IntCountShift(kind, left) is { } shifted) {
+                policy++;
+                var typed = Clr(left).GetOperator(kind, Clr(right!))?.Result.GetRuntimeType();
+                if (oracle.Defined || typed != shifted)
+                    mismatches.Add($"{CSharpOperatorOracle.Key(kind, left, right)}: policy, C# {(oracle.Defined ? "defines it" : oracle.Errors)}, provider {(typed is null ? "none" : CSharpOperatorOracle.Keyword(typed))}, int count {CSharpOperatorOracle.Keyword(shifted)}");
+                continue;
+            }
             defined += oracle.Defined ? 1 : 0;
             var resolution = Clr(left).GetOperator(kind, right is null ? null : Clr(right));
             var actual = resolution?.Result.GetRuntimeType();
@@ -689,6 +700,22 @@ public class NativeIntegerTests {
         }
         await Assert.That(mismatches).IsEmpty();
         await Assert.That(defined).IsEqualTo(DefinedNonLiftedCells);
+        // The policy cells with a native side: the 9 non-native integral lefts by nint and nuint, and nint and nuint by the 5
+        // wider counts, times the 2 shifts.
+        await Assert.That(policy).IsEqualTo(56);
+    }
+
+    /// <summary>The type C# gives a shift of <paramref name="left"/> by an int count, or null when it has none.</summary>
+    private static Type? IntCountShift(OperatorKind kind, Type left) {
+        if (CSharpOperatorOracle.IsNativeForm(left))
+            return CSharpOperatorOracle.Answer(kind, left, typeof(int)) is { Defined: true } answer ? answer.Type : null;
+        try {
+            dynamic value = Activator.CreateInstance(left)!;
+            return ((object)(kind is OperatorKind.ShiftLeft ? value << 1 : value >> 1)).GetType();
+        }
+        catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException) {
+            return null;
+        }
     }
 
     /// <summary>The oracle's own count, so an empty mismatch list cannot pass by finding no cell.</summary>
@@ -718,17 +745,17 @@ public class NativeIntegerTests {
         await Assert.That(cells.Count(static c => c.Class == "defined: runs right")).IsEqualTo(RunsRight);
     }
 
-    private const int RunsRight = 2174;
+    /// <summary>T-22a: the 24 bitwise cells whose stated type was the left operand's now run right (2,174 before).</summary>
+    private const int RunsRight = 2198;
 
     /// <summary>
-    /// The cells whose stated result type is not C#'s, with the right word. T-17 typed the 60 arithmetic ones as C#'s; the 24 that
-    /// remain are bitwise cells of a small integer or char beside a native integer, typed as the left operand (T-22: required
-    /// bitwise operands keep the left type). Pinned by count and key checksum.
+    /// No cell's stated result type differs from C#'s with the right word: T-17 typed the 60 arithmetic ones as C#'s, T-22a the
+    /// 24 bitwise cells of a small integer or char beside a native integer (typed as the left operand before).
     /// </summary>
     [Test]
-    public async Task Grid_StatedTypeDiffers_IsT22s_PinnedByCountAndChecksum() {
-        var cells = NativeIntegerGrid.Cells.Value.Where(static c => c.Class == "defined: right word, stated type differs").ToArray();
-        await Assert.That((cells.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(cells.Select(static c => c.Key)))).IsEqualTo((24, "361d663ed250c4c0"));
+    public async Task Grid_StatedType_IsCSharps_WheneverTheWordIsRight() {
+        var cells = NativeIntegerGrid.Cells.Value.Where(static c => c.Class == "defined: right word, stated type differs").Select(static c => c.Line).ToArray();
+        await Assert.That(cells).IsEmpty();
     }
 
     /// <summary>Amendment 7: every cell that ran right on 0d2cd4a8^1 runs right now.</summary>

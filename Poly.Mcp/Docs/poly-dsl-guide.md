@@ -384,6 +384,8 @@ public entity Order {
 
 `Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`.
 
+A number literal is ASCII digits `0-9` with at most one `.` between digits: no sign, exponent or digit separator, and a non-ASCII digit such as `٣` is a positioned error. It is held exactly or it is a positioned error that states the limit: at most 28 digits after the point and no larger than `79228162514264337593543950335` (less with digits after the point). Nothing is rounded. Leading zeros and trailing fraction zeros are free (`007`, `1.0`). `length(...)` bounds and duration amounts are whole numbers written without a decimal point (`length(1.0)` and `1.0 Days` are errors), from 0 to `2147483647` and from 0 to `9223372036854775807`.
+
 `range` bounds are exact at parse and in the assign guard: a `Number` bound is a `long`, a `Decimal` or any other non-Number-family bound is a `decimal`, and no bound is a `double`. A `Number` bound outside the `long` range (for example `9223372036854775808`) is a positioned parse error, not a silent widening, and the exported DSL and the generated validation messages keep the declared bound text. The generated data-annotation attribute is still `[Range(double, double)]` for integral members, so a `long` bound beyond `int` is rounded in that attribute only; decimal members use `[Range(typeof(decimal), "min", "max")]` (the integral attribute is a follow-up). Analysis-time bound arithmetic is still `double` and moves to an exact representation in a later slice.
 
 Properties can reference enum types by name as their type, and use `default(MemberName)`
@@ -418,6 +420,18 @@ Token: entity {
   Kind: Text default("Word")   // may be omitted; the default supplies "Word"
 }
 ```
+
+**`null` and optional values.** `null` is written only into an `optional` property: `assign Note to null`, a
+`create` initializer, `default(null)`, or a `match` arm (`assign Q to match { Big -> null, else -> 7 }` stores
+absent or 7). Into a required property, an action or function parameter, or a function's return it is refused at
+the `null` (`DMSEM003`; `DMFUN003` for a call argument, `DMFUN006` for a return). An `optional` property's constraints
+(an enum's members, `equals`, `range`, `length`, `pattern`) apply to a present value only. `==` and `!=` (`is`, `is not`) compare `null` with an optional property, a related
+read (`part Qty`, `line Qty`), arithmetic over an optional property, a `match` with a `null` arm, or a Text, Uuid,
+entity or Binary value; a required Number, Boolean, Date, Time, Duration or enum property is never null, so
+`Qty == null` is `DMSEM003`, and an ordering against `null` (`Q < null`) is always `DMSEM003`. An optional Boolean
+in a condition (`if`, an `and`/`or`/`not` operand, a `for … where`, a `match` arm condition, an
+`any`/`all`/`none`/`count … where` body, a policy) means `X is true`: absent is false. So `not Flag` and
+`Flag != true` are true when Flag is absent, and `Flag is false` is false when it is absent.
 
 A property without `optional` rejects a missing or empty Text value when it is written.
 The word `required` is not a constraint. Writing it is a positioned parse error:
@@ -1239,6 +1253,22 @@ not Suspended
 Status is "active"
 ```
 
+Ordering (`<`, `>`, `<=`, `>=`) is defined for `Number`, `Decimal`, `Date`, `Time`, `DateTime`, `Duration` and `Uuid`
+(an optional operand and a `match` result of those types included; an absent optional operand orders false). Ordering `Text`, `Boolean`, an enum, an entity,
+a value type or `Binary` is DMSEM003 (`ordering is not defined for 'Text'`); compare with `==` or `!=` instead.
+A value type has value equality, so `==` and `!=` are allowed on it. Known wrong (row X-06): the generated C# compares
+two value types by value, but the simulator compares the JSON text of an argument payload, so two equal values written
+with their fields in another order, or `2` against `2.0` for a `Decimal` field, compare unequal there; so do equal
+values a .NET caller passes as dictionaries to `ModuleInstanceExecutor.Invoke`.
+
+Integer division truncates: `7 / 2` is 3. Storing an integral division into a `Decimal` (`assign Total to 7 / 2`,
+`assign Total to N / 2 + 1`) is the warning DMNUM001, because the quotient is cut before it widens. A literal with a
+zero fraction is a whole number, so `7.0 / 2` is also 3; divide by a `Decimal` property or a literal with a fraction
+(`7.5 / 2`, `Total / 2`) to divide exactly. The warning covers an `assign`, a `create` initializer, a `default(...)`, a
+function's return, a function argument and an invoke or fan-out argument, along the `+ - * /` spine of the value. It
+does not cover a division inside a `match` arm (row T-09a) and, like every analysis warning, it is not yet suppressible
+by an allowance (row T-08).
+
 #### Subject-First Related Reads (Q1′)
 
 Policies and assign RHS can **read** data from related entities using subject-first syntax.
@@ -1347,6 +1377,9 @@ Replenished: policy { DueDate + 14 Days > ExpiryDate }
 | `N Seconds` / `Minutes` / `Hours` / `Days` / `Weeks` / `Months` / `Years` | Relative duration | Singular and plural accepted; exact PascalCase. Milliseconds also as `ms` |
 
 | `DateExpr ± N <unit>` | Offset a date/time by a duration | `Now`, `Today`, or a Date/DateTime/Time property on the left |
+| `DateProp ± count` | Offset a Date or DateTime by a whole day count (`Due + n`) | the left is a Date or DateTime property or action parameter; the count is a Number, never a Decimal |
+| `DateProp - DateProp` | The difference, a Duration (`Finished - Started`) | two Date or two DateTime properties or parameters; assign it to a Duration property or compare it with a Duration |
+| `assign Len to 30 Minutes`, `Len > 1 Hours` | A bare duration as a Duration value | assigned to a `Duration` property or compared with one, as a `default(...)` is; Months and Years have no fixed length and are rejected |
 
 Clock-resolution units (`Milliseconds`/`ms`, `Seconds`, `Minutes`, `Hours`) apply to `Now`, `DateTime`, and `Time`. Calendar units (`Days`, `Weeks`, `Months`, `Years`) apply to `Now`, `Today`, `Date`, and `DateTime`. `Date`/`Today` + hours (or finer) is rejected at analysis; `Time` + days (or coarser) is rejected.
 
@@ -1361,6 +1394,13 @@ temporal authoring (`Now - 12 Days`, `5 Days`) fails at parse, and `DateOperatio
 Product sessions load Temporal implicitly at Load. A raw `SessionBuilder` that never calls
 `LoadTemporal` does not get clock meaning or temporal primitives.
 
+**Refused at analysis, so no door runs a different answer:** a Decimal day count of any kind (`Due + 1.5`,
+`Due + Days` with a Decimal `Days`, on a Date or a DateTime): use a whole Number count or a unit literal such as
+`36 Hours`; a date plus or minus a Duration *value* (`Due + Len`: not supported yet, F-11, #550); a count offset whose left
+is not a date property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
+`default(Now + 7 Days)` (a date operation has no default lowering: use `default(Now)` or `default(Today)`); and a bare
+duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration compared with an `optional` Duration property is rejected (#484), and so is one too long for a `TimeSpan`.
+
 **Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
 `default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create /
 invoke (C# export emits a `??` coalesce). `Now` and `Today` share one UTC clock on every
@@ -1368,7 +1408,7 @@ path: `default(...)`, bare assign, offsets, and policy reads all lower to `DateT
 (`Now`, and `Today` on a DateTime/Timestamp property) or `DateOnly.FromDateTime(DateTime.UtcNow)`
 (`Today` on a Date property). They do not use the machine-local `DateTime.Today`.
 Offsets (`Now - 12 Days`) author, lower, and execute as `Add*` on that clock value.
-Adding a duration to a Date or DateTime that was never set fails with `'PropertyName' is not set` and does not change the instance.
+Adding a duration to a *required* Date or DateTime that was never set fails with `'PropertyName' is not set` and does not change the instance. An offset or a difference on an `optional` date or date-time is rejected at analysis (#648): the property may be unset, and no door computes with an absent date.
 Compare a `Date` with `Today` and a `DateTime` with `Now`. A mixed comparison (`Date < Now`,
 `DateTime < Today`) is rejected at analysis.
 

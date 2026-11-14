@@ -138,34 +138,40 @@ public class ArithmeticResultTypingTests {
     public async Task Add_WithANullableOperand_IsTheLiftedProviderResult(Type left, Type right, Type expected) =>
         await Assert.That(Stamp(OperatorKind.Add, Param("a", left), Param("b", right))).IsEqualTo(expected);
 
-    /// <summary>Required bitwise and shift operands keep the left type (T-22 removes that rule; this row leaves it byte for byte).</summary>
+    /// <summary>
+    /// T-22a: required bitwise and shift operands are stamped with the provider's result, as C# types them (they kept the
+    /// left type before); a shift count of a wider integer type is Poly's policy, typed by the left operand.
+    /// </summary>
     [Test]
     [Arguments(OperatorKind.BitwiseOr, typeof(long), typeof(int), typeof(long))]
-    [Arguments(OperatorKind.BitwiseAnd, typeof(sbyte), typeof(sbyte), typeof(sbyte))]
-    [Arguments(OperatorKind.BitwiseXor, typeof(uint), typeof(int), typeof(uint))]
+    [Arguments(OperatorKind.BitwiseAnd, typeof(sbyte), typeof(sbyte), typeof(int))]
+    [Arguments(OperatorKind.BitwiseXor, typeof(uint), typeof(int), typeof(long))]
     [Arguments(OperatorKind.ShiftLeft, typeof(int), typeof(long), typeof(int))]
+    [Arguments(OperatorKind.ShiftLeft, typeof(byte), typeof(ulong), typeof(int))]
     [Arguments(OperatorKind.ShiftRight, typeof(ulong), typeof(int), typeof(ulong))]
-    public async Task BitwiseAndShift_OfRequiredOperands_KeepTheLeftType(OperatorKind kind, Type left, Type right, Type expected) =>
+    public async Task BitwiseAndShift_OfRequiredOperands_AreTheProvidersResult(OperatorKind kind, Type left, Type right, Type expected) =>
         await Assert.That(Stamp(kind, Param("a", left), Param("b", right))).IsEqualTo(expected);
 
     /// <summary>
-    /// The nullable bitwise and shift branch is judged by the node's own operator (lock amendment 7). The two named cells
-    /// change from master (T-22 families): <c>Int32? &lt;&lt; Int64</c> was <c>Int64?</c>, <c>UInt64? | Int32</c> was <c>UInt64?</c>.
+    /// The nullable bitwise and shift branch is judged by the node's own operator (lock amendment 7). Two named cells
+    /// change from master: <c>Int32? &lt;&lt; Int64</c> was <c>Int64?</c> and is <c>Int32?</c> (the shift-count policy:
+    /// the left operand types a shift), <c>UInt64? | Int32</c> was <c>UInt64?</c> and has none (C# CS0034).
     /// </summary>
     [Test]
     [Arguments(OperatorKind.ShiftLeft, typeof(int?), typeof(int), typeof(int?))]
     [Arguments(OperatorKind.ShiftRight, typeof(long?), typeof(int), typeof(long?))]
     [Arguments(OperatorKind.BitwiseOr, typeof(long), typeof(int?), typeof(long?))]
     [Arguments(OperatorKind.BitwiseAnd, typeof(int?), typeof(int?), typeof(int?))]
-    [Arguments(OperatorKind.ShiftLeft, typeof(int?), typeof(long), null)]
+    [Arguments(OperatorKind.ShiftLeft, typeof(int?), typeof(long), typeof(int?))]
+    [Arguments(OperatorKind.ShiftLeft, typeof(int), typeof(long?), typeof(int?))]
     [Arguments(OperatorKind.BitwiseOr, typeof(ulong?), typeof(int), null)]
     public async Task BitwiseAndShift_WithANullableOperand_AreJudgedAsTheirOwnOperator(OperatorKind kind, Type left, Type right, Type? expected) =>
         await Assert.That(Stamp(kind, Param("a", left), Param("b", right))).IsEqualTo(expected);
 
     /// <summary>
     /// Lock amendment 6: the fixed <c>bool</c> arm of a comparison node equals the provider's result wherever the provider
-    /// answers, so a provider answer that stops being <c>bool</c> fails here. The provider gives no answer for enum, null
-    /// and reference comparison (T-25 and unowned), which is why the arm stays fixed.
+    /// answers, so a provider answer that stops being <c>bool</c> fails here. The provider gives no answer for enum and
+    /// null comparison (T-25, T-06), which is why the arm stays fixed; reference equality it answers since T-22a.
     /// </summary>
     [Test]
     public async Task ComparisonStamp_IsBool_WhereverTheProviderAnswers() {
@@ -253,15 +259,108 @@ public class ArithmeticResultTypingTests {
         await Assert.That(Stamp(kind, Param("d", left), Param("n", right))).IsEqualTo(expected);
 
     /// <summary>
-    /// <c>object + int</c> passed to a call is refused, as on master (the lowered tree carries no stamp for the sum, and
-    /// <c>UndefinedArithmeticMatch</c> lets the call judge it by the type master stamped, the left operand's).
-    /// This test first asserted the wrong result (the call accepted and the VM added to 2): the closing round flips it.
+    /// T-22a (lock amendment 7, red test 2): arithmetic over an operand the provider defines no operator for (an
+    /// <c>object</c>, an entity, a struct) is refused at the node, as C# refuses it, in every position. Master refused it
+    /// only as an argument the left operand's type did not fit (<c>TakesInt(obj + 1)</c>) and computed it at the root, as
+    /// an <c>object</c> argument and as a returned value; T-17's <c>UndefinedArithmeticMatch</c> kept that and is deleted.
     /// </summary>
     [Test]
-    public async Task ObjectPlusInt_PassedToACall_IsRefusedAsOnMaster() {
-        var node = new Invoke(new Member(new ClrTypeReference(typeof(DateOffsetNestingTests.Calls)), "TakesInt"), new Add(Param("o", typeof(object)), new Constant(1)));
+    [Arguments(typeof(object), "Object")]
+    [Arguments(typeof(LoweredTreeOperandCoverageTests.Item), "Item")]
+    [Arguments(typeof(KeyValuePair<int, int>), "KeyValuePair`2")]
+    public async Task UndefinedArithmetic_IsRefusedAtTheNode_InEveryPosition(Type operand, string name) {
+        Node Sum() => new Add(Param("o", operand), new Constant(1));
+        Node Call(string method) => new Invoke(new Member(new ClrTypeReference(typeof(TypedCalls)), method), Sum());
+        foreach (var node in new[] { Sum(), Call(nameof(TypedCalls.TakesInt)), Call(nameof(TypedCalls.TakesObject)), new Block([new Return(Sum())]) }) {
+            var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
+            await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray())
+                .IsEquivalentTo([$"arithmetic operand is not numeric (got '{name}' and 'Int32'): no Add operator for these types"]);
+        }
+    }
+
+    private static string Run(Node node, params object?[] args) {
         var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
-        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray())
-            .IsEquivalentTo(["no matching member 'TakesInt' on 'Calls' for invoke with 1 argument(s)"]);
+        if (analysis.Diagnostics.FirstOrDefault(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error) is { } error)
+            return "rejected: " + error.Message;
+        var program = Interpreter.Compile(node, analysis);
+        using var exec = Interpreter.Execute(program, args);
+        return $"{analysis.GetResolvedType(node)?.GetRuntimeType()?.Name}; {NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, program.RootClrType))}";
+    }
+
+    /// <summary>
+    /// T-22a, lock amendment 4: the shapes that must stay accepted when the scalar gate is replaced by the operand's type
+    /// definition, each with the type and value C# gives it (the value master computed). A shift by a <c>long</c> count is
+    /// Poly's policy: the count converted to int unchecked (33 is 1).
+    /// </summary>
+    [Test]
+    public async Task MustStayAccepted_ComputeAsCSharp() {
+        var item = new LoweredTreeOperandCoverageTests.Item(1m);
+        await Assert.That(Run(new Add(Param("o", typeof(object)), new Constant("a")), "x")).IsEqualTo("String; xa");
+        await Assert.That(Run(new Add(Param("e", typeof(LoweredTreeOperandCoverageTests.Item)), new Constant("a")), item)).EndsWith("Itema");
+        await Assert.That(Run(new Equal(Param("a", typeof(long[])), Param("b", typeof(long[]))), new long[] { 1 }, new long[] { 1 })).IsEqualTo("Boolean; False");
+        await Assert.That(Run(new Equal(Param("a", typeof(List<int>)), new Constant(null)), new List<int>())).IsEqualTo("Boolean; False");
+        await Assert.That(Run(new BitwiseAnd(Param("a", typeof(ulong)), new Constant(1)), ulong.MaxValue)).IsEqualTo("UInt64; 1");
+        await Assert.That(Run(new BitwiseAnd(Param("a", typeof(bool)), Param("b", typeof(bool))), true, false)).IsEqualTo("Boolean; False");
+        await Assert.That(Run(new BitwiseAnd(Param("a", typeof(int)), Param("b", typeof(long))), -1, 4294967296L)).IsEqualTo("Int64; 4294967296");
+        await Assert.That(Run(new ShiftLeft(Param("a", typeof(int)), Param("b", typeof(int))), 1, 33)).IsEqualTo("Int32; 2");
+        await Assert.That(Run(new ShiftLeft(Param("a", typeof(int)), Param("b", typeof(long))), 1, 33L)).IsEqualTo("Int32; 2");
+        await Assert.That(Run(new ShiftRight(Param("a", typeof(long)), Param("b", typeof(uint))), -64L, 3u)).IsEqualTo("Int64; -8");
+        await Assert.That(Run(new ShiftLeft(new Constant(1L), new Constant(3L)))).IsEqualTo("Int64; 8");
+    }
+
+    /// <summary>
+    /// T-22a, lock amendment 8: <c>uint x | -1</c> is Int64 -1, as in C# (master computed 4294967295). Its sibling
+    /// <c>uint x &amp; 1</c>, typed Int64 where C# says uint, is on the interim list (T-26).
+    /// </summary>
+    [Test]
+    public async Task UInt32OrMinusOne_IsInt64MinusOne_AsCSharp() =>
+        await Assert.That(Run(new BitwiseOr(Param("a", typeof(uint)), new Constant(-1)), 5u)).IsEqualTo("Int64; -1");
+
+    /// <summary>
+    /// The shift-count policy with a nullable count: the tree states <c>(int?)count</c> and the VM runs it. A present count
+    /// is C#'s shift by the count converted to <c>int</c> unchecked (33 is 1, 2^32 + 2 is 2), an absent count or left is
+    /// null, as C# lifts a shift.
+    /// </summary>
+    [Test]
+    public async Task ShiftByANullableWiderCount_RunsAsCSharpForTheIntCount() {
+        Node Shift() => new ShiftLeft(Param("a", typeof(int)), Param("b", typeof(long?)));
+        await Assert.That(Run(Shift(), 3, 2L)).IsEqualTo($"Nullable`1; {3 << 2}");
+        await Assert.That(Run(Shift(), 3, 33L)).IsEqualTo($"Nullable`1; {3 << unchecked((int)33L)}");
+        await Assert.That(Run(Shift(), 3, 4294967298L)).IsEqualTo($"Nullable`1; {3 << unchecked((int)4294967298L)}");
+        await Assert.That(Run(Shift(), 3, null)).IsEqualTo("Nullable`1; null");
+        Node Lifted() => new ShiftRight(Param("a", typeof(long?)), Param("b", typeof(ulong?)));
+        await Assert.That(Run(Lifted(), -64L, 3UL)).IsEqualTo($"Nullable`1; {-64L >> 3}");
+        await Assert.That(Run(Lifted(), null, 3UL)).IsEqualTo("Nullable`1; null");
+        await Assert.That(Run(Lifted(), -64L, null)).IsEqualTo("Nullable`1; null");
+    }
+
+    public sealed class Target {
+        public void M() { }
+        public void N() { }
+        public int F() => 1;
+        public int G() => 2;
+    }
+
+    /// <summary>
+    /// C# 12.12.9: <c>==</c> and <c>!=</c> over two operands of one delegate type compare invocation lists. The analysis
+    /// accepts them and the VM computes C#'s value for the same instance, two distinct instances of the same target and
+    /// method, and two different delegates (the base ran all twelve cells right; T-22a's first head refused them).
+    /// </summary>
+    [Test]
+    public async Task DelegateEquality_RunsAsCSharp() {
+        var t = new Target();
+        Action same = t.M;
+        Func<int> sameF = t.F;
+        foreach (var (type, a, b) in new (Type, Delegate, Delegate)[] {
+                     (typeof(Action), same, same), (typeof(Action), new Action(t.M), new Action(t.M)), (typeof(Action), new Action(t.M), new Action(t.N)),
+                     (typeof(Func<int>), sameF, sameF), (typeof(Func<int>), new Func<int>(t.F), new Func<int>(t.F)), (typeof(Func<int>), new Func<int>(t.F), new Func<int>(t.G)) }) {
+            await Assert.That(Run(new Equal(Param("a", type), Param("b", type)), a, b)).IsEqualTo($"Boolean; {a == b}");
+            await Assert.That(Run(new NotEqual(Param("a", type), Param("b", type)), a, b)).IsEqualTo($"Boolean; {a != b}");
+        }
+    }
+
+    public static class TypedCalls {
+        public static int TakesInt(int value) => value;
+        public static object TakesObject(object value) => value;
     }
 }

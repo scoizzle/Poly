@@ -4,6 +4,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
+using Poly.Grammar;
 using Poly.Tests.Docs;
 using Poly.Tests.TestHelpers;
 
@@ -77,7 +78,7 @@ public sealed class DslNumberTextTests {
 
     [Test]
     public async Task Format_ReaderRefusedRows_StillReadAsRefused() {
-        // Pins the reader's refusal (T-15 owns it): a double below decimal's scale is printed exactly, and the reader says so.
+        // A double below decimal's scale is printed exactly, and the reader refuses it (T-15: a positioned error, see Format_ThenRead_GivesTheSameValueOrAPositionedError).
         foreach (var (label, value, expected) in Rows().Where(r => r.Item3 is null)) {
             var text = DslNumberText.Format(value);
             await Assert.That(() => ReadBack(text)).ThrowsException().Because(label);
@@ -153,6 +154,188 @@ public sealed class DslNumberTextTests {
         await Assert.That(ReadBack("42", "Number")).IsTypeOf<long>();
         await Assert.That(DslNumberText.Classify("1.5")).IsEqualTo(NumberLiteralKind.Fractional);
         await Assert.That(ReadBack("1.5")).IsTypeOf<decimal>();
+    }
+
+    // ── T-15: a literal is held exactly or is a positioned error ──────────────────────
+
+    private const string MaxDecimal = "79228162514264337593543950335";
+
+    /// <summary>What the expression reader does with <paramref name="text"/>: the literal's value, or the positioned error.</summary>
+    private static (object? Value, string? Detail, int Line, int Column) ReadLiteral(string text) {
+        try {
+            return (((Literal)DslExpressionFragment.ParseExpressionFragment(text)).Value, null, 0, 0);
+        }
+        catch (GrammarException ex) {
+            return (null, ex.Detail, ex.Line, ex.Column);
+        }
+    }
+
+    [Test]
+    [Arguments("1.00000000000000000000000000001", "Number '1.00000000000000000000000000001' has 29 digits after the point; the maximum is 28.")]
+    [Arguments("0.00000000000000000000000000005", "Number '0.00000000000000000000000000005' has 29 digits after the point; the maximum is 28.")]
+    [Arguments("79228162514264337593543950336", "Number '79228162514264337593543950336' is larger than the maximum 79228162514264337593543950335.")]
+    [Arguments("99999999999999999999999999999999", "Number '99999999999999999999999999999999' is larger than the maximum 79228162514264337593543950335.")]
+    [Arguments("9.9999999999999999999999999999", "Number '9.9999999999999999999999999999' is larger than the maximum 7.9228162514264337593543950335 for 28 digits after the point.")]
+    [Arguments("79228162514264337593543950335.5", "Number '79228162514264337593543950335.5' is larger than the maximum 7922816251426433759354395033.5 for 1 digit after the point.")]
+    public async Task Literal_NotHeldExactly_IsPositionedErrorNamingTheLimit(string text, string detail) {
+        var read = ReadLiteral(text);
+        await Assert.That(read.Detail).IsEqualTo(detail);
+        await Assert.That((read.Line, read.Column)).IsEqualTo((1, 1));
+
+        var inContext = ReadLiteral("Age > " + text);
+        await Assert.That(inContext.Detail).IsEqualTo(detail);
+        await Assert.That((inContext.Line, inContext.Column)).IsEqualTo((1, 7));
+    }
+
+    [Test]
+    [Arguments("1.0000000000000000000000000000", 1L)]
+    [Arguments("007", 7L)]
+    [Arguments("9223372036854775807", 9223372036854775807L)]
+    public async Task Literal_ExactIntegral_IsLong(string text, long expected) {
+        await Assert.That(ReadLiteral(text).Value).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments("9223372036854775808", "9223372036854775808")]
+    [Arguments(MaxDecimal, MaxDecimal)]
+    [Arguments("7.9228162514264337593543950335", "7.9228162514264337593543950335")]
+    [Arguments("0.0000000000000000000000000001", "0.0000000000000000000000000001")]
+    [Arguments("1.50", "1.50")]
+    public async Task Literal_ExactBeyondLongOrFractional_IsDecimal(string text, string expected) {
+        await Assert.That(ReadLiteral(text).Value).IsEqualTo(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Test]
+    public async Task LimitsInTheMessages_AreTheLimitsTheCheckEnforces() {
+        // The number a message prints is the edge of what the reader accepts: it reads, and one step past it does not.
+        var tooLarge = ReadLiteral("79228162514264337593543950336").Detail!;
+        var printed = tooLarge[(tooLarge.IndexOf("maximum ", StringComparison.Ordinal) + "maximum ".Length)..].TrimEnd('.');
+        await Assert.That(printed).IsEqualTo(decimal.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        await Assert.That(ReadLiteral(printed).Detail).IsNull();
+
+        var scaled = ReadLiteral("9.9999999999999999999999999999").Detail!;
+        var scaledMax = scaled.Split(' ')[7];
+        await Assert.That(ReadLiteral(scaledMax).Detail).IsNull();
+        await Assert.That(ReadLiteral(scaledMax[..^1] + "6").Detail).IsNotNull();
+
+        var places = ReadLiteral("0.00000000000000000000000000001").Detail!;
+        var maxPlaces = int.Parse(places[(places.LastIndexOf("is ", StringComparison.Ordinal) + 3)..].TrimEnd('.'), System.Globalization.CultureInfo.InvariantCulture);
+        await Assert.That(ReadLiteral("0." + new string('0', maxPlaces - 1) + "1").Detail).IsNull();
+        await Assert.That(ReadLiteral("0." + new string('0', maxPlaces) + "1").Detail).IsNotNull();
+    }
+
+    [Test]
+    public async Task Literal_HundredThousandDigits_IsRefusedWithATruncatedShownText() {
+        var integer = ReadLiteral("1" + new string('0', 100_000));
+        await Assert.That(integer.Detail).IsEqualTo($"Number '{"1" + new string('0', 36)}...' is larger than the maximum {MaxDecimal}.");
+        var fraction = ReadLiteral("0." + new string('0', 99_999) + "1");
+        await Assert.That(fraction.Detail).IsEqualTo("Number '0.00000000000000000000000000000000000...' has 100000 digits after the point; the maximum is 28.");
+        await Assert.That(ReadLiteral("1." + new string('0', 100_000)).Value).IsEqualTo(1L);
+    }
+
+    private static string InLateTemporalPolicy(string expression) =>
+        ResolverBaselineTests.Resolve($"domain A\nuses temporal\nX: entity {{\n  Due: Date\n  Late: policy {{ {expression} > Due }}\n}}\n");
+
+    [Test]
+    [Arguments("1.5", "Duration amount '1.5' must be a whole number from 0 to 9223372036854775807, written without a decimal point.")]
+    [Arguments("1.0", "Duration amount '1.0' must be a whole number from 0 to 9223372036854775807, written without a decimal point.")]
+    [Arguments("99999999999999999999", "Duration amount '99999999999999999999' must be a whole number from 0 to 9223372036854775807.")]
+    [Arguments("9223372036854775808", "Duration amount '9223372036854775808' must be a whole number from 0 to 9223372036854775807.")]
+    public async Task DurationAmount_NotAWholeLong_IsPositionedError_InBothFoldPaths(string amount, string detail) {
+        await Assert.That(ExprDifferentialTests.Result($"{amount} Days", digest: false)).IsEqualTo($"ERR {detail} @1:1");
+        await Assert.That(InLateTemporalPolicy($"Now - {amount} Days")).IsEqualTo($"ERR {detail} @5:24");
+    }
+
+    [Test]
+    public async Task DurationAmount_LimitInTheMessage_IsTheLimitEnforced() {
+        var printed = long.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await Assert.That(ExprDifferentialTests.Result($"{printed} Days", digest: false)).StartsWith("OK ");
+        await Assert.That(InLateTemporalPolicy($"Now - {printed} Days")).StartsWith("OK ");
+        await Assert.That(ExprDifferentialTests.Result("9223372036854775808 Days", digest: false)).Contains($"from 0 to {printed}.");
+    }
+
+    [Test]
+    public async Task Format_ThenRead_GivesTheSameValueOrAPositionedError() {
+        // The independent authority is the C# runtime: double/float/decimal parse of the digits the reader accepted.
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var refused = new List<string>();
+        foreach (var (label, value, _) in Rows().Concat([("float 1e-45", (object)float.Epsilon, null), ("double 1e-28 sum", 1e-28d + 1e-29d, null)])) {
+            var text = DslNumberText.Format(value).TrimStart('-');
+            var read = ReadLiteral(text);
+            if (read.Detail is not null) {
+                refused.Add(label);
+                await Assert.That((read.Line, read.Column)).IsEqualTo((1, 1)).Because(label);
+                await Assert.That(read.Detail).StartsWith("Number '").Because(label);
+                continue;
+            }
+
+            var digits = Convert.ToDecimal(read.Value, invariant).ToString(invariant);
+            var same = value switch {
+                double d => double.Parse(digits, invariant) == Math.Abs(d),
+                float f => float.Parse(digits, invariant) == Math.Abs(f),
+                decimal m => Convert.ToDecimal(read.Value, invariant) == Math.Abs(m),
+                _ => Convert.ToDecimal(read.Value, invariant) == Math.Abs(Convert.ToDecimal(value, invariant)),
+            };
+            await Assert.That(same).IsTrue().Because($"{label} printed '{text}' and the reader gave {digits}");
+        }
+
+        await Assert.That(refused).Contains("double 5e-324 (reader refuses)");
+        await Assert.That(refused).Contains("float 1e-45");
+    }
+
+    [Test]
+    [Arguments("ar-SA")]
+    [Arguments("de-DE")]
+    public async Task LiteralReads_AreCultureInvariant(string culture) {
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(culture);
+        try {
+            await Assert.That(ReadLiteral("1234567890123456789012.5").Value).IsEqualTo(1234567890123456789012.5m);
+            await Assert.That(ReadLiteral("007").Value).IsEqualTo(7L);
+            await Assert.That(ReadLiteral("0.00000000000000000000000000001").Detail).IsEqualTo("Number '0.00000000000000000000000000001' has 29 digits after the point; the maximum is 28.");
+            await Assert.That(OnTextProperty("length(12)")).StartsWith("OK ");
+            await Assert.That(OnTextProperty("column(\"c\", 1.5)")).Contains("AnnotationNumber(Value=Double:1.5)");
+            await Assert.That(DslNumberText.Format(1.5d)).IsEqualTo("1.5");
+        }
+        finally {
+            System.Globalization.CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    private static string OnTextProperty(string annotation) => ResolverBaselineTests.Resolve($"domain A\nX: entity {{\n  N: Text {annotation}\n}}\n");
+
+    [Test]
+    [Arguments("length(2147483648)", "ERR Length bound '2147483648' must be a whole number from 0 to 2147483647. @3:18")]
+    [Arguments("length(1.5)", "ERR Length bound '1.5' must be a whole number from 0 to 2147483647, written without a decimal point. @3:18")]
+    [Arguments("length(1.0)", "ERR Length bound '1.0' must be a whole number from 0 to 2147483647, written without a decimal point. @3:18")]
+    [Arguments("length(3, 99999999999)", "ERR Length bound '99999999999' must be a whole number from 0 to 2147483647. @3:21")]
+    [Arguments("length(3, 1.5)", "ERR Length bound '1.5' must be a whole number from 0 to 2147483647, written without a decimal point. @3:21")]
+    public async Task LengthBound_NotAWholeInt_IsPositionedErrorNamingTheLimit(string annotation, string expected) {
+        await Assert.That(OnTextProperty(annotation)).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task LengthBound_LimitInTheMessage_IsTheLimitEnforced() {
+        var printed = int.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await Assert.That(OnTextProperty($"length({printed})")).StartsWith("OK ");
+        await Assert.That(OnTextProperty("length(2147483648)")).Contains($"from 0 to {printed}.");
+    }
+
+    [Test]
+    [Arguments("column(\"c\", 123456789012345678901234567890)", "ERR Number '123456789012345678901234567890' is larger than the maximum 79228162514264337593543950335. @3:23")]
+    [Arguments("column(\"c\", 0.0000000000000000000000000000000001)", "ERR Number '0.0000000000000000000000000000000001' has 34 digits after the point; the maximum is 28. @3:23")]
+    [Arguments("label(123456789012345678901234567890)", "ERR Number '123456789012345678901234567890' is larger than the maximum 79228162514264337593543950335. @3:17")]
+    public async Task AnnotationNumber_NotHeldExactly_IsPositionedErrorNamingTheLimit(string annotation, string expected) {
+        await Assert.That(OnTextProperty(annotation)).IsEqualTo(expected);
+        await Assert.That(OnTextProperty("column(\"c\", " + new string('9', 400) + ")")).Contains("is larger than the maximum 79228162514264337593543950335. @3:23");
+    }
+
+    [Test]
+    public async Task AnnotationNumber_ExactLiterals_StillRun() {
+        // The same rule as every literal: exact digits run; 79228162514264337593543950335 is the largest.
+        await Assert.That(OnTextProperty("column(\"c\", 1.5)")).StartsWith("OK ");
+        await Assert.That(OnTextProperty("column(\"c\", 79228162514264337593543950335)")).StartsWith("OK ");
+        await Assert.That(OnTextProperty("column(\"c\", 79228162514264337593543950336)")).StartsWith("ERR Number ");
     }
 
     [Test]

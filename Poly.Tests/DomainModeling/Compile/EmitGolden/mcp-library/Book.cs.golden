@@ -9,7 +9,7 @@ namespace Library;
 internal class Book : Poly.Runtime.IActionScoped
 {
     private Book() { }
-    private Book(string title, string isbn, long copies = 1L)
+    private Book(string title, string isbn, long copies)
     {
         this.Title = title;
         this.Isbn = isbn;
@@ -18,7 +18,7 @@ internal class Book : Poly.Runtime.IActionScoped
     public string Title { get; private set; } = default!;
     public string Isbn { get; private set; } = default!;
     public long Copies { get; private set; }
-    internal static DomainResult<Book> Create(string title, string isbn, Poly.Runtime.IStoragePort db, long copies = 1L)
+    internal static DomainResult<Book> Create(Poly.Runtime.IStoragePort db, string? title = default, string? isbn = default, long? copies = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -41,31 +41,34 @@ internal class Book : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Book> __BodyOfCreate(string title, string isbn, long copies, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Book> __BodyOfCreate(string? title, string? isbn, long? copies, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(title))
+        if (title == null)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Book.Title"));
         }
-        if (string.IsNullOrEmpty(isbn))
+        var __title = title;
+        if (isbn == null)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Isbn' is required.", "Book.Isbn"));
         }
-        if (copies < 0L)
+        var __isbn = isbn;
+        var __copies = (copies == null ? 1L : (long)copies);
+        if (__copies < 0L)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Range("'Copies' must be >= 0.", "Book.Copies"));
         }
-        if (copies > 1000L)
+        if (__copies > 1000L)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Range("'Copies' must be <= 1000.", "Book.Copies"));
         }
-        if (Book.ExistsWithIsbn(db, isbn))
+        if (Book.ExistsWithIsbn(db, __isbn))
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Isbn' value is already used on another 'Book'.", "Book.Isbn"));
         }
-        var created = new Book(title, isbn, copies);
+        var created = new Book(__title, __isbn, __copies);
         Poly.Runtime.ActionScope.Create(created, "Book");
-        db.Record("Book", "Isbn", isbn);
+        db.Record("Book", "Isbn", __isbn);
         return DomainResult<Book>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

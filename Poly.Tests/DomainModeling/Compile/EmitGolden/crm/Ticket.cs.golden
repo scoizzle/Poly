@@ -19,7 +19,7 @@ internal class Ticket : Poly.Runtime.IActionScoped
     private List<Account>? _accountTicketsClosedSubscribers;
     private int _notifyDepth;
     private Ticket() { }
-    private Ticket(string subject, Account? account = null)
+    private Ticket(string subject, Account? account)
     {
         this.Subject = subject;
         this.Account = account;
@@ -138,7 +138,7 @@ internal class Ticket : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<Ticket> Create(string subject, Account? account = null)
+    internal static DomainResult<Ticket> Create(string? subject = default, Account? account = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -161,13 +161,14 @@ internal class Ticket : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Ticket> __BodyOfCreate(string subject, Account? account)
+    private static DomainResult<Ticket> __BodyOfCreate(string? subject, Account? account)
     {
-        if (string.IsNullOrEmpty(subject))
+        if (subject == null)
         {
             return DomainResult<Ticket>.Failure(Poly.Runtime.DomainFailure.Required("'Subject' is required.", "Ticket.Subject"));
         }
-        var created = new Ticket(subject, account);
+        var __subject = subject;
+        var created = new Ticket(__subject, account);
         Poly.Runtime.ActionScope.Create(created, "Ticket");
         if (account != null)
         {

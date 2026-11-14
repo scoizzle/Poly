@@ -72,7 +72,9 @@ public class StoreBindUniqueTests {
             DomainExpression.Property("incoming")));
 
         var cs = new CSharpGenerator().Generate(lowered!);
-        await Assert.That(cs).Contains("IsNullOrEmpty");
+        // L-08b: required means non-null for every type, so the required check is `== null`.
+        await Assert.That(cs).Contains("== null");
+        await Assert.That(cs).Contains("'Name' is required.");
         await Assert.That(cs).DoesNotContain("EnsureUnique");
     }
 
@@ -90,8 +92,32 @@ public class StoreBindUniqueTests {
             DomainExpression.Literal("Ada")));
 
         var cs = new CSharpGenerator().Generate(lowered!);
-        await Assert.That(cs).DoesNotContain("IsNullOrEmpty");
+        await Assert.That(cs).DoesNotContain("'Name' is required.");
         await Assert.That(cs).DoesNotContain("EnsureUnique");
+    }
+
+    [Test]
+    [Arguments("[]", false)]
+    [Arguments("length", true)]
+    public async Task NonUniqueAssign_EmptyStringConstant_SkipsTheGuardUnlessALengthRefusesIt(string constraints, bool guarded) {
+        // L-08b (owner ruling): an empty string is a value, so a literal "" satisfies required;
+        // only a length (or pattern) that refuses it keeps the guard.
+        var name = new Property("Name", new DomainTypeReference("Text"),
+            constraints == "length"
+                ? new Constraint[] { new Poly.DomainModeling.Ontology.Constraints.LengthConstraint(1, 10) }
+                : Array.Empty<Constraint>());
+        var entity = new Entity("Person",
+            Properties: [name],
+            Actions: [], Policies: [], Stages: []);
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity));
+
+        var lowered = pass.TryLowerVmNode(new AssignEffect(
+            DomainExpression.Property("Name"),
+            DomainExpression.Literal("")));
+
+        var cs = new CSharpGenerator().Generate(lowered!);
+        await Assert.That(cs.Contains("'Name' must be at least 1 characters.", StringComparison.Ordinal)).IsEqualTo(guarded);
+        await Assert.That(cs.Contains("'Name' is required.", StringComparison.Ordinal)).IsEqualTo(guarded);
     }
 
     [Test]

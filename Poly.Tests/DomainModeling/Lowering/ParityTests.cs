@@ -290,16 +290,16 @@ public class ParityTests {
         await Assert.That(outcomes[1].Message).IsNull();
     }
 
+    /// <summary>L-08b (owner ruling 2026-11-13): an empty string is a value, so assigning it to a required Text succeeds on both hosts.</summary>
     [Test]
-    public async Task Invoke_WhenAssignBreaksRequired_FailsTheSameWay() {
+    public async Task Invoke_WhenAssignEmptyToRequiredText_SucceedsTheSameWay() {
         var outcomes = await ParityScenario.FromDsl(AssignRequiredDsl, "ParityAssignRequired")
             .AssertAgree(side => {
                 side.Create("Person", ("Name", "Ada"));
                 side.Invoke("Rename", ("name", ""));
             });
-        await Assert.That(outcomes[1].Success).IsFalse();
-        await Assert.That(outcomes[1].Message).IsEqualTo("'Name' is required.");
-        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("Ada");
+        await Assert.That(outcomes[1].Success).IsTrue().Because(outcomes[1].Message ?? "");
+        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("");
     }
 
     [Test]

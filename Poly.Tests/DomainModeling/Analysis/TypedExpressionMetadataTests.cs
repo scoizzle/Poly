@@ -1,5 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
@@ -141,5 +143,84 @@ public class TypedExpressionMetadataTests {
             .ToArray();
         await Assert.That(string.Join(" | ", messages)).IsEqualTo(
             "comparison between incompatible types 'Decimal' and 'Text' | comparison between incompatible types 'Number' and 'Text'");
+    }
+    private static string[] Dmnum001Warnings(string dsl) {
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
+        return [.. result.Analysis.Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.NumericIntegerDivisionIntoDecimal)
+            .Select(d => $"{d.Severity}: {d.Message}")];
+    }
+
+    private static string[] DecimalDivisionWarnings(string assignment) => Dmnum001Warnings($$"""
+        domain T
+        E: entity {
+          N: Number
+          D: Decimal
+          Go: action { {{assignment}} }
+        }
+        """);
+
+    private static string Dmnum001(string division) =>
+        $"Warning: integer division '{division}' is stored into a Decimal: the quotient is truncated first; " +
+        "divide by a Decimal property or a literal with a fraction (a literal with a zero fraction, like 7.0, is a whole number)";
+
+    /// <summary>
+    /// T-07a (#657): an integral division stored into a Decimal truncates before it widens (<c>7 / 2</c> stores 3), a
+    /// warning DMNUM001 naming the division; it reaches the integral division inside a sum (<c>7 / 2 + 1</c> stores 4),
+    /// and a literal written <c>7.0</c> is a whole number, so <c>7.0 / 2</c> is one too.
+    /// </summary>
+    [Test]
+    [Arguments("assign D to 7 / 2", "(7 / 2)")]
+    [Arguments("assign D to N / 2", "(N / 2)")]
+    [Arguments("assign D to 7 / 2 + 1", "(7 / 2)")]
+    [Arguments("assign D to 7.0 / 2", "(7 / 2)")]
+    public async Task Assign_IntegralDivisionToDecimal_WarnsDmnum001(string assignment, string division) =>
+        await Assert.That(string.Join(" | ", DecimalDivisionWarnings(assignment))).IsEqualTo(Dmnum001(division));
+
+    /// <summary>A division with a Decimal operand is exact, and an integral division into a Number is the language's meaning: no warning.</summary>
+    [Test]
+    [Arguments("assign D to D / 2")]
+    [Arguments("assign D to 7.5 / 2")]
+    [Arguments("assign N to 7 / 2")]
+    public async Task Assign_DecimalDivisionOrNumberTarget_IsClean(string assignment) =>
+        await Assert.That(DecimalDivisionWarnings(assignment)).IsEmpty();
+
+    /// <summary>
+    /// DMNUM001 also covers the other places a value is put into a Decimal: a default, a function's return, a function
+    /// argument and an invoke argument. A <c>match</c> arm is not covered (T-09a retypes <c>match</c>).
+    /// </summary>
+    [Test]
+    [Arguments("default", "E: entity {\n  N: Number\n  D: Decimal default(7 / 2)\n}")]
+    [Arguments("function return", "function Half(n: Number): Decimal = n / 2\nE: entity {\n  N: Number\n}")]
+    [Arguments("function argument", "function Same(d: Decimal): Decimal = d\nE: entity {\n  N: Number\n  D: Decimal\n  Go: action { assign D to Same(7 / 2) }\n}")]
+    [Arguments("invoke argument", "E: entity {\n  N: Number\n  D: Decimal\n  Put: action (x: Decimal) { assign D to x }\n  Go: action { invoke Put(x: 7 / 2) }\n}")]
+    public async Task IntegralDivisionIntoDecimal_AtTheOtherSites_WarnsDmnum001(string site, string body) {
+        var warnings = Dmnum001Warnings("domain T\n" + body);
+        await Assert.That(warnings.Length).IsEqualTo(1).Because(site);
+        await Assert.That(warnings[0]).StartsWith("Warning: integer division").Because(site);
+    }
+
+    /// <summary>A warned document is accepted and runs: <c>assign D to 7 / 2</c> stores 3 on every door.</summary>
+    [Test]
+    public async Task Dmnum001Document_StillAnalysesAcceptedAndStoresThree() {
+        const string dsl = """
+            domain T
+            E: entity {
+              D: Decimal default(0.0)
+              Go: action { assign D to 7 / 2 }
+              Stored: policy { D == 3 }
+            }
+            """;
+        var result = GateParity.Check(dsl, SimStep.Create("E", """{"D":0.0}""", "e"), SimStep.Invoke("e", "Go"), SimStep.Evaluate("E", "Stored", "e"));
+
+        await Assert.That(result.Analysis).IsTrue().Because(result.ToString());
+        await Assert.That(result.Holds).IsTrue().Because(result.ToString());
+        var (simulated, printed) = ParityScenario.FromDsl(dsl, "Dmnum001").Run(side => {
+            side.Create("E", ("D", 0m));
+            side.Invoke("Go");
+            side.EvaluatePolicy("Stored");
+        });
+        await Assert.That(simulated[^1].State["Stored"]).IsEqualTo("True");
+        await Assert.That(printed[^1].State["Stored"]).IsEqualTo("True");
     }
 }

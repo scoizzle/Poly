@@ -88,7 +88,6 @@ public class ConstraintWriterCoverageTests {
                         style,
                         new Constant(sample is RangeConstraint ? 5L : "value"),
                         nullableValue: false,
-                        valueHasDefault: false,
                         includeRequired: true)
                     .Select(check => check.Kind)
                     .Distinct()

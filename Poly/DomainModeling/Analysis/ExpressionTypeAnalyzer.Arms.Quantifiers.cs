@@ -28,6 +28,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             RequireTyped(context, body, bodyType, quantifier, scope, parameters, enumTypes);
         else if (Family(bodyType) is not TypeFamily.Boolean)
             Report(context, body, $"'{keyword}' condition must be Boolean (got '{Describe(bodyType)}')");
+        StampOptionalBoolean(context, body, bodyType);
     }
 
     private static void RejectEndpointCallsInBody(AnalysisContext context, Node node) {

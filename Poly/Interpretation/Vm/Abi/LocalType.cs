@@ -5,6 +5,8 @@ using System.Reflection;
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
@@ -48,9 +50,46 @@ internal abstract record LocalType(Type Clr) {
         return Of(source).FromWord(word, target, heap);
     }
 
-    /// <summary>The frame word for a runtime value. Null is the absent sentinel.</summary>
-    public static long Write(object? value, VmManagedObjectHeap heap) =>
-        value is null ? 0L : Of(value.GetType()).ToRing(value, heap);
+    /// <summary>The frame word for a runtime value stored where <paramref name="declared"/> is the static type, encoded
+    /// by the declared type only. For a value type, a value of another runtime type converts where C# converts it
+    /// implicitly at a call site (the platform's answer, <c>ResolveConversionFrom</c>); any other value is refused, and
+    /// so is null for a non-nullable value type. A reference-typed declaration takes the reference as its handle (a
+    /// host object passed for an AST type is dispatched by name); null is the absent sentinel.</summary>
+    public static long Write(object? value, Type declared, VmManagedObjectHeap heap) {
+        if (declared.IsByRef)
+            throw new InvalidOperationException($"VM rejected: by-ref type '{declared}' has no frame word.");
+        var target = Nullable.GetUnderlyingType(declared) ?? declared;
+        if (value is null)
+            return declared.IsValueType && target == declared
+                ? throw new InvalidOperationException($"VM rejected: null is not a '{declared.Name}'.")
+                : 0L;
+        if (target.IsValueType && !target.IsInstanceOfType(value))
+            value = ConvertImplicitly(value, target);
+        var form = Of(declared);
+        return form.Kind == ValueRepresentationKind.HeapRef ? heap.Allocate(value) : form.ToRing(value, heap);
+    }
+
+    /// <summary><paramref name="value"/> as <paramref name="target"/> by C#'s implicit conversion: a declared
+    /// <c>op_Implicit</c> runs, a built-in numeric widening converts. There is no other conversion.</summary>
+    private static object ConvertImplicitly(object value, Type target) {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var conversion = ((ITypeDefinition)registry.GetTypeDefinition(target))
+            .ResolveConversionFrom(registry.GetTypeDefinition(value.GetType()));
+        if (conversion is { Kind: ConversionOperatorKind.Implicit }) {
+            if (conversion.Value.Method is ClrMethod declaredMethod)
+                return declaredMethod.MethodInfo.Invoke(null, [value])!;
+            // A native integer and char to IEEE are not IConvertible pairs: go through the word C# widens them by.
+            object source = value switch { nint n => (long)n, nuint n => (ulong)n, char c => (int)c, _ => value };
+            if (target == typeof(nint))
+                return (nint)System.Convert.ToInt64(source, System.Globalization.CultureInfo.InvariantCulture);
+            if (target == typeof(nuint))
+                return (nuint)System.Convert.ToUInt64(source, System.Globalization.CultureInfo.InvariantCulture);
+            if (source is IConvertible && typeof(IConvertible).IsAssignableFrom(target))
+                return System.Convert.ChangeType(source, target, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        throw new InvalidOperationException(
+            $"VM rejected: a '{value.GetType().Name}' does not convert implicitly to '{target.Name}'.");
+    }
 
     /// <summary>The local type of a node, after analysis replacement. A statement is
     /// none. A constant uses <see cref="Of(Type)"/> on the value's type.</summary>
@@ -368,7 +407,9 @@ internal abstract record LocalType(Type Clr) {
                 : value;
 
         public override long ToRing(object value, VmManagedObjectHeap heap) =>
-            value is true ? 1L : 0L;
+            value is bool flag
+                ? flag ? 1L : 0L
+                : throw new InvalidOperationException($"VM rejected: '{value.GetType()}' is not a Boolean.");
 
         public override Expression FromWord(Expression word, Type target, Expression heap) =>
             Finish(word.Type == typeof(bool) ? word : NotEqual(RingCodec.ToWord(word), Constant(0L)), target);

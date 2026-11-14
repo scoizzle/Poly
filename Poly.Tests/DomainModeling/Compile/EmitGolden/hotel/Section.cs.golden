@@ -9,7 +9,7 @@ namespace Hotel;
 internal class Section : Poly.Runtime.IActionScoped
 {
     private Section() { }
-    private Section(string name, long capacity, decimal dayRate, Hall? hall = null, bool occupied = false)
+    private Section(string name, long capacity, decimal dayRate, bool occupied, Hall? hall)
     {
         this.Name = name;
         this.Capacity = capacity;
@@ -118,13 +118,13 @@ internal class Section : Poly.Runtime.IActionScoped
     public bool IsOccupied() => this.Occupied;
     public bool ParentFree() => this.Hall != null && (!this.Hall!.Occupied && !this.Hall!.Offline);
     public bool CanBook() => !this.Occupied;
-    internal static DomainResult<Section> Create(string name, long capacity, decimal dayRate, Hall? hall = null, bool occupied = false)
+    internal static DomainResult<Section> Create(string? name = default, long? capacity = default, decimal? dayRate = default, bool? occupied = default, Hall? hall = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Section.__BodyOfCreate(name, capacity, dayRate, hall, occupied);
+            var __result = Section.__BodyOfCreate(name, capacity, dayRate, occupied, hall);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -141,37 +141,49 @@ internal class Section : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Section> __BodyOfCreate(string name, long capacity, decimal dayRate, Hall? hall, bool occupied)
+    private static DomainResult<Section> __BodyOfCreate(string? name, long? capacity, decimal? dayRate, bool? occupied, Hall? hall)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Section.Name"));
         }
-        if (name.Length < 1L)
+        var __name = name;
+        if (__name.Length < 1L)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 1 characters.", "Section.Name"));
         }
-        if (name.Length > 80L)
+        if (__name.Length > 80L)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 80 characters.", "Section.Name"));
         }
-        if (capacity < 1L)
+        if (capacity == null)
+        {
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'Capacity' is required.", "Section.Capacity"));
+        }
+        var __capacity = (long)capacity;
+        if (__capacity < 1L)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be >= 1.", "Section.Capacity"));
         }
-        if (capacity > 2000L)
+        if (__capacity > 2000L)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be <= 2000.", "Section.Capacity"));
         }
-        if (dayRate < 0m)
+        if (dayRate == null)
+        {
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'DayRate' is required.", "Section.DayRate"));
+        }
+        var __dayRate = (decimal)dayRate;
+        if (__dayRate < 0m)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be >= 0.", "Section.DayRate"));
         }
-        if (dayRate > 100000m)
+        if (__dayRate > 100000m)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "Section.DayRate"));
         }
-        var created = new Section(name, capacity, dayRate, hall, occupied);
+        var __occupied = (occupied == null ? false : (bool)occupied);
+        var created = new Section(__name, __capacity, __dayRate, __occupied, hall);
         Poly.Runtime.ActionScope.Create(created, "Section");
         if (hall != null)
         {

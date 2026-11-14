@@ -222,10 +222,6 @@ public class WhenAnySimulatePrintAgreeTests {
                 callArgs[i] = value;
             else if (parameters[i].HasDefaultValue)
                 callArgs[i] = parameters[i].DefaultValue;
-            else if (parameters[i].ParameterType == typeof(string))
-                callArgs[i] = "";
-            else if (parameters[i].ParameterType == typeof(long))
-                callArgs[i] = 0L;
             else
                 callArgs[i] = null;
         }

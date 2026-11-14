@@ -57,9 +57,8 @@ public sealed partial class EffectLoweringPass {
     /// <summary>
     /// <c>this.Create{Nav}(args…)</c> with the same Failure unwrap as
     /// <see cref="LowerTypedCreateCall"/>. Arguments are the public slots of
-    /// that method: constructor parameters the caller supplies, then trailing
-    /// defaulted properties. The method fills back-references and collections
-    /// and links the child.
+    /// that method, in the target's slot order. The method fills back-references
+    /// and collections and links the child.
     /// </summary>
     private Node LowerCreateNavCall(
         string relationshipName,
@@ -68,16 +67,9 @@ public sealed partial class EffectLoweringPass {
         var loweredInitializers = new List<LoweredExpression>();
         var inits = BindingsByName(initializers);
         var slots = new List<(Node Node, bool OmitWhenTrailing)>();
-        foreach (var parameter in DomainToCSharpExporter.CreateNavParameters(
+        foreach (var slot in DomainToCSharpExporter.CreateNavParameters(
                      _entity, targetEntity, _analysis))
-            slots.Add(ArgumentFor(
-                targetEntity, parameter.Name, parameter.Type, parameter.IsNavigation,
-                parameter.IsCollection, inits, loweredInitializers));
-        foreach (var prop in DomainToCSharpExporter.TrailingOmittableProperties(
-                     targetEntity, _analysis))
-            slots.Add(ArgumentFor(
-                targetEntity, prop.Name, prop.Type, isNavigation: false, isCollection: false,
-                inits, loweredInitializers));
+            slots.Add(ArgumentFor(targetEntity, slot, inits, loweredInitializers));
         var args = KeepThroughLastWritten(slots);
 
         var methodName = $"Create{DomainToCSharpExporter.ToPascalCase(relationshipName)}";
@@ -100,9 +92,8 @@ public sealed partial class EffectLoweringPass {
     /// <summary>
     /// Typed by-type create in an action-result context: <c>Type.Create(args…)</c>
     /// returning <c>DomainResult&lt;Type&gt;</c> with no object cast. Arguments are
-    /// positional against the printed static factory: constructor parameters, then
-    /// trailing defaulted properties. Omitted optional properties pass their
-    /// default; the interpreter trims nulls so the store applies the same defaults.
+    /// positional against the printed static factory, in slot order. An omitted slot
+    /// passes null, and the factory's body applies its default or fails Required.
     /// </summary>
     private Node LowerTypedCreateCall(
         Entity targetEntity,
@@ -144,12 +135,11 @@ public sealed partial class EffectLoweringPass {
         FailureLowering.Propagate(CallerResultType, resultVar, CallerPath);
 
     /// <summary>
-    /// Positional arguments for the printed <c>Type.Create</c> factory: constructor
-    /// parameters, then trailing defaulted properties. A slot the caller did not
-    /// write (collection, navigation, or a property that already has a default)
-    /// is left off the call when every slot after it is the same. The factory
-    /// parameter default fills it. A hole before a written argument stays, so
-    /// the call remains positional.
+    /// Positional arguments for the printed <c>Type.Create</c> factory, one per
+    /// published create slot. A slot the caller did not write passes a typed null,
+    /// and is left off the call when every slot after it is the same: the factory
+    /// parameter's own <c>default</c> fills it. A hole before a written argument stays,
+    /// so the call remains positional.
     /// </summary>
     private List<Node> BuildFullCreateArgs(
         Entity target,
@@ -157,14 +147,8 @@ public sealed partial class EffectLoweringPass {
         List<LoweredExpression> loweredInitializers) {
         var inits = BindingsByName(initializers);
         var slots = new List<(Node Node, bool OmitWhenTrailing)>();
-        foreach (var parameter in DomainToCSharpExporter.GetConstructorParameters(target, _analysis))
-            slots.Add(ArgumentFor(
-                target, parameter.Name, parameter.Type, parameter.IsNavigation,
-                parameter.IsCollection, inits, loweredInitializers));
-        foreach (var prop in DomainToCSharpExporter.TrailingOmittableProperties(target, _analysis))
-            slots.Add(ArgumentFor(
-                target, prop.Name, prop.Type, isNavigation: false, isCollection: false,
-                inits, loweredInitializers));
+        foreach (var slot in DomainToCSharpExporter.CreateSlotsOf(target, _analysis))
+            slots.Add(ArgumentFor(target, slot, inits, loweredInitializers));
         return KeepThroughLastWritten(slots);
     }
 
@@ -182,43 +166,26 @@ public sealed partial class EffectLoweringPass {
         return args;
     }
 
+    /// <summary>
+    /// The argument for one create slot: the written initializer, or a typed null the
+    /// factory reads as "not supplied". The cast keeps the hole's type when a later slot
+    /// is written (#495, D4).
+    /// </summary>
     private (Node Node, bool OmitWhenTrailing) ArgumentFor(
         Entity target,
-        string name,
-        DomainTypeReference type,
-        bool isNavigation,
-        bool isCollection,
+        CreateSlot slot,
         Dictionary<string, PropertyBinding> inits,
         List<LoweredExpression> loweredInitializers) {
-        if (inits.TryGetValue(name, out var binding)) {
-            var lowered = LowerInitializerValue(target, name, binding.Expression);
+        if (inits.TryGetValue(slot.Name, out var binding)) {
+            var lowered = LowerInitializerValue(target, slot.Name, binding.Expression);
             loweredInitializers.Add(lowered);
             return (lowered.Value, false);
         }
-        if (isCollection)
-            return (DomainToCSharpExporter.NullCollectionNode(type.TypeName), true);
-        if (isNavigation)
-            return (DomainToCSharpExporter.TypedNull(type.TypeName), true);
-        var prop = target.Properties.FirstOrDefault(p =>
-            string.Equals(p.Name, name, StringComparison.Ordinal));
-        if (prop is not null) {
-            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-            if (defaultConstraint is not null) {
-                if (LowerDefault(defaultConstraint.Expression,
-                        new NamedTypeReference(prop.Type.TypeName)) is { } runtime)
-                    return (runtime, true);
-                if (DomainToCSharpExporter.LowerDefaultConstantNode(
-                        defaultConstraint, prop, _domain, _analysis) is { } constant)
-                    return (constant, !IsEnumMemberDefault(defaultConstraint, prop));
-            }
-            // Optional with no default: an omitted slot passes a typed null and may be
-            // dropped from the trailing run. The cast keeps the hole's type when a later
-            // slot is written (#495, D4). Requiredness is the published fact.
-            var required = DomainToCSharpExporter.RequireStructure(target, _analysis).RequiredPropertyNames;
-            if (!required.Contains(prop.Name))
-                return (TypedNullOf(type), true);
-        }
-        return (TargetTypeAdapter.TypeDefault(type, _context), false);
+        return slot.Shape switch {
+            CreateSlotShape.Collection => (DomainToCSharpExporter.NullCollectionNode(slot.Type.TypeName), true),
+            CreateSlotShape.Reference => (DomainToCSharpExporter.TypedNull(slot.Type.TypeName), true),
+            _ => (TypedNullOf(slot.Type), true),
+        };
     }
 
     /// <summary>
@@ -230,20 +197,6 @@ public sealed partial class EffectLoweringPass {
         new TypeCast(
             new Constant(null),
             new OptionalTypeReference(DomainToCSharpExporter.MapDomainTypeRef(type, _domain, _analysis)));
-
-    /// <summary>
-    /// True when a defaulted slot must be passed explicitly instead of dropped from a
-    /// trailing run: the module default is not a value the VM can evaluate — in
-    /// practice an enum member. Every other default (Text/Number/Boolean/Decimal
-    /// constants, clock/guid runtime folds) keeps dropping, so emitted call shapes are
-    /// unchanged outside enums. Transitional: L-08 owns the final required/NotCreatable
-    /// rule; this never touches requiredness.
-    /// </summary>
-    private bool IsEnumMemberDefault(DefaultValueConstraint constraint, Property prop) =>
-        constraint.Expression is PropertyAccess member
-        && DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, prop.Type.TypeName, out var enumType)
-        && enumType is not null
-        && enumType.MemberNames.Contains(member.Name, StringComparer.Ordinal);
 
     /// <summary>
     /// An initializer value lowers straight into the property's type through the one

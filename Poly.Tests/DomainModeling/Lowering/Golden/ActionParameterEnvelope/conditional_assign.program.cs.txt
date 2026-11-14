@@ -31,7 +31,7 @@ app.MapGet("/api/books", async (TDbCtx db) => await db.Books.ToListAsync());
 app.MapGet("/api/books/{id}", async (int id, TDbCtx db) => (await db.Books.FindAsync(id) is T.Book book ? Results.Ok(book) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/books", async (BookDto dto, TDbCtx db) => {
-    var bookResult = T.Book.Create(dto.Pages, dto.Stock);
+    var bookResult = T.Book.Create(dto.Stock, dto.Pages);
     if (!bookResult.IsSuccess)
     {
         return Problem(bookResult.Error!);
@@ -124,7 +124,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var bookResult = T.Book.Create(5, 500);
+    var bookResult = T.Book.Create(500, 5);
     if (bookResult.IsSuccess)
     {
         db.Add(bookResult.Value);
@@ -138,10 +138,10 @@ app.Run();
 
 internal record BookDto
 {
-    [Range(5, 50)]
-    public long Pages { get; init; }
     [Range(0, 1000)]
     public long Stock { get; init; }
+    [Range(5, 50)]
+    public long Pages { get; init; }
 }
 
 internal record RestockDto

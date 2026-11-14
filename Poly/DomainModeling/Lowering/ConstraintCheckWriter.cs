@@ -29,16 +29,14 @@ internal static class ConstraintCheckWriter {
         LengthMaximum,
         Pattern,
         Equality,
-        EnumRequiredSlot,
         EnumMember,
     }
 
     /// <summary>
     /// One guard. <see cref="Condition"/> is the violation condition without the
     /// applicability guard; <see cref="Presence"/> is the guard that makes the
-    /// check applicable (create optional <c>value != null</c>, assign length
-    /// <c>!IsNullOrEmpty(value)</c>, assign pattern <c>value != null</c>), or null
-    /// when the check always applies.
+    /// check applicable (create optional <c>value != null</c>, assign optional length
+    /// and pattern <c>value != null</c>), or null when the check always applies.
     /// </summary>
     internal sealed record Check(Kind Kind, Node Condition, Node? Presence, Node Message) {
         /// <summary><c>Presence &amp;&amp; Condition</c>, or <c>Condition</c> alone.</summary>
@@ -51,13 +49,13 @@ internal static class ConstraintCheckWriter {
         /// <summary>Create optional slot: every value check is <c>value != null &amp;&amp; …</c>.</summary>
         CreateSlot,
 
-        /// <summary>Assign: length groups under <c>!IsNullOrEmpty</c>, pattern under <c>value != null</c>.</summary>
+        /// <summary>Assign: an optional value's length checks group under <c>value != null</c>, pattern under <c>value != null</c>.</summary>
         AssignValue,
     }
 
     /// <summary>The order a property's checks take in the emitted tree.</summary>
     internal enum CheckOrder {
-        /// <summary>Declaration order, then the enum guards (create).</summary>
+        /// <summary>Declaration order, then the enum member guard (create).</summary>
         Declaration,
 
         /// <summary>Required, range, length, pattern, equality, enum (assign's historical order).</summary>
@@ -66,8 +64,8 @@ internal static class ConstraintCheckWriter {
 
     /// <summary>
     /// A named output dialect, not a consumer-named flag. Create prints
-    /// <c>string.Is…</c> and names the offending enum value; assign prints
-    /// <c>System.String.Is…</c>, names the property only, and carries no enum slot guard.
+    /// <c>string.…</c> and names the offending enum value; assign prints
+    /// <c>System.String.…</c> and names the property only.
     /// Presence and order are data on the dialect, so a third style cannot silently
     /// inherit the other one's rules.
     /// </summary>
@@ -75,14 +73,12 @@ internal static class ConstraintCheckWriter {
         Func<Node> StringStatic,
         Func<Node> RegexStatic,
         bool NamesEnumValue,
-        bool GuardsEnumSlot,
         PresencePolicy Presence,
         CheckOrder Order) {
         internal static readonly ConstraintCheckStyle Create = new(
             () => new PrimitiveTypeReference(PrimType.String),
             () => new NamedTypeReference("System.Text.RegularExpressions.Regex"),
             NamesEnumValue: true,
-            GuardsEnumSlot: true,
             Presence: PresencePolicy.CreateSlot,
             Order: CheckOrder.Declaration);
 
@@ -90,15 +86,15 @@ internal static class ConstraintCheckWriter {
             () => TypeReference.To<string>(),
             () => TypeReference.To<System.Text.RegularExpressions.Regex>(),
             NamesEnumValue: false,
-            GuardsEnumSlot: false,
             Presence: PresencePolicy.AssignValue,
             Order: CheckOrder.Category);
     }
 
     /// <summary>
-    /// Requiredness is the one published fact: a property is required at create
-    /// unless it carries <c>optional</c>, then the text/nullable type gate decides
-    /// whether a value check applies. Reads <see cref="EntityStructureMetadata.RequiredPropertyNames"/>;
+    /// Requiredness is the one published fact: a property is required unless it
+    /// carries <c>optional</c>, and required means non-null for every type. An assigned
+    /// value of a non-nullable CLR value type has no null to refuse, so the gate is
+    /// whether the value can be null. Reads <see cref="EntityStructureMetadata.RequiredPropertyNames"/>;
     /// a missing structure bag throws — it does not recompute. Does not read
     /// <c>DefaultValueConstraint</c> or <c>RequiredPropertiesMetadata</c>.
     /// </summary>
@@ -117,12 +113,11 @@ internal static class ConstraintCheckWriter {
 
     /// <summary>
     /// All constraint checks for one property. The style selects the order: create
-    /// uses declaration order (required, then constraints, then enum); assign uses
+    /// uses declaration order (constraints, then enum membership); assign uses
     /// its historical category order (required, range, length, pattern, equality, enum).
-    /// <paramref name="nullableValue"/> is the create slot's optionality;
-    /// <paramref name="valueHasDefault"/> suppresses the create enum slot guard;
-    /// <paramref name="includeRequired"/> is create's <c>!default</c> gate (assign
-    /// always passes true).
+    /// <paramref name="nullableValue"/> is the slot's optionality (create, or assign to an optional property);
+    /// <paramref name="includeRequired"/> is false on create, where <see cref="RequiredSlotCheck"/>
+    /// guards every Required slot before its value is read (assign passes true).
     /// </summary>
     internal static IReadOnlyList<Check> ChecksFor(
         Entity entity,
@@ -132,28 +127,18 @@ internal static class ConstraintCheckWriter {
         ConstraintCheckStyle style,
         Node value,
         bool nullableValue,
-        bool valueHasDefault,
         bool includeRequired) {
         var checks = new List<Check>();
         var isText = IsText(prop);
         var isNumber = IsNumber(prop);
         var isAssign = style.Presence == PresencePolicy.AssignValue;
 
-        // Create optional slot: value constraints only apply when a value was supplied.
+        // Optional slot (create, or assign to an optional property): value constraints only apply to a present value.
         Node? CreatePresence() =>
-            !isAssign && nullableValue ? new NotEqual(value, new Constant(null)) : null;
+            nullableValue ? new NotEqual(value, new Constant(null)) : null;
 
-        if (includeRequired && RequiredApplies(entity, prop, domain, analysis)) {
-            checks.Add(isText
-                ? new Check(Kind.Required,
-                    new Invoke(new Member(style.StringStatic(), "IsNullOrEmpty"), [value]),
-                    null,
-                    new Constant($"'{prop.Name}' is required."))
-                : new Check(Kind.Required,
-                    new Equal(value, new Constant(null)),
-                    null,
-                    new Constant($"'{prop.Name}' is required.")));
-        }
+        if (includeRequired && RequiredApplies(entity, prop, domain, analysis))
+            checks.Add(RequiredCheck(prop.Name, value));
 
         foreach (var constraint in prop.Constraints) {
             switch (constraint) {
@@ -172,13 +157,13 @@ internal static class ConstraintCheckWriter {
 
                 case LengthConstraint l when isText:
                     var lenAccess = new Member(value, "Length");
-                    // Assign optional length groups under one !IsNullOrEmpty guard; create
-                    // carries per-check presence instead.
+                    // Assign optional length groups under one `value != null` guard (an empty
+                    // string is a value, so its length is checked); create carries per-check
+                    // presence instead.
                     var lengthPresence = isAssign
                         ? (RequiredApplies(entity, prop, domain, analysis)
                             ? null
-                            : new Syntactic.Not(
-                                new Invoke(new Member(style.StringStatic(), "IsNullOrEmpty"), [value])))
+                            : new NotEqual(value, new Constant(null)))
                         : CreatePresence();
                     if (l.MinLength > 0)
                         checks.Add(new Check(Kind.LengthMinimum,
@@ -218,13 +203,6 @@ internal static class ConstraintCheckWriter {
 
         if (DomainToCSharpExporter.TryResolveEnumType(domain, analysis, prop.Type.TypeName, out var enumType)
             && enumType is { MemberNames.Count: > 0 }) {
-            if (style.GuardsEnumSlot && !valueHasDefault) {
-                checks.Add(new Check(Kind.EnumRequiredSlot,
-                    new Equal(new TypeCast(value, new ClrTypeReference(typeof(object))), new Constant(null)),
-                    null,
-                    new Constant($"'{prop.Name}' is required.")));
-            }
-
             Node? notMember = null;
             var enumTypeRef = new NamedTypeReference(enumType.Name);
             foreach (var member in enumType.MemberNames) {
@@ -244,6 +222,17 @@ internal static class ConstraintCheckWriter {
             checks = [.. checks.OrderBy(c => CategoryRank(c.Kind))];
         return checks;
     }
+
+    /// <summary>
+    /// The create guard for a Required slot of any shape (scalar, navigation or collection):
+    /// <c>value == null</c> fails <c>Required</c> with <c>'{Name}' is required.</c> on <c>Entity.{Name}</c>.
+    /// It runs before the slot's value is read, so the slot's constraint checks see a non-null value.
+    /// A slot kind decides whether it applies; the slot's type and shape never do.
+    /// </summary>
+    internal static Check RequiredSlotCheck(CreateSlot slot, Node value) => RequiredCheck(slot.Name, value);
+
+    private static Check RequiredCheck(string name, Node value) =>
+        new(Kind.Required, new Equal(value, new Constant(null)), null, new Constant($"'{name}' is required."));
 
     /// <summary>
     /// The writer's coverage of <see cref="Constraint"/> records. <see cref="Coverage.Kinds"/>
@@ -289,7 +278,7 @@ internal static class ConstraintCheckWriter {
 
     /// <summary>The closed <see cref="DomainFailureKind"/> a failing check reports; equality is a <c>Constraint</c>.</summary>
     internal static DomainFailureKind FailureKindOf(Kind kind) => kind switch {
-        Kind.Required or Kind.EnumRequiredSlot => DomainFailureKind.Required,
+        Kind.Required => DomainFailureKind.Required,
         Kind.RangeMinimum or Kind.RangeMaximum => DomainFailureKind.Range,
         Kind.LengthMinimum or Kind.LengthMaximum => DomainFailureKind.Length,
         Kind.Pattern => DomainFailureKind.Pattern,
@@ -309,8 +298,7 @@ internal static class ConstraintCheckWriter {
         Kind.LengthMinimum or Kind.LengthMaximum => 2,
         Kind.Pattern => 3,
         Kind.Equality => 4,
-        Kind.EnumRequiredSlot => 5,
-        Kind.EnumMember => 6,
+        Kind.EnumMember => 5,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unranked constraint check kind.")
     };
 

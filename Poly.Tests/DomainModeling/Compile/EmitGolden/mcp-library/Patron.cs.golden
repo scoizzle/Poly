@@ -12,7 +12,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     private List<Loan> _loans = new List<Loan>();
     private List<Fine> _fines = new List<Fine>();
     private Patron() { }
-    private Patron(string name, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, string status = "Active")
+    private Patron(string name, string status, IEnumerable<Loan>? loans, IEnumerable<Fine>? fines)
     {
         this.Name = name;
         this.Status = status;
@@ -29,7 +29,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     {
         get => this._fines;
     }
-    internal DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
+    internal DomainResult<Loan> CreateLoans(Book? book = default, long? amount = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -53,7 +53,7 @@ internal class Patron : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Loan> __BodyOfCreateLoans(Book? book, long amount)
+    private DomainResult<Loan> __BodyOfCreateLoans(Book? book, long? amount)
     {
         var loanResult = Loan.Create(book, this, amount);
         if (!loanResult.IsSuccess)
@@ -69,14 +69,14 @@ internal class Patron : Poly.Runtime.IActionScoped
         this._loans.Add(child);
         child.RegisterPatronLoansOverdueSubscriber(this);
     }
-    internal DomainResult<Fine> CreateFines(string reason, long amount = 0L)
+    internal DomainResult<Fine> CreateFines(long? amount = default, string? reason = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
             Poly.Runtime.ActionScope.Touch(this);
-            var __result = this.__BodyOfCreateFines(reason, amount);
+            var __result = this.__BodyOfCreateFines(amount, reason);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -93,9 +93,9 @@ internal class Patron : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Fine> __BodyOfCreateFines(string reason, long amount)
+    private DomainResult<Fine> __BodyOfCreateFines(long? amount, string? reason)
     {
-        var fineResult = Fine.Create(reason, amount);
+        var fineResult = Fine.Create(amount, reason);
         if (!fineResult.IsSuccess)
         {
             return DomainResult<Fine>.Failure(fineResult.Error!);
@@ -151,20 +151,20 @@ internal class Patron : Poly.Runtime.IActionScoped
     internal DomainResult WhenEachLoanOverdue(Loan loan)
     {
         Poly.Runtime.ActionScope.Touch(this);
-        var create0 = this.CreateFines("Overdue", loan.Amount);
+        var create0 = this.CreateFines(loan.Amount, "Overdue");
         if (!create0.IsSuccess)
         {
             return DomainResult.Failure(create0.Error!);
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<Patron> Create(string name, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, string status = "Active")
+    internal static DomainResult<Patron> Create(string? name = default, string? status = default, IEnumerable<Loan>? loans = default, IEnumerable<Fine>? fines = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Patron.__BodyOfCreate(name, loans, fines, status);
+            var __result = Patron.__BodyOfCreate(name, status, loans, fines);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -181,13 +181,15 @@ internal class Patron : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Patron> __BodyOfCreate(string name, IEnumerable<Loan>? loans, IEnumerable<Fine>? fines, string status)
+    private static DomainResult<Patron> __BodyOfCreate(string? name, string? status, IEnumerable<Loan>? loans, IEnumerable<Fine>? fines)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
-        var created = new Patron(name, loans, fines, status);
+        var __name = name;
+        var __status = (status == null ? "Active" : status);
+        var created = new Patron(__name, __status, loans, fines);
         Poly.Runtime.ActionScope.Create(created, "Patron");
         created.InitializeSubscriptions();
         return DomainResult<Patron>.Success(created);

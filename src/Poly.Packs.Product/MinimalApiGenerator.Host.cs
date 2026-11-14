@@ -104,7 +104,7 @@ public sealed partial class MinimalApiGenerator {
                 new Block(new Return(null))));
 
             foreach (var entity in seedableEntities) {
-                var createArgs = BuildCreateCallArgs(entity, GetConstructorOrder(entity), MakeSampleValue);
+                var createArgs = BuildCreateCallArgs(entity, MakeSampleValue);
 
                 var dtoVar = ToCamelCase(entity.Name);
                 bodyNodes.Add(Init($"{dtoVar}Result",

@@ -17,7 +17,7 @@ internal class Hall : Poly.Runtime.IActionScoped
 {
     private List<Section> _sections = new List<Section>();
     private Hall() { }
-    private Hall(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
+    private Hall(string name, long capacity, decimal dayRate, bool occupied, bool offline, long busySections, Property? property, IEnumerable<Section>? sections)
     {
         this.Name = name;
         this.Capacity = capacity;
@@ -266,13 +266,13 @@ internal class Hall : Poly.Runtime.IActionScoped
     public bool ChildrenFree() => this.BusySections == 0L;
     public bool CanBook() => !this.Occupied && !this.Offline && this.BusySections == 0L;
     public bool IsOccupied() => this.Occupied;
-    internal static DomainResult<Hall> Create(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
+    internal static DomainResult<Hall> Create(string? name = default, long? capacity = default, decimal? dayRate = default, bool? occupied = default, bool? offline = default, long? busySections = default, Property? property = default, IEnumerable<Section>? sections = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Hall.__BodyOfCreate(name, capacity, dayRate, property, sections, occupied, offline, busySections);
+            var __result = Hall.__BodyOfCreate(name, capacity, dayRate, occupied, offline, busySections, property, sections);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -289,37 +289,51 @@ internal class Hall : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Hall> __BodyOfCreate(string name, long capacity, decimal dayRate, Property? property, IEnumerable<Section>? sections, bool occupied, bool offline, long busySections)
+    private static DomainResult<Hall> __BodyOfCreate(string? name, long? capacity, decimal? dayRate, bool? occupied, bool? offline, long? busySections, Property? property, IEnumerable<Section>? sections)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Hall.Name"));
         }
-        if (name.Length < 1L)
+        var __name = name;
+        if (__name.Length < 1L)
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 1 characters.", "Hall.Name"));
         }
-        if (name.Length > 80L)
+        if (__name.Length > 80L)
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 80 characters.", "Hall.Name"));
         }
-        if (capacity < 1L)
+        if (capacity == null)
+        {
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'Capacity' is required.", "Hall.Capacity"));
+        }
+        var __capacity = (long)capacity;
+        if (__capacity < 1L)
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be >= 1.", "Hall.Capacity"));
         }
-        if (capacity > 5000L)
+        if (__capacity > 5000L)
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be <= 5000.", "Hall.Capacity"));
         }
-        if (dayRate < 0m)
+        if (dayRate == null)
+        {
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'DayRate' is required.", "Hall.DayRate"));
+        }
+        var __dayRate = (decimal)dayRate;
+        if (__dayRate < 0m)
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be >= 0.", "Hall.DayRate"));
         }
-        if (dayRate > 100000m)
+        if (__dayRate > 100000m)
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "Hall.DayRate"));
         }
-        var created = new Hall(name, capacity, dayRate, property, sections, occupied, offline, busySections);
+        var __occupied = (occupied == null ? false : (bool)occupied);
+        var __offline = (offline == null ? false : (bool)offline);
+        var __busySections = (busySections == null ? 0L : (long)busySections);
+        var created = new Hall(__name, __capacity, __dayRate, __occupied, __offline, __busySections, property, sections);
         Poly.Runtime.ActionScope.Create(created, "Hall");
         if (property != null)
         {

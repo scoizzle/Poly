@@ -9,12 +9,12 @@ namespace Fleet;
 internal class Delivery : Poly.Runtime.IActionScoped
 {
     private Delivery() { }
-    private Delivery(string reference, long weight, string notes = "", Truck? truck = null)
+    private Delivery(string reference, long weight, Truck? truck, string notes)
     {
         this.Reference = reference;
         this.Weight = weight;
-        this.Notes = notes;
         this.Truck = truck;
+        this.Notes = notes;
     }
     public string Reference { get; private set; } = default!;
     public long Weight { get; private set; }
@@ -47,20 +47,20 @@ internal class Delivery : Poly.Runtime.IActionScoped
     private DomainResult __BodyOfConfirm(string notes)
     {
         var assignValue0 = notes;
-        if (System.String.IsNullOrEmpty(assignValue0))
+        if (assignValue0 == null)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Notes' is required.", "Delivery.Notes"));
         }
         this.Notes = assignValue0;
         return DomainResult.Success();
     }
-    internal static DomainResult<Delivery> Create(string reference, long weight, string notes = "", Truck? truck = null)
+    internal static DomainResult<Delivery> Create(string? reference = default, long? weight = default, Truck? truck = default, string? notes = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Delivery.__BodyOfCreate(reference, weight, notes, truck);
+            var __result = Delivery.__BodyOfCreate(reference, weight, truck, notes);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -77,33 +77,40 @@ internal class Delivery : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Delivery> __BodyOfCreate(string reference, long weight, string notes, Truck? truck)
+    private static DomainResult<Delivery> __BodyOfCreate(string? reference, long? weight, Truck? truck, string? notes)
     {
-        if (string.IsNullOrEmpty(reference))
+        if (reference == null)
         {
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Required("'Reference' is required.", "Delivery.Reference"));
         }
-        if (reference.Length < 4L)
+        var __reference = reference;
+        if (__reference.Length < 4L)
         {
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Length("'Reference' must be at least 4 characters.", "Delivery.Reference"));
         }
-        if (reference.Length > 20L)
+        if (__reference.Length > 20L)
         {
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Length("'Reference' must be at most 20 characters.", "Delivery.Reference"));
         }
-        if (weight < 1L)
+        if (weight == null)
+        {
+            return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Required("'Weight' is required.", "Delivery.Weight"));
+        }
+        var __weight = (long)weight;
+        if (__weight < 1L)
         {
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Range("'Weight' must be >= 1.", "Delivery.Weight"));
         }
-        if (weight > 40000L)
+        if (__weight > 40000L)
         {
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Range("'Weight' must be <= 40000.", "Delivery.Weight"));
         }
-        if (string.IsNullOrEmpty(notes))
+        if (notes == null)
         {
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Required("'Notes' is required.", "Delivery.Notes"));
         }
-        var created = new Delivery(reference, weight, notes, truck);
+        var __notes = notes;
+        var created = new Delivery(__reference, __weight, truck, __notes);
         Poly.Runtime.ActionScope.Create(created, "Delivery");
         if (truck != null)
         {

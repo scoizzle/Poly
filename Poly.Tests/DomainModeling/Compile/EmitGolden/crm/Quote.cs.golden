@@ -19,7 +19,7 @@ internal class Quote : Poly.Runtime.IActionScoped
 {
     private List<QuoteLine> _lines = new List<QuoteLine>();
     private Quote() { }
-    private Quote(string title, decimal amount, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
+    private Quote(string title, decimal amount, Opportunity? opportunity, IEnumerable<QuoteLine>? lines)
     {
         this.Title = title;
         this.Amount = amount;
@@ -35,7 +35,7 @@ internal class Quote : Poly.Runtime.IActionScoped
         get => this._lines;
     }
     public QuoteStage CurrentStage { get; private set; }
-    internal DomainResult<QuoteLine> CreateLines(long qty, decimal unitPrice, Product? product = null)
+    internal DomainResult<QuoteLine> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -59,7 +59,7 @@ internal class Quote : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<QuoteLine> __BodyOfCreateLines(long qty, decimal unitPrice, Product? product)
+    private DomainResult<QuoteLine> __BodyOfCreateLines(long? qty, decimal? unitPrice, Product? product)
     {
         var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
         if (!quoteLineResult.IsSuccess)
@@ -221,7 +221,7 @@ internal class Quote : Poly.Runtime.IActionScoped
         this.CurrentStage = QuoteStage.Rejected;
         return DomainResult.Success();
     }
-    internal static DomainResult<Quote> Create(string title, decimal amount, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
+    internal static DomainResult<Quote> Create(string? title = default, decimal? amount = default, Opportunity? opportunity = default, IEnumerable<QuoteLine>? lines = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -244,21 +244,27 @@ internal class Quote : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Quote> __BodyOfCreate(string title, decimal amount, Opportunity? opportunity, IEnumerable<QuoteLine>? lines)
+    private static DomainResult<Quote> __BodyOfCreate(string? title, decimal? amount, Opportunity? opportunity, IEnumerable<QuoteLine>? lines)
     {
-        if (string.IsNullOrEmpty(title))
+        if (title == null)
         {
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Quote.Title"));
         }
-        if (amount < 0m)
+        var __title = title;
+        if (amount == null)
+        {
+            return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Required("'Amount' is required.", "Quote.Amount"));
+        }
+        var __amount = (decimal)amount;
+        if (__amount < 0m)
         {
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Quote.Amount"));
         }
-        if (amount > 100000000m)
+        if (__amount > 100000000m)
         {
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Quote.Amount"));
         }
-        var created = new Quote(title, amount, opportunity, lines);
+        var created = new Quote(__title, __amount, opportunity, lines);
         Poly.Runtime.ActionScope.Create(created, "Quote");
         if (opportunity != null)
         {

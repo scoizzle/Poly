@@ -37,12 +37,12 @@ public sealed class HttpFileGenerator {
     }
 
     /// <summary>
-    /// The entity's CREATE-signature scalar params (the complete constructor
-    /// metadata, non-nav) — the DTO/JSON body mirrors what Entity.Create(...) takes.
+    /// The entity's Required scalar create slots — the members of the create DTO the
+    /// JSON body sends to Entity.Create(...).
     /// </summary>
-    private IReadOnlyList<ConstructorParameterOrder> GetCreateScalarParams(Entity entity) {
+    private IReadOnlyList<CreateSlot> GetCreateScalarParams(Entity entity) {
         if (_analysis.GetStructure(entity) is { } esm)
-            return esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
+            return [.. esm.CreateSlots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })];
         return [];
     }
 

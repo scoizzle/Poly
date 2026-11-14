@@ -18,7 +18,7 @@ internal class Student : Poly.Runtime.IActionScoped
 {
     private List<Enrollment> _enrollments = new List<Enrollment>();
     private Student() { }
-    private Student(string name, string email, IEnumerable<Enrollment>? enrollments = null, long maxCredits = 18L, long openCredits = 0L, long holds = 0L, long completions = 0L, long lastGrade = 0L)
+    private Student(string name, string email, long maxCredits, long openCredits, long holds, long completions, long lastGrade, IEnumerable<Enrollment>? enrollments)
     {
         this.Name = name;
         this.Email = email;
@@ -42,14 +42,14 @@ internal class Student : Poly.Runtime.IActionScoped
         get => this._enrollments;
     }
     public StudentStage CurrentStage { get; private set; }
-    internal DomainResult<Enrollment> CreateEnrollments(Section? section = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
+    internal DomainResult<Enrollment> CreateEnrollments(DateOnly? enrolledOn = default, DateOnly? dueDate = default, long? grade = default, Section? section = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
             Poly.Runtime.ActionScope.Touch(this);
-            var __result = this.__BodyOfCreateEnrollments(section, enrolledOn, dueDate, grade);
+            var __result = this.__BodyOfCreateEnrollments(enrolledOn, dueDate, grade, section);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -66,9 +66,9 @@ internal class Student : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Enrollment> __BodyOfCreateEnrollments(Section? section, DateOnly? enrolledOn, DateOnly? dueDate, long grade)
+    private DomainResult<Enrollment> __BodyOfCreateEnrollments(DateOnly? enrolledOn, DateOnly? dueDate, long? grade, Section? section)
     {
-        var enrollmentResult = Enrollment.Create(section, this, enrolledOn, dueDate, grade);
+        var enrollmentResult = Enrollment.Create(enrolledOn, dueDate, grade, section, this);
         if (!enrollmentResult.IsSuccess)
         {
             return DomainResult<Enrollment>.Failure(enrollmentResult.Error!);
@@ -118,7 +118,7 @@ internal class Student : Poly.Runtime.IActionScoped
             return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Policy("'Enroll' blocked by policy 'AtLimit'.", "Student.Enroll", "AtLimit"));
         }
         this.OpenCredits = this.OpenCredits + 3L;
-        var create0 = this.CreateEnrollments(offering);
+        var create0 = this.CreateEnrollments((DateOnly?)null, (DateOnly?)null, (long?)null, offering);
         if (!create0.IsSuccess)
         {
             return DomainResult<Enrollment>.Failure(create0.Error!.At("Student.Enroll"));
@@ -383,13 +383,13 @@ internal class Student : Poly.Runtime.IActionScoped
         this.LastGrade = done.Grade;
         return DomainResult.Success();
     }
-    internal static DomainResult<Student> Create(string name, string email, Poly.Runtime.IStoragePort db, IEnumerable<Enrollment>? enrollments = null, long maxCredits = 18L, long openCredits = 0L, long holds = 0L, long completions = 0L, long lastGrade = 0L)
+    internal static DomainResult<Student> Create(Poly.Runtime.IStoragePort db, string? name = default, string? email = default, long? maxCredits = default, long? openCredits = default, long? holds = default, long? completions = default, long? lastGrade = default, IEnumerable<Enrollment>? enrollments = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Student.__BodyOfCreate(name, email, enrollments, maxCredits, openCredits, holds, completions, lastGrade, db);
+            var __result = Student.__BodyOfCreate(name, email, maxCredits, openCredits, holds, completions, lastGrade, enrollments, db);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -406,36 +406,43 @@ internal class Student : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Student> __BodyOfCreate(string name, string email, IEnumerable<Enrollment>? enrollments, long maxCredits, long openCredits, long holds, long completions, long lastGrade, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Student> __BodyOfCreate(string? name, string? email, long? maxCredits, long? openCredits, long? holds, long? completions, long? lastGrade, IEnumerable<Enrollment>? enrollments, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Student.Name"));
         }
-        if (string.IsNullOrEmpty(email))
+        var __name = name;
+        if (email == null)
         {
             return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Student.Email"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
+        var __email = email;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Student.Email"));
         }
-        if (maxCredits < 1L)
+        var __maxCredits = (maxCredits == null ? 18L : (long)maxCredits);
+        if (__maxCredits < 1L)
         {
             return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Range("'MaxCredits' must be >= 1.", "Student.MaxCredits"));
         }
-        if (maxCredits > 24L)
+        if (__maxCredits > 24L)
         {
             return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Range("'MaxCredits' must be <= 24.", "Student.MaxCredits"));
         }
-        if (Student.ExistsWithEmail(db, email))
+        var __openCredits = (openCredits == null ? 0L : (long)openCredits);
+        var __holds = (holds == null ? 0L : (long)holds);
+        var __completions = (completions == null ? 0L : (long)completions);
+        var __lastGrade = (lastGrade == null ? 0L : (long)lastGrade);
+        if (Student.ExistsWithEmail(db, __email))
         {
             return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Student'.", "Student.Email"));
         }
-        var created = new Student(name, email, enrollments, maxCredits, openCredits, holds, completions, lastGrade);
+        var created = new Student(__name, __email, __maxCredits, __openCredits, __holds, __completions, __lastGrade, enrollments);
         Poly.Runtime.ActionScope.Create(created, "Student");
         created.InitializeSubscriptions();
-        db.Record("Student", "Email", email);
+        db.Record("Student", "Email", __email);
         return DomainResult<Student>.Success(created);
     }
     private void InitializeSubscriptions()

@@ -9,7 +9,7 @@ namespace Crm;
 internal class Line : Poly.Runtime.IActionScoped
 {
     private Line() { }
-    private Line(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
+    private Line(long qty, decimal unitPrice, Product? product, Opportunity? opportunity)
     {
         this.Qty = qty;
         this.UnitPrice = unitPrice;
@@ -20,7 +20,7 @@ internal class Line : Poly.Runtime.IActionScoped
     public decimal UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Opportunity? Opportunity { get; private set; }
-    internal static DomainResult<Line> Create(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
+    internal static DomainResult<Line> Create(long? qty = default, decimal? unitPrice = default, Product? product = default, Opportunity? opportunity = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -43,25 +43,35 @@ internal class Line : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Line> __BodyOfCreate(long qty, decimal unitPrice, Product? product, Opportunity? opportunity)
+    private static DomainResult<Line> __BodyOfCreate(long? qty, decimal? unitPrice, Product? product, Opportunity? opportunity)
     {
-        if (qty < 1L)
+        if (qty == null)
+        {
+            return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Required("'Qty' is required.", "Line.Qty"));
+        }
+        var __qty = (long)qty;
+        if (__qty < 1L)
         {
             return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be >= 1.", "Line.Qty"));
         }
-        if (qty > 10000L)
+        if (__qty > 10000L)
         {
             return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be <= 10000.", "Line.Qty"));
         }
-        if (unitPrice < 0m)
+        if (unitPrice == null)
+        {
+            return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Required("'UnitPrice' is required.", "Line.UnitPrice"));
+        }
+        var __unitPrice = (decimal)unitPrice;
+        if (__unitPrice < 0m)
         {
             return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'UnitPrice' must be >= 0.", "Line.UnitPrice"));
         }
-        if (unitPrice > 100000000m)
+        if (__unitPrice > 100000000m)
         {
             return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'UnitPrice' must be <= 100000000.", "Line.UnitPrice"));
         }
-        var created = new Line(qty, unitPrice, product, opportunity);
+        var created = new Line(__qty, __unitPrice, product, opportunity);
         Poly.Runtime.ActionScope.Create(created, "Line");
         if (opportunity != null)
         {

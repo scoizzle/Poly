@@ -98,15 +98,19 @@ public sealed class VmState : IDisposable {
         var slots = Stack.RawSlots;
         var types = Program.RootParameterClrTypes;
         foreach (var (i, arg) in args.Index()) {
-            if (types is not null && i < types.Count && types[i] is Type pt
-                && Nullable.GetUnderlyingType(pt) is not null)
-                slots[i] = arg is null ? 0L : Heap.Allocate(arg);
-            else
-                slots[i] = ToRing(arg);
+            var declared = types is not null && i < types.Count ? types[i] : null;
+            // A slot with no recorded type is `object`: a module body's `this` (slot 0, always a reference) or a
+            // parameter with no type, which compiles as object. Nothing is encoded by the argument's runtime type.
+            try {
+                slots[i] = LocalType.Write(arg, declared ?? typeof(object), Heap);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or InvalidCastException or OverflowException) {
+                throw new InvalidOperationException(
+                    $"{ex.Message} (root argument {i}: a '{arg?.GetType().Name ?? "null"}' for '{declared?.Name ?? nameof(Object)}')", ex);
+            }
         }
     }
 
-    internal long ToRing(object? arg) => RingCodec.ToRing(arg, Heap);
 
     /// <summary>Resets the VM state to its initial condition, clearing the
     /// stack, heap, loop ticks, and current node tracking. Does not

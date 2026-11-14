@@ -1,8 +1,16 @@
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Text;
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
+using Poly.Tests.Introspection;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
 
@@ -201,6 +209,21 @@ public class AbiEmitterCompareDomainTests {
         await Assert.That(Run(new NotEqual(shade, new Constant(Shade.Red)))).IsEqualTo(1L);
     }
 
+    /// <summary>Every same-enum comparison, for each underlying type, against C#'s own answer (T-25a).</summary>
+    [Test]
+    [Arguments(typeof(ComparisonEnums.SB))]
+    [Arguments(typeof(ComparisonEnums.B))]
+    [Arguments(typeof(ComparisonEnums.S))]
+    [Arguments(typeof(ComparisonEnums.US))]
+    [Arguments(typeof(ComparisonEnums.I))]
+    [Arguments(typeof(ComparisonEnums.UI))]
+    [Arguments(typeof(ComparisonEnums.L))]
+    [Arguments(typeof(ComparisonEnums.UL))]
+    public async Task SameEnumComparison_EveryShape_MatchesCSharp(Type enumType) {
+        var mismatches = EnumComparisonOracle.Mismatches(enumType);
+        await Assert.That(string.Join("\n", mismatches)).IsEqualTo("");
+    }
+
     [Test]
     public async Task Bool_Ordering_IsCompileRejected() {
         var left = Param<bool>("left");
@@ -361,4 +384,160 @@ public class AbiEmitterCompareDomainTests {
                 new Assignment(new Member(new ThisReference(), "mark"), new Constant(mark)),
                 new Return(value),
             ]));
+}
+
+/// <summary>One enum per underlying type, five members in ascending numeric order (V0..V4): the unsigned ones
+/// straddle the signed boundary of their width, the signed ones hold the minimum, -1, 0, 1 and the maximum.</summary>
+public static class ComparisonEnums {
+    public enum SB : sbyte { V0 = sbyte.MinValue, V1 = -1, V2 = 0, V3 = 1, V4 = sbyte.MaxValue }
+    public enum B : byte { V0 = 0, V1 = 1, V2 = byte.MaxValue / 2, V3 = byte.MaxValue / 2 + 1, V4 = byte.MaxValue }
+    public enum S : short { V0 = short.MinValue, V1 = -1, V2 = 0, V3 = 1, V4 = short.MaxValue }
+    public enum US : ushort { V0 = 0, V1 = 1, V2 = ushort.MaxValue / 2, V3 = ushort.MaxValue / 2 + 1, V4 = ushort.MaxValue }
+    public enum I : int { V0 = int.MinValue, V1 = -1, V2 = 0, V3 = 1, V4 = int.MaxValue }
+    public enum UI : uint { V0 = 0, V1 = 1, V2 = uint.MaxValue / 2, V3 = uint.MaxValue / 2 + 1, V4 = uint.MaxValue }
+    public enum L : long { V0 = long.MinValue, V1 = -1, V2 = 0, V3 = 1, V4 = long.MaxValue }
+    public enum UL : ulong { V0 = 0, V1 = 1, V2 = ulong.MaxValue / 2, V3 = ulong.MaxValue / 2 + 1, V4 = ulong.MaxValue }
+}
+
+/// <summary>
+/// Roslyn is the authority for a same-enum comparison: one compilation of one static method per cell (an enum beside an
+/// enum, a nullable enum, a named member or the null literal, either order), the VM's answer on every operand value
+/// compared with the method's. Nothing is recorded: the C# compiler computes the expected value on each run.
+/// </summary>
+internal static class EnumComparisonOracle {
+    private static readonly OperatorKind[] Kinds = [
+        OperatorKind.Equal, OperatorKind.NotEqual, OperatorKind.LessThan,
+        OperatorKind.LessThanOrEqual, OperatorKind.GreaterThan, OperatorKind.GreaterThanOrEqual
+    ];
+
+    private static readonly string[] Shapes = [
+        "E|E", "E|E?", "E?|E", "E?|E?",
+        "E|V0", "E|V2", "E|V4", "V0|E", "V2|E", "V4|E",
+        "E?|V0", "E?|V2", "E?|V4", "V0|E?", "V2|E?", "V4|E?",
+        "E?|null", "null|E?"
+    ];
+
+    private static readonly Lazy<Dictionary<(Type, string, OperatorKind), MethodInfo?>> Compiled = new(Compile);
+
+    private static string Fqn(Type type) => "global::" + type.FullName!.Replace('+', '.');
+
+    private static bool IsParameter(string side) => side is "E" or "E?";
+
+    private static IEnumerable<(Type Enum, string Shape, OperatorKind Kind)> Cells(IEnumerable<Type> enums) =>
+        from type in enums
+        from shape in Shapes
+        from kind in Kinds
+            // The VM refuses an ordering against the null literal for every type, with a positioned error (not enum-specific).
+        where kind is OperatorKind.Equal or OperatorKind.NotEqual || !shape.Contains("null")
+        select (type, shape, kind);
+
+    private static string Operator(OperatorKind kind) => kind switch {
+        OperatorKind.Equal => "==",
+        OperatorKind.NotEqual => "!=",
+        OperatorKind.LessThan => "<",
+        OperatorKind.LessThanOrEqual => "<=",
+        OperatorKind.GreaterThan => ">",
+        OperatorKind.GreaterThanOrEqual => ">=",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
+    };
+
+    private static Dictionary<(Type, string, OperatorKind), MethodInfo?> Compile() {
+        var enums = typeof(ComparisonEnums).GetNestedTypes().Where(static t => t.IsEnum).ToArray();
+        var cells = Cells(enums).ToArray();
+        var source = new StringBuilder("public static class Cells {\n");
+        for (var i = 0; i < cells.Length; i++) {
+            var (type, shape, kind) = cells[i];
+            var sides = shape.Split('|');
+            var parameters = new List<string>();
+            var text = new string[2];
+            for (var s = 0; s < 2; s++) {
+                if (IsParameter(sides[s])) {
+                    var name = "p" + s;
+                    parameters.Add($"{Fqn(type)}{(sides[s] == "E?" ? "?" : "")} {name}");
+                    text[s] = name;
+                }
+                else
+                    text[s] = sides[s] == "null" ? "null" : $"{Fqn(type)}.{sides[s]}";
+            }
+            source.Append($"public static bool M{i}({string.Join(", ", parameters)}) => {text[0]} {Operator(kind)} {text[1]};\n");
+        }
+        source.Append("}\n");
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
+            .Split(Path.PathSeparator)
+            .Where(static p => Path.GetFileName(p) is "System.Private.CoreLib.dll" or "System.Runtime.dll")
+            .Select(static p => (MetadataReference)MetadataReference.CreateFromFile(p))
+            .Append(MetadataReference.CreateFromFile(typeof(ComparisonEnums).Assembly.Location))
+            .ToArray();
+        var tree = CSharpSyntaxTree.ParseText(source.ToString(), new CSharpParseOptions(LanguageVersion.CSharp11));
+        var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
+        var compilation = CSharpCompilation.Create("EnumComparisonOracle", [tree], references, options);
+        using var pe = new MemoryStream();
+        var emit = compilation.Emit(pe);
+        if (!emit.Success)
+            throw new InvalidOperationException("enum oracle: " + string.Join("\n",
+                emit.Diagnostics.Where(static d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error).Take(5)));
+        pe.Position = 0;
+        var holder = new AssemblyLoadContext("EnumComparisonOracle", isCollectible: true).LoadFromStream(pe).GetType("Cells")!;
+        var answers = new Dictionary<(Type, string, OperatorKind), MethodInfo?>();
+        for (var i = 0; i < cells.Length; i++)
+            answers[cells[i]] = holder.GetMethod($"M{i}");
+        return answers;
+    }
+
+    private static Node Side(Type type, string side, string name) => side switch {
+        "E" => new Parameter(name, new ClrTypeReference(type)),
+        "E?" => new Parameter(name, new OptionalTypeReference(new ClrTypeReference(type))),
+        "null" => new Constant(null),
+        _ => new Constant(Enum.Parse(type, side))
+    };
+
+    private static IEnumerable<object?> Values(Type type, string side) =>
+        side == "E?" ? Enum.GetValues(type).Cast<object?>().Append(null) : Enum.GetValues(type).Cast<object?>();
+
+    private static string Show(object? value) => value is null ? "null" : value.ToString()!;
+
+    public static List<string> Mismatches(Type type) {
+        var mismatches = new List<string>();
+        var answers = Compiled.Value;
+        foreach (var (_, shape, kind) in Cells([type])) {
+            var sides = shape.Split('|');
+            var oracle = answers[(type, shape, kind)];
+            if (oracle is null) {
+                mismatches.Add($"{type.Name} {shape} {kind}: C# rejects the shape");
+                continue;
+            }
+            var node = NativeIntegerGrid.Build(kind, Side(type, sides[0], "p0"), Side(type, sides[1], "p1"));
+            VmProgram program;
+            try {
+                program = Interpreter.Compile(node);
+            }
+            catch (Exception ex) {
+                mismatches.Add($"{type.Name} {shape} {kind}: VM compile {ex.GetType().Name}: {ex.Message.ReplaceLineEndings(" ")}");
+                continue;
+            }
+            var leftValues = IsParameter(sides[0]) ? Values(type, sides[0]).ToArray() : [null];
+            var rightValues = IsParameter(sides[1]) ? Values(type, sides[1]).ToArray() : [null];
+            foreach (var left in leftValues) {
+                foreach (var right in rightValues) {
+                    var arguments = new List<object?>();
+                    if (IsParameter(sides[0]))
+                        arguments.Add(left);
+                    if (IsParameter(sides[1]))
+                        arguments.Add(right);
+                    var expected = (bool)oracle.Invoke(null, [.. arguments])!;
+                    string actual;
+                    try {
+                        using var exec = Interpreter.Execute(program, [.. arguments]);
+                        actual = (exec.RawValue != 0).ToString();
+                    }
+                    catch (Exception ex) {
+                        actual = $"throws {ex.GetType().Name}";
+                    }
+                    if (actual != expected.ToString())
+                        mismatches.Add($"{type.Name} {shape} {kind} [{Show(left)}, {Show(right)}]: VM {actual}, C# {expected}");
+                }
+            }
+        }
+        return mismatches;
+    }
 }

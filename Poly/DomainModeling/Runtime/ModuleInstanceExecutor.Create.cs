@@ -32,10 +32,18 @@ public sealed partial class ModuleInstanceExecutor {
                     var property = entity.Properties.FirstOrDefault(p =>
                         string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
                     var supplied = TryValue(values, parameter.Name, out var raw);
+                    // An omitted scalar is null, never a value invented here: the lowered Create
+                    // fails it Required or applies its default. A navigation keeps its path below.
+                    if (IsOmittedAtCreate(supplied, raw) && EntityTypeOf(parameter.TypeReference) is null) {
+                        args[i] = null;
+                        continue;
+                    }
                     var label = $"Property '{property?.Name ?? parameter.Name}'";
-                    args[i] = supplied
-                        ? CoerceValue(parameter, property?.Type.TypeName, raw, label, namedTypeFailure: true)
-                        : CoerceValue(parameter, null, DefaultOf(parameter), label);
+                    // A supplied value takes the slot's own type: the parameter is `T? x = default`.
+                    var slotType = parameter.TypeReference is OptionalTypeReference optional
+                        ? parameter with { TypeReference = optional.InnerType, DefaultValue = null }
+                        : parameter;
+                    args[i] = CoerceValue(slotType, property?.Type.TypeName, raw, label, namedTypeFailure: supplied);
                 }
                 foreach (var key in values.Keys) {
                     if (!known.Contains(key))

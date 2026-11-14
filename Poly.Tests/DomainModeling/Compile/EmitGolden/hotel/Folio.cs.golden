@@ -15,7 +15,7 @@ internal enum FolioStage
 internal class Folio : Poly.Runtime.IActionScoped
 {
     private Folio() { }
-    private Folio(Reservation? reservation = null, decimal balance = 0m)
+    private Folio(decimal balance, Reservation? reservation)
     {
         this.Balance = balance;
         this.Reservation = reservation;
@@ -185,13 +185,13 @@ internal class Folio : Poly.Runtime.IActionScoped
     }
     public bool HasBalance() => this.Balance > 0L;
     public bool IsSettled() => this.Balance == 0L;
-    internal static DomainResult<Folio> Create(Reservation? reservation = null, decimal balance = 0m)
+    internal static DomainResult<Folio> Create(decimal? balance = default, Reservation? reservation = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Folio.__BodyOfCreate(reservation, balance);
+            var __result = Folio.__BodyOfCreate(balance, reservation);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -208,17 +208,18 @@ internal class Folio : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Folio> __BodyOfCreate(Reservation? reservation, decimal balance)
+    private static DomainResult<Folio> __BodyOfCreate(decimal? balance, Reservation? reservation)
     {
-        if (balance < 0m)
+        var __balance = (balance == null ? 0m : (decimal)balance);
+        if (__balance < 0m)
         {
             return DomainResult<Folio>.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be >= 0.", "Folio.Balance"));
         }
-        if (balance > 1000000m)
+        if (__balance > 1000000m)
         {
             return DomainResult<Folio>.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be <= 1000000.", "Folio.Balance"));
         }
-        var created = new Folio(reservation, balance);
+        var created = new Folio(__balance, reservation);
         Poly.Runtime.ActionScope.Create(created, "Folio");
         return DomainResult<Folio>.Success(created);
     }

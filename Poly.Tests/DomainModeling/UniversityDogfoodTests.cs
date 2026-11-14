@@ -60,8 +60,8 @@ public class UniversityDogfoodTests {
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).DoesNotContain("void Notify(string stageName)");
-        await Assert.That(cs).Contains("Instructor? instructor = null");
-        await Assert.That(cs).Contains("IEnumerable<Enrollment>? enrollments = null");
+        await Assert.That(cs).Contains("Instructor? instructor = default");
+        await Assert.That(cs).Contains("IEnumerable<Enrollment>? enrollments = default");
         await Assert.That(cs).Contains("void AttachEnrollments");
         await Assert.That(cs).Contains("section.AttachEnrollments");
         await Assert.That(cs).Contains("this.Waitlist.Count");

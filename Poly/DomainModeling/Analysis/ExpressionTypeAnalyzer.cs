@@ -667,6 +667,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
         var inferred = InferLiteralAware(context, value, targetTypeName, enumTypes, props, parameters);
         var target = ResolveName(context, targetTypeName, enumTypes).AsOptional(targetOptional);
+        StampMatchTarget(context, value, target);
         // Unresolved bare identifier (`assign CheckIn to now`, `assign Name to Bogus` →
         // `this.Bogus`). Enum targets keep the member diagnostic.
         if (!IsTyped(inferred)
@@ -698,7 +699,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// DMNUM001 (T-07a, #657): an integral division inside a value stored into a Decimal truncates before it widens
-    /// (<c>assign D to 7 / 2</c> stores 3, <c>7 / 2 + 1</c> stores 4). The walk follows the arithmetic spine only.
+    /// (<c>assign D to 7 / 2</c> stores 3, <c>7 / 2 + 1</c> stores 4). The walk follows the arithmetic spine and the arm
+    /// values of a <c>match</c>.
     /// </summary>
     private void WarnIntegerDivisionIntoDecimal(
         AnalysisContext context, DomainExpression expr, ExprType target,
@@ -710,6 +712,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private void WarnIntegerDivisions(
         AnalysisContext context, DomainExpression expr, DomainTypeModel model,
         Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        // A match is stored arm by arm (each arm is converted to the match's type): the spine continues into every arm
+        // value, never into a condition, which is not stored.
+        if (expr is MatchExpr match) {
+            foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else))
+                WarnIntegerDivisions(context, value, model, props, parameters, enumTypes);
+            return;
+        }
         if (expr is not (Add or Subtract or Multiply or Divide))
             return;
         if (expr is Divide divide
@@ -734,6 +743,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         !target.Optional && NullArm(value) is { } arm ? (arm, ExprType.NullLiteral)
         : Compatible(inferred, target, assigning: true) ? null
         : (value, inferred);
+
+    private static MatchExpr? FirstMatch(DomainExpression expr) =>
+        expr as MatchExpr ?? expr.Children.OfType<DomainExpression>().Select(FirstMatch).FirstOrDefault(found => found is not null);
 
     private void CheckDefault(
         AnalysisContext context,
@@ -788,6 +800,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 // Any other default is a consumer like every other (T-05b C2): walked, typed, and checked against the
                 // property's type. A default has no entity scope: it is evaluated before the instance exists.
                 var noProps = new Dictionary<string, string>(StringComparer.Ordinal);
+                // The C# exporter writes a default as a constant optional parameter and silently drops any other form, so a
+                // `match` here runs on the simulator and fails to compile as printed C# (T-09a, found with the position matrix).
+                if (FirstMatch(expr) is { } defaultMatch)
+                    Report(context, defaultMatch,
+                        "a 'match' is not supported in default(...): the generated C# cannot print it as a parameter default"
+                        + (defaultMatch.Line > 0 ? $" (line {defaultMatch.Line}, col {defaultMatch.Col})" : "")
+                        + "; assign the match in an action instead");
+                StampMatchTarget(context, expr, target);
                 WalkExpression(context, expr, noProps, null, enumTypes);
                 var value = InferLiteralAware(context, expr, propTypeName, enumTypes, noProps);
                 if (!IsTyped(value)) {

@@ -27,6 +27,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             && !(IsDate(leftType) && Family(rightType) is TypeFamily.Duration))
             Report(context, left,
                 $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
+        RejectAbsentMatchOperand(context, left, leftType);
+        RejectAbsentMatchOperand(context, right, rightType);
         WalkExpression(context, left, props, parameters, enumTypes);
         WalkExpression(context, right, props, parameters, enumTypes);
     }
@@ -43,8 +45,23 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             && (!IsNumeric(leftType) || !IsNumeric(rightType)))
             Report(context, left,
                 $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
+        RejectAbsentMatchOperand(context, left, leftType);
+        RejectAbsentMatchOperand(context, right, rightType);
         WalkExpression(context, left, props, parameters, enumTypes);
         WalkExpression(context, right, props, parameters, enumTypes);
+    }
+
+    /// <summary>
+    /// Arithmetic over a <c>match</c> that may be absent (an arm is <c>null</c> or optional) is not defined (T-09a): the
+    /// operand has no value on one path, and no host adds to it (the VM and <c>polyc</c> refuse it, the C# compiler
+    /// rejects <c>long?</c> into a <c>long</c>). Compare the match first, or give every arm a value.
+    /// </summary>
+    private void RejectAbsentMatchOperand(AnalysisContext context, DomainExpression operand, ExprType type) {
+        if (type.Optional && IsTyped(type) && RewriteLibraryIdent(operand) is MatchExpr match)
+            Report(context, match,
+                "arithmetic over a 'match' that may be absent is not defined (an arm is null or optional)"
+                + (match.Line > 0 ? $" (line {match.Line}, col {match.Col})" : "")
+                + ": give every arm a value, or compare the match first");
     }
 
     private void RequireTypedOperands(

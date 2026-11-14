@@ -142,6 +142,48 @@ public class T09aProbes {
     }
 
     [Test]
+    public async Task P10_DefaultMatch() {
+        var lines = new List<string>();
+        void Probe(string label, string members, string body, string extra = "") =>
+            lines.Add($"{label} :: {Cell(Doc(members, body, extra))}");
+        Probe("P10 default match Number", "  D2: Number default(match { true -> 1, else -> 2 })", "assign Qty to Qty");
+        Probe("P10 default match Decimal same", "  D2: Decimal default(match { true -> 1.5, else -> 2.5 })", "assign Qty to Qty");
+        Probe("P10 default match Decimal mixed", "  D2: Decimal default(match { true -> 1.5, else -> 2 })", "assign Qty to Qty");
+        Probe("P10 default plain Decimal", "  D2: Decimal default(1.5)", "assign Qty to Qty");
+        Write("P10.txt", lines);
+        await Assert.That(lines.Count).IsGreaterThan(0);
+    }
+
+    private static string Expected(string name) =>
+        (string)typeof(Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests)
+            .GetNestedType("FormGridExpected", System.Reflection.BindingFlags.NonPublic)!
+            .GetField(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(null)!;
+
+    [Test]
+    public async Task P8_Grids() {
+        var lines = new List<string>();
+        lines.Add("== FormGrid");
+        lines.Add(Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests.GridDifferences(
+            Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests.FormGridRows(),
+            Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests.MasterPlusFlips("FormGrid", Expected("FormGrid"))));
+        lines.Add("== FormGridF3");
+        lines.Add(Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests.GridDifferences(
+            Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests.FormGridF3Rows(),
+            Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests.MasterPlusFlips("FormGridF3", Expected("FormGridF3"))));
+        lines.Add("== Dead");
+        var expectedDead = (string)typeof(Poly.Tests.DomainModeling.Analysis.StrictGateCensusTests)
+            .GetNestedType("Expected", System.Reflection.BindingFlags.NonPublic)!
+            .GetField("Dead", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(null)!;
+        lines.Add(Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests.GridDifferences(
+            StrictGateCensus.DeadRows(),
+            Poly.Tests.DomainModeling.Analysis.AnalyzerClosingRoundPinTests.MasterPlusFlips("Dead", expectedDead)));
+        Write("P8.txt", lines);
+        await Assert.That(lines.Count).IsGreaterThan(0);
+    }
+
+    [Test]
     public async Task P0_Decls() {
         var lines = new List<string>();
         foreach (var decl in new[] { "A: Int32 default(2)", "A: Int32", "A: Float default(1.5)", "A: Float", "A: Double", "A: Int", "A: Int64 default(2)",

@@ -822,11 +822,11 @@ assigned arithmetic stays unknown = ok
 match { true -> P_<row>, else -> P_<col> }; cols: Number Decimal Date DateTime Time Text Color Guid
 Number   55NNNNNN
 Decimal  55NNNNNN
-Date     NN55NNNN
-DateTime NN55NNNN
+Date     NN5NNNNN
+DateTime NNN5NNNN
 Time     NNNN5NNN
-Text     NNNNN55N
-Color    NNNNN55N
+Text     NNNNN5NN
+Color    NNNNNN5N
 Guid     NNNNNNN5
 """;
     }

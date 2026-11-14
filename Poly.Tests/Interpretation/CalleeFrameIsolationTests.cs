@@ -191,7 +191,10 @@ public class CalleeFrameIsolationTests {
         yield return new("policy body", $"Ok: policy {{ ({ArmsMixed}) > 2 }}", "assign Dec to 0", "", "Ok", "False", "True");
         yield return new("quantifier body", $"AnyBig: policy {{ any lines where ({ArmsMixed}) > 2 }}", "assign Dec to 0", "",
             "AnyBig", "False", "True");
-        yield return new("default", "D2: Decimal default(match { true -> 1.5, else -> 2 })", "assign Dec to 0", "", "D2", "1.5", "1.5");
+        yield return new("for where filter", "", $"for l in lines where ({ArmsMixed}) > 2 {{ assign Dec to 9 }}", "", "Dec", "0", "9");
+        yield return new("entry effect", $"Open: stage {{ entry {{ assign Dec to {ArmsMixed} }} }}", "assign Qty to Qty", "", "Dec", "1.5", "3");
+        yield return new("exit effect", $"Open: stage {{ exit {{ assign Dec to {ArmsMixed} }} }}\n  Closed: stage {{ }}", "transition to Closed", "",
+            "Dec", "1.5", "3");
         yield return new("nested match", "", "assign Dec to match { Flag -> match { Qty > 1 -> 1.5, else -> Qty }, else -> 2 }", "",
             "Dec", "1.5", "2");
         yield return new("guard operand", "", $"if (({ArmsMixed}) > 2) {{ assign Dec to 9 }}", "", "Dec", "0", "9");
@@ -210,10 +213,10 @@ public class CalleeFrameIsolationTests {
           Qty: Number default(3)
           Dec: Decimal default(0)
           Flag: Boolean default(true)
-          {{position.Members}}
           lines: many MxLine
           Take: action (x: Decimal) { assign Dec to x }
           Run: action { {{position.Body}} }
+          {{position.Members}}
         }
         """;
 
@@ -245,6 +248,23 @@ public class CalleeFrameIsolationTests {
             });
         await Assert.That(outcomes[block - 1].State[position.Observed]).IsEqualTo(position.WhenTrue);
         await Assert.That(outcomes[2 * block - 1].State[position.Observed]).IsEqualTo(position.WhenFalse);
+    }
+
+    /// <summary>A <c>match</c> in <c>default(...)</c> is a positioned analysis error: the generated C# prints a default as a constant
+    /// parameter default and cannot print it, even when every arm has the same type (found with the position matrix).</summary>
+    [Test]
+    [Arguments("Decimal default(match { true -> 1.5, else -> 2 })")]
+    [Arguments("Number default(match { true -> 1, else -> 2 })")]
+    public async Task Match_InADefault_IsAPositionedAnalysisError(string property) {
+        var gate = GateParity.Check($$"""
+            domain P
+            MxDef: entity {
+              D2: {{property}}
+              Go: action { assign D2 to D2 }
+            }
+            """);
+        await Assert.That(gate.Analysis).IsFalse().Because(gate.ToString());
+        await Assert.That(gate.AnalysisSummary).Contains("a 'match' is not supported in default(...)");
     }
 
     /// <summary>A function body may not hold a <c>match</c>: the position is a positioned analysis error on every host, so a

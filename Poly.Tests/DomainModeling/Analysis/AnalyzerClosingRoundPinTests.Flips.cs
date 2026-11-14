@@ -1592,6 +1592,53 @@ public partial class AnalyzerClosingRoundPinTests {
     ];
 
     /// <summary>
+    /// T-09a (#605, #623, the <c>match</c> type): a <c>match</c> has one type. <c>T09a-optional-arm</c>, an optional arm in a
+    /// match that needs a number converted to Decimal is DMMAT002 (the lifted cast is T-06a's and unproven on a host);
+    /// <c>T09a-enum-text</c>, an enum arm with a Text arm that is not a string literal, or into a Text slot, is DMMAT002 (the
+    /// generated C# has no type for it); <c>T09a-absent-arithmetic</c>, arithmetic over a match that may be absent is DMSEM003
+    /// (no host adds to it); <c>T09a-default-match</c>, a <c>match</c> in <c>default(...)</c> is DMSEM003 (the generated C#
+    /// cannot print it), added to cells already refused for their unresolved names. Updated by hand, one row per cell that flips.
+    /// </summary>
+    internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsT09a = [
+        ("FormGrid", "part Qty | match arm into Decimal", "ok", "DMMAT002", "T09a-optional-arm"),
+        ("FormGrid", "part Label | match arm into Color", "ok", "DMMAT002", "T09a-enum-text"),
+        ("FormGrid", "part Tone | match arm into Text", "ok", "DMMAT002", "T09a-enum-text"),
+        ("FormGrid", "p Qty | match arm into Decimal", "ok", "DMMAT002", "T09a-optional-arm"),
+        ("FormGrid", "p Label | match arm into Color", "ok", "DMMAT002", "T09a-enum-text"),
+        ("FormGrid", "o Qty | match arm into Decimal", "ok", "DMMAT002", "T09a-optional-arm"),
+        ("FormGrid", "o Label | match arm into Color", "ok", "DMMAT002", "T09a-enum-text"),
+        ("FormGrid", "Cost Amount | match arm into Decimal", "DMSTR006", "DMMAT002+DMSTR006", "T09a-optional-arm"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Number", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Decimal", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Text", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Boolean", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Date", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Color", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Widget", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "part book Qty | match arm into Decimal", "ok", "DMMAT002", "T09a-optional-arm"),
+        ("FormGridF3", "p book Qty | match arm into Decimal", "ok", "DMMAT002", "T09a-optional-arm"),
+        ("FormGridF3", "part Opt | match arm into Decimal", "ok", "DMMAT002", "T09a-optional-arm"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Number", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Decimal", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Text", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Boolean", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Date", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Color", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Widget", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Number", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Decimal", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Text", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Boolean", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Date", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Color", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Widget", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | form * N", "ok", "DMSEM003", "T09a-absent-arithmetic"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | N * form", "ok", "DMSEM003", "T09a-absent-arithmetic"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | match arm into Decimal", "DMSEM003", "DMMAT002+DMSEM003", "T09a-optional-arm"),
+        ("Dead", "match with an untyped arm | default", "DMMAT004", "DMMAT004+DMSEM003", "T09a-default-match")
+    ];
+
+    /// <summary>
     /// <paramref name="master"/> with every <see cref="FlipsA"/> row, then every <see cref="FlipsB"/> row, of <paramref name="grid"/> applied. A row whose
     /// cell is missing, or whose <c>Before</c> is not the master verdict, throws: the table must describe master.
     /// A line is <c>cell = verdict</c>; the verdict follows the last <c> = </c>.
@@ -1601,7 +1648,7 @@ public partial class AnalyzerClosingRoundPinTests {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 1; i < lines.Length; i++)
             index.Add(CellOf(lines[i]), i);
-        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT06).Where(f => f.Grid == grid)) {
+        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT06).Concat(FlipsT09a).Where(f => f.Grid == grid)) {
             if (!index.TryGetValue(flip.Cell, out var at))
                 throw new InvalidOperationException($"Flip row '{grid}/{flip.Cell}' names no cell of the grid.");
             var verdict = VerdictOf(lines[at]);

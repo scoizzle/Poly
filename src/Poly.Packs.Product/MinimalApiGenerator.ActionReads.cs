@@ -32,6 +32,16 @@ public sealed partial class MinimalApiGenerator {
         return ReadsOf(entity, GetBehaviorActions(entity).First(a => a.Name == actionName), whitelist);
     }
 
+    /// <summary>The same walk entered at <paramref name="entity"/>'s lowered <c>Create</c>, with one root per Required link slot
+    /// (the targets the create route loads and passes): the tree it preloads. Every other entity or collection slot is
+    /// passed <c>null</c>, as the host does. A create reads no stored navigation of <c>this</c>.</summary>
+    internal ActionReads ReadsOfCreate(Entity entity) {
+        if (_catalog is null)
+            throw new InvalidOperationException($"Entity '{entity.Name}' has no lowered module to read.");
+        var links = GetCreateSlots(entity).Where(IsRequiredLink).Select(s => ToCamelCase(s.Name)).ToHashSet(StringComparer.Ordinal);
+        return new ActionReadsWalker(_catalog, _storageLookup, _domain, ActionReadsWalker.Whitelist).Walk(entity.Name, "Create", links);
+    }
+
     private ActionReads ReadsOf(Entity entity, BehaviorAction action, IReadOnlyList<ActionReadsWalker.WhitelistEntry> whitelist) {
         if (_catalog is null)
             throw new InvalidOperationException($"Action '{entity.Name}.{action.Name}' has no lowered module to read.");
@@ -192,7 +202,9 @@ internal sealed class ActionReadsWalker {
         _domainTypes = domain.Types.Where(t => t is not Entity).ToDictionary(t => t.Name, StringComparer.Ordinal);
     }
 
-    internal ActionReads Walk(string entityName, string actionName) {
+    /// <param name="createLinks">Null for an action. For a create entry: the parameter names the host loads and passes (the
+    /// Required links); every other entity or collection parameter is passed <c>null</c>, as the host does.</param>
+    internal ActionReads Walk(string entityName, string actionName, IReadOnlySet<string>? createLinks = null) {
         _action = $"{entityName}.{actionName}";
         var wrapper = _catalog.Method(entityName, actionName)
             ?? throw Refused(null, "an action with no lowered method");
@@ -201,10 +213,13 @@ internal sealed class ActionReadsWalker {
         var arguments = new List<Value>();
         foreach (var parameter in wrapper.Parameters ?? []) {
             switch (Classify(parameter.TypeReference)) {
-                case EntityType entity:
+                case EntityType entity when createLinks is null || createLinks.Contains(parameter.Name):
                     var root = new NodeBuilder(parameter.Name, false, entity.Name, null, null);
                     roots.Add(root);
                     arguments.Add(new EntityValue(root.Instance));
+                    break;
+                case EntityType or EntityCollectionType when createLinks is not null:
+                    arguments.Add(NullValue.Instance);
                     break;
                 case PortType:
                     arguments.Add(PortValue.Instance);

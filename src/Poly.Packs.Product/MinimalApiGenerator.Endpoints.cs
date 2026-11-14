@@ -46,32 +46,87 @@ public sealed partial class MinimalApiGenerator {
                     ProblemResponse(404, "Not Found")))));
 
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
-        if (store.IsRoot && CreatesDirectly(_entities, entity, GetCreateSlots(entity))) {
+        if (store.IsRoot && CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) {
             var dtoParam = new Parameter("dto", new TypeReference($"{entity.Name}Dto"));
             AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, key);
         }
     }
 
     /// <summary>
-    /// False for an entity with an entity-typed property or a Required link (a required to-one, L-15a):
-    /// such an entity has no POST route, no create DTO, no sample request and no seed row, never a route
-    /// that always answers 400, because a POST body carries scalars only and its <c>Create</c> answers
-    /// Required without the link. It is created through a parent action's <c>create in</c>. The DSL cannot
-    /// declare an entity-typed property; only an API-built model reaches it.
+    /// True when a POST body can carry everything the entity's <c>Create</c> requires: every Required slot is a
+    /// scalar, or a link whose target has a natural route key (the body carries the target's key; a target with a
+    /// shadow key has no value a client could send). Otherwise the entity has no POST route, no create DTO, no
+    /// sample request and no seed row, never a route that always answers 400; it is created through a parent
+    /// action's <c>create in</c>. An entity-typed property or a Required collection also has no route; the DSL
+    /// cannot declare either, only an API-built model reaches them. A link member that would share a name with a
+    /// scalar member refuses the route too (two DTO members of one name).
     /// </summary>
-    internal static bool CreatesDirectly(IEnumerable<Entity> entities, Entity entity, IReadOnlyList<CreateSlot> slots) =>
-        !entity.Properties.Any(p => entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
-        && !slots.Any(s => s is { Kind: CreateSlotKind.Required } && s.Shape != CreateSlotShape.Scalar);
+    internal static bool CreatesDirectly(IEnumerable<Entity> entities, Entity entity, IReadOnlyList<CreateSlot> slots,
+        IReadOnlyDictionary<string, StorageEntity> storage) {
+        if (entity.Properties.Any(p => entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal))))
+            return false;
+        var scalarNames = slots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })
+            .Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var slot in slots.Where(s => s is { Kind: CreateSlotKind.Required, Shape: not CreateSlotShape.Scalar })) {
+            if (!IsRequiredLink(slot) || slot.IsSelfNavigation
+                || !storage.TryGetValue(slot.Type.TypeName, out var target) || RouteKeyFor(target).Property is null
+                || scalarNames.Contains(CreateLinkMemberName(slot.Name)))
+                return false;
+        }
+        return true;
+    }
 
-    /// <summary>Appends Syntax IR for POST /api/entities endpoint — calls Entity.Create with result handling.</summary>
+    /// <summary>
+    /// Appends Syntax IR for POST /api/entities endpoint — calls Entity.Create with result handling. Each Required
+    /// link arrives as the target's route key and is looked up exactly as an action's entity argument is (404 when
+    /// it does not exist); a missing or null key passes a null link, and the lowered <c>Create</c> answers Required.
+    /// What the lowered create reads or writes on each loaded target (<see cref="ReadsOfCreate"/>) is loaded before the call.
+    /// </summary>
     private void AppendCreateCallStatements(List<Node> statements, Entity entity,
         Parameter dtoParam, Parameter dbParam,
         string route, RouteKey key) {
-        var createArgs = BuildCreateCallArgs(entity,
-            prop => new Member(new Variable("dto"), prop.Name));
-
         var resultVarName = $"{ToCamelCase(entity.Name)}Result";
+        var locals = new HashSet<string>(["dto", "db", resultVarName], StringComparer.Ordinal);
         var bodyNodes = new List<Node>();
+
+        var reads = _catalog is null ? null : ReadsOfCreate(entity);
+        var loadedRoots = new HashSet<string>(StringComparer.Ordinal) { "this" };
+        var linkLocals = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var slot in GetRequiredLinkSlots(entity)) {
+            var target = slot.Type.TypeName;
+            var local = FreshLocal(locals, ToCamelCase(target));
+            linkLocals[slot.Name] = local;
+            Node Given() => new Member(new Variable("dto"), CreateLinkMemberName(slot.Name));
+            bodyNodes.Add(Init(local, new Conditional(
+                new Equal(Given(), new Constant(null!)),
+                new Constant(null!),
+                LoadByRouteKey(Pluralize(target), _storageLookup[target], Given()))));
+            bodyNodes.Add(new IfStatement(
+                new Ast.Nodes.And(
+                    new NotEqual(Given(), new Constant(null!)),
+                    new Equal(new Variable(local), new Constant(null!))),
+                new Block(new Return(ProblemResponse(404, "Not Found", $"{target} not found")))));
+            var below = new List<Node>();
+            if (reads is null) {
+                // Shape-only generation has no lowered module to read: the one-hop floor of the target, the same floor an
+                // action route loads. Production always passes the catalog (MinimalApiHostArtifactContributor).
+                var targetStore = _storageLookup[target];
+                below.AddRange(targetStore.CollectionNavigations.Select(n => LoadCollection(local, n.PropertyName)));
+                below.AddRange(targetStore.ReferenceNavigations.Select(n => LoadReference(local, n.PropertyName)));
+            }
+            else if (reads.Roots.FirstOrDefault(r => r.Name == ToCamelCase(slot.Name)) is { } linkReads) {
+                loadedRoots.Add(linkReads.Name);
+                AppendReadLoads(below, local, linkReads.Children, new HashSet<string>(), locals);
+            }
+            if (below.Count > 0)
+                bodyNodes.Add(new IfStatement(new NotEqual(new Variable(local), new Constant(null!)), Stmts(below)));
+        }
+        if (reads is not null)
+            RequireEveryRootLoaded(reads, loadedRoots);
+
+        var createArgs = BuildCreateCallArgs(entity,
+            prop => new Member(new Variable("dto"), prop.Name),
+            slot => new Variable(linkLocals[slot.Name]));
 
         // var result = Entity.Create(...)
         bodyNodes.Add(Init(resultVarName,

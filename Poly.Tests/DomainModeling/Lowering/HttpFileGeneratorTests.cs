@@ -30,6 +30,27 @@ public class HttpFileGeneratorTests {
         return new HttpFileGenerator(domain, analysis, storage, behavior, aggregate).Generate();
     }
 
+    /// <summary>P-11b (#687): a create with a Required link sends the target's key, as the sample key its own route uses; a
+    /// target with a shadow key has no key a body could carry, so its dependant has no sample request at all.</summary>
+    [Test]
+    public async Task CreateSample_RequiredLink_CarriesTheTargetsKey() {
+        var http = Render(ParseDomain("""
+            domain Uni
+            Course: entity { Code: Text unique  Title: Text }
+            Section: entity { Cap: Number  Code: Text unique  course: Course }
+            Shelf: entity { Slot: Number unique }
+            Book: entity { Title: Text  shelf: Shelf }
+            Customer: entity { Name: Text }
+            Order: entity { Number: Text  customer: Customer }
+            """)).Replace("\r\n", "\n");
+
+        await Assert.That(http).Contains("### Create a new section");
+        await Assert.That(http).Contains("\"Code\": \"example-code\",\n    \"CourseId\": \"example-value\"\n}");
+        await Assert.That(http).Contains("\"Title\": \"sample\",\n    \"ShelfId\": 42\n}");
+        await Assert.That(http).Contains("### Create a new customer");
+        await Assert.That(http).DoesNotContain("### Create a new order");
+    }
+
     [Test]
     public async Task ValueTypeParam_EmitsJsonObject() {
         var http = Render(ParseDomain("""

@@ -83,10 +83,11 @@ public sealed partial class MinimalApiGenerator {
 
     /// <summary>Appends the SeedAsync local function (Issue 11b).</summary>
     private void AppendSeedMethodStatements(List<Node> statements, string dbContextName) {
-        // A root whose Create needs a link (CreatesDirectly is false) is not seeded: its create would
-        // always fail and be skipped.
+        // A root whose Create needs a link is not seeded, whether or not it has a POST route: the seed passes no link, so
+        // its create would always fail and be skipped.
         var seedableEntities = _entities
-            .Where(e => GetStorageEntity(e).IsRoot && CreatesDirectly(_entities, e, GetCreateSlots(e))).ToList();
+            .Where(e => GetStorageEntity(e).IsRoot && CreatesDirectly(_entities, e, GetCreateSlots(e), _storageLookup)
+                && GetRequiredLinkSlots(e).Count == 0).ToList();
         var bodyNodes = new List<Node>();
 
         // if (db is null) return;

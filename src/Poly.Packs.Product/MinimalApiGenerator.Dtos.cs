@@ -18,8 +18,8 @@ public sealed partial class MinimalApiGenerator {
     private HashSet<string> ComputeActionDtoCollisions() {
         var reserved = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in _entities) {
-            if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity))) continue;
-            if (GetRequiredScalarSlots(entity).Count == 0) continue;
+            if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) continue;
+            if (GetRequiredScalarSlots(entity).Count + GetRequiredLinkSlots(entity).Count == 0) continue;
             reserved.Add($"{entity.Name}Dto");
         }
 
@@ -176,9 +176,10 @@ public sealed partial class MinimalApiGenerator {
         // passes them into Entity.Create(...); every other slot is null). The SAME
         // published slots the endpoint reads, not a re-derived property set.
         var scalarParams = GetRequiredScalarSlots(entity);
+        var linkSlots = GetRequiredLinkSlots(entity);
 
-        if (scalarParams.Count == 0) return;
-        if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity))) return;
+        if (scalarParams.Count + linkSlots.Count == 0) return;
+        if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) return;
 
         // Emit as a record with get/init properties so transport validation attributes
         // attach to properties and the contract stays immutable. Every member is
@@ -218,6 +219,14 @@ public sealed partial class MinimalApiGenerator {
             return attrs.Count == 0 ? prop : prop with { Attributes = attrs };
         }).ToList();
 
+        // One member per Required link, after the scalars: the target's route key. Nullable like every member: an absent
+        // member and a JSON null reach the module as a null link, and it answers Required (the host adds no check).
+        props.AddRange(linkSlots.Select(slot => new PropertyDefinitionNode(
+            CreateLinkMemberName(slot.Name),
+            NullableClrTypeNode(RouteKeyFor(_storageLookup[slot.Type.TypeName]).ClrType),
+            Getter: new PropertyGetterDefinitionNode(),
+            Initializer: new PropertyInitializerDefinitionNode())));
+
         dtoTypes.Add(new TypeDefinitionNode(
             $"{entity.Name}Dto",
             Properties: props,
@@ -226,7 +235,7 @@ public sealed partial class MinimalApiGenerator {
                 TypeDefinitionEqualitySemantics.Value
             ),
             AccessModifier: DomainAccess.ForInfrastructure(
-                _domain, [entity.Name, .. scalarParams.Select(p => p.Type.TypeName)])
+                _domain, [entity.Name, .. scalarParams.Select(p => p.Type.TypeName), .. linkSlots.Select(s => s.Type.TypeName)])
         ));
     }
 }

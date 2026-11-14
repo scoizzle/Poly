@@ -1940,6 +1940,14 @@ A stage failure (an action the current stage does not offer) conflicts with the 
 policy failure (a `require` guard that does not hold) is `422`: the request is well-formed and a rule refused it. It
 is not authorisation, so it is not `403`.
 
+### HTTP route keys (`uses http`)
+
+A `201 Created` response's `Location` is the route plus the row's natural key as one escaped path segment
+(`Uri.EscapeDataString`; non-text keys are formatted culture-invariantly, a Date key as `2026-01-05`), so a key
+with a space, `?`, `#` or a non-ASCII letter reads back at that `Location`. **Known gap:** a key containing `/`
+gets the escaped `Location` but the route cannot read it back, because ASP.NET does not turn `%2F` into `/` in a
+route value.
+
 ### HTTP actions: what the host loads (`uses http`)
 
 An action route answers from what the host loaded before the module runs, and the host loads **everything the action's

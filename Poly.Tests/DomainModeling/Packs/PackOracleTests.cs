@@ -1226,4 +1226,151 @@ public class PackOracleTests {
             [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "n1"),
              new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Seen", "n2")]);
     }
+
+    private static async Task<HttpResponseMessage> PostJsonAsync(PackOracle oracle, string path, string member, JsonNode? value) {
+        var body = new JsonObject { [member] = value }.ToJsonString();
+        return await oracle.Client.PostAsync(path, new StringContent(body, Encoding.UTF8, "application/json"));
+    }
+
+    /// <summary>P-12a (#687 row P-12): a created row's <c>Location</c> carries its natural key as one escaped path
+    /// segment, so a key with a space, a non-ASCII letter, <c>?</c>, <c>#</c>, <c>%</c> or a newline answers 201 and its
+    /// Location reads the same row back. A key with a <c>/</c> gets the escaped Location too; ASP.NET does not turn
+    /// <c>%2F</c> back into <c>/</c> in a route value, so that route cannot be read back (recorded in the PR, no fix
+    /// here: the escaped text is still the right Location).</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task NaturalKey_NeedingEscape_LocationIsEscapedAndRoundTrips(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+
+        foreach (var key in new[] { "a b", "a b@d", "ä", "a?b#c", "a%2Fb", "a\nb", "a/b", "a b/c@d" }) {
+            using var created = await PostJsonAsync(oracle, "/api/customers", "Email", key);
+            await Assert.That((int)created.StatusCode).IsEqualTo(201).Because($"POST {JsonSerializer.Serialize(key)}");
+            var location = created.Headers.Location?.OriginalString;
+            await Assert.That(location).IsEqualTo("/api/customers/" + Uri.EscapeDataString(key)).Because(JsonSerializer.Serialize(key));
+            if (key.Contains('/'))
+                continue;
+            using var read = await oracle.Client.GetAsync(new Uri(location!, UriKind.Relative));
+            await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK).Because($"GET {location}");
+            using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+            await Assert.That(row.RootElement.GetProperty("email").GetString()).IsEqualTo(key);
+        }
+    }
+
+    /// <summary>P-12a regression guard: a key that needs no escaping gets the same <c>Location</c> as before, a Number
+    /// key included, and a shadow-key entity's POST is still a 200 with no <c>Location</c>.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task NaturalKey_NeedingNoEscape_LocationIsUnchanged(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+
+        using var text = await PostJsonAsync(oracle, "/api/customers", "Email", "plain-key_1.x~");
+        await Assert.That((int)text.StatusCode).IsEqualTo(201);
+        await Assert.That(text.Headers.Location?.OriginalString).IsEqualTo("/api/customers/plain-key_1.x~");
+
+        using var number = await PostJsonAsync(oracle, "/api/tickets", "Seq", 42);
+        await Assert.That((int)number.StatusCode).IsEqualTo(201);
+        await Assert.That(number.Headers.Location?.OriginalString).IsEqualTo("/api/tickets/42");
+        using var readNumber = await oracle.Client.GetAsync("/api/tickets/42");
+        await Assert.That(readNumber.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        using var shadow = await PostJsonAsync(oracle, "/api/notes", "Body", "hello");
+        await Assert.That((int)shadow.StatusCode).IsEqualTo(200);
+        await Assert.That(shadow.Headers.Location).IsNull();
+    }
+
+    /// <summary>P-12a: a Date key's Location is culture-invariant ISO text that the route binds back. Before, it was the
+    /// host's culture short date (<c>1/5/2026</c>), whose slashes made it a different route.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task DateKey_LocationIsInvariantAndRoundTrips(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+
+        using var created = await PostJsonAsync(oracle, "/api/events", "Day", "2026-01-05");
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+        await Assert.That(created.Headers.Location?.OriginalString).IsEqualTo("/api/events/2026-01-05");
+        using var read = await oracle.Client.GetAsync(created.Headers.Location);
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        await Assert.That(row.RootElement.GetProperty("day").GetString()).IsEqualTo("2026-01-05");
+    }
+
+    /// <summary>P-12a fix round: an optional unique Date key is a <c>DateOnly?</c>, and the generated host compiles with it
+    /// (it did not, CS1501, with the unguarded ISO format) and serves. The create path is not exercised: on this host every
+    /// create of such an entity answers 409 Unique (and an optional unique Text key kills the host at boot, a
+    /// <c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task OptionalUniqueDateKey_HostCompilesAndServes(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.OptionalKeys687);
+
+        using var list = await oracle.Client.GetAsync("/api/slots");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+    }
+
+    /// <summary>P-12a: the GET body of a keyed entity carries every declared scalar and the stage, under the member
+    /// names and JSON kinds the declaration implies. Names come from the parsed domain through the BCL's
+    /// <see cref="JsonNamingPolicy.CamelCase"/>, not from the generator. A subset-and-required check, deliberately not a
+    /// single golden body: it does not say whether <c>id</c> or a navigation is present (the missing <c>id</c> is
+    /// P-12's, navigations are unstable), so it pins neither.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task GetBody_MembersFollowTheDeclaredContract(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        // The same entities without the host libraries (persistence stands in for sqlite), so the plain parser reads them.
+        var declaration = PackOracleDomains.RouteKeys687.Poly.Replace("uses http\n", "").Replace("uses sqlite", "uses persistence");
+        var domain = EvolvedDomain.FromDsl(declaration).Domain;
+        var profile = domain.Types.OfType<Poly.DomainModeling.Ontology.Entity>().Single(e => e.Name == "Profile");
+        var expected = profile.Properties.ToDictionary(
+            p => JsonNamingPolicy.CamelCase.ConvertName(p.Name),
+            p => p.Type.TypeName switch {
+                "Number" or "Decimal" => JsonValueKind.Number,
+                "Boolean" => JsonValueKind.True,
+                _ => JsonValueKind.String,
+            });
+        var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
+        var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
+        var stageName = new Poly.DomainModeling.Analysis.StorageAnalyzer(domain).Analyze(aggregate, topology)
+            .Entities.Single(e => e.Name == "Profile").StagePropertyName;
+        expected[JsonNamingPolicy.CamelCase.ConvertName(stageName!)] = JsonValueKind.String;
+
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+        var post = new JsonObject {
+            ["Handle"] = "h1",
+            ["Age"] = 3,
+            ["Active"] = true,
+            ["Born"] = "2026-01-01",
+            ["Tier"] = "High",
+            ["Price"] = 1.5,
+        };
+        using var created = await oracle.Client.PostAsync(
+            "/api/profiles", new StringContent(post.ToJsonString(), Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var read = await oracle.Client.GetAsync("/api/profiles/h1");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        using var listRead = await oracle.Client.GetAsync("/api/profiles");
+        await Assert.That(listRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var list = JsonDocument.Parse(await listRead.Content.ReadAsStringAsync());
+        await Assert.That(list.RootElement.GetArrayLength()).IsGreaterThan(0);
+        // A Boolean is True or False by value, one JSON kind.
+        static JsonValueKind Kind(JsonElement e) => e.ValueKind == JsonValueKind.False ? JsonValueKind.True : e.ValueKind;
+        foreach (var (name, kind) in expected) {
+            await Assert.That(body.RootElement.TryGetProperty(name, out var member)).IsTrue().Because($"member {name}");
+            await Assert.That(Kind(member)).IsEqualTo(kind).Because($"member {name}");
+            foreach (var item in list.RootElement.EnumerateArray()) {
+                await Assert.That(item.TryGetProperty(name, out var listed)).IsTrue().Because($"list member {name}");
+                await Assert.That(Kind(listed)).IsEqualTo(kind).Because($"list member {name}");
+            }
+        }
+    }
 }

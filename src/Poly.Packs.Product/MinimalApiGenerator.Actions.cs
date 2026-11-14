@@ -15,8 +15,9 @@ public sealed partial class MinimalApiGenerator {
             if (!emittedActions.Add(ia.Name))
                 continue;
             var store = GetStorageEntity(entity);
-            var keyName = store.KeyName;
-            var keyType = store.KeyClrType;
+            var key = RouteKeyFor(store);
+            var keyName = key.Name;
+            var keyType = key.ClrType;
             var pluralName = Pluralize(entity.Name);
             var parentCtx = GetStorageEntity(entity).IsRoot ? null : GetAggregateParent(entity);
             // What the action can read, at any depth, from the lowered module. A refused action fails generation here, naming
@@ -34,8 +35,9 @@ public sealed partial class MinimalApiGenerator {
             if (parentCtx is { } ctx) {
                 var (pEntity, relNameRaw, _) = ctx;
                 var pStore = GetStorageEntity(pEntity);
-                var pKeyName = pStore.KeyName;
-                var pKeyType = pStore.KeyClrType;
+                var pKey = RouteKeyFor(pStore);
+                var pKeyName = pKey.Name;
+                var pKeyType = pKey.ClrType;
                 var pascalRel = Pascalize(relNameRaw);
                 var childKeyParam = DistinctChildKeyParam(pKeyName, keyName, entity.Name);
                 var isCollection = IsCollectionNavigation(pStore, pascalRel);

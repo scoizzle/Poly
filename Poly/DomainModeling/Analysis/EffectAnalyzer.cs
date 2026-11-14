@@ -108,7 +108,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             }
 
             foreach (var targetConstraint in target.Value.Property.Constraints) {
-                if (targetConstraint is not (LengthConstraint or RangeConstraint))
+                if (ConstraintKinds.Of(targetConstraint) is not { WriteRelevant: true })
                     continue;
                 var sourceConstraint = source.Value.Property.Constraints
                     .FirstOrDefault(c => c.GetType() == targetConstraint.GetType());
@@ -143,6 +143,22 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     WriteRecorder.Record(
                         context, domain, target.Value.Property, target.Value.Property.Name, constraint,
                         WriteVerdict.Satisfied);
+                    continue;
+                }
+
+                // A pattern or equals that differs proves nothing about a value being outside: an
+                // unverified warning plus its fact, never an error (only Range and Length can err).
+                if (targetConstraint is PatternConstraint or EqualityConstraint) {
+                    context.ReportWarning(
+                        target.Value.Property,
+                        $"Observed flow '{flow.SourcePath}' -> '{flow.TargetPath}': " +
+                        $"{ConstraintValidation.Describe(sourceConstraint)} differs from " +
+                        $"{ConstraintValidation.Describe(targetConstraint)}, so the copy cannot be verified.",
+                        DomainModelDiagnosticCodes.ConstraintUndecided);
+                    WriteRecorder.Record(
+                        context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                        WriteVerdict.Unverified(
+                            UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.ConstraintUndecided));
                     continue;
                 }
 
@@ -1392,6 +1408,13 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
         if (inner is LengthConstraint il && outer is LengthConstraint ol) {
             return il.MinLength >= ol.MinLength && il.MaxLength <= ol.MaxLength;
+        }
+        // A pattern or an equality is subsumed only by the identical constraint.
+        if (inner is PatternConstraint ip && outer is PatternConstraint op) {
+            return string.Equals(ip.Pattern, op.Pattern, StringComparison.Ordinal);
+        }
+        if (inner is EqualityConstraint ie && outer is EqualityConstraint oe) {
+            return Equals(ie.ExpectedValue, oe.ExpectedValue);
         }
         // For other constraint types, assume compatible (exact match on type was already checked)
         return true;

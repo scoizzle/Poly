@@ -146,9 +146,14 @@ internal sealed partial class EffectAnalyzer {
             case ConstraintVerdict.Violated:
                 return WriteVerdict.Violated;
             default:
-                return constraint is RangeConstraint && value.NumericRange is not null
+                if (constraint is RangeConstraint && value.NumericRange is not null)
+                    return WriteVerdict.Unverified(
+                        UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.EffectConstraintViolation);
+                // A non-range value that carries a bound of the target's own kind has a bound, just not an
+                // inside one: say so, rather than that it has none.
+                return constraint is not RangeConstraint && value.Constraints.Any(c => c.GetType() == constraint.GetType())
                     ? WriteVerdict.Unverified(
-                        UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.EffectConstraintViolation)
+                        UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.ConstraintUndecided)
                     : WriteVerdict.Unverified(OpaqueReason(assigned), DomainModelDiagnosticCodes.ConstraintUndecided);
         }
     }

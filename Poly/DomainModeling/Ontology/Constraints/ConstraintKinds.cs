@@ -78,8 +78,9 @@ internal sealed class ConstraintKind {
 
     /// <summary>
     /// True when a write of a non-literal value must be verified against this kind (the Q4
-    /// unverified-write channel consults <see cref="Decide"/> for it). Range only in V-03: a
-    /// widening kind sets this together with a real <see cref="Decide"/>.
+    /// unverified-write channel consults <see cref="Decide"/> for it). Range, Length, Pattern and
+    /// Equality: a kind the runtime enforces on a write sets this together with a real <see cref="Decide"/>.
+    /// Excluded: unique (stored state, not the written value), required (DMEFF014) and enum membership (the type check).
     /// </summary>
     public bool WriteRelevant { get; }
 
@@ -145,7 +146,9 @@ internal static class ConstraintKinds {
                 describe: l => $"length({l.MinLength}, {l.MaxLength})",
                 print: (l, host) => l.MinLength == l.MaxLength
                     ? $"length({host.Number(l.MinLength)})"
-                    : $"length({host.Number(l.MinLength)}, {host.Number(l.MaxLength)})"),
+                    : $"length({host.Number(l.MinLength)}, {host.Number(l.MaxLength)})",
+                decide: WriteVerification.DecideLength,
+                writeRelevant: true),
             Row<RequiredConstraint>(
                 merge: (_, _) => ConstraintMergeResult.Of(new RequiredConstraint()),
                 join: (_, _) => new RequiredConstraint(),
@@ -168,7 +171,9 @@ internal static class ConstraintKinds {
                 identical: (x, y) => Equals(x.ExpectedValue, y.ExpectedValue),
                 evaluate: (eq, v) => ConstraintValidation.Of(Equals(v, eq.ExpectedValue)),
                 describe: eq => $"== {eq.ExpectedValue}",
-                print: (e, host) => $"equals({host.Literal(e.ExpectedValue)})"),
+                print: (e, host) => $"equals({host.Literal(e.ExpectedValue)})",
+                decide: WriteVerification.DecideEquality,
+                writeRelevant: true),
             Row<PatternConstraint>(
                 // Two different patterns are a conjunction (a string can match both), not bottom:
                 // not one pattern, so Unmergeable; AbstractValue keeps both (ConstraintMerge.Coexists).
@@ -179,7 +184,9 @@ internal static class ConstraintKinds {
                 identical: (x, y) => string.Equals(x.Pattern, y.Pattern, StringComparison.Ordinal),
                 evaluate: (p, v) => ConstraintValidation.Of(ConstraintValidation.IsValidPattern(v, p.Pattern)),
                 describe: p => $"pattern({p.Pattern})",
-                print: (p, host) => $"pattern(\"{host.EscapeString(p.Pattern)}\")"),
+                print: (p, host) => $"pattern(\"{host.EscapeString(p.Pattern)}\")",
+                decide: WriteVerification.DecidePattern,
+                writeRelevant: true),
             Row<UniqueConstraint>(
                 merge: (a, _) => ConstraintMergeResult.Of(a),
                 join: null,

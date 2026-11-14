@@ -141,6 +141,72 @@ public class PolySurfaceV2Tests {
     }
 
     [Test]
+    public async Task PolyCheck_UnverifiedWrite_IsUnknown() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain V2
+            Box: entity {
+              S: Text length(1, 3)
+              T: Text length(1, 5)
+              Go: action { assign S to T }
+            }
+            """).Ok).IsTrue();
+
+        var whole = surface.Check(workspace);
+        var selected = surface.Check(workspace, select: "Box");
+
+        foreach (var response in new[] { whole, selected }) {
+            await Assert.That(response.Ok).IsTrue();
+            var data = JsonSerializer.SerializeToNode(response.Data)!;
+            await Assert.That(data["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
+            await Assert.That(data["unverifiedFindings"]?.GetValue<int>()).IsEqualTo(1);
+        }
+    }
+
+    [Test]
+    public async Task PolyCheck_SelectOnCleanAction_IsProvenWhileTheWholeModelIsUnknown() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain V2
+            Box: entity {
+              S: Text length(1, 3)
+              T: Text length(1, 5)
+              N: Number range(0, 10)
+              Bad: action { assign S to T }
+              Good: action { assign N to 5 }
+            }
+            """).Ok).IsTrue();
+
+        var whole = JsonSerializer.SerializeToNode(surface.Check(workspace).Data)!;
+        var clean = JsonSerializer.SerializeToNode(surface.Check(workspace, select: "Box.Good").Data)!;
+        var bad = JsonSerializer.SerializeToNode(surface.Check(workspace, select: "Box.Bad").Data)!;
+
+        await Assert.That(whole["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
+        await Assert.That(clean["verdict"]!.GetValue<string>()).IsEqualTo("proven");
+        await Assert.That(bad["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
+    }
+
+    [Test]
+    public async Task PolyCheck_PatternWrite_IsUnknown() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain V2
+            Box: entity {
+              A: Text pattern("^a+$")
+              B: Text
+              Go: action { assign A to B }
+            }
+            """).Ok).IsTrue();
+
+        var data = JsonSerializer.SerializeToNode(surface.Check(workspace).Data)!;
+
+        await Assert.That(data["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
+    }
+
+    [Test]
     public async Task Check_ViolatedWhenTheModelHasErrors() {
         var (sessionId, state) = McpTestTools.Store.Create("Broken");
         var broken = new Domain("Broken", [

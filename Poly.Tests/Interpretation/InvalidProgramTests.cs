@@ -725,7 +725,7 @@ public class InvalidProgramTests {
         var genericNew = new New(
             new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("T")]),
             new Constant(true),
-            new Parameter("value"),
+            new Default(null), // an argument whose type does not resolve (an untyped parameter is object since T-21a)
             new Constant(null));
         var analysis = Interpreter.Analyze(new Block([plain, generic, plainNew, genericNew]));
         await Assert.That(analysis.GetResolvedMember(plainNew) as ITypeConstructor).IsNotNull();

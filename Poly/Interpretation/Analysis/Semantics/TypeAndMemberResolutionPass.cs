@@ -17,6 +17,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
         if (node is ForLoop loop)
             ApplyForLoopStoredLambdas(context, loop);
+        if (node is Lambda declaring)
+            MarkLambdaParameters(context, declaring);
 
         var resolvedType = ResolveNodeType(context, node);
 
@@ -761,6 +763,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     /// Tag it as <c>Func&lt;…&gt;</c> / <c>Action&lt;…&gt;</c> from parameter types
     /// plus the body's yield type (what <c>Invoke</c> of that value returns).</summary>
     private static ITypeDefinition? ResolveLambdaType(AnalysisContext context, Lambda lambda) {
+        MarkLambdaParameters(context, lambda);
         var paramClr = new Type[lambda.Parameters.Count];
         for (int i = 0; i < paramClr.Length; i++) {
             paramClr[i] = RuntimeTypeOf(context, lambda.Parameters[i]) ?? typeof(object);
@@ -798,14 +801,32 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         // A use in a body carries no type reference; the bind pass linked it to the
         // declaration that does.
-        if (context.GetMetadata<ParameterBindingMetadata>(parameter)?.Declaration is { TypeReference: { } declared })
+        var declaration = context.GetMetadata<ParameterBindingMetadata>(parameter)?.Declaration ?? parameter;
+        if (declaration.TypeReference is { } declared)
             return ResolveNodeType(context, declared);
 
-        return null;
+        // An untyped parameter is `object`: it compiles as object (AstParameterDefinition) and its frame slot holds a
+        // handle. A lambda's untyped parameter is the exception: its type is the delegate's, settled where it converts.
+        return context.GetMetadata<LambdaParameterMetadata>(declaration) is null
+            ? context.TypeDefinitions.GetTypeDefinition(typeof(object))
+            : null;
+    }
+
+    /// <summary>Marks the parameters a lambda declares before any route resolves its body (the pass's own visit, a
+    /// delegate position, an inline or stored invoke), so an untyped one is left to its delegate rather than <c>object</c>.</summary>
+    private static void MarkLambdaParameters(AnalysisContext context, Lambda lambda) {
+        foreach (var parameter in lambda.Parameters)
+            context.SetMetadata(parameter, LambdaParameterMetadata.Instance);
+    }
+
+    /// <summary>Marks a parameter a lambda declares, so an untyped one is left to its delegate rather than <c>object</c>.</summary>
+    private sealed record LambdaParameterMetadata : IAnalysisMetadata {
+        public static readonly LambdaParameterMetadata Instance = new();
     }
 
     private static void BindLambdaArguments(
         AnalysisContext context, Lambda lambda, IReadOnlyList<Node> arguments) {
+        MarkLambdaParameters(context, lambda);
         int n = Math.Min(lambda.Parameters.Count, arguments.Count);
         for (int i = 0; i < n; i++) {
             var arg = arguments[i];

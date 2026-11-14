@@ -334,28 +334,73 @@ public class CompatibilityProviderTests {
         await Assert.That(AssignErrors("Count", true)).IsEquivalentTo(["cannot assign 'Boolean' to 'Count' (type 'Int64')"]);
     }
 
-    // ---- And over a bool and a bool? (T-20 re-review N1): pinned as it is today ----
+    // ---- And and Or over a bool? operand (T-20 re-review N1; T-21a) ----
 
     /// <summary>
     /// C# defines no <c>bool &amp;&amp; bool?</c> (CS0019), but <c>CheckBooleanOperands</c> judges by category, so the lowered
-    /// analysis accepts it and the VM runs it; constant folding no longer simplifies it (T-20). A KNOWN-WRONG result,
-    /// pinned as it is and not as it should be: with the right operand present and false, the VM answers true (it reads
-    /// the optional's presence, raw word 2). Row T-28 moves the Boolean operand checks onto the provider, which rejects
-    /// the pair as C# does.
+    /// analysis accepts it until row T-28 moves the Boolean operand checks onto the provider. The VM reads an optional
+    /// Boolean operand as the owner's ruling reads an optional Boolean condition (#862): <c>X == true</c>, so absent is not
+    /// true. Before T-21a the VM read the optional's presence, so a stored false answered true.
     /// </summary>
     [Test]
-    public async Task And_TrueWithNullableBool_IsAccepted_AsToday_FalseOperandReadsTrue_T28() {
+    public async Task And_TrueWithNullableBool_IsAccepted_UntilT28() {
         var node = new And(new Constant(true), new Parameter("f", TypeReference.To<bool?>()));
         await Assert.That(Interpreter.Analyze(node).Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
-        var program = Interpreter.Compile(node);
-        await Assert.That(program.RootClrType).IsEqualTo(typeof(bool));
-        using (var present = Interpreter.Execute(program, s => s.SetArgs(true)))
-            await Assert.That(present.GetValue<bool>()).IsTrue();
-        using (var absent = Interpreter.Execute(program, s => s.SetArgs((object?)null)))
-            await Assert.That(absent.GetValue<bool>()).IsFalse();
-        using (var falseOperand = Interpreter.Execute(program, s => s.SetArgs(false))) {
-            await Assert.That(falseOperand.RawValue).IsEqualTo(2L);
-            await Assert.That(falseOperand.GetValue<bool>()).IsTrue();
-        }
     }
+
+    /// <summary>The operand arrives as a parameter, a CLR property read and a call result; each operator in both operand
+    /// orders, and beside another <c>bool?</c>. The root is a bool, 0 or 1, and true only when the operand is stored true.
+    /// Accepting <c>and</c>/<c>or</c> over a <c>bool?</c> at all is interim: row T-28 rejects the pair as C# does.</summary>
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    [Arguments(null)]
+    public async Task AndOr_OverNullableBool_ReadTheValue_AbsentIsNotTrue(bool? flag) {
+        var sources = new (string Name, Func<Node> Operand, object?[] Args)[] {
+            ("parameter", static () => new Parameter("f", TypeReference.To<bool?>()), [flag]),
+            ("property", static () => new Member(new Parameter("b", TypeReference.To<NullableFlagBox>()), nameof(NullableFlagBox.Flag)), [new NullableFlagBox { Flag = flag }]),
+            ("call", () => new Invoke(new Member(new ClrTypeReference(typeof(NullableFlagBox)), nameof(NullableFlagBox.Of)), new Constant(NullableFlagBox.Code(flag))), []),
+        };
+        var answers = new List<string>();
+        foreach (var (name, operand, args) in sources) {
+            foreach (var (shape, node) in new (string, Node)[] {
+                ("true and X", new And(new Constant(true), operand())),
+                ("X and true", new And(operand(), new Constant(true))),
+                ("false or X", new Or(new Constant(false), operand())),
+                ("X or false", new Or(operand(), new Constant(false))),
+            }) {
+                var program = Interpreter.Compile(node);
+                using var exec = Interpreter.Execute(program, args);
+                answers.Add($"{name} {shape}: {program.RootClrType?.Name} {exec.RawValue}");
+            }
+        }
+        var expected = flag == true ? 1L : 0L;
+        await Assert.That(answers).IsEquivalentTo(sources.SelectMany(s => new[] { "true and X", "X and true", "false or X", "X or false" }
+            .Select(shape => $"{s.Name} {shape}: Boolean {expected}")).ToArray());
+
+        var both = Interpreter.Compile(new And(new Parameter("f", TypeReference.To<bool?>()), new Parameter("g", TypeReference.To<bool?>())));
+        await Assert.That(both.RootClrType).IsEqualTo(typeof(bool));
+        using var pair = Interpreter.Execute(both, true, flag);
+        await Assert.That(pair.RawValue).IsEqualTo(expected);
+    }
+
+    /// <summary>Short-circuit over a <c>bool?</c> right operand: <c>false and X</c> and <c>true or X</c> never run X.</summary>
+    [Test]
+    public async Task AndOr_OverNullableBool_DoNotRunTheRightOperand_WhenTheLeftDecides() {
+        static Node Explode() => new Invoke(new Member(new ClrTypeReference(typeof(NullableFlagBox)), nameof(NullableFlagBox.Explode)));
+        using (var and = Interpreter.Execute(Interpreter.Compile(new And(new Constant(false), Explode()))))
+            await Assert.That(and.RawValue).IsEqualTo(0L);
+        using (var or = Interpreter.Execute(Interpreter.Compile(new Or(new Constant(true), Explode()))))
+            await Assert.That(or.RawValue).IsEqualTo(1L);
+    }
+}
+
+public sealed class NullableFlagBox {
+    public static bool? Explode() => throw new InvalidOperationException("the right operand ran");
+
+    public bool? Flag { get; set; }
+
+    public static int Code(bool? flag) => flag switch { true => 1, false => 2, null => 0 };
+
+    public static bool? Of(int code) => code switch { 1 => true, 2 => false, _ => null };
 }

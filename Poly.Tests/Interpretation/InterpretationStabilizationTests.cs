@@ -489,8 +489,11 @@ public class InterpretationStabilizationTests {
             .WithMessage("MaxLoopIterations exceeded.");
     }
 
+    /// <summary>The word <c>SetArgs</c> stores for an argument of the parameter's own declared type.</summary>
     private static async Task AssertSlot0(object? arg, long expectedRaw) {
-        var program = Interpreter.Compile(new ThisReference());
+        var program = Interpreter.Compile(arg is null
+            ? new ThisReference()
+            : new Parameter("p", new ClrTypeReference(arg.GetType())));
         using var exec = Interpreter.Execute(program, s => s.SetArgs(arg));
         await Assert.That(exec.RawValue).IsEqualTo(expectedRaw);
     }

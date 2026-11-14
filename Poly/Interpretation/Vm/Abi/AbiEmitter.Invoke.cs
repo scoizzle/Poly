@@ -92,16 +92,7 @@ public static partial class AbiEmitter {
                                 methodArgs[i] = bridgeArgument;
                                 continue;
                             }
-                            var ringVal = ctx.RingVar(argSlots[i]);
-                            var parameterType = methodParams[i].ParameterType;
-                            var sourceClr = ctx.ClrTypeOf(invoke.Arguments[i]);
-                            methodArgs[i] = Nullable.GetUnderlyingType(parameterType) is not null
-                                && sourceClr is not null
-                                && Nullable.GetUnderlyingType(sourceClr) is not null
-                                ? new SlotLocation.Ring(argSlots[i]).ReadAs(ctx, parameterType)
-                                : RingCodec.ToClr(
-                                    ringVal, parameterType, invoke.Arguments[i],
-                                    ctx.Analysis, ctx.HeapLocal);
+                            methodArgs[i] = ClrArgument(argSlots[i], invoke.Arguments[i], methodParams[i].ParameterType, ctx);
                         }
                     }
 
@@ -1343,6 +1334,17 @@ public static partial class AbiEmitter {
             Throw(New(ctor, Constant($"'{member.MemberName}' is not set"))));
     }
 
+    /// <summary>A CLR call or constructor argument: the word in <paramref name="slot"/>, read as
+    /// <paramref name="parameterType"/> by the meaning of the argument's own type.</summary>
+    private static Expression ClrArgument(int slot, Node argument, Type parameterType, Context ctx) {
+        var sourceClr = ctx.ClrTypeOf(argument);
+        return Nullable.GetUnderlyingType(parameterType) is not null
+            && sourceClr is not null
+            && Nullable.GetUnderlyingType(sourceClr) is not null
+            ? new SlotLocation.Ring(slot).ReadAs(ctx, parameterType)
+            : RingCodec.ToClr(ctx.RingVar(slot), parameterType, argument, ctx.Analysis, ctx.HeapLocal);
+    }
+
     /// <summary>The receiver of a resolved instance call. A temporal word is the
     /// value (<c>DateTime.AddDays</c> must not treat <c>ToBinary</c> as a heap
     /// index). Every other receiver is still the heap object.</summary>
@@ -1366,13 +1368,12 @@ public static partial class AbiEmitter {
         return Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int)));
     }
 
-    /// <summary>A scalar argument of a name-dispatched call. A temporal word boxes
-    /// the CLR value; an int or IEEE word boxes as it always has.</summary>
-    private static Expression ScalarArgument(Expression word, Type? clr, Context ctx) {
-        if (TemporalWord(clr))
-            return Convert(LocalType.Decode(word, clr, clr!, ctx.HeapLocal), typeof(object));
-        return Convert(word, typeof(object));
-    }
+    /// <summary>A scalar argument of a name-dispatched call: the word read as its own type, then boxed, so a
+    /// <c>bool</c> arrives as a bool and a <c>double</c> as the double, not its IEEE bits.</summary>
+    private static Expression ScalarArgument(Expression word, Type? clr, Context ctx) =>
+        clr is null
+            ? throw new InvalidOperationException("VM compile rejected: cannot resolve the type of a name-dispatched argument.")
+            : Convert(LocalType.Decode(word, clr, clr, ctx.HeapLocal), typeof(object));
 
     private static bool TemporalWord(Type? clr) =>
         clr is not null && LocalType.Of(clr) is LocalType.TemporalLocal { IsWord: true };

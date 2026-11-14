@@ -1,5 +1,6 @@
 using Poly.Ast;
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
 
 namespace Poly.Packs.Product;
 
@@ -45,19 +46,22 @@ public sealed partial class MinimalApiGenerator {
                     ProblemResponse(404, "Not Found")))));
 
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
-        if (store.IsRoot && CreatesDirectly(_entities, entity)) {
+        if (store.IsRoot && CreatesDirectly(_entities, entity, GetCreateSlots(entity))) {
             var dtoParam = new Parameter("dto", new TypeReference($"{entity.Name}Dto"));
             AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, keyProp);
         }
     }
 
     /// <summary>
-    /// False for an entity with an entity-typed property: such an entity has no POST route (and no sample
-    /// request), never a route that always answers 400. The DSL cannot declare that property; only an
-    /// API-built model reaches it.
+    /// False for an entity with an entity-typed property or a Required link (a required to-one, L-15a):
+    /// such an entity has no POST route, no create DTO, no sample request and no seed row, never a route
+    /// that always answers 400, because a POST body carries scalars only and its <c>Create</c> answers
+    /// Required without the link. It is created through a parent action's <c>create in</c>. The DSL cannot
+    /// declare an entity-typed property; only an API-built model reaches it.
     /// </summary>
-    internal static bool CreatesDirectly(IEnumerable<Entity> entities, Entity entity) =>
-        !entity.Properties.Any(p => entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)));
+    internal static bool CreatesDirectly(IEnumerable<Entity> entities, Entity entity, IReadOnlyList<CreateSlot> slots) =>
+        !entity.Properties.Any(p => entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
+        && !slots.Any(s => s is { Kind: CreateSlotKind.Required } && s.Shape != CreateSlotShape.Scalar);
 
     /// <summary>Appends Syntax IR for POST /api/entities endpoint — calls Entity.Create with result handling.</summary>
     private void AppendCreateCallStatements(List<Node> statements, Entity entity,

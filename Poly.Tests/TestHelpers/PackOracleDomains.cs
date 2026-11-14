@@ -415,6 +415,27 @@ public static class PackOracleDomains {
         """,
         "/api/gizmos");
 
+    /// <summary>L-15a (#683): <c>Order</c> has a required link and no parent, so it is an aggregate root whose
+    /// <c>Create</c> answers Required unless the link is supplied, which a POST body cannot do. It stays out of
+    /// <see cref="All"/>.</summary>
+    public static PackOracleDomain RequiredLink683 { get; } = new(
+        "RequiredLink683",
+        """
+        domain Shop
+        uses http
+        uses sqlite
+
+        Customer: entity {
+          Name: Text
+        }
+
+        Order: entity {
+          Number: Text
+          customer: Customer
+        }
+        """,
+        "/api/orders");
+
     /// <summary>The simulator's side of <see cref="RequiredOmitted683"/>: the same entity, no host libraries.</summary>
     public const string RequiredOmittedSimulatorDsl = """
         domain Required

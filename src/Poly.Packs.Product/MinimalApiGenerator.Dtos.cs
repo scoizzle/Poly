@@ -18,7 +18,7 @@ public sealed partial class MinimalApiGenerator {
     private HashSet<string> ComputeActionDtoCollisions() {
         var reserved = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in _entities) {
-            if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity)) continue;
+            if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity))) continue;
             if (GetRequiredScalarSlots(entity).Count == 0) continue;
             reserved.Add($"{entity.Name}Dto");
         }
@@ -178,7 +178,7 @@ public sealed partial class MinimalApiGenerator {
         var scalarParams = GetRequiredScalarSlots(entity);
 
         if (scalarParams.Count == 0) return;
-        if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity)) return;
+        if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity))) return;
 
         // Emit as a record with get/init properties so transport validation attributes
         // attach to properties and the contract stays immutable. Every member is

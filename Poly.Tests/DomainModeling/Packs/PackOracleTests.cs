@@ -963,6 +963,25 @@ public class PackOracleTests {
         await Assert.That((int)supplied.StatusCode).IsEqualTo(201);
     }
 
+    /// <summary>L-15a (#683): a root with a required link has no POST route (the path answers 405, as for any
+    /// method the route does not map), not a route whose every request answers 400 Required.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostOrder_RootWithARequiredLink_HasNoPostRoute(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RequiredLink683);
+
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That((int)list.StatusCode).IsEqualTo(200);
+        using var customer = await oracle.Client.PostAsync(
+            "/api/customers", new StringContent("""{"Name":"Ada"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)customer.StatusCode).IsEqualTo(200);
+        using var order = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Number":"A1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)order.StatusCode).IsEqualTo(405).Because(await order.Content.ReadAsStringAsync());
+    }
+
     /// <summary>L-08b half 2: for a required Number, Text, Boolean, Date and enum, an absent member and a JSON
     /// <c>null</c> answer exactly what the simulator answers for the same create (Required, the same path and
     /// message); an empty string for the Text is a value on both.</summary>

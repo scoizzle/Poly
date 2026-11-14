@@ -46,6 +46,12 @@ public sealed class HttpFileGenerator {
         return [];
     }
 
+    // The same published create slots the generated host reads for its POST route.
+    private IReadOnlyList<CreateSlot> GetCreateSlots(Entity entity) =>
+        _analysis.GetStructure(entity)?.CreateSlots
+        ?? throw new InvalidOperationException(
+            $"EntityStructureMetadata is required for the create slots of entity '{entity.Name}'.");
+
     private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];
 
     private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) =>
@@ -96,7 +102,7 @@ public sealed class HttpFileGenerator {
             sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(store.KeyProperty?.Name ?? "id")}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}/{keyExample}");
             sb.AppendLine();
-            if (MinimalApiGenerator.CreatesDirectly(_entities, entity)) {
+            if (MinimalApiGenerator.CreatesDirectly(_entities, entity, GetCreateSlots(entity))) {
                 sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
                 sb.AppendLine($"POST {_baseUrl}/api/{route}");
                 sb.AppendLine("Content-Type: application/json");

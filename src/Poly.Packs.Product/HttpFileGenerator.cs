@@ -102,7 +102,7 @@ public sealed class HttpFileGenerator {
             sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(MinimalApiGenerator.RouteKeyFor(store).Property?.Name ?? "id")}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}/{keyExample}");
             sb.AppendLine();
-            if (MinimalApiGenerator.CreatesDirectly(_entities, entity, GetCreateSlots(entity))) {
+            if (MinimalApiGenerator.CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) {
                 sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
                 sb.AppendLine($"POST {_baseUrl}/api/{route}");
                 sb.AppendLine("Content-Type: application/json");
@@ -111,10 +111,17 @@ public sealed class HttpFileGenerator {
                 var scalarProps = GetCreateScalarParams(entity)
                     .Select(p => entity.Properties.First(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal)))
                     .ToList();
-                for (int i = 0; i < scalarProps.Count; i++) {
-                    var comma = i < scalarProps.Count - 1 ? "," : "";
-                    sb.AppendLine($"    \"{scalarProps[i].Name}\": {GetExampleJsonValue(scalarProps[i])}{comma}");
-                }
+                // A Required link is sent as the target's key (the target's sample key, as the route examples use).
+                var members = scalarProps.Select(p => $"\"{p.Name}\": {GetExampleJsonValue(p)}")
+                    .Concat(GetCreateSlots(entity).Where(MinimalApiGenerator.IsRequiredLink).Select(slot => {
+                        var target = _storageLookup[slot.Type.TypeName];
+                        var key = MinimalApiGenerator.RouteKeyFor(target);
+                        var example = GetKeyExample(target);
+                        return $"\"{MinimalApiGenerator.CreateLinkMemberName(slot.Name)}\": {(key.ClrType is "long" or "int" ? example : $"\"{example}\"")}";
+                    }))
+                    .ToList();
+                for (int i = 0; i < members.Count; i++)
+                    sb.AppendLine($"    {members[i]}{(i < members.Count - 1 ? "," : "")}");
                 sb.AppendLine("}");
                 sb.AppendLine();
             }

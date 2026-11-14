@@ -288,12 +288,10 @@ EventHold: entity {
   DatesValid: policy { EndDate > StartDate }
   PartyFits: policy { Headcount <= Capacity }
   HasSection: policy { section exists }
-  HasSpace: policy { hall exists or section exists }
   Requested: stage {
     Confirm: action
       require DatesValid
       require PartyFits
-      require HasSpace
     {
       transition to Confirmed
     }

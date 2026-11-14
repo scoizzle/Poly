@@ -81,10 +81,6 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'PartyFits'.", "EventHold.Confirm", "PartyFits"));
         }
-        if (!this.HasSpace())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'HasSpace'.", "EventHold.Confirm", "HasSpace"));
-        }
         this.CurrentStage = EventHoldStage.Confirmed;
         return DomainResult.Success();
     }
@@ -318,7 +314,6 @@ internal class EventHold : Poly.Runtime.IActionScoped
     public bool DatesValid() => this.EndDate > this.StartDate;
     public bool PartyFits() => this.Headcount <= this.Capacity;
     public bool HasSection() => this.Section != null;
-    public bool HasSpace() => this.Hall != null || this.Section != null;
     internal void RegisterGuestEventsReleasedSubscriber(Guest subscriber)
     {
         Poly.Runtime.ActionScope.Touch(this);

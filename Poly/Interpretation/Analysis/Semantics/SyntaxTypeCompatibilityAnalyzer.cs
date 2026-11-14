@@ -345,11 +345,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// A veto: a nullable Date-category operand compares only with the identical type; the VM does not lift a mixed
-    /// optional temporal comparison. Any other pair goes to the provider. Removed by T-10 (optional temporal operands).
+    /// A veto, narrowed by T-21d: a nullable Date-category operand beside an operand of a DIFFERENT unwrapped type
+    /// (<c>DateTime?</c> beside <c>DateTimeOffset</c>: the provider accepts it through an implicit conversion, C# compiles it,
+    /// and the VM's nullable compare does not convert, so the build throws a raw expression error). The same unwrapped type
+    /// (<c>DateOnly?</c> beside <c>DateOnly</c>) is C#'s lifted comparison and runs. Interim: removed with its cells in
+    /// <c>KnownInterimRules</c> by row T-21b, when the VM converts in a nullable compare.
     /// </summary>
     private static bool NullableDateRule(Type left, Type right) =>
-        (IsNullableDate(left) || IsNullableDate(right)) && left != right;
+        (IsNullableDate(left) || IsNullableDate(right))
+        && (Nullable.GetUnderlyingType(left) ?? left) != (Nullable.GetUnderlyingType(right) ?? right);
 
     private static bool IsNullableDate(Type type) =>
         Nullable.GetUnderlyingType(type) is { } underlying && CategoryOf(underlying) is Cat.Date;

@@ -137,7 +137,17 @@ internal class Visit : Poly.Runtime.IActionScoped
         {
             return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __state, "' is not a valid member of VisitState for property 'State'."), "Visit.State"));
         }
-        var created = new Visit(__reason, __state, patient, primaryDoctor);
+        if (patient == null)
+        {
+            return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Required("'patient' is required.", "Visit.patient"));
+        }
+        var __patient = patient;
+        if (primaryDoctor == null)
+        {
+            return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Required("'primaryDoctor' is required.", "Visit.primaryDoctor"));
+        }
+        var __primaryDoctor = primaryDoctor;
+        var created = new Visit(__reason, __state, __patient, __primaryDoctor);
         Poly.Runtime.ActionScope.Create(created, "Visit");
         if (patient != null)
         {

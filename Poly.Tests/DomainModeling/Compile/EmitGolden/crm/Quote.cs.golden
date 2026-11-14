@@ -264,7 +264,12 @@ internal class Quote : Poly.Runtime.IActionScoped
         {
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Quote.Amount"));
         }
-        var created = new Quote(__title, __amount, opportunity, lines);
+        if (opportunity == null)
+        {
+            return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Required("'opportunity' is required.", "Quote.opportunity"));
+        }
+        var __opportunity = opportunity;
+        var created = new Quote(__title, __amount, __opportunity, lines);
         Poly.Runtime.ActionScope.Create(created, "Quote");
         if (opportunity != null)
         {

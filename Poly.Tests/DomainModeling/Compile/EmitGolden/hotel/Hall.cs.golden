@@ -333,7 +333,12 @@ internal class Hall : Poly.Runtime.IActionScoped
         var __occupied = (occupied == null ? false : (bool)occupied);
         var __offline = (offline == null ? false : (bool)offline);
         var __busySections = (busySections == null ? 0L : (long)busySections);
-        var created = new Hall(__name, __capacity, __dayRate, __occupied, __offline, __busySections, property, sections);
+        if (property == null)
+        {
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'property' is required.", "Hall.property"));
+        }
+        var __property = property;
+        var created = new Hall(__name, __capacity, __dayRate, __occupied, __offline, __busySections, __property, sections);
         Poly.Runtime.ActionScope.Create(created, "Hall");
         if (property != null)
         {

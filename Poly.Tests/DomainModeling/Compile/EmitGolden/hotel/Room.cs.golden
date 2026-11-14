@@ -272,11 +272,21 @@ internal class Room : Poly.Runtime.IActionScoped
         var __occupied = (occupied == null ? false : (bool)occupied);
         var __dirty = (dirty == null ? false : (bool)dirty);
         var __offline = (offline == null ? false : (bool)offline);
+        if (property == null)
+        {
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Required("'property' is required.", "Room.property"));
+        }
+        var __property = property;
+        if (roomType == null)
+        {
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Required("'roomType' is required.", "Room.roomType"));
+        }
+        var __roomType = roomType;
         if (Room.ExistsWithNumber(db, __number))
         {
             return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Number' value is already used on another 'Room'.", "Room.Number"));
         }
-        var created = new Room(__number, __floor, __nightlyRate, __maxOccupancy, __occupied, __dirty, __offline, property, roomType, stays);
+        var created = new Room(__number, __floor, __nightlyRate, __maxOccupancy, __occupied, __dirty, __offline, __property, __roomType, stays);
         Poly.Runtime.ActionScope.Create(created, "Room");
         created.InitializeSubscriptions();
         if (property != null)

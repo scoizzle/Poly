@@ -496,11 +496,11 @@ D	docs/probes/fleet-eval/09-transport/orders.poly	232	0665D5195C35A0A7
 D	docs/probes/fleet-eval/09-transport/clinic.poly	182	4FD4138B093BAF22
 D	docs/probes/fleet-eval/12-mcp/mcp-library.poly	202	FFEF4FE6DA60D48D
 D	docs/probes/dogfood/university.poly	687	33D5D64B1927BE0F
-D	docs/probes/dogfood/crm.poly	1219	F09458E089E999D6
-D	docs/probes/dogfood/hotel.poly	1458	3235A9B4F7D447AA
-D	docs/probes/dogfood/simulate-create-type.poly	86	89E32BBD899A2E1D
+D	docs/probes/dogfood/crm.poly	1222	0ACB97F4087DD2D9
+D	docs/probes/dogfood/hotel.poly	1460	55470F056B0A6F04
+D	docs/probes/dogfood/simulate-create-type.poly	87	B58B87063E6399A4
 D	docs/probes/dogfood/simulate-create-in.poly	87	C729EA00E25A5882
-D	docs/probes/dogfood/simulate-create-create-in.poly	104	6AFA037DAE6146D9
+D	docs/probes/dogfood/simulate-create-create-in.poly	105	16705AD9A14AD014
 E	a or b and c	6	9B9BAD723E41D43B
 E	a and b or c and d	8	EE7340E26268AC49
 E	a - b - c	6	ACF88DBB05212972

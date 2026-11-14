@@ -441,7 +441,17 @@ internal class EventHold : Poly.Runtime.IActionScoped
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'EndDate' is required.", "EventHold.EndDate"));
         }
         var __endDate = (DateOnly)endDate;
-        var created = new EventHold(__headcount, __capacity, __dayRate, __startDate, __endDate, guest, hall, section);
+        if (guest == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'guest' is required.", "EventHold.guest"));
+        }
+        var __guest = guest;
+        if (hall == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'hall' is required.", "EventHold.hall"));
+        }
+        var __hall = hall;
+        var created = new EventHold(__headcount, __capacity, __dayRate, __startDate, __endDate, __guest, __hall, section);
         Poly.Runtime.ActionScope.Create(created, "EventHold");
         if (guest != null)
         {

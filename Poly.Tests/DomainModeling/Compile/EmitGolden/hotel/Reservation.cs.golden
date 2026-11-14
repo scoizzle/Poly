@@ -642,7 +642,17 @@ internal class Reservation : Poly.Runtime.IActionScoped
             return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Required("'CheckOutDate' is required.", "Reservation.CheckOutDate"));
         }
         var __checkOutDate = (DateOnly)checkOutDate;
-        var created = new Reservation(__partySize, __nights, __nightlyRate, __maxOccupancy, __checkInDate, __checkOutDate, folio, guest, room);
+        if (guest == null)
+        {
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Required("'guest' is required.", "Reservation.guest"));
+        }
+        var __guest = guest;
+        if (room == null)
+        {
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Required("'room' is required.", "Reservation.room"));
+        }
+        var __room = room;
+        var created = new Reservation(__partySize, __nights, __nightlyRate, __maxOccupancy, __checkInDate, __checkOutDate, folio, __guest, __room);
         Poly.Runtime.ActionScope.Create(created, "Reservation");
         if (guest != null)
         {

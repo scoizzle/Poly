@@ -60,11 +60,11 @@
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
 ## poly file docs/missions/evolve-2026-10-13/ambig-backref.poly
-  status: analysis-errors DMREL005
+  status: analysis-errors DMEFF011,DMEFF011,DMREL005
 ## poly file docs/missions/evolve-2026-10-13/billing.poly
   status: analysis-errors DMEFF011,DMLIB001
 ## poly file docs/missions/evolve-2026-10-13/claims.poly
-  status: analysis-errors DMEFF011,DMLIB001
+  status: analysis-errors DMEFF011,DMEFF011,DMLIB001
 ## poly file docs/missions/evolve-2026-10-13/disputes.poly
   status: analysis-errors DMSTR006
 ## poly file docs/missions/evolve-2026-10-13/library.poly
@@ -807,7 +807,14 @@
   System.Collections.IList.Clear()
 ## poly wrapper stage-subscriptions
   errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.ActionScope.Create(System.Object,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Touch(System.Object)
   System.Collections.IList.Clear()
 ## poly wrapper time-facts
   errors: 0
@@ -916,8 +923,15 @@
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
 ## poly guide Department: entity { #0
   errors: 0
+  Poly.Runtime.ActionScope.Touch(System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Create(System.Object,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
 ## poly guide Draft: stage { #0
   errors: 0
   Poly.Runtime.DomainResult.get_IsSuccess()
@@ -1035,9 +1049,16 @@
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
 ## poly guide Pending: stage { #0
   errors: 0
+  Poly.Runtime.ActionScope.Touch(System.Object)
   System.Object.ReferenceEquals(System.Object,System.Object)
   Poly.Runtime.DomainResult.get_IsSuccess()
   Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.ActionScope.Create(System.Object,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   System.String.Concat(System.String,System.String,System.String)
   System.InvalidOperationException.ctor(System.String)

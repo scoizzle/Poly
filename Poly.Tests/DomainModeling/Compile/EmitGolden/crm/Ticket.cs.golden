@@ -168,7 +168,12 @@ internal class Ticket : Poly.Runtime.IActionScoped
             return DomainResult<Ticket>.Failure(Poly.Runtime.DomainFailure.Required("'Subject' is required.", "Ticket.Subject"));
         }
         var __subject = subject;
-        var created = new Ticket(__subject, account);
+        if (account == null)
+        {
+            return DomainResult<Ticket>.Failure(Poly.Runtime.DomainFailure.Required("'account' is required.", "Ticket.account"));
+        }
+        var __account = account;
+        var created = new Ticket(__subject, __account);
         Poly.Runtime.ActionScope.Create(created, "Ticket");
         if (account != null)
         {

@@ -1,7 +1,7 @@
 # PrintBaseline.txt: the exact text DomainDslPrinter prints, one section per key.
 # Header: ##### key <TAB> pipeline <TAB> session <TAB> status <TAB> sha8 of the text. See PrintBaselineTests.
 # Regenerate only on an unchanged printer (POLY_REGEN_PRINT_BASELINE=1); comments in the sources are dropped by design.
-##### poly/demo/Poly.RestApi/library.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,sqlite,http]+implicit	printed	E63AFEE2
+##### poly/demo/Poly.RestApi/library.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,sqlite,http]+implicit	printed	5452761F
 domain Library
 uses sqlite
 uses http
@@ -62,7 +62,7 @@ Patron: entity {
       require not AtLimit
       require not HasFines {
       assign CurrentBorrowCount to (CurrentBorrowCount + 1)
-      create in loans {}
+      create in loans { book: book }
     }
     Suspend: action {
       assign Status to "Suspended"
@@ -89,7 +89,7 @@ Patron: entity {
   Closed: stage {
   }
   when loans Overdue {
-    create Fine { Amount: 5 Reason: "Overdue item" }
+    create in fines { Amount: 5 Reason: "Overdue item" }
     assign OutstandingFines to (OutstandingFines + 5)
   }
   when loans Returned {
@@ -195,7 +195,7 @@ Patron: entity {
   Name: Text length(2, 80)
   Email: Text unique
 }
-##### poly/docs/missions/evolve-2026-10-13/ambig-backref.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[]+implicit	Core:analysis-failed:DMREL005 | Product:analysis-failed:DMREL005	E3B0C442
+##### poly/docs/missions/evolve-2026-10-13/ambig-backref.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[]+implicit	Core:analysis-failed:DMEFF011+DMREL005 | Product:analysis-failed:DMEFF011+DMREL005	E3B0C442
 ##### poly/docs/missions/evolve-2026-10-13/billing.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001	E3B0C442
 ##### poly/docs/missions/evolve-2026-10-13/claims.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001	E3B0C442
 ##### poly/docs/missions/evolve-2026-10-13/disputes.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMSTR006 | Product:analysis-failed:DMSTR006	E3B0C442
@@ -465,7 +465,7 @@ Note: entity {
 }
 ##### poly/docs/missions/evolve-2026-10-14/ratelimit.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMLIB001 | Product:analysis-failed:DMLIB001	E3B0C442
 ##### poly/docs/missions/evolve-2026-10-14/sessions.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMLIB001 | Product:analysis-failed:DMLIB001	E3B0C442
-##### poly/docs/probes/dogfood/crm.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	4A52BDE7
+##### poly/docs/probes/dogfood/crm.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	E66C6AAF
 domain Crm
 uses persistence
 
@@ -512,10 +512,10 @@ Lead: entity {
 Account: entity {
   Name: Text
   Industry: Industry
-  parent: one Account
+  parent: one Account optional
   WonCount: Number default(0)
   OpenPipeline: Decimal default(0)
-  hq: one owned Site
+  hq: one owned Site optional
   contacts: many Contact
   opportunities: many Opportunity via account
   tickets: many Ticket via account
@@ -586,7 +586,7 @@ Opportunity: entity {
   CloseBy: Date default(Today)
   Probability: Number range(0, 100) default(10)
   account: one Account
-  contact: one Contact
+  contact: one Contact optional
   activities: many Activity
   lines: many Line
   quotes: many Quote
@@ -789,7 +789,7 @@ Z: entity {
   B: stage {
   }
 }
-##### poly/docs/probes/dogfood/hotel.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	864CBC24
+##### poly/docs/probes/dogfood/hotel.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	39BD6B31
 domain Hotel
 uses persistence
 
@@ -973,7 +973,7 @@ Reservation: entity {
   MaxOccupancy: Number range(1, 8)
   CheckInDate: Date
   CheckOutDate: Date
-  folio: one owned Folio
+  folio: one owned Folio optional
   guest: one Guest
   room: one Room
   DatesValid: policy { CheckOutDate > CheckInDate }
@@ -1057,7 +1057,7 @@ EventHold: entity {
   EndDate: Date
   guest: one Guest
   hall: one Hall
-  section: one Section
+  section: one Section optional
   DatesValid: policy { EndDate > StartDate }
   PartyFits: policy { Headcount <= Capacity }
   HasHall: policy { hall exists }
@@ -1132,7 +1132,7 @@ Tr: entity {
   Q: stage {
   }
 }
-##### poly/docs/probes/dogfood/simulate-create-create-in.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,storage]+implicit	printed	9EDD511D
+##### poly/docs/probes/dogfood/simulate-create-create-in.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,storage]+implicit	printed	FF5B0BC8
 domain SimulateCreateCreateIn
 uses storage
 
@@ -1155,7 +1155,7 @@ Patron: entity {
 Fine: entity {
   Amount: Number range(0, 500)
   Reason: Text
-  patron: one Patron
+  patron: one Patron optional
 }
 ##### poly/docs/probes/dogfood/simulate-create-in.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,storage]+implicit	printed	8FB185F5
 domain SimulateCreateIn
@@ -1179,7 +1179,7 @@ Fine: entity {
   Reason: Text
   patron: one Patron
 }
-##### poly/docs/probes/dogfood/simulate-create-type.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,storage]+implicit	printed	E06D9A92
+##### poly/docs/probes/dogfood/simulate-create-type.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,storage]+implicit	printed	6A0A2EDC
 domain SimulateCreateType
 uses storage
 
@@ -1199,7 +1199,7 @@ Patron: entity {
 Fine: entity {
   Amount: Number range(0, 500)
   Reason: Text
-  patron: one Patron
+  patron: one Patron optional
 }
 ##### poly/docs/probes/dogfood/university.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	1B68D2A8
 domain University
@@ -1733,7 +1733,7 @@ Hit: entity {
   LineNumber: Number
   Content: Text
 }
-##### poly/docs/probes/scratch-2026-10-14/banking.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	831FBBD2
+##### poly/docs/probes/scratch-2026-10-14/banking.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	E5E45A02
 domain Banking
 uses http
 uses persistence
@@ -1758,7 +1758,7 @@ Account: entity {
   Currency: Text equals("USD")
   Balance: Number range(0, 100000000) default(0)
   Flags: Number default(0)
-  parent: one Account
+  parent: one Account optional
   txns: many Transaction via account
   HasFunds: policy { Balance > 0 }
   Open: stage {
@@ -2005,7 +2005,7 @@ Booking: entity {
   Dropped: stage {
   }
 }
-##### poly/docs/probes/scratch-2026-10-14/insurance.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	F8D5DCF2
+##### poly/docs/probes/scratch-2026-10-14/insurance.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	A1E5DB42
 domain Insurance
 uses persistence
 
@@ -2054,8 +2054,8 @@ Claim: entity {
   Amount: Number range(0, 1000000)
   Reviewed: Number default(0)
   holder: one Policyholder
-  cover: one Policy
-  adjuster: one Adjuster
+  cover: one Policy optional
+  adjuster: one Adjuster optional
   documents: many Document via claim
   WithinCoverage: policy { Amount <= cover Coverage }
   HasDocuments: policy { count documents > 0 }
@@ -2110,7 +2110,7 @@ Payments: contract internal paygate v1 {
 }
 
 PayoutClaim: bind Payments Disburse to Disburse request
-##### poly/docs/probes/scratch-2026-10-14/logistics.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	F1C4799C
+##### poly/docs/probes/scratch-2026-10-14/logistics.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	4F7C53C2
 domain Logistics
 uses http
 uses persistence
@@ -2144,7 +2144,7 @@ Customer: entity {
   Name: Text
   Email: Text unique pattern("^[^@]+@[^@]+$")
   Status: Text default("open")
-  address: one owned Address
+  address: one owned Address optional
   orders: many Order via customer
   Active: stage {
     Place: action (total: Number) -> Order {

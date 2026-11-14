@@ -132,17 +132,17 @@ public class ConstraintAssignLoweringTests {
         await Assert.That(cs.Contains("!= null") || cs.Contains("is not null")).IsTrue();
         await Assert.That(cs).Contains("IsMatch");
 
-        // A bare Text property is required, so null fails that check before
-        // the pattern guard. The prior value stays.
+        // The simulator turns a null Text action argument into "" (X-05's remainder), and since
+        // L-08b an empty string is a value, so the pattern refuses it. The prior value stays.
         var result = exec.Invoke(instance, "Relabel", new Dictionary<string, object?> { ["code"] = null });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("'Code' is required.");
+        await Assert.That(result.Error).Contains("'Code' does not match the required pattern.");
         await Assert.That((string)instance.Bag["Code"]!).IsEqualTo("OK");
     }
 
     [Test]
-    public async Task Length_WithRequired_EmptyFails() {
+    public async Task Length_WithRequired_EmptyFailsLength() {
         var (domain, _) = Evolve("""
             domain Lab
             Label: entity {
@@ -158,13 +158,14 @@ public class ConstraintAssignLoweringTests {
 
         var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
 
+        // L-08b: the empty string is a value; the length refuses it, not required.
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("is required");
+        await Assert.That(result.Error).Contains("'Name' must be at least 7 characters.");
         await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("abcdefg");
     }
 
     [Test]
-    public async Task Length_BareProperty_EmptyFails_TooShortFails() {
+    public async Task Length_BareProperty_EmptyFailsLength_TooShortFails() {
         var (domain, _) = Evolve("""
             domain Lab
             Note: entity {
@@ -179,7 +180,7 @@ public class ConstraintAssignLoweringTests {
         var emptyFail = exec.Create((entity).Name, new Dictionary<string, object?> { ["Body"] = "abcdefg" }).Instance!;
         var emptyResult = exec.Invoke(emptyFail, "Edit", new Dictionary<string, object?> { ["body"] = "" });
         await Assert.That(emptyResult.Succeeded).IsFalse();
-        await Assert.That(emptyResult.Error).Contains("is required");
+        await Assert.That(emptyResult.Error).Contains("'Body' must be at least 7 characters.");
         await Assert.That((string)emptyFail.Bag["Body"]!).IsEqualTo("abcdefg");
 
         var shortFail = exec.Create((entity).Name, new Dictionary<string, object?> { ["Body"] = "abcdefg" }).Instance!;
@@ -332,7 +333,7 @@ public class ConstraintAssignLoweringTests {
     }
 
     [Test]
-    public async Task RequiredTextAssign_Empty_IsFailure() {
+    public async Task RequiredTextAssign_Empty_IsAccepted() {
         var (domain, _) = Evolve("""
             domain Lab
             Person: entity {
@@ -346,14 +347,14 @@ public class ConstraintAssignLoweringTests {
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Person");
         var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Name"] = "Ada" }).Instance!;
 
+        // L-08b (owner ruling 2026-11-13): an empty string is a value, so a required Text accepts it.
         var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("'Name' is required.");
-        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("Ada");
+        await Assert.That(result.Succeeded).IsTrue().Because(result.Error ?? "");
+        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("");
     }
 
     [Test]
-    public async Task BareTextAssign_Empty_IsFailure() {
+    public async Task BareTextAssign_Empty_IsAccepted() {
         var (domain, _) = Evolve("""
             domain Lab
             Person: entity {
@@ -367,14 +368,14 @@ public class ConstraintAssignLoweringTests {
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Person");
         var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Name"] = "Ada" }).Instance!;
 
+        // L-08b (owner ruling 2026-11-13): an empty string is a value, so a required Text accepts it.
         var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("'Name' is required.");
-        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("Ada");
+        await Assert.That(result.Succeeded).IsTrue().Because(result.Error ?? "");
+        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("");
     }
 
     [Test]
-    public async Task Length_Optional_EmptySucceeds() {
+    public async Task Length_Optional_EmptyFailsLength() {
         var (domain, _) = Evolve("""
             domain Lab
             Note: entity {
@@ -387,9 +388,11 @@ public class ConstraintAssignLoweringTests {
         var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Note");
         var instance = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        // L-08b: an empty string is a value, so an optional Text's length applies to it.
         var result = exec.Invoke(instance, "Edit", new Dictionary<string, object?> { ["body"] = "" });
-        await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That((string)instance.Bag["Body"]!).IsEqualTo("");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Error).Contains("'Body' must be at least 7 characters.");
+        await Assert.That(instance.Bag["Body"]).IsNull();
     }
 
     [Test]

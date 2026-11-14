@@ -72,7 +72,9 @@ public class StoreBindUniqueTests {
             DomainExpression.Property("incoming")));
 
         var cs = new CSharpGenerator().Generate(lowered!);
-        await Assert.That(cs).Contains("IsNullOrEmpty");
+        // L-08b: required means non-null for every type, so the required check is `== null`.
+        await Assert.That(cs).Contains("== null");
+        await Assert.That(cs).Contains("'Name' is required.");
         await Assert.That(cs).DoesNotContain("EnsureUnique");
     }
 

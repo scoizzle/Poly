@@ -44,7 +44,7 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(item).Contains("public string Name { get; private set; }");
         await Assert.That(item).Contains("public string? Note { get; private set; }");
         await Assert.That(item).Contains("public long? Qty { get; private set; }");
-        await Assert.That(item).Contains("string? note = null");
+        await Assert.That(item).Contains("string? note = default");
 
         // Requiredness is one fact: the bare Name column is required, the optional
         // Note/Qty columns are not.
@@ -249,9 +249,9 @@ public class DslCompilerSqliteOracleTests {
 
     [Test]
     public async Task DslCompiler_AllMode_EntityWithCollections_EmitsEmptyCollectionArgs() {
-        // The POST endpoint + seed code construct root entities via Entity.Create(...)
-        // — collection navs are ctor params (IEnumerable<T>) but omitted from ESM;
-        // the generators must append Enumerable.Empty<T>() or the call is CS7036.
+        // The POST endpoint + seed code construct root entities via Entity.Create(...),
+        // one positional argument per create slot (L-08b): the collection slot is passed
+        // null, which the constructor turns into an empty list. A missing slot is CS7036.
         var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
@@ -264,13 +264,13 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("Box.Create(");
-        await Assert.That(prog).Contains("Enumerable.Empty<Demo.Token>()");
+        await Assert.That(prog).Contains("Box.Create(dto.Name, null)");
+        await Assert.That(prog).Contains("Box.Create(\"Sample\", null)");
     }
 
     [Test]
     public async Task DslCompiler_Dto_IncludesEnumTypedScalarFromConstructorMetadata() {
-        // The DTO mirrors the entity's CREATE signature (from ESM.ConstructorParameters).
+        // The DTO carries the entity's Required scalar create slots (ESM.CreateSlots).
         // A scalar enum-typed prop (Genre) is part of that signature — the old
         // `_entities.Any(...)` filter would have EXCLUDED it (Genre is not an entity).
         var compiler = CompilerWithHttpHost();

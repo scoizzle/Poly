@@ -115,7 +115,8 @@ public class ContributedMethodTests {
         var create = Method(module, "Widget", "Create");
         await Assert.That(Names(create)).IsEqualTo("code,db");
         await Assert.That(Calls(create, "ExistsWithCode")).IsTrue();
-        var requiredAt = TopIndex(create, n => n is Invoke invoke && invoke.Delegate is Member { MemberName: "IsNullOrEmpty" });
+        var requiredAt = TopIndex(create, n => n is IfStatement { Condition: Equal { LeftHandValue: Parameter { Name: "code" }, RightHandValue: Constant { Value: null } } });
+        await Assert.That(requiredAt).IsGreaterThanOrEqualTo(0);
         var uniqueAt = TopIndex(create, n => n is Invoke invoke && invoke.Delegate is Member { MemberName: "ExistsWithCode" });
         var newAt = TopIndex(create, n => n is New);
         await Assert.That(requiredAt).IsLessThan(uniqueAt);
@@ -123,7 +124,8 @@ public class ContributedMethodTests {
 
         var createWidgets = Method(module, "Lot", "CreateWidgets");
         await Assert.That(Names(createWidgets)).IsEqualTo("code,db");
-        await Assert.That(LastArgument(createWidgets, "Create")).IsEqualTo("db");
+        // L-08b: every Create slot is `T? x = default`, so the port goes first (before the first default).
+        await Assert.That(FirstArgument(createWidgets, "Create")).IsEqualTo("db");
 
         var issue = Method(module, "Lot", "Issue");
         await Assert.That(Names(issue)).IsEqualTo("code,db");
@@ -205,8 +207,8 @@ public class ContributedMethodTests {
                 catalog: new CatalogIndex(session.ArtifactCatalog))
             .Generate("LabDbContext");
 
-        await Assert.That(source.Contains("Widget.Create(dto.Code, db)", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(source.Contains("Widget.Create(\"Sample\", db)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(source.Contains("Widget.Create(db, dto.Code)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(source.Contains("Widget.Create(db, \"Sample\")", StringComparison.Ordinal)).IsTrue();
     }
 
     [Test]
@@ -220,10 +222,11 @@ public class ContributedMethodTests {
                 catalog: new CatalogIndex(session.ArtifactCatalog))
             .Generate("LabDbContext");
 
+        // L-08b: the port sits before the first `= default`, the first slot; a non-Required slot is null.
         await Assert.That(source.Contains(
-            "Lab.Widget.Create(dto.Code, db, Enumerable.Empty<Lab.Tag>())", StringComparison.Ordinal)).IsTrue();
+            "Lab.Widget.Create(db, dto.Code, null)", StringComparison.Ordinal)).IsTrue();
         await Assert.That(source.Contains(
-            "Lab.Widget.Create(\"Sample\", db, Enumerable.Empty<Lab.Tag>())", StringComparison.Ordinal)).IsTrue();
+            "Lab.Widget.Create(db, \"Sample\", null)", StringComparison.Ordinal)).IsTrue();
     }
 
     [Test]
@@ -306,8 +309,8 @@ public class ContributedMethodTests {
 
         var createWidgets = Method(module, "Lot", "CreateWidgets");
         var invoke = Invokes(createWidgets.Body!).First(i => i.Delegate is Member { MemberName: "Create" });
-        await Assert.That(invoke.Arguments[1]).IsTypeOf<Parameter>();
-        await Assert.That(((Parameter)invoke.Arguments[1]).Name).IsEqualTo("db");
+        await Assert.That(invoke.Arguments[0]).IsTypeOf<Parameter>();
+        await Assert.That(((Parameter)invoke.Arguments[0]).Name).IsEqualTo("db");
     }
 
     [Test]
@@ -460,6 +463,12 @@ public class ContributedMethodTests {
     private static bool Calls(MethodDefinitionNode method, string name) =>
         method.Body is not null && Invokes(method.Body).Any(i =>
             i.Delegate is Member { MemberName: var called } && called == name);
+
+    private static string FirstArgument(MethodDefinitionNode method, string name) {
+        var invoke = Invokes(method.Body!).First(i =>
+            i.Delegate is Member { MemberName: var called } && called == name);
+        return invoke.Arguments[0] is Parameter parameter ? parameter.Name : invoke.Arguments[0].GetType().Name;
+    }
 
     private static string LastArgument(MethodDefinitionNode method, string name) {
         var invoke = Invokes(method.Body!).First(i =>

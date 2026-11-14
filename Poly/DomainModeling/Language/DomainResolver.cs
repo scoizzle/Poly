@@ -75,7 +75,8 @@ public sealed partial class DomainResolver : DslCursor {
         string TargetTypeName,
         RelationshipCardinality Cardinality,
         bool SourceOwnsTarget,
-        DslToken At);
+        DslToken At,
+        bool IsOptional = false);
 
     public DomainResolver(DslSyntaxTree tree, DomainSession session)
         : base(TokenReaderFor(tree), reader => new Matcher<DslToken, DslTokenKind>(session.Language.Grammar, reader)) {

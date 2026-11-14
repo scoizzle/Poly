@@ -133,7 +133,7 @@ public sealed class StorageNavigationInverseTests {
     }
 
     // Mixed cardinality: the peer has one singular and one collection navigation back. Pinned as of this slice; the
-    // exporter's FindAutoWireBackReference / FindInverseCollectionInfo answer differently (row S-11b unifies them).
+    // exporter's CreateInWiring.FilledNavigation / FindInverseCollectionInfo answer differently (row S-11b unifies them).
     [Test]
     public async Task InversePropertyName_WhenPeerHasSingularAndCollectionBack_IsNullWhileTheExporterPicksOne() {
         const string Dsl = """
@@ -156,7 +156,8 @@ public sealed class StorageNavigationInverseTests {
             .ApplyAndAnalyze(new PolyDslParser(Dsl).Parse());
         var line = result.Root.Types.OfType<Poly.DomainModeling.Ontology.Entity>().Single(e => e.Name == "Line");
         var order = result.Root.Types.OfType<Poly.DomainModeling.Ontology.Entity>().Single(e => e.Name == "Order");
-        await Assert.That(Poly.DomainModeling.Lowering.DomainToCSharpExporter.FindAutoWireBackReference(line, "Order")?.Name).IsEqualTo("order");
+        var lines = order.Navigations.Single(n => n.Name == "lines");
+        await Assert.That(Poly.DomainModeling.Analysis.CreateInWiring.FilledNavigation(order, lines, line)?.Name).IsEqualTo("order");
         await Assert.That(Poly.DomainModeling.Lowering.DomainToCSharpExporter.FindInverseCollectionInfo(order, "Line").Unique?.Name).IsEqualTo("lines");
     }
 }

@@ -90,6 +90,40 @@ internal class Patron : Poly.Runtime.IActionScoped
         child.RegisterPatronLoansOverdueSubscriber(this);
         child.RegisterPatronLoansReturnedSubscriber(this);
     }
+    internal DomainResult<Fine> CreateFines(long? amount = default, string? reason = default, DateTime? dateIssued = default, bool? paid = default)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateFines(amount, reason, dateIssued, paid);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Fine> __BodyOfCreateFines(long? amount, string? reason, DateTime? dateIssued, bool? paid)
+    {
+        var fineResult = Fine.Create(amount, reason, dateIssued, paid, this);
+        if (!fineResult.IsSuccess)
+        {
+            return DomainResult<Fine>.Failure(fineResult.Error!);
+        }
+        var fine = fineResult.Value;
+        return DomainResult<Fine>.Success(fine);
+    }
     internal void AttachFines(Fine child)
     {
         Poly.Runtime.ActionScope.Touch(this);
@@ -139,7 +173,7 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'HasFines'.", "Patron.CheckOut", "HasFines"));
         }
         this.CurrentBorrowCount = this.CurrentBorrowCount + 1L;
-        var create0 = this.CreateLoans();
+        var create0 = this.CreateLoans((string?)null, (DateTime?)null, (DateTime?)null, (long?)null, book);
         if (!create0.IsSuccess)
         {
             return DomainResult<Loan>.Failure(create0.Error!.At("Patron.CheckOut"));
@@ -278,7 +312,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     internal DomainResult WhenEachLoanOverdue()
     {
         Poly.Runtime.ActionScope.Touch(this);
-        var create0 = Fine.Create(5L, "Overdue item");
+        var create0 = this.CreateFines(5L, "Overdue item");
         if (!create0.IsSuccess)
         {
             return DomainResult.Failure(create0.Error!);

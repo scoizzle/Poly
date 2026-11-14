@@ -38,7 +38,6 @@ Room: entity {
   stays: many Reservation via room
   IsVacant: policy { Occupied is false }
   IsReady: policy { Occupied is false and Dirty is false and Offline is false }
-  HasType: policy { roomType exists }
   when stays InHouse {
     assign Occupied to true
   }
@@ -205,21 +204,18 @@ Reservation: entity {
   MaxOccupancy: Number range(1, 8)
   CheckInDate: Date
   CheckOutDate: Date
-  folio: owned Folio
+  folio: owned Folio optional
   guest: Guest
   room: Room
   DatesValid: policy { CheckOutDate > CheckInDate }
   PartyFits: policy { PartySize <= MaxOccupancy }
   RoomReady: policy { room where Occupied is false and Dirty is false and Offline is false }
-  HasRoom: policy { room exists }
-  HasGuest: policy { guest exists }
   BillSettled: policy { folio Balance is 0 }
   HasFolio: policy { folio exists }
   Requested: stage {
     Confirm: action
       require DatesValid
       require PartyFits
-      require HasRoom
     {
       transition to Confirmed
     }
@@ -228,7 +224,6 @@ Reservation: entity {
   Confirmed: stage {
     CheckIn: action
       require RoomReady
-      require HasRoom
     {
       create in folio { Balance: 0 }
       transition to InHouse
@@ -289,17 +284,14 @@ EventHold: entity {
   EndDate: Date
   guest: Guest
   hall: Hall
-  section: Section
+  section: Section optional
   DatesValid: policy { EndDate > StartDate }
   PartyFits: policy { Headcount <= Capacity }
-  HasHall: policy { hall exists }
   HasSection: policy { section exists }
-  HasSpace: policy { hall exists or section exists }
   Requested: stage {
     Confirm: action
       require DatesValid
       require PartyFits
-      require HasSpace
     {
       transition to Confirmed
     }
@@ -307,7 +299,6 @@ EventHold: entity {
   }
   Confirmed: stage {
     StartHall: action
-      require HasHall
       require not HasSection
     {
       invoke hall.Occupy
@@ -323,7 +314,6 @@ EventHold: entity {
   }
   InUse: stage {
     ReleaseHall: action
-      require HasHall
       require not HasSection
     {
       invoke hall.Vacate

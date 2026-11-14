@@ -436,7 +436,17 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         {
             return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be <= 100.", "Enrollment.Grade"));
         }
-        var created = new Enrollment(__enrolledOn, __dueDate, __grade, section, student);
+        if (section == null)
+        {
+            return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Required("'section' is required.", "Enrollment.section"));
+        }
+        var __section = section;
+        if (student == null)
+        {
+            return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Required("'student' is required.", "Enrollment.student"));
+        }
+        var __student = student;
+        var created = new Enrollment(__enrolledOn, __dueDate, __grade, __section, __student);
         Poly.Runtime.ActionScope.Create(created, "Enrollment");
         if (section != null)
         {

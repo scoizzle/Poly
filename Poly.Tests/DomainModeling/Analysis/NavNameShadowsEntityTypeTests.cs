@@ -62,7 +62,7 @@ public sealed class NavNameShadowsEntityTypeTests {
             domain DocCreateInToOne
             Order: entity {
               Total: Number default(0)
-              invoice: Invoice
+              invoice: Invoice optional
               Finalize: action -> Invoice {
                 assign Total to 100
                 create in invoice { Amount: 100 }

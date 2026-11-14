@@ -476,12 +476,14 @@ public sealed record AddRelationshipChange(
     RelationshipCardinality Cardinality,
     IReadOnlyList<Property> Properties,
     bool SourceOwnsTarget = false,
-    string? Inverse = null
+    string? Inverse = null,
+    bool IsOptional = false
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         var newRel = new Relationship(Name, Source, Target, Cardinality, Properties) {
             SourceOwnsTarget = SourceOwnsTarget,
-            Inverse = Inverse
+            Inverse = Inverse,
+            IsOptional = IsOptional
         };
         var added = context.ReplaceInEntity(Source.TypeName,
             _ => true,
@@ -918,7 +920,8 @@ public sealed record SetRelationshipShapeChange(
     DomainTypeReference? NewSource = null,
     DomainTypeReference? NewTarget = null,
     RelationshipCardinality? NewCardinality = null,
-    bool? NewSourceOwnsTarget = null
+    bool? NewSourceOwnsTarget = null,
+    bool? NewIsOptional = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
@@ -926,7 +929,8 @@ public sealed record SetRelationshipShapeChange(
                 Source = NewSource ?? r.Source,
                 Target = NewTarget ?? r.Target,
                 Cardinality = NewCardinality ?? r.Cardinality,
-                SourceOwnsTarget = NewSourceOwnsTarget ?? r.SourceOwnsTarget
+                SourceOwnsTarget = NewSourceOwnsTarget ?? r.SourceOwnsTarget,
+                IsOptional = NewIsOptional ?? r.IsOptional
             }),
             $"Relationship '{RelationshipName}' on entity '{SourceEntityName}' not found — cannot update shape");
     }

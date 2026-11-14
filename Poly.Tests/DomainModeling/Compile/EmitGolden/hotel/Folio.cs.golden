@@ -219,7 +219,12 @@ internal class Folio : Poly.Runtime.IActionScoped
         {
             return DomainResult<Folio>.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be <= 1000000.", "Folio.Balance"));
         }
-        var created = new Folio(__balance, reservation);
+        if (reservation == null)
+        {
+            return DomainResult<Folio>.Failure(Poly.Runtime.DomainFailure.Required("'reservation' is required.", "Folio.reservation"));
+        }
+        var __reservation = reservation;
+        var created = new Folio(__balance, __reservation);
         Poly.Runtime.ActionScope.Create(created, "Folio");
         return DomainResult<Folio>.Success(created);
     }

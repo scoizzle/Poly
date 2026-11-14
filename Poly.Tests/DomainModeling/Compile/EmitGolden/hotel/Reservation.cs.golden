@@ -123,10 +123,6 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'PartyFits'.", "Reservation.Confirm", "PartyFits"));
         }
-        if (!this.HasRoom())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'HasRoom'.", "Reservation.Confirm", "HasRoom"));
-        }
         this.CurrentStage = ReservationStage.Confirmed;
         return DomainResult.Success();
     }
@@ -205,10 +201,6 @@ internal class Reservation : Poly.Runtime.IActionScoped
         if (!this.RoomReady())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckIn' blocked by policy 'RoomReady'.", "Reservation.CheckIn", "RoomReady"));
-        }
-        if (!this.HasRoom())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckIn' blocked by policy 'HasRoom'.", "Reservation.CheckIn", "HasRoom"));
         }
         if (this.Folio != null)
         {
@@ -363,8 +355,6 @@ internal class Reservation : Poly.Runtime.IActionScoped
     public bool DatesValid() => this.CheckOutDate > this.CheckInDate;
     public bool PartyFits() => this.PartySize <= this.MaxOccupancy;
     public bool RoomReady() => this.Room != null && (!this.Room!.Occupied && !this.Room!.Dirty && !this.Room!.Offline);
-    public bool HasRoom() => this.Room != null;
-    public bool HasGuest() => this.Guest != null;
     public bool BillSettled() => this.Folio != null && this.Folio!.Balance == 0L;
     public bool HasFolio() => this.Folio != null;
     internal void RegisterRoomStaysInHouseSubscriber(Room subscriber)
@@ -642,7 +632,17 @@ internal class Reservation : Poly.Runtime.IActionScoped
             return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Required("'CheckOutDate' is required.", "Reservation.CheckOutDate"));
         }
         var __checkOutDate = (DateOnly)checkOutDate;
-        var created = new Reservation(__partySize, __nights, __nightlyRate, __maxOccupancy, __checkInDate, __checkOutDate, folio, guest, room);
+        if (guest == null)
+        {
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Required("'guest' is required.", "Reservation.guest"));
+        }
+        var __guest = guest;
+        if (room == null)
+        {
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Required("'room' is required.", "Reservation.room"));
+        }
+        var __room = room;
+        var created = new Reservation(__partySize, __nights, __nightlyRate, __maxOccupancy, __checkInDate, __checkOutDate, folio, __guest, __room);
         Poly.Runtime.ActionScope.Create(created, "Reservation");
         if (guest != null)
         {

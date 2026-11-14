@@ -102,11 +102,16 @@ internal class Doctor : Poly.Runtime.IActionScoped
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Pattern("'LicenseNo' does not match the required pattern.", "Doctor.LicenseNo"));
         }
+        if (schedule == null)
+        {
+            return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Required("'schedule' is required.", "Doctor.schedule"));
+        }
+        var __schedule = schedule;
         if (Doctor.ExistsWithLicenseNo(db, __licenseNo))
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.", "Doctor.LicenseNo"));
         }
-        var created = new Doctor(__name, __licenseNo, schedule);
+        var created = new Doctor(__name, __licenseNo, __schedule);
         Poly.Runtime.ActionScope.Create(created, "Doctor");
         db.Record("Doctor", "LicenseNo", __licenseNo);
         return DomainResult<Doctor>.Success(created);

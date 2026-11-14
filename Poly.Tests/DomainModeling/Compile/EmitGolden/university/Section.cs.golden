@@ -352,9 +352,14 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __offeringTerm, "' is not a valid member of Term for property 'OfferingTerm'."), "Section.OfferingTerm"));
         }
+        if (course == null)
+        {
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'course' is required.", "Section.course"));
+        }
+        var __course = course;
         var __offeredSeats = (offeredSeats == null ? 0L : (long)offeredSeats);
         var __waitCleared = (waitCleared == null ? 0L : (long)waitCleared);
-        var created = new Section(__cap, __seatsTaken, __offeringTerm, course, instructor, enrollments, waitlist, __offeredSeats, __waitCleared);
+        var created = new Section(__cap, __seatsTaken, __offeringTerm, __course, instructor, enrollments, waitlist, __offeredSeats, __waitCleared);
         Poly.Runtime.ActionScope.Create(created, "Section");
         created.InitializeSubscriptions();
         return DomainResult<Section>.Success(created);

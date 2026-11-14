@@ -101,15 +101,17 @@ public class UniversityDogfoodTests {
             ["Code"] = "CS101",
             ["Title"] = "Intro"
         }).Instance!;
+        // L-15a: Section.course is a required to-one; Section.instructor is optional (a section is unstaffed
+        // until it is assigned), so Close is blocked by HasInstructor until the instructor is linked.
         var section = exec.Create("Section", new Dictionary<string, object?> {
             ["Cap"] = 1L,
-            ["OfferingTerm"] = "Fall"
+            ["OfferingTerm"] = "Fall",
+            ["course"] = course
         }).Instance!;
         var student = exec.Create("Student", new Dictionary<string, object?> {
             ["Name"] = "Alex",
             ["Email"] = "alex@uni.test"
         }).Instance!;
-        exec.Link("course", section, course);
 
         var closeUnlinked = exec.Invoke(section, "Close");
         await Assert.That(closeUnlinked.Succeeded).IsFalse();

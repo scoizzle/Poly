@@ -124,7 +124,12 @@ internal class Activity : Poly.Runtime.IActionScoped
         }
         var __subject = subject;
         var __dueOn = (dueOn == null ? DateOnly.FromDateTime(DateTime.UtcNow) : (DateOnly)dueOn);
-        var created = new Activity(__subject, __dueOn, opportunity);
+        if (opportunity == null)
+        {
+            return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Required("'opportunity' is required.", "Activity.opportunity"));
+        }
+        var __opportunity = opportunity;
+        var created = new Activity(__subject, __dueOn, __opportunity);
         Poly.Runtime.ActionScope.Create(created, "Activity");
         if (opportunity != null)
         {

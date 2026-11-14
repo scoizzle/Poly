@@ -278,7 +278,7 @@ public sealed class CSharpExportCompileTests {
 
             public entity Order {
               Code: Text unique length(3, 8)
-              receipt: one Receipt
+              receipt: one Receipt optional
               public action Issue (note: Text) { create in receipt { Note: note } }
             }
             """);

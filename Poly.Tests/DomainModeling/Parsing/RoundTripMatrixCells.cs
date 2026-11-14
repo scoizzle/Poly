@@ -53,9 +53,12 @@ internal static class RoundTripMatrixCells {
 
     private static Entity WithNavs(Entity entity, params Relationship[] navigations) => entity with { Navigations = navigations };
 
+    // An owned single part carries `optional`: it is the only spelling the DSL reads (L-15a, #677 ruling A).
     private static Domain NavDomain(string target, RelationshipCardinality cardinality, bool owned, string? via) =>
         Dom(Ent(target, [Prop("Name")]),
-            WithNavs(Ent("A", [Prop("Name")]), Nav("A", "b", target, cardinality, owned, via)));
+            WithNavs(Ent("A", [Prop("Name")]), Nav("A", "b", target, cardinality, owned, via) with {
+                IsOptional = owned && cardinality is RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne
+            }));
 
     private static Entity ActionHost(params Effect[] effects) =>
         WithNavs(Ent("A", [Prop("Name"), Prop("Total", "Number")], [Act("Go", effects)]), Nav("A", "bs", "B", RelationshipCardinality.OneToMany));

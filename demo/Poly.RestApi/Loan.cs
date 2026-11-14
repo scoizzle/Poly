@@ -222,7 +222,17 @@ internal class Loan : Poly.Runtime.IActionScoped
     private static DomainResult<Loan> __BodyOfCreate(string? status, DateTime? dueDate, DateTime? returnedAt, long? timesRenewed, Book? book, Patron? borrower)
     {
         var __dueDate = (dueDate == null ? DateTime.UtcNow : (DateTime)dueDate);
-        var created = new Loan(status, __dueDate, returnedAt, timesRenewed, book, borrower);
+        if (book == null)
+        {
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Required("'book' is required.", "Loan.book"));
+        }
+        var __book = book;
+        if (borrower == null)
+        {
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Required("'borrower' is required.", "Loan.borrower"));
+        }
+        var __borrower = borrower;
+        var created = new Loan(status, __dueDate, returnedAt, timesRenewed, __book, __borrower);
         Poly.Runtime.ActionScope.Create(created, "Loan");
         var __entry = created.__EnterInitialStage();
         if (!__entry.IsSuccess)

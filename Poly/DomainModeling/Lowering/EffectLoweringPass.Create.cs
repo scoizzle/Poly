@@ -68,7 +68,7 @@ public sealed partial class EffectLoweringPass {
         var inits = BindingsByName(initializers);
         var slots = new List<(Node Node, bool OmitWhenTrailing)>();
         foreach (var slot in DomainToCSharpExporter.CreateNavParameters(
-                     _entity, targetEntity, _analysis))
+                     _entity, relationshipName, targetEntity, _analysis))
             slots.Add(ArgumentFor(targetEntity, slot, inits, loweredInitializers));
         var args = KeepThroughLastWritten(slots);
 

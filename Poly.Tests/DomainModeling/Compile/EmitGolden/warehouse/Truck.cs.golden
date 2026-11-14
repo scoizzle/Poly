@@ -181,11 +181,16 @@ internal class Truck : Poly.Runtime.IActionScoped
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __status, "' is not a valid member of TruckStatus for property 'Status'."), "Truck.Status"));
         }
+        if (warehouse == null)
+        {
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Required("'warehouse' is required.", "Truck.warehouse"));
+        }
+        var __warehouse = warehouse;
         if (Truck.ExistsWithVin(db, __vin))
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Vin' value is already used on another 'Truck'.", "Truck.Vin"));
         }
-        var created = new Truck(__vin, __maxLoad, __currentLoad, __status, warehouse, deliveries);
+        var created = new Truck(__vin, __maxLoad, __currentLoad, __status, __warehouse, deliveries);
         Poly.Runtime.ActionScope.Create(created, "Truck");
         if (warehouse != null)
         {

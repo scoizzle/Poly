@@ -248,6 +248,11 @@ internal class Order : Poly.Runtime.IActionScoped
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __state, "' is not a valid member of OrderState for property 'State'."), "Order.State"));
         }
+        if (customer == null)
+        {
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'customer' is required.", "Order.customer"));
+        }
+        var __customer = customer;
         if (cancelReason == null)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'CancelReason' is required.", "Order.CancelReason"));
@@ -257,7 +262,7 @@ internal class Order : Poly.Runtime.IActionScoped
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Length("'CancelReason' must be at most 200 characters.", "Order.CancelReason"));
         }
-        var created = new Order(__total, __discount, __state, customer, items, __cancelReason);
+        var created = new Order(__total, __discount, __state, __customer, items, __cancelReason);
         Poly.Runtime.ActionScope.Create(created, "Order");
         if (customer != null)
         {

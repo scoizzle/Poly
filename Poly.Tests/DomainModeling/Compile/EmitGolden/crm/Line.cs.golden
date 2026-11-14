@@ -71,7 +71,17 @@ internal class Line : Poly.Runtime.IActionScoped
         {
             return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'UnitPrice' must be <= 100000000.", "Line.UnitPrice"));
         }
-        var created = new Line(__qty, __unitPrice, product, opportunity);
+        if (product == null)
+        {
+            return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Required("'product' is required.", "Line.product"));
+        }
+        var __product = product;
+        if (opportunity == null)
+        {
+            return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Required("'opportunity' is required.", "Line.opportunity"));
+        }
+        var __opportunity = opportunity;
+        var created = new Line(__qty, __unitPrice, __product, __opportunity);
         Poly.Runtime.ActionScope.Create(created, "Line");
         if (opportunity != null)
         {

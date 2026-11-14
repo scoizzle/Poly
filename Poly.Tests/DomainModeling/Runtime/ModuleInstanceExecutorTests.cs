@@ -393,14 +393,41 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(wrong.Error).Contains("not 'Customer'");
     }
 
+    private const string RequiredLinks = """
+        domain ReqUnlink
+        ReqUnlinkPatron: entity { Name: Text }
+        ReqUnlinkLoan: entity {
+          Code: Text
+          borrower: ReqUnlinkPatron
+          reviewer: ReqUnlinkPatron optional
+        }
+        """;
+
+    [Test]
+    public async Task Unlink_RequiredToOne_IsRefused() {
+        // L-15a: a required to-one is permanent through the host; an optional one still unlinks.
+        var executor = ExecutorFor(RequiredLinks);
+        var ada = executor.Create("ReqUnlinkPatron", Values(("Name", "Ada"))).Instance!;
+        var loan = executor.Create("ReqUnlinkLoan", Values(("Code", "L1"), ("borrower", ada), ("reviewer", ada))).Instance!;
+
+        var refused = executor.Unlink("borrower", loan, ada);
+        await Assert.That(refused.Succeeded).IsFalse();
+        await Assert.That(refused.Failure?.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Link);
+        await Assert.That(refused.Error).IsEqualTo(Relationship.RequiredUnlinkViolationMessage("borrower"));
+        await Assert.That(ReferenceEquals(loan.Bag["Borrower"], ada.Bag)).IsTrue();
+
+        await Assert.That(executor.Unlink("reviewer", loan, ada).Succeeded).IsTrue();
+        await Assert.That(loan.Bag["Reviewer"]).IsNull();
+    }
+
     private const string Passports = """
         domain Travel
         Profile: entity { Bio: Text }
         Passport: entity { Number: Text }
         Person: entity {
           Name: Text
-          profile: one Profile
-          passport: owned Passport
+          profile: one Profile optional
+          passport: owned Passport optional
         }
         """;
 
@@ -447,7 +474,7 @@ public sealed class ModuleInstanceExecutorTests {
         domain Watch
         Item: entity {
           Code: Text
-          watcher: Watcher via items
+          watcher: Watcher via items optional
           Draft: stage {
             Activate: action { transition to Active }
           }
@@ -524,7 +551,7 @@ public sealed class ModuleInstanceExecutorTests {
           SeatsTaken: Number default(0)
         }
         Enrollment: entity {
-          section: Section
+          section: Section optional
           SectionFull: policy { section SeatsTaken >= 1 }
           Pending: stage {
             Confirm: action require not SectionFull {
@@ -616,10 +643,10 @@ public sealed class ModuleInstanceExecutorTests {
     public async Task Invoke_MultiHopPathPrefix_SecondHopUnlinked_ListsActionPolicies() {
         var executor = ExecutorFor("""
             domain IssueSlice
-            Engineer: entity { team: Team }
+            Engineer: entity { team: Team optional }
             Team: entity { TeamName: Text }
             Issue: entity {
-              reporter: Engineer
+              reporter: Engineer optional
               FromBlueTeam: policy { reporter team TeamName is "Blue" }
               Open: stage {
                 Escalate: action require FromBlueTeam { transition to Closed }
@@ -657,7 +684,7 @@ public sealed class ModuleInstanceExecutorTests {
         Parent: entity {
           Armed: Boolean default(true)
           Ready: policy { Armed is true }
-          kid: Child
+          kid: Child optional
           Go: action require Ready { invoke kid.Poke }
         }
         """;
@@ -679,14 +706,14 @@ public sealed class ModuleInstanceExecutorTests {
         domain Lab
         Owner: entity { Flag: Boolean default(true) }
         Child: entity {
-          owner: Owner
+          owner: Owner optional
           OwnerFlagged: policy { owner Flag is true }
           Poke: action require OwnerFlagged { }
         }
         Parent: entity {
           Armed: Boolean default(true)
           Ready: policy { Armed is true }
-          kid: Child
+          kid: Child optional
           AddKid: action { create in kid { } }
           Go: action require Ready { invoke kid.Poke }
         }
@@ -815,7 +842,7 @@ public sealed class ModuleInstanceExecutorTests {
     private const string OwnedKidDsl = """
         domain Lab
         Child: entity { Name: Text }
-        Parent: entity { kid: owned Child }
+        Parent: entity { kid: owned Child optional }
         """;
 
     [Test]
@@ -888,13 +915,13 @@ public sealed class ModuleInstanceExecutorTests {
               Draft: stage { }
               Active: stage { }
               Go: action { transition to Active }
-              seesB: one B via seesA
+              seesB: one B via seesA optional
               when seesB Active { transition to Active }
             }
             B: entity {
               Draft: stage { }
               Active: stage { }
-              seesA: one A
+              seesA: one A optional
               when seesA Active { transition to Active }
             }
             """);
@@ -955,7 +982,7 @@ public sealed class ModuleInstanceExecutorTests {
             Widget: entity {
               Score: Number range(1, 10) default(5)
               Bump: Number default(100)
-              watcher: Watcher via widgets
+              watcher: Watcher via widgets optional
               Draft: stage {
                 Go: action { transition to Active }
               }

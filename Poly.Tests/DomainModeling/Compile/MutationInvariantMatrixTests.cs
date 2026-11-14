@@ -190,7 +190,7 @@ public sealed class MutationInvariantMatrixTests {
             }
             Parent: entity {
               Name: Text
-              kid: Child
+              kid: Child optional
               AddKid: action { create in kid { Name: "x" } }
             }
             """, """

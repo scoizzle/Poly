@@ -174,7 +174,7 @@ public class OwnershipAggregateAnalysisTests {
             domain Test
             Customer: entity {
               Name: Text
-              address: owned Address
+              address: owned Address optional
               orders: many Order
             }
             Address: entity {
@@ -236,7 +236,7 @@ public class OwnershipAggregateAnalysisTests {
             }
             B: entity {
               Name: Text
-              a: A
+              a: A optional
             }
             """);
 
@@ -270,7 +270,7 @@ public class OwnershipAggregateAnalysisTests {
             domain Test
             Customer: entity {
               Name: Text
-              profile: owned Profile
+              profile: owned Profile optional
               orders: many owned Order
             }
             Profile: entity { Bio: Text }
@@ -345,7 +345,7 @@ public class OwnershipAggregateAnalysisTests {
         var (root, analysis) = Run("""
             domain DuplicatedTarget
             A: entity {
-              x: owned B
+              x: owned B optional
             }
             B: entity {
               Name: Text
@@ -369,11 +369,11 @@ public class OwnershipAggregateAnalysisTests {
             domain Test
             Customer: entity {
               Name: Text
-              profile: owned Profile
+              profile: owned Profile optional
             }
             Supplier: entity {
               Name: Text
-              profile: owned Profile
+              profile: owned Profile optional
             }
             Profile: entity { Bio: Text }
             """);
@@ -396,8 +396,8 @@ public class OwnershipAggregateAnalysisTests {
             domain Test
             Peer: entity {
               Name: Text
-              primary: owned Address
-              secondary: owned Address
+              primary: owned Address optional
+              secondary: owned Address optional
             }
             Address: entity { Line: Text }
             """);
@@ -412,9 +412,9 @@ public class OwnershipAggregateAnalysisTests {
     public async Task ThreeOwners_ReportOncePerTargetNamingAll() {
         var (_, analysis) = Run("""
             domain Test
-            A: entity { x: owned T }
-            B: entity { x: owned T }
-            C: entity { x: owned T }
+            A: entity { x: owned T optional }
+            B: entity { x: owned T optional }
+            C: entity { x: owned T optional }
             T: entity { Name: Text }
             """);
 
@@ -433,7 +433,7 @@ public class OwnershipAggregateAnalysisTests {
             domain Test
             Customer: entity {
               Name: Text
-              profile: owned Profile
+              profile: owned Profile optional
             }
             Supplier: entity {
               Name: Text
@@ -452,8 +452,8 @@ public class OwnershipAggregateAnalysisTests {
             domain Test
             Order: entity {
               Total: Number
-              header: owned Header
-              line: owned Line
+              header: owned Header optional
+              line: owned Line optional
             }
             Header: entity { Name: Text }
             Line: entity { Qty: Number }
@@ -481,8 +481,8 @@ public class OwnershipAggregateAnalysisTests {
     public async Task DuplicatedTarget_ReportsOnlyStructural_Pin() {
         var (_, analysis) = Run("""
             domain Test
-            A: entity { x: owned B }
-            C: entity { y: owned B }
+            A: entity { x: owned B optional }
+            C: entity { y: owned B optional }
             B: entity { Name: Text }
             B: entity { Other: Text }
             """);
@@ -500,11 +500,11 @@ public class OwnershipAggregateAnalysisTests {
         domain OwnCycle
         A: entity {
           Name: Text
-          b: owned B
+          b: owned B optional
         }
         B: entity {
           Name: Text
-          a: owned A
+          a: owned A optional
         }
         """;
 
@@ -552,10 +552,10 @@ public class OwnershipAggregateAnalysisTests {
         // is silent until B.c is removed. Fail closed either way: the document is rejected.
         var (_, both) = Run("""
             domain P
-            A: entity { b: owned B
-              c: owned C }
-            B: entity { c: owned C }
-            C: entity { a: owned A }
+            A: entity { b: owned B optional
+              c: owned C optional }
+            B: entity { c: owned C optional }
+            C: entity { a: owned A optional }
             """);
         var first = Errors(both, Cycle);
         await Assert.That(first.Count).IsEqualTo(1);
@@ -563,10 +563,10 @@ public class OwnershipAggregateAnalysisTests {
 
         var (_, fixedFirst) = Run("""
             domain P
-            A: entity { b: owned B
-              c: owned C }
+            A: entity { b: owned B optional
+              c: owned C optional }
             B: entity { Name: Text }
-            C: entity { a: owned A }
+            C: entity { a: owned A optional }
             """);
         var second = Errors(fixedFirst, Cycle);
         await Assert.That(second.Count).IsEqualTo(1);
@@ -602,11 +602,11 @@ public class OwnershipAggregateAnalysisTests {
             domain Chain
             A: entity {
               Name: Text
-              b: owned B
+              b: owned B optional
             }
             B: entity {
               Name: Text
-              c: owned C
+              c: owned C optional
             }
             C: entity {
               Name: Text
@@ -616,7 +616,7 @@ public class OwnershipAggregateAnalysisTests {
             domain OwnedWithPlainInverse
             A: entity {
               Name: Text
-              b: owned B
+              b: owned B optional
             }
             B: entity {
               Name: Text
@@ -635,9 +635,9 @@ public class OwnershipAggregateAnalysisTests {
         // Master (characterised in 3f9d12c4) accepted the three-entity ring with no error.
         var (_, analysis) = Run("""
             domain Ring
-            A: entity { b: owned B }
-            B: entity { c: owned C }
-            C: entity { a: owned A }
+            A: entity { b: owned B optional }
+            B: entity { c: owned C optional }
+            C: entity { a: owned A optional }
             """);
         await Assert.That(string.Join(",", AllErrors(analysis).Select(static d => d.Code))).IsEqualTo("DMDEP002");
     }
@@ -669,11 +669,11 @@ public class OwnershipAggregateAnalysisTests {
         var (_, analysis) = Run("""
             domain Ring
             A: entity { Name: Text
-              b: owned B }
+              b: owned B optional }
             B: entity { Name: Text
-              c: owned C }
+              c: owned C optional }
             C: entity { Name: Text
-              a: owned A }
+              a: owned A optional }
             """);
 
         var errors = Errors(analysis, Cycle);
@@ -711,8 +711,8 @@ public class OwnershipAggregateAnalysisTests {
     public async Task OwnedChain_IsAccepted() {
         var (_, analysis) = Run("""
             domain Chain
-            A: entity { b: owned B }
-            B: entity { c: owned C }
+            A: entity { b: owned B optional }
+            B: entity { c: owned C optional }
             C: entity { Name: Text }
             """);
         await Assert.That(Errors(analysis, Cycle)).IsEmpty();
@@ -721,9 +721,9 @@ public class OwnershipAggregateAnalysisTests {
         // Presence control: the same chain with C owning A closes the ring and reports.
         var (_, closed) = Run("""
             domain Chain
-            A: entity { b: owned B }
-            B: entity { c: owned C }
-            C: entity { a: owned A }
+            A: entity { b: owned B optional }
+            B: entity { c: owned C optional }
+            C: entity { a: owned A optional }
             """);
         await Assert.That(Errors(closed, Cycle).Count).IsEqualTo(1);
     }
@@ -746,9 +746,9 @@ public class OwnershipAggregateAnalysisTests {
             A: entity {
               Name: Text
               children: many owned A
-              b: owned B
+              b: owned B optional
             }
-            B: entity { a: owned A }
+            B: entity { a: owned A optional }
             """);
         await Assert.That(Errors(closed, Cycle).Count).IsEqualTo(1);
     }
@@ -759,7 +759,7 @@ public class OwnershipAggregateAnalysisTests {
             domain PlainInverse
             A: entity {
               Name: Text
-              b: owned B
+              b: owned B optional
             }
             B: entity {
               Name: Text
@@ -781,9 +781,9 @@ public class OwnershipAggregateAnalysisTests {
             A: entity {
               Name: Text
               children: many owned A
-              b: owned B
+              b: owned B optional
             }
-            B: entity { a: owned A }
+            B: entity { a: owned A optional }
             """);
 
         var errors = Errors(analysis, Cycle);
@@ -795,10 +795,10 @@ public class OwnershipAggregateAnalysisTests {
     public async Task TwoDisjointCycles_TwoErrors() {
         var (_, analysis) = Run("""
             domain TwoRings
-            A: entity { b: owned B }
-            B: entity { a: owned A }
-            C: entity { d: owned D }
-            D: entity { c: owned C }
+            A: entity { b: owned B optional }
+            B: entity { a: owned A optional }
+            C: entity { d: owned D optional }
+            D: entity { c: owned C optional }
             """);
 
         var errors = Errors(analysis, Cycle);
@@ -813,9 +813,9 @@ public class OwnershipAggregateAnalysisTests {
         // earliest-declared member of the ring), closed by C.b — not as C -> B -> C.
         var (_, analysis) = Run("""
             domain RingBehindARoot
-            A: entity { c: owned C }
-            B: entity { c: owned C }
-            C: entity { b: owned B }
+            A: entity { c: owned C optional }
+            B: entity { c: owned C optional }
+            C: entity { b: owned B optional }
             """);
 
         var errors = Errors(analysis, Cycle);
@@ -829,8 +829,8 @@ public class OwnershipAggregateAnalysisTests {
     public async Task CycleDeclaredInReverseOrder_StartsAtTheFirstDeclaredEntity() {
         var (_, analysis) = Run("""
             domain Reversed
-            B: entity { a: owned A }
-            A: entity { b: owned B }
+            B: entity { a: owned A optional }
+            A: entity { b: owned B optional }
             """);
 
         var errors = Errors(analysis, Cycle);
@@ -845,10 +845,10 @@ public class OwnershipAggregateAnalysisTests {
         var (_, analysis) = Run("""
             domain Parallel
             A: entity {
-              b1: owned B
-              b2: owned B
+              b1: owned B optional
+              b2: owned B optional
             }
-            B: entity { a: owned A }
+            B: entity { a: owned A optional }
             """);
 
         await Assert.That(Errors(analysis, Cycle).Count).IsEqualTo(1);
@@ -861,8 +861,8 @@ public class OwnershipAggregateAnalysisTests {
         // and, being a mutual ownership ring, also DMDEP002 — one definition of ownership.
         var (_, analysis) = Run("""
             domain ViaBothOwned
-            A: entity { b: owned B via a }
-            B: entity { a: owned A via b }
+            A: entity { b: owned B via a optional }
+            B: entity { a: owned A via b optional }
             """);
 
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory).Count).IsEqualTo(1);

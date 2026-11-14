@@ -67,35 +67,29 @@ public sealed partial class DomainToCSharpExporter {
         var methodParams = new List<Parameter>();
         var createArgs = new List<Node>();
 
-        // Cross-entity auto-wire back-ref: exactly one singular nav on the target
-        // pointing back to the source → wired with `this`, excluded from the factory
-        // signature. (Self-relationship slots are filled here too.)
-        var autoWireBackRef = FindAutoWireBackReference(targetEntity, entity.Name);
-        var selfPeerSingular = FindSelfRelPeerSingular(targetEntity, entity.Name);
-        var isCollectionRel = rel.Cardinality is RelationshipCardinality.OneToMany
-            or RelationshipCardinality.ManyToMany;
+        // The navigation `create in` fills with the source (the published
+        // CreateInFilledNavigation fact): wired with `this`, excluded from the factory
+        // signature. Self-relationship slots are filled here too.
+        var filledName = CreateInWiring.FilledNavigationName(metadata, entity.Name, rel.Name);
 
         foreach (var slot in CreateSlotsOf(targetEntity, metadata)) {
             if (slot is { IsSelfNavigation: true, Shape: not CreateSlotShape.Scalar }) {
                 // Self-rel slot. A self collection (including `rel` when it is a
                 // collection) starts empty; a singular self-nav wires `this` only as
-                // the peer of a collection create-in; every other self singular is null.
+                // the peer of a collection create-in (the fact); every other self singular is null.
                 if (slot.Shape == CreateSlotShape.Collection) {
                     createArgs.Add(new New(
                         new NamedTypeReference("List",
                             TypeArguments: [new NamedTypeReference(slot.Type.TypeName)])));
                     continue;
                 }
-                createArgs.Add(isCollectionRel
-                    && selfPeerSingular is not null
-                    && string.Equals(slot.Name, selfPeerSingular.Name, StringComparison.Ordinal)
-                        ? (Node)new ThisReference()
-                        : TypedNull(slot.Type.TypeName));
+                createArgs.Add(string.Equals(slot.Name, filledName, StringComparison.Ordinal)
+                    ? new ThisReference()
+                    : TypedNull(slot.Type.TypeName));
                 continue;
             }
 
-            if (autoWireBackRef is not null
-                && string.Equals(slot.Name, autoWireBackRef.Name, StringComparison.Ordinal)) {
+            if (string.Equals(slot.Name, filledName, StringComparison.Ordinal)) {
                 createArgs.Add(new ThisReference());
                 continue;
             }
@@ -138,7 +132,7 @@ public sealed partial class DomainToCSharpExporter {
         // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
         // _field.Add / Register* / peer Attach when Create wired this collection.
         var (wiredInverse, _) = FindInverseCollectionInfo(entity, targetTypeName);
-        var createWiredThisCollection = (autoWireBackRef is not null || selfPeerSingular is not null)
+        var createWiredThisCollection = filledName is not null
             && fieldName is not null
             && wiredInverse is not null
             && string.Equals(wiredInverse.Name, rel.Name, StringComparison.Ordinal);
@@ -226,14 +220,13 @@ public sealed partial class DomainToCSharpExporter {
     /// collections are filled inside the method.
     /// </summary>
     internal static List<CreateSlot> CreateNavParameters(
-        Entity source, Entity target, INodeMetadataProvider analysis) {
+        Entity source, string relationshipName, Entity target, INodeMetadataProvider analysis) {
         var slots = new List<CreateSlot>();
-        var autoWire = FindAutoWireBackReference(target, source.Name);
+        var filledName = CreateInWiring.FilledNavigationName(analysis, source.Name, relationshipName);
         foreach (var slot in CreateSlotsOf(target, analysis)) {
             if (slot is { IsSelfNavigation: true, Shape: not CreateSlotShape.Scalar })
                 continue;
-            if (autoWire is not null
-                && string.Equals(slot.Name, autoWire.Name, StringComparison.Ordinal))
+            if (string.Equals(slot.Name, filledName, StringComparison.Ordinal))
                 continue;
             if (slot.Shape == CreateSlotShape.Collection)
                 continue;

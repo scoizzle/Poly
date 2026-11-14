@@ -156,14 +156,16 @@ public sealed class EntityKeyDesignationTests {
     }
 
     [Test]
-    public async Task SingularNavigationKey_ToKeyedTarget_IsLegal() {
+    public async Task SingularNavigationKey_ToKeyedTarget_IsRefusedUntilItsForeignKeyIsDecided() {
+        // #677 ruling D (L-15a): a key over a navigation was accepted and unenforced; it is refused.
         var domain = ValidDomain.Create("Test",
             [Keyed("Customer", ["Code"], Text("Code")), Keyed("Order", ["Customer", "Number"], Text("Number"))],
             [Nav("Customer", "Order", "Customer")]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation)).IsEmpty();
-        await Assert.That(Structure(analysis, domain, "Order").Id).IsEquivalentTo(new[] { "Customer", "Number" });
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("'Customer' is a navigation").And.Contains("not supported yet");
     }
 
     [Test]
@@ -174,7 +176,7 @@ public sealed class EntityKeyDesignationTests {
 
         var errors = Errors(analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation);
         await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(errors[0].Message).Contains("Customer").And.Contains("no key");
+        await Assert.That(errors[0].Message).Contains("Customer").And.Contains("not supported yet");
     }
 
     [Test]
@@ -212,7 +214,10 @@ public sealed class EntityKeyDesignationTests {
             [Nav("b", "A", "B"), Nav("c", "B", "C")]);
 
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.StructuralCycle)).IsEmpty();
-        await Assert.That(analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        // #677 ruling D: each navigation key member is refused; nothing else is an error.
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation).Count).IsEqualTo(2);
+        await Assert.That(analysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error
+            && d.Code != DomainModelDiagnosticCodes.InvalidKeyDesignation)).IsEqualTo(0);
     }
 
     [Test]
@@ -393,7 +398,7 @@ public sealed class EntityKeyDesignationTests {
         await Assert.That(result.Succeeded).IsFalse();
         var errors = Errors(result.Analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation);
         await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(errors[0].Message).Contains("no key");
+        await Assert.That(errors[0].Message).Contains("not supported yet");
     }
 
     [Test]

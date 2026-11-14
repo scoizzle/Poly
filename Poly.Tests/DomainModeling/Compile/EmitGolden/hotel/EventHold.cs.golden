@@ -81,10 +81,6 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'PartyFits'.", "EventHold.Confirm", "PartyFits"));
         }
-        if (!this.HasSpace())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'HasSpace'.", "EventHold.Confirm", "HasSpace"));
-        }
         this.CurrentStage = EventHoldStage.Confirmed;
         return DomainResult.Success();
     }
@@ -150,10 +146,6 @@ internal class EventHold : Poly.Runtime.IActionScoped
         if (this.CurrentStage != EventHoldStage.Confirmed)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'StartHall' requires stage 'Confirmed' on entity 'EventHold'.", "EventHold.StartHall", "Confirmed"));
-        }
-        if (!this.HasHall())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'StartHall' blocked by policy 'HasHall'.", "EventHold.StartHall", "HasHall"));
         }
         if (this.HasSection())
         {
@@ -247,10 +239,6 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'ReleaseHall' requires stage 'InUse' on entity 'EventHold'.", "EventHold.ReleaseHall", "InUse"));
         }
-        if (!this.HasHall())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'ReleaseHall' blocked by policy 'HasHall'.", "EventHold.ReleaseHall", "HasHall"));
-        }
         if (this.HasSection())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'ReleaseHall' blocked by policy 'HasSection'.", "EventHold.ReleaseHall", "HasSection"));
@@ -325,9 +313,7 @@ internal class EventHold : Poly.Runtime.IActionScoped
     }
     public bool DatesValid() => this.EndDate > this.StartDate;
     public bool PartyFits() => this.Headcount <= this.Capacity;
-    public bool HasHall() => this.Hall != null;
     public bool HasSection() => this.Section != null;
-    public bool HasSpace() => this.Hall != null || this.Section != null;
     internal void RegisterGuestEventsReleasedSubscriber(Guest subscriber)
     {
         Poly.Runtime.ActionScope.Touch(this);
@@ -441,7 +427,17 @@ internal class EventHold : Poly.Runtime.IActionScoped
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'EndDate' is required.", "EventHold.EndDate"));
         }
         var __endDate = (DateOnly)endDate;
-        var created = new EventHold(__headcount, __capacity, __dayRate, __startDate, __endDate, guest, hall, section);
+        if (guest == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'guest' is required.", "EventHold.guest"));
+        }
+        var __guest = guest;
+        if (hall == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'hall' is required.", "EventHold.hall"));
+        }
+        var __hall = hall;
+        var created = new EventHold(__headcount, __capacity, __dayRate, __startDate, __endDate, __guest, __hall, section);
         Poly.Runtime.ActionScope.Create(created, "EventHold");
         if (guest != null)
         {

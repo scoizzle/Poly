@@ -187,7 +187,7 @@ public sealed class DomainDslPrinterTests {
             Alpha: entity {
               Zed1: Text
               mgr: Zed
-              buddy: Alpha
+              buddy: Alpha optional
               Age: Number
             }
             """;

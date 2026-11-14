@@ -160,7 +160,7 @@ public class AnalysisGateParityTests {
           Opt: Number optional
           U1: Uuid
           U2: Uuid
-          peer: Other
+          peer: Other optional
           MEMBERS
         }
         """;
@@ -327,7 +327,7 @@ public class AnalysisGateParityTests {
           Due: Date
           Stamp: DateTime
           Gap: Duration optional
-          part: Part
+          part: Part optional
           {{members}}
         }
         """;
@@ -400,7 +400,7 @@ public class AnalysisGateParityTests {
           OutD: Date optional
           OutT: DateTime optional
           Gap: Duration optional
-          part: Part
+          part: Part optional
           {{members}}
         }
         """;
@@ -551,7 +551,7 @@ public class AnalysisGateParityTests {
               Gap: Duration optional
             }
             Job: entity {
-              advisor: Person
+              advisor: Person optional
               OutD: Date optional
               {{members}}
             }
@@ -697,7 +697,7 @@ public class AnalysisGateParityTests {
               Gap: Duration optional
             }
             Job: entity {
-              advisor: Person
+              advisor: Person optional
               {{string.Join("\n  ", policies)}}
             }
             """;
@@ -1061,7 +1061,7 @@ public class AnalysisGateParityTests {
             Order: entity {
               N: Number default(0)
               books: many Book
-              book: Book
+              book: Book optional
               Go: action { assign N to READ }
             }
             """;

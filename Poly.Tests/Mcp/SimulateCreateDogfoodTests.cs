@@ -258,7 +258,7 @@ public class SimulateCreateDogfoodTests {
             Fine: entity {
               Amount: Number
               Reason: Text
-              patron: Patron
+              patron: Patron optional
             }
 
             Patron: entity {

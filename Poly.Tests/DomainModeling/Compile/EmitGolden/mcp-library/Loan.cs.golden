@@ -166,6 +166,16 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     private static DomainResult<Loan> __BodyOfCreate(Book? book, Patron? patron, long? amount)
     {
+        if (book == null)
+        {
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Required("'book' is required.", "Loan.book"));
+        }
+        var __book = book;
+        if (patron == null)
+        {
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Required("'patron' is required.", "Loan.patron"));
+        }
+        var __patron = patron;
         var __amount = (amount == null ? 0L : (long)amount);
         if (__amount < 0L)
         {
@@ -175,7 +185,7 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 500.", "Loan.Amount"));
         }
-        var created = new Loan(book, patron, __amount);
+        var created = new Loan(__book, __patron, __amount);
         Poly.Runtime.ActionScope.Create(created, "Loan");
         if (patron != null)
         {

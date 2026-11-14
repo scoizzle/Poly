@@ -71,7 +71,17 @@ internal class QuoteLine : Poly.Runtime.IActionScoped
         {
             return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Range("'UnitPrice' must be <= 100000000.", "QuoteLine.UnitPrice"));
         }
-        var created = new QuoteLine(__qty, __unitPrice, product, quote);
+        if (product == null)
+        {
+            return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Required("'product' is required.", "QuoteLine.product"));
+        }
+        var __product = product;
+        if (quote == null)
+        {
+            return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Required("'quote' is required.", "QuoteLine.quote"));
+        }
+        var __quote = quote;
+        var created = new QuoteLine(__qty, __unitPrice, __product, __quote);
         Poly.Runtime.ActionScope.Create(created, "QuoteLine");
         if (quote != null)
         {

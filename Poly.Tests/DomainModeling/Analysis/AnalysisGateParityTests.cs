@@ -620,14 +620,22 @@ public class AnalysisGateParityTests {
         var stamp = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc);
         var stamp2 = new DateTime(2026, 1, 6, 0, 0, 0, DateTimeKind.Utc);
         object requiredValue = required switch {
-            "Due" => due, "Today" => DateOnly.FromDateTime(DateTime.UtcNow), "(Due + 3 Days)" => due.AddDays(3),
-            "Stamp" => stamp, "Now" => DateTime.UtcNow, "(Stamp + 3 Hours)" => stamp.AddHours(3),
-            "Opens" => new TimeOnly(9, 0), "(Opens + 2 Hours)" => new TimeOnly(11, 0),
-            "Len" or "1 Hours" => TimeSpan.FromHours(1), _ => stamp2 - stamp,
+            "Due" => due,
+            "Today" => DateOnly.FromDateTime(DateTime.UtcNow),
+            "(Due + 3 Days)" => due.AddDays(3),
+            "Stamp" => stamp,
+            "Now" => DateTime.UtcNow,
+            "(Stamp + 3 Hours)" => stamp.AddHours(3),
+            "Opens" => new TimeOnly(9, 0),
+            "(Opens + 2 Hours)" => new TimeOnly(11, 0),
+            "Len" or "1 Hours" => TimeSpan.FromHours(1),
+            _ => stamp2 - stamp,
         };
         object presentValue = family switch {
-            "Date" => new DateOnly(2026, 1, 3), "DateTime" => new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
-            "Time" => new TimeOnly(8, 0), _ => TimeSpan.FromMinutes(30),
+            "Date" => new DateOnly(2026, 1, 3),
+            "DateTime" => new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+            "Time" => new TimeOnly(8, 0),
+            _ => TimeSpan.FromMinutes(30),
         };
 
         var gate = GateParity.Check(dsl, SimStep.Create("Item", """{"Due":"2026-01-05","Stamp":"2026-01-05T00:00:00Z","Stamp2":"2026-01-06T00:00:00Z","Opens":"09:00:00","Len":"01:00:00"}""", "i"), SimStep.Evaluate("Item", "P0", "i"));

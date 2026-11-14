@@ -403,8 +403,8 @@ public class AbiEmitterCompareDomainTests {
                 T? left = leftPresent ? a : null;
                 T? right = rightPresent ? b : null;
                 var expected = (left, right) switch {
-                    ({ } l, { } r) => cmp.Of(op)(l, r),
-                    ({ }, null) or (null, { }) => op == "!=",
+                    ( { } l, { } r) => cmp.Of(op)(l, r),
+                    ( { }, null) or (null, { }) => op == "!=",
                     _ => op == "==",
                 };
                 await Assert.That(Run(make(Optional<T>("l"), Optional<T>("r")), left, right)).IsEqualTo(expected ? 1L : 0L)
@@ -452,13 +452,23 @@ public class AbiEmitterCompareDomainTests {
     [Arguments("DateOnly?", "Object")]
     public async Task OptionalTemporal_BesideADifferentType_IsRefusedWithAPositionedMessage(string optional, string required) {
         static Node Opt(string type) => type switch {
-            "DateOnly?" => Optional<DateOnly>("o"), "DateTime?" => Optional<DateTime>("o"), "TimeOnly?" => Optional<TimeOnly>("o"),
-            "TimeSpan?" => Optional<TimeSpan>("o"), _ => Optional<DateTimeOffset>("o"),
+            "DateOnly?" => Optional<DateOnly>("o"),
+            "DateTime?" => Optional<DateTime>("o"),
+            "TimeOnly?" => Optional<TimeOnly>("o"),
+            "TimeSpan?" => Optional<TimeSpan>("o"),
+            _ => Optional<DateTimeOffset>("o"),
         };
         static Node Req(string type) => type switch {
-            "DateTime" => Param<DateTime>("r"), "DateOnly" => Param<DateOnly>("r"), "TimeSpan" => Param<TimeSpan>("r"), "DateTimeOffset" => Param<DateTimeOffset>("r"),
-            "Int32" => Param<int>("r"), "Int64" => Param<long>("r"), "Decimal" => Param<decimal>("r"), "String" => Param<string>("r"),
-            "Boolean" => Param<bool>("r"), _ => Param<object>("r"),
+            "DateTime" => Param<DateTime>("r"),
+            "DateOnly" => Param<DateOnly>("r"),
+            "TimeSpan" => Param<TimeSpan>("r"),
+            "DateTimeOffset" => Param<DateTimeOffset>("r"),
+            "Int32" => Param<int>("r"),
+            "Int64" => Param<long>("r"),
+            "Decimal" => Param<decimal>("r"),
+            "String" => Param<string>("r"),
+            "Boolean" => Param<bool>("r"),
+            _ => Param<object>("r"),
         };
         foreach (var (op, make) in Operators.Where(static o => o.Name is "==" or "<"))
             foreach (var optionalLeft in new[] { true, false }) {

@@ -1265,9 +1265,9 @@ Integer division truncates: `7 / 2` is 3. Storing an integral division into a `D
 `assign Total to N / 2 + 1`) is the warning DMNUM001, because the quotient is cut before it widens. A literal with a
 zero fraction is a whole number, so `7.0 / 2` is also 3; divide by a `Decimal` property or a literal with a fraction
 (`7.5 / 2`, `Total / 2`) to divide exactly. The warning covers an `assign`, a `create` initializer, a `default(...)`, a
-function's return, a function argument and an invoke or fan-out argument, along the `+ - * /` spine of the value. It
-does not cover a division inside a `match` arm (row T-09a) and, like every analysis warning, it is not yet suppressible
-by an allowance (row T-08).
+function's return, a function argument and an invoke or fan-out argument, along the `+ - * /` spine of the value and
+into the arm values of a `match` (each arm is converted to the match's type, so `match { c -> 7 / 2, else -> 1.5 }`
+stores 3 for that arm). Like every analysis warning, it is not yet suppressible by an allowance (row T-08).
 
 #### Subject-First Related Reads (Q1′)
 
@@ -1615,7 +1615,14 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 - Arms are **expressions**, never effects. It works wherever an expression does (assign RHS, `if`
   conditions, policy bodies, `create` initializers, nested inside another `match`, or as a function-call argument such as `Add(match { Qty > 3 -> 10, else -> 1 }, 1)`).
 - Conditions must be Boolean (**DMMAT001**). The arm values and the `else` must unify to one type
-  (**DMMAT002**; `Text` and an enum unify, `Text` and `Number` do not). Two arms with the same
+  (**DMMAT002**): the same type, or a `Decimal` with a `Number` (every `Number` arm is converted to
+  `Decimal`, so `match { Qty > 1 -> 1.5, else -> Qty }` is a `Decimal` whichever arm comes first, and
+  assigning it into a `Number` is DMSEM003). `Text` and `Number` do not unify; neither do a `Date` and a
+  `DateTime`, a `Decimal` and an optional `Number`, or an enum and a `Text` that is not a string literal
+  (a string literal naming an enum member unifies with an enum arm only when the match is assigned to
+  that enum: `assign Tier to match { c -> Gold, else -> "Std" }`). An arm that is `null` or optional makes
+  the match optional: it compares and orders false when absent, and arithmetic over it is DMSEM003. A
+  `match` in `default(...)` is a positioned error (the generated C# cannot print it). Two arms with the same
   condition are an error, the later arm is unreachable (**DMMAT003**); only identical conditions
   are seen, overlapping ranges are the author's problem. A bare name that is no property, parameter or
   enum member is an error (**DMMAT004**).

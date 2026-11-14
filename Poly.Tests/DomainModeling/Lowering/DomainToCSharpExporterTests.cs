@@ -709,7 +709,7 @@ public class DomainToCSharpExporterTests {
             }
             Item: entity {
               Name: Text
-              order: Order
+              order: Order optional
               Active: stage {
                 Add: action { create in order { Code: "x" } }
               }
@@ -3520,7 +3520,7 @@ public class DomainToCSharpExporterTests {
               B: stage { }
             }
             Tr: entity {
-              Tracks: Paper
+              Tracks: Paper optional
               P: stage {
                 Adopt: action { create in Tracks { Title: "x" } }
                 when Tracks B { transition to Q }

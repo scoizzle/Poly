@@ -144,16 +144,11 @@ internal class Lead : Poly.Runtime.IActionScoped
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'Company' is required.", "Lead.Company"));
         }
         var __company = company;
-        if (account == null)
-        {
-            return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'account' is required.", "Lead.account"));
-        }
-        var __account = account;
         if (Lead.ExistsWithEmail(db, __email))
         {
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Lead'.", "Lead.Email"));
         }
-        var created = new Lead(__name, __email, __company, __account);
+        var created = new Lead(__name, __email, __company, account);
         Poly.Runtime.ActionScope.Create(created, "Lead");
         db.Record("Lead", "Email", __email);
         return DomainResult<Lead>.Success(created);

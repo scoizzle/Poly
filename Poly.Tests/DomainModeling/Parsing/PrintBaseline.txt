@@ -465,7 +465,7 @@ Note: entity {
 }
 ##### poly/docs/missions/evolve-2026-10-14/ratelimit.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMLIB001 | Product:analysis-failed:DMLIB001	E3B0C442
 ##### poly/docs/missions/evolve-2026-10-14/sessions.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMLIB001 | Product:analysis-failed:DMLIB001	E3B0C442
-##### poly/docs/probes/dogfood/crm.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	E66C6AAF
+##### poly/docs/probes/dogfood/crm.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	B56C7DC0
 domain Crm
 uses persistence
 
@@ -492,7 +492,7 @@ Lead: entity {
   Name: Text
   Email: Text unique pattern("^[^@]+@[^@]+$")
   Company: Text
-  account: one Account
+  account: one Account optional
   HasAccount: policy { account exists }
   New: stage {
     Convert: action
@@ -590,14 +590,12 @@ Opportunity: entity {
   activities: many Activity
   lines: many Line
   quotes: many Quote
-  HasAccount: policy { account exists }
   HasLines: policy { count lines > 0 }
   Qualify: stage {
     entry {
       assign Probability to 10
     }
-    Propose: action
-      require HasAccount {
+    Propose: action {
       transition to Propose
     }
     Lose: action {
@@ -789,7 +787,7 @@ Z: entity {
   B: stage {
   }
 }
-##### poly/docs/probes/dogfood/hotel.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	39BD6B31
+##### poly/docs/probes/dogfood/hotel.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	0F3F63A3
 domain Hotel
 uses persistence
 
@@ -833,7 +831,6 @@ Room: entity {
   stays: many Reservation via room
   IsVacant: policy { Occupied is false }
   IsReady: policy { ((Occupied is false and Dirty is false) and Offline is false) }
-  HasType: policy { roomType exists }
   InService: stage {
     TakeOutOfService: action
       require IsVacant {
@@ -979,13 +976,11 @@ Reservation: entity {
   DatesValid: policy { CheckOutDate > CheckInDate }
   PartyFits: policy { PartySize <= MaxOccupancy }
   RoomReady: policy { room where ((Occupied is false and Dirty is false) and Offline is false) }
-  HasRoom: policy { room exists }
-  HasGuest: policy { guest exists }
   BillSettled: policy { folio Balance is 0 }
   HasFolio: policy { folio exists }
   Requested: stage {
     Confirm: action
-      require DatesValid, PartyFits, HasRoom {
+      require DatesValid, PartyFits {
       transition to Confirmed
     }
     Cancel: action {
@@ -994,7 +989,7 @@ Reservation: entity {
   }
   Confirmed: stage {
     CheckIn: action
-      require RoomReady, HasRoom {
+      require RoomReady {
       create in folio { Balance: 0 }
       transition to InHouse
     }
@@ -1060,7 +1055,6 @@ EventHold: entity {
   section: one Section optional
   DatesValid: policy { EndDate > StartDate }
   PartyFits: policy { Headcount <= Capacity }
-  HasHall: policy { hall exists }
   HasSection: policy { section exists }
   HasSpace: policy { (hall exists or section exists) }
   Requested: stage {
@@ -1074,7 +1068,6 @@ EventHold: entity {
   }
   Confirmed: stage {
     StartHall: action
-      require HasHall
       require not HasSection {
       invoke hall.Occupy
       transition to InUse
@@ -1090,7 +1083,6 @@ EventHold: entity {
   }
   InUse: stage {
     ReleaseHall: action
-      require HasHall
       require not HasSection {
       invoke hall.Vacate
       transition to Released
@@ -1201,7 +1193,7 @@ Fine: entity {
   Reason: Text
   patron: one Patron optional
 }
-##### poly/docs/probes/dogfood/university.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	1B68D2A8
+##### poly/docs/probes/dogfood/university.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	F9BA7432
 domain University
 uses persistence
 
@@ -1287,7 +1279,7 @@ Section: entity {
   SeatsTaken: Number default(0)
   OfferingTerm: Term
   course: one Course
-  instructor: one Instructor
+  instructor: one Instructor optional
   enrollments: many Enrollment via section
   waitlist: many WaitOffer via section
   OfferedSeats: Number default(0)

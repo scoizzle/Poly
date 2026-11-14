@@ -697,7 +697,7 @@ public class AnalysisGateParityTests {
               Gap: Duration optional
             }
             Job: entity {
-              advisor: Person
+              advisor: Person optional
               {{string.Join("\n  ", policies)}}
             }
             """;

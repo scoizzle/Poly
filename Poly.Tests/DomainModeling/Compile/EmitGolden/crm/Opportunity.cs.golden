@@ -245,10 +245,6 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Propose' requires stage 'Qualify' on entity 'Opportunity'.", "Opportunity.Propose", "Qualify"));
         }
-        if (!this.HasAccount())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Propose' blocked by policy 'HasAccount'.", "Opportunity.Propose", "HasAccount"));
-        }
         this.CurrentStage = OpportunityStage.Propose;
         this.Probability = 40L;
         var notify0 = this.NotifyProposeSubscribers();
@@ -540,7 +536,6 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         this.Amount = assignValue0;
         return DomainResult.Success();
     }
-    public bool HasAccount() => this.Account != null;
     public bool HasLines() => this.Lines.Count > 0;
     internal void RegisterAccountOpportunitiesWonSubscriber(Account subscriber)
     {

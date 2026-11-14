@@ -161,7 +161,6 @@ internal class Room : Poly.Runtime.IActionScoped
     }
     public bool IsVacant() => !this.Occupied;
     public bool IsReady() => !this.Occupied && !this.Dirty && !this.Offline;
-    public bool HasType() => this.RoomType != null;
     internal DomainResult WhenEachReservationInHouse()
     {
         Poly.Runtime.ActionScope.Touch(this);

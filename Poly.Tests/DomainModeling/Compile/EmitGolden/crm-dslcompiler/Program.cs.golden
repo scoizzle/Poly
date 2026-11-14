@@ -2,6 +2,7 @@
 
 #nullable enable
 
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -30,13 +31,13 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListAsync());
 
-app.MapGet("/api/products/{sku}", async (string sku, CrmDbContext db) => (await db.Products.FirstOrDefaultAsync(e => e.Sku == sku) is Crm.Product product ? Results.Ok(product) : Results.NotFound()));
+app.MapGet("/api/products/{sku}", async (string sku, CrmDbContext db) => (await db.Products.FirstOrDefaultAsync(e => e.Sku == sku) is Crm.Product product ? Results.Ok(product) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
     var productResult = Crm.Product.Create(dto.Sku, dto.Name, dto.ListPrice, db);
     if (!productResult.IsSuccess)
     {
-        return FailureStatus(productResult.ErrorMessage);
+        return Problem(productResult.Error!);
     }
     db.Products.Add(productResult.Value);
     await db.SaveChangesAsync();
@@ -45,13 +46,13 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
 
 app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync());
 
-app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Crm.Lead lead ? Results.Ok(lead) : Results.NotFound()));
+app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Crm.Lead lead ? Results.Ok(lead) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
     var leadResult = Crm.Lead.Create(dto.Name, dto.Email, dto.Company, db, null);
     if (!leadResult.IsSuccess)
     {
-        return FailureStatus(leadResult.ErrorMessage);
+        return Problem(leadResult.Error!);
     }
     db.Leads.Add(leadResult.Value);
     await db.SaveChangesAsync();
@@ -60,13 +61,13 @@ app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
 
 app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListAsync());
 
-app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Crm.Account account ? Results.Ok(account) : Results.NotFound()));
+app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Crm.Account account ? Results.Ok(account) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
     var accountResult = Crm.Account.Create(dto.Name, dto.Industry, null, null, Enumerable.Empty<Crm.Contact>(), Enumerable.Empty<Crm.Opportunity>(), Enumerable.Empty<Crm.Ticket>());
     if (!accountResult.IsSuccess)
     {
-        return FailureStatus(accountResult.ErrorMessage);
+        return Problem(accountResult.Error!);
     }
     db.Accounts.Add(accountResult.Value);
     await db.SaveChangesAsync();
@@ -75,13 +76,13 @@ app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
 
 app.MapGet("/api/campaigns", async (CrmDbContext db) => await db.Campaigns.ToListAsync());
 
-app.MapGet("/api/campaigns/{id}", async (int id, CrmDbContext db) => (await db.Campaigns.FindAsync(id) is Crm.Campaign campaign ? Results.Ok(campaign) : Results.NotFound()));
+app.MapGet("/api/campaigns/{id}", async (int id, CrmDbContext db) => (await db.Campaigns.FindAsync(id) is Crm.Campaign campaign ? Results.Ok(campaign) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
     var campaignResult = Crm.Campaign.Create(dto.Name, Enumerable.Empty<Crm.CampaignMember>());
     if (!campaignResult.IsSuccess)
     {
-        return FailureStatus(campaignResult.ErrorMessage);
+        return Problem(campaignResult.Error!);
     }
     db.Campaigns.Add(campaignResult.Value);
     await db.SaveChangesAsync();
@@ -92,7 +93,7 @@ app.MapGet("/api/accounts/{id}/hq", async (int id, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Reference(e => e.Hq).LoadAsync();
     return Results.Ok(parent.Hq);
@@ -102,7 +103,7 @@ app.MapGet("/api/accounts/{id}/contacts", async (int id, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Contacts).LoadAsync();
     return Results.Ok(parent.Contacts);
@@ -112,13 +113,13 @@ app.MapGet("/api/accounts/{id}/contacts/{email}", async (int id, string email, C
     var parent = await db.Accounts.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Contacts).LoadAsync();
     var child = parent.Contacts.FirstOrDefault(e => e.Email == email);
     if (child == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -127,7 +128,7 @@ app.MapGet("/api/accounts/{id}/opportunities", async (int id, CrmDbContext db) =
     var parent = await db.Accounts.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Opportunities).LoadAsync();
     return Results.Ok(parent.Opportunities);
@@ -137,13 +138,13 @@ app.MapGet("/api/accounts/{id}/opportunities/{opportunityId}", async (int id, in
     var parent = await db.Accounts.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Opportunities).LoadAsync();
     var child = await db.Opportunities.FindAsync(opportunityId);
     if (child == null || !parent.Opportunities.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -152,7 +153,7 @@ app.MapGet("/api/opportunities/{id}/activities", async (int id, CrmDbContext db)
     var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Activities).LoadAsync();
     return Results.Ok(parent.Activities);
@@ -162,13 +163,13 @@ app.MapGet("/api/opportunities/{id}/activities/{activityId}", async (int id, int
     var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Activities).LoadAsync();
     var child = await db.Activities.FindAsync(activityId);
     if (child == null || !parent.Activities.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -177,7 +178,7 @@ app.MapGet("/api/opportunities/{id}/quotes", async (int id, CrmDbContext db) => 
     var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Quotes).LoadAsync();
     return Results.Ok(parent.Quotes);
@@ -187,13 +188,13 @@ app.MapGet("/api/opportunities/{id}/quotes/{quoteId}", async (int id, int quoteI
     var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Quotes).LoadAsync();
     var child = await db.Quotes.FindAsync(quoteId);
     if (child == null || !parent.Quotes.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -202,7 +203,7 @@ app.MapGet("/api/campaigns/{id}/members", async (int id, CrmDbContext db) => {
     var parent = await db.Campaigns.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Members).LoadAsync();
     return Results.Ok(parent.Members);
@@ -212,13 +213,13 @@ app.MapGet("/api/campaigns/{id}/members/{campaignMemberId}", async (int id, int 
     var parent = await db.Campaigns.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Members).LoadAsync();
     var child = await db.CampaignMembers.FindAsync(campaignMemberId);
     if (child == null || !parent.Members.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -227,7 +228,7 @@ app.MapGet("/api/accounts/{id}/tickets", async (int id, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Tickets).LoadAsync();
     return Results.Ok(parent.Tickets);
@@ -237,13 +238,13 @@ app.MapGet("/api/accounts/{id}/tickets/{ticketId}", async (int id, int ticketId,
     var parent = await db.Accounts.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Tickets).LoadAsync();
     var child = await db.Tickets.FindAsync(ticketId);
     if (child == null || !parent.Tickets.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -252,7 +253,7 @@ app.MapGet("/api/opportunities/{id}/lines", async (int id, CrmDbContext db) => {
     var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
     return Results.Ok(parent.Lines);
@@ -262,13 +263,13 @@ app.MapGet("/api/opportunities/{id}/lines/{lineId}", async (int id, int lineId, 
     var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
     var child = await db.Lines.FindAsync(lineId);
     if (child == null || !parent.Lines.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -277,7 +278,7 @@ app.MapGet("/api/quotes/{id}/lines", async (int id, CrmDbContext db) => {
     var parent = await db.Quotes.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
     return Results.Ok(parent.Lines);
@@ -287,13 +288,13 @@ app.MapGet("/api/quotes/{id}/lines/{quoteLineId}", async (int id, int quoteLineI
     var parent = await db.Quotes.FindAsync(id);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
     var child = await db.QuoteLines.FindAsync(quoteLineId);
     if (child == null || !parent.Lines.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -302,7 +303,7 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
     var entity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
-        return Results.NotFound("Lead not found");
+        return StatusProblem(404, "Not Found", "Lead not found");
     }
     try
     {
@@ -314,12 +315,13 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Lead.Convert");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -327,7 +329,7 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
     var entity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
-        return Results.NotFound("Lead not found");
+        return StatusProblem(404, "Not Found", "Lead not found");
     }
     try
     {
@@ -339,12 +341,13 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Lead.Disqualify");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -352,7 +355,7 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
     var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
@@ -367,12 +370,13 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.PlaceHq");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -380,7 +384,7 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
     var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
@@ -395,12 +399,13 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.AddContact");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -408,7 +413,7 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
     var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
@@ -418,7 +423,7 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
         var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.LeadId);
         if (lead == null)
         {
-            return Results.NotFound("Lead not found");
+            return StatusProblem(404, "Not Found", "Lead not found");
         }
         var result = entity.ConvertLead(lead, db);
         if (result.IsSuccess)
@@ -428,12 +433,13 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.ConvertLead");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -441,7 +447,7 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
     var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
@@ -456,12 +462,13 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.OpenDeal");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -469,7 +476,7 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
     var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
@@ -484,12 +491,13 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.Archive");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -497,7 +505,7 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
     var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
@@ -512,12 +520,13 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.OpenTicket");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -525,7 +534,7 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
     var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
@@ -540,12 +549,13 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.Restore");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -553,17 +563,17 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Contacts.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
-        return Results.NotFound("Contact not found");
+        return StatusProblem(404, "Not Found", "Contact not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Contacts).LoadAsync();
     if (!parentEntity.Contacts.Any(e => e == entity))
     {
-        return Results.NotFound("Contact not found for this Account");
+        return StatusProblem(404, "Not Found", "Contact not found for this Account");
     }
     try
     {
@@ -575,12 +585,13 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Contact.Retire");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -588,17 +599,17 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Contacts.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
-        return Results.NotFound("Contact not found");
+        return StatusProblem(404, "Not Found", "Contact not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Contacts).LoadAsync();
     if (!parentEntity.Contacts.Any(e => e == entity))
     {
-        return Results.NotFound("Contact not found for this Account");
+        return StatusProblem(404, "Not Found", "Contact not found for this Account");
     }
     try
     {
@@ -610,12 +621,13 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Contact.Reactivate");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -623,17 +635,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -648,12 +660,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.CompleteOpenWork");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -661,17 +674,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -686,12 +699,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Propose");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -699,17 +713,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -724,12 +738,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Lose");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -737,17 +752,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -762,12 +777,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Log");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -775,17 +791,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -795,7 +811,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
         var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
         if (product == null)
         {
-            return Results.NotFound("Product not found");
+            return StatusProblem(404, "Not Found", "Product not found");
         }
         var result = entity.AddLine(product, dto.Qty);
         if (result.IsSuccess)
@@ -805,12 +821,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.AddLine");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -818,17 +835,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -843,12 +860,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.QuoteDeal");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -856,17 +874,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -881,12 +899,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Commit");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -894,17 +913,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -919,12 +938,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Win");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -932,17 +952,17 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Opportunities).LoadAsync();
     if (!parentEntity.Opportunities.Any(e => e == entity))
     {
-        return Results.NotFound("Opportunity not found for this Account");
+        return StatusProblem(404, "Not Found", "Opportunity not found for this Account");
     }
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
@@ -957,12 +977,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Capture");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -970,17 +991,17 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
     var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     var entity = await db.Activities.FindAsync(activityId);
     if (entity == null)
     {
-        return Results.NotFound("Activity not found");
+        return StatusProblem(404, "Not Found", "Activity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Activities).LoadAsync();
     if (!parentEntity.Activities.Any(e => e == entity))
     {
-        return Results.NotFound("Activity not found for this Opportunity");
+        return StatusProblem(404, "Not Found", "Activity not found for this Opportunity");
     }
     try
     {
@@ -992,12 +1013,13 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Activity.Snooze");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1005,17 +1027,17 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
     var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     var entity = await db.Activities.FindAsync(activityId);
     if (entity == null)
     {
-        return Results.NotFound("Activity not found");
+        return StatusProblem(404, "Not Found", "Activity not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Activities).LoadAsync();
     if (!parentEntity.Activities.Any(e => e == entity))
     {
-        return Results.NotFound("Activity not found for this Opportunity");
+        return StatusProblem(404, "Not Found", "Activity not found for this Opportunity");
     }
     try
     {
@@ -1027,12 +1049,13 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Activity.Complete");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1040,17 +1063,17 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
     var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     var entity = await db.Quotes.FindAsync(quoteId);
     if (entity == null)
     {
-        return Results.NotFound("Quote not found");
+        return StatusProblem(404, "Not Found", "Quote not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Quotes).LoadAsync();
     if (!parentEntity.Quotes.Any(e => e == entity))
     {
-        return Results.NotFound("Quote not found for this Opportunity");
+        return StatusProblem(404, "Not Found", "Quote not found for this Opportunity");
     }
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     try
@@ -1058,7 +1081,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
         var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
         if (product == null)
         {
-            return Results.NotFound("Product not found");
+            return StatusProblem(404, "Not Found", "Product not found");
         }
         var result = entity.AddLine(product, dto.Qty);
         if (result.IsSuccess)
@@ -1068,12 +1091,13 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Quote.AddLine");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1081,17 +1105,17 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
     var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     var entity = await db.Quotes.FindAsync(quoteId);
     if (entity == null)
     {
-        return Results.NotFound("Quote not found");
+        return StatusProblem(404, "Not Found", "Quote not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Quotes).LoadAsync();
     if (!parentEntity.Quotes.Any(e => e == entity))
     {
-        return Results.NotFound("Quote not found for this Opportunity");
+        return StatusProblem(404, "Not Found", "Quote not found for this Opportunity");
     }
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     try
@@ -1104,12 +1128,13 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Quote.Present");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1117,17 +1142,17 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
     var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     var entity = await db.Quotes.FindAsync(quoteId);
     if (entity == null)
     {
-        return Results.NotFound("Quote not found");
+        return StatusProblem(404, "Not Found", "Quote not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Quotes).LoadAsync();
     if (!parentEntity.Quotes.Any(e => e == entity))
     {
-        return Results.NotFound("Quote not found for this Opportunity");
+        return StatusProblem(404, "Not Found", "Quote not found for this Opportunity");
     }
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     try
@@ -1140,12 +1165,13 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Quote.Accept");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1153,17 +1179,17 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
     var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Opportunity not found");
+        return StatusProblem(404, "Not Found", "Opportunity not found");
     }
     var entity = await db.Quotes.FindAsync(quoteId);
     if (entity == null)
     {
-        return Results.NotFound("Quote not found");
+        return StatusProblem(404, "Not Found", "Quote not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Quotes).LoadAsync();
     if (!parentEntity.Quotes.Any(e => e == entity))
     {
-        return Results.NotFound("Quote not found for this Opportunity");
+        return StatusProblem(404, "Not Found", "Quote not found for this Opportunity");
     }
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     try
@@ -1176,12 +1202,13 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Quote.Reject");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1189,7 +1216,7 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
     var entity = await db.Campaigns.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Campaign not found");
+        return StatusProblem(404, "Not Found", "Campaign not found");
     }
     await db.Entry(entity).Collection(e => e.Members).LoadAsync();
     try
@@ -1197,7 +1224,7 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
         var contact = await db.Contacts.FirstOrDefaultAsync(e => e.Email == dto.WhoId);
         if (contact == null)
         {
-            return Results.NotFound("Contact not found");
+            return StatusProblem(404, "Not Found", "Contact not found");
         }
         var result = entity.Enroll(contact);
         if (result.IsSuccess)
@@ -1207,12 +1234,13 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Campaign.Enroll");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1220,7 +1248,7 @@ app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
     var entity = await db.Campaigns.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Campaign not found");
+        return StatusProblem(404, "Not Found", "Campaign not found");
     }
     await db.Entry(entity).Collection(e => e.Members).LoadAsync();
     try
@@ -1233,12 +1261,13 @@ app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Campaign.End");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1246,17 +1275,17 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Tickets.FindAsync(ticketId);
     if (entity == null)
     {
-        return Results.NotFound("Ticket not found");
+        return StatusProblem(404, "Not Found", "Ticket not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Tickets).LoadAsync();
     if (!parentEntity.Tickets.Any(e => e == entity))
     {
-        return Results.NotFound("Ticket not found for this Account");
+        return StatusProblem(404, "Not Found", "Ticket not found for this Account");
     }
     try
     {
@@ -1268,12 +1297,13 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Ticket.Work");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -1281,17 +1311,17 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
     var parentEntity = await db.Accounts.FindAsync(id);
     if (parentEntity == null)
     {
-        return Results.NotFound("Account not found");
+        return StatusProblem(404, "Not Found", "Account not found");
     }
     var entity = await db.Tickets.FindAsync(ticketId);
     if (entity == null)
     {
-        return Results.NotFound("Ticket not found");
+        return StatusProblem(404, "Not Found", "Ticket not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Tickets).LoadAsync();
     if (!parentEntity.Tickets.Any(e => e == entity))
     {
-        return Results.NotFound("Ticket not found for this Account");
+        return StatusProblem(404, "Not Found", "Ticket not found for this Account");
     }
     try
     {
@@ -1303,18 +1333,34 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Ticket.Close");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
-static IResult FailureStatus(string? message)
+static IResult Problem(Poly.Runtime.DomainFailure failure)
 {
-    return (message != null && (message.Contains("Unique constraint") || message.Contains("already has a target")) ? Results.Conflict(message) : Results.BadRequest(message));
+    var extensions = new Dictionary<string, object?>();
+    if (failure.ElementPath != null)
+    {
+        extensions["elementPath"] = failure.ElementPath;
+    }
+    if (failure.Guard != null)
+    {
+        extensions["guard"] = failure.Guard;
+    }
+    return Results.Problem(failure.Message, null, Poly.Runtime.DomainFailureStatus.Http(failure.Kind), failure.Kind.ToString(), null, extensions);
+}
+
+
+static IResult StatusProblem(int status, string title, string? detail = null)
+{
+    return Results.Problem(detail, null, status, title);
 }
 
 

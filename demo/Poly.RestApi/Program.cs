@@ -2,6 +2,7 @@
 
 #nullable enable
 
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -30,13 +31,13 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/api/books", async (LibraryDbContext db) => await db.Books.ToListAsync());
 
-app.MapGet("/api/books/{isbn}", async (string isbn, LibraryDbContext db) => (await db.Books.FirstOrDefaultAsync(e => e.ISBN == isbn) is Library.Book book ? Results.Ok(book) : Results.NotFound()));
+app.MapGet("/api/books/{isbn}", async (string isbn, LibraryDbContext db) => (await db.Books.FirstOrDefaultAsync(e => e.ISBN == isbn) is Library.Book book ? Results.Ok(book) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
     var bookResult = Library.Book.Create(dto.Title, dto.Author, dto.ISBN, dto.Pages, dto.Genre, db);
     if (!bookResult.IsSuccess)
     {
-        return FailureStatus(bookResult.ErrorMessage);
+        return Problem(bookResult.Error!);
     }
     db.Books.Add(bookResult.Value);
     await db.SaveChangesAsync();
@@ -45,13 +46,13 @@ app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
 
 app.MapGet("/api/patrons", async (LibraryDbContext db) => await db.Patrons.ToListAsync());
 
-app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Library.Patron patron ? Results.Ok(patron) : Results.NotFound()));
+app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Library.Patron patron ? Results.Ok(patron) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
     var patronResult = Library.Patron.Create(dto.Name, dto.Email, db, dto.MaxItems, Enumerable.Empty<Library.Loan>(), Enumerable.Empty<Library.Fine>());
     if (!patronResult.IsSuccess)
     {
-        return FailureStatus(patronResult.ErrorMessage);
+        return Problem(patronResult.Error!);
     }
     db.Patrons.Add(patronResult.Value);
     await db.SaveChangesAsync();
@@ -60,13 +61,13 @@ app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
 
 app.MapGet("/api/premiumpatrons", async (LibraryDbContext db) => await db.PremiumPatrons.ToListAsync());
 
-app.MapGet("/api/premiumpatrons/{email}", async (string email, LibraryDbContext db) => (await db.PremiumPatrons.FirstOrDefaultAsync(e => e.Email == email) is Library.PremiumPatron premiumPatron ? Results.Ok(premiumPatron) : Results.NotFound()));
+app.MapGet("/api/premiumpatrons/{email}", async (string email, LibraryDbContext db) => (await db.PremiumPatrons.FirstOrDefaultAsync(e => e.Email == email) is Library.PremiumPatron premiumPatron ? Results.Ok(premiumPatron) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/premiumpatrons", async (PremiumPatronDto dto, LibraryDbContext db) => {
     var premiumPatronResult = Library.PremiumPatron.Create(dto.Name, dto.Email, dto.RewardPoints, dto.PriorityAccess, db);
     if (!premiumPatronResult.IsSuccess)
     {
-        return FailureStatus(premiumPatronResult.ErrorMessage);
+        return Problem(premiumPatronResult.Error!);
     }
     db.PremiumPatrons.Add(premiumPatronResult.Value);
     await db.SaveChangesAsync();
@@ -77,7 +78,7 @@ app.MapGet("/api/patrons/{email}/loans", async (string email, LibraryDbContext d
     var parent = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Loans).LoadAsync();
     return Results.Ok(parent.Loans);
@@ -87,13 +88,13 @@ app.MapGet("/api/patrons/{email}/loans/{id}", async (string email, int id, Libra
     var parent = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Loans).LoadAsync();
     var child = await db.Loans.FindAsync(id);
     if (child == null || !parent.Loans.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -102,7 +103,7 @@ app.MapGet("/api/patrons/{email}/fines", async (string email, LibraryDbContext d
     var parent = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Fines).LoadAsync();
     return Results.Ok(parent.Fines);
@@ -112,13 +113,13 @@ app.MapGet("/api/patrons/{email}/fines/{id}", async (string email, int id, Libra
     var parent = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (parent == null)
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Fines).LoadAsync();
     var child = await db.Fines.FindAsync(id);
     if (child == null || !parent.Fines.Any(e => e == child))
     {
-        return Results.NotFound();
+        return StatusProblem(404, "Not Found");
     }
     return Results.Ok(child);
 });
@@ -127,7 +128,7 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
     var entity = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
-        return Results.NotFound("Patron not found");
+        return StatusProblem(404, "Not Found", "Patron not found");
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
@@ -136,7 +137,7 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
         var book = await db.Books.FirstOrDefaultAsync(e => e.ISBN == dto.BookId);
         if (book == null)
         {
-            return Results.NotFound("Book not found");
+            return StatusProblem(404, "Not Found", "Book not found");
         }
         var result = entity.CheckOut(book);
         if (result.IsSuccess)
@@ -146,12 +147,13 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Patron.CheckOut");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -159,7 +161,7 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
     var entity = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
-        return Results.NotFound("Patron not found");
+        return StatusProblem(404, "Not Found", "Patron not found");
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
@@ -173,12 +175,13 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Patron.Suspend");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -186,7 +189,7 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
     var entity = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
-        return Results.NotFound("Patron not found");
+        return StatusProblem(404, "Not Found", "Patron not found");
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
@@ -200,12 +203,13 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Patron.CloseAccount");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -213,7 +217,7 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
     var entity = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
-        return Results.NotFound("Patron not found");
+        return StatusProblem(404, "Not Found", "Patron not found");
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
@@ -227,12 +231,13 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Patron.Reinstate");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -240,17 +245,17 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
     var parentEntity = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (parentEntity == null)
     {
-        return Results.NotFound("Patron not found");
+        return StatusProblem(404, "Not Found", "Patron not found");
     }
     var entity = await db.Loans.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Loan not found");
+        return StatusProblem(404, "Not Found", "Loan not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Loans).LoadAsync();
     if (!parentEntity.Loans.Any(e => e == entity))
     {
-        return Results.NotFound("Loan not found for this Patron");
+        return StatusProblem(404, "Not Found", "Loan not found for this Patron");
     }
     try
     {
@@ -262,12 +267,13 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Loan.Renew");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -275,17 +281,17 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
     var parentEntity = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (parentEntity == null)
     {
-        return Results.NotFound("Patron not found");
+        return StatusProblem(404, "Not Found", "Patron not found");
     }
     var entity = await db.Loans.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Loan not found");
+        return StatusProblem(404, "Not Found", "Loan not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Loans).LoadAsync();
     if (!parentEntity.Loans.Any(e => e == entity))
     {
-        return Results.NotFound("Loan not found for this Patron");
+        return StatusProblem(404, "Not Found", "Loan not found for this Patron");
     }
     try
     {
@@ -297,12 +303,13 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Loan.Return");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -310,17 +317,17 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
     var parentEntity = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (parentEntity == null)
     {
-        return Results.NotFound("Patron not found");
+        return StatusProblem(404, "Not Found", "Patron not found");
     }
     var entity = await db.Fines.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Fine not found");
+        return StatusProblem(404, "Not Found", "Fine not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Fines).LoadAsync();
     if (!parentEntity.Fines.Any(e => e == entity))
     {
-        return Results.NotFound("Fine not found for this Patron");
+        return StatusProblem(404, "Not Found", "Fine not found for this Patron");
     }
     try
     {
@@ -332,12 +339,13 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Fine.Pay");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -345,17 +353,17 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
     var parentEntity = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
     if (parentEntity == null)
     {
-        return Results.NotFound("Patron not found");
+        return StatusProblem(404, "Not Found", "Patron not found");
     }
     var entity = await db.Fines.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Fine not found");
+        return StatusProblem(404, "Not Found", "Fine not found");
     }
     await db.Entry(parentEntity).Collection(e => e.Fines).LoadAsync();
     if (!parentEntity.Fines.Any(e => e == entity))
     {
-        return Results.NotFound("Fine not found for this Patron");
+        return StatusProblem(404, "Not Found", "Fine not found for this Patron");
     }
     try
     {
@@ -367,18 +375,34 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Fine.Waive");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
-static IResult FailureStatus(string? message)
+static IResult Problem(Poly.Runtime.DomainFailure failure)
 {
-    return (message != null && (message.Contains("Unique constraint") || message.Contains("already has a target")) ? Results.Conflict(message) : Results.BadRequest(message));
+    var extensions = new Dictionary<string, object?>();
+    if (failure.ElementPath != null)
+    {
+        extensions["elementPath"] = failure.ElementPath;
+    }
+    if (failure.Guard != null)
+    {
+        extensions["guard"] = failure.Guard;
+    }
+    return Results.Problem(failure.Message, null, Poly.Runtime.DomainFailureStatus.Http(failure.Kind), failure.Kind.ToString(), null, extensions);
+}
+
+
+static IResult StatusProblem(int status, string title, string? detail = null)
+{
+    return Results.Problem(detail, null, status, title);
 }
 
 

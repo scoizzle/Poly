@@ -277,6 +277,7 @@ public sealed partial class MinimalApiGenerator {
             AppendActionEndpointStatements(topLevelStatements, entity, dbContextName);
 
         // ── SeedAsync local function followed by DTOs ──
+        AppendProblemMethodStatements(topLevelStatements);
         AppendSeedMethodStatements(topLevelStatements, dbContextName);
 
         // ── DTOs ──
@@ -366,9 +367,15 @@ public sealed partial class MinimalApiGenerator {
         return _catalog.Method(entity.Name, methodName);
     }
 
-    /// <summary>400 unless the message is a unique or link conflict, which is 409.</summary>
-    private static Return DomainFailureReturn(Node errorMessage) =>
-        new(new Invoke(new Variable("FailureStatus"), errorMessage));
+    /// <summary>The failure's typed kind picks the status; the body is ProblemDetails.</summary>
+    private static Return DomainFailureReturn(Node result) =>
+        new(new Invoke(new Variable("Problem"), new NullForgiving(new Member(result, "Error"))));
+
+    /// <summary>A ProblemDetails response with no domain failure behind it.</summary>
+    private static Node ProblemResponse(int status, string title, string? detail = null) =>
+        detail is null
+            ? new Invoke(new Variable("StatusProblem"), new Constant(status), new Constant(title))
+            : new Invoke(new Variable("StatusProblem"), new Constant(status), new Constant(title), new Constant(detail));
 
     /// <summary>
     /// A shadow key is the primary key, so <c>FindAsync</c> matches it. A natural

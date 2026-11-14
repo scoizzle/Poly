@@ -807,14 +807,9 @@
   System.Collections.IList.Clear()
 ## poly wrapper stage-subscriptions
   errors: 0
-  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
-  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
-  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
-  Poly.Runtime.ActionScope.Create(System.Object,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-  Poly.Runtime.ActionScope.Touch(System.Object)
   System.Collections.IList.Clear()
 ## poly wrapper time-facts
   errors: 0
@@ -923,11 +918,6 @@
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
 ## poly guide Department: entity { #0
   errors: 0
-  Poly.Runtime.ActionScope.Touch(System.Object)
-  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
-  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
-  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
-  Poly.Runtime.ActionScope.Create(System.Object,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   System.Collections.IList.Clear()
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
@@ -1049,16 +1039,11 @@
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
 ## poly guide Pending: stage { #0
   errors: 0
-  Poly.Runtime.ActionScope.Touch(System.Object)
   System.Object.ReferenceEquals(System.Object,System.Object)
   Poly.Runtime.DomainResult.get_IsSuccess()
   Poly.Runtime.DomainResult.Success()
-  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
-  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
-  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
-  Poly.Runtime.ActionScope.Create(System.Object,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   System.String.Concat(System.String,System.String,System.String)
   System.InvalidOperationException.ctor(System.String)

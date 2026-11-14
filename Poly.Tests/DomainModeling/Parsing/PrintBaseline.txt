@@ -3082,6 +3082,20 @@ A: entity {
     create in bs { Name: "x" }
   }
 }
+##### built/create-in-empty	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	F59812FC
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    create in bs {}
+  }
+}
 ##### built/link-and-unlink	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	19AEDF99
 domain Matrix
 

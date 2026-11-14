@@ -217,15 +217,22 @@ public class CrmDogfoodTests {
         await Assert.That(exec.Invoke(lostDeal.Instance!, "Lose").Succeeded).IsTrue();
         await Assert.That(ModuleReads.Stage(lostDeal.Instance!)).IsEqualTo("Lost");
 
-        var lead = exec.Create("Lead", new Dictionary<string, object?> {
+        // L-15a: Lead.account is a required to-one, so a lead without one is refused at create (before, it
+        // was created and Convert was blocked by HasAccount).
+        var unlinkedLead = exec.Create("Lead", new Dictionary<string, object?> {
             ["Name"] = "Grace",
             ["Email"] = "grace@acme.test",
             ["Company"] = "Acme"
+        });
+        await Assert.That(unlinkedLead.Succeeded).IsFalse();
+        await Assert.That(unlinkedLead.Failure!.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Required);
+        await Assert.That(unlinkedLead.Failure.ElementPath).IsEqualTo("Lead.account");
+        var lead = exec.Create("Lead", new Dictionary<string, object?> {
+            ["Name"] = "Grace",
+            ["Email"] = "grace@acme.test",
+            ["Company"] = "Acme",
+            ["account"] = account
         }).Instance!;
-        var convertUnlinked = exec.Invoke(lead, "Convert");
-        await Assert.That(convertUnlinked.Succeeded).IsFalse();
-        await Assert.That(convertUnlinked.Error).Contains("HasAccount");
-        exec.Link("account", lead, account);
         var fromLead = exec.Invoke(account, "ConvertLead", new Dictionary<string, object?> { ["lead"] = lead });
         await Assert.That(fromLead.Succeeded).IsTrue();
         await Assert.That(fromLead.Instance!.EntityName).IsEqualTo("Contact");

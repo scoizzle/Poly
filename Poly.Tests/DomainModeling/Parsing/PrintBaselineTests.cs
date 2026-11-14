@@ -63,7 +63,7 @@ public sealed class PrintBaselineTests {
     /// starts to print fails until its entry is deleted and its key re-recorded; a status that changes fails until re-recorded.
     /// </summary>
     internal static readonly (string Key, string Status)[] KnownUnprintable = [
-        ("poly/docs/missions/evolve-2026-10-13/ambig-backref.poly", "Core:analysis-failed:DMREL005 | Product:analysis-failed:DMREL005"),
+        ("poly/docs/missions/evolve-2026-10-13/ambig-backref.poly", "Core:analysis-failed:DMEFF011+DMREL005 | Product:analysis-failed:DMEFF011+DMREL005"),
         ("poly/docs/missions/evolve-2026-10-13/billing.poly", "Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-13/claims.poly", "Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-13/disputes.poly", "Core:analysis-failed:DMSTR006 | Product:analysis-failed:DMSTR006"),

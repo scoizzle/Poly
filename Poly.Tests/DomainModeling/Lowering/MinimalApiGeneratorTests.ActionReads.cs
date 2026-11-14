@@ -16,10 +16,11 @@ public partial class MinimalApiGeneratorTests {
     private sealed record HostCompile(Domain Domain, AnalysisResult Analysis, ArtifactCatalog Catalog);
 
     /// <summary>The compile the DslCompiler facade runs for a host (sqlite, <c>http</c> loaded), keeping the domain,
-    /// the analysis and the lowered catalog that the host generator reads.</summary>
-    private static HostCompile CompileForHost(string poly) {
+    /// the analysis and the lowered catalog that the host generator reads. <paramref name="generateHost"/> false loads no host,
+    /// so the compile does not run the generator (a refused action fails a host compile; these tests ask the walk itself).</summary>
+    private static HostCompile CompileForHost(string poly, bool generateHost = true) {
         var catalog = ProductCatalog.Create("sqlite");
-        var options = new SessionOptions(catalog, ProductCatalog.ImplicitIds) { StorageVendor = "sqlite", HostIds = ["http"] };
+        var options = new SessionOptions(catalog, ProductCatalog.ImplicitIds) { StorageVendor = "sqlite", HostIds = generateHost ? ["http"] : [] };
         var compiled = new PolyCompiler(catalog, options).Compile(poly);
         if (!compiled.Succeeded)
             throw new InvalidOperationException(string.Join("; ", compiled.Diagnostics.Where(d => d.IsError).Select(d => d.Message)));
@@ -237,6 +238,109 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(reads).IsEqualTo("this{Customer}");
     }
 
+    // ── The preload ───────────────────────────────────────────
+
+    private static string GoldenPath(string name) =>
+        Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "DomainModeling", "Lowering", "Golden", "ActionReads", name);
+
+    /// <summary>The statements an action route runs before the module's action: the lookups and every load.</summary>
+    private static string PreloadOf(string program, string route) {
+        var lines = program.Split('\n');
+        var start = Array.FindIndex(lines, l => l.Contains($"MapPost(\"{route}\""));
+        var end = Array.FindIndex(lines, start, l => l.TrimStart().StartsWith("var result", StringComparison.Ordinal));
+        return $"// {route}\n" + string.Join("\n", lines[(start + 1)..end]) + "\n";
+    }
+
+    /// <summary>The emitted preload of one action per read shape, as text: the same document gives the same code (the templates are
+    /// the golden). Set <c>POLY_UPDATE_GOLDEN=1</c> to write it.</summary>
+    [Test]
+    public async Task ActionReads_Preload_IsDeterministicAndMatchesTheGolden() {
+        var domains = new (string Poly, string Db, string[] Routes)[] {
+            (Poly.Tests.TestHelpers.PackOracleDomains.ReadDepth912.Poly, "DepthDbContext", [
+                "/api/orders/{code}/threehop",           // a path of links through the entity
+                "/api/orders/{code}/anynamed",           // a collection read through each item's link
+                "/api/customers/{code}/region/makezone", // a nested route
+                "/api/orders/{code}/lines/{lineCode}/showcustomer", // a nested route reading through its parent: the subtree loads on parentEntity
+                "/api/orders/{code}/notenamed",          // a collection under a to-one
+                "/api/orders/{code}/fantags",            // a collection in a collection
+            ]),
+            (Poly.Tests.TestHelpers.PackOracleDomains.SameRow912.Poly, "AliasDbContext", [
+                "/api/orders/{code}/go",                 // a parameter whose own link is read
+            ]),
+            (Poly.Tests.TestHelpers.PackOracleDomains.Names912.Poly, "NamesDbContext", [
+                "/api/orders/{code}/both",               // two paths whose concatenated local names are equal
+            ]),
+            (Poly.Tests.TestHelpers.PackOracleDomains.TwoParams912.Poly, "PairDbContext", [
+                "/api/orders/{code}/both",               // two parameters of one entity type
+            ]),
+        };
+        var programs = domains.Select(d => HostGenerator(CompileForHost(d.Poly)).Generate(d.Db)).ToList();
+        var again = domains.Select(d => HostGenerator(CompileForHost(d.Poly)).Generate(d.Db)).ToList();
+        var preload = string.Concat(domains.SelectMany((d, i) => d.Routes.Select(r => PreloadOf(programs[i], r))));
+
+        await Assert.That(programs).IsEquivalentTo(again);
+        if (Environment.GetEnvironmentVariable("POLY_UPDATE_GOLDEN") == "1") {
+            Directory.CreateDirectory(Path.GetDirectoryName(GoldenPath("read_depth.preload.txt"))!);
+            File.WriteAllText(GoldenPath("read_depth.preload.txt"), preload);
+        }
+        await Assert.That(preload).IsEqualTo(File.ReadAllText(GoldenPath("read_depth.preload.txt")));
+    }
+
+    /// <summary>Locals of the loads are unique by construction: one set, numeric suffix on a clash. Two paths whose concatenated
+    /// names are equal (<c>Customer</c> + <c>Region</c> and <c>CustomerRegion</c>) must not lean on the writer's own rename
+    /// (<c>name_2</c>), which only works where the declaration and every use sit in one scope.</summary>
+    [Test]
+    public async Task ActionReads_TreeLocalsThatCollide_GetNumericSuffixes_NotAWriterRename() {
+        var program = HostGenerator(CompileForHost(Poly.Tests.TestHelpers.PackOracleDomains.Names912.Poly)).Generate("NamesDbContext");
+        var preload = PreloadOf(program, "/api/orders/{code}/both");
+
+        await Assert.That(preload).Contains("var entityCustomerRegion = entityCustomer.Region;");
+        await Assert.That(preload).Contains("var entityCustomerRegion2 = entity.CustomerRegion;");
+        await Assert.That(System.Text.RegularExpressions.Regex.IsMatch(preload, @"\w_\d\b")).IsFalse();
+    }
+
+    /// <summary>A tree root with reads that no route parameter consumed would load nothing: generation fails instead, naming the
+    /// action and the root. A root that a parameter consumed, or one with no reads, is fine.</summary>
+    [Test]
+    public async Task ActionReads_RootWithReadsThatMatchesNoParameter_FailsGeneration() {
+        var reads = new ActionReads("Order", "Go", [
+            new ReadRoot("this", "Order", []),
+            new ReadRoot("q", "Product", [new ReadNode("Zone", false, "Zone", [], false)]),
+            new ReadRoot("idle", "Product", []),
+        ]);
+
+        var refusal = Assert.Throws<ActionReadsRefusedException>(() => MinimalApiGenerator.RequireEveryRootLoaded(reads, new HashSet<string> { "this" }));
+        MinimalApiGenerator.RequireEveryRootLoaded(reads, new HashSet<string> { "this", "q" });
+
+        await Assert.That(refusal.Message).Contains("Action 'Order.Go' cannot be served over HTTP");
+        await Assert.That(refusal.Message).Contains("'q'");
+    }
+
+    /// <summary>Without a catalog the generator loads only the one-hop floor; production never builds one without. The host
+    /// contributor (the path <c>polyc</c> and the facade take) passes the lowered catalog, so it loads what the tree says: this
+    /// fails if that argument is removed.</summary>
+    [Test]
+    public async Task ActionReads_HostContributorPath_PassesTheCatalog_SoTheTreeLoads() {
+        var result = new global::Poly.DslCompiler.DslCompiler()
+            .Load(new Poly.DomainModeling.Libraries.Http.HttpLibrary())
+            .Compile(Poly.Tests.TestHelpers.PackOracleDomains.ReadDepth912.Poly, global::Poly.DslCompiler.CompileMode.All, global::Poly.DslCompiler.DbmsPack.Sqlite);
+        await Assert.That(result.Success).IsTrue();
+        var program = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+
+        await Assert.That(PreloadOf(program, "/api/orders/{code}/threehop")).Contains("db.Entry(entityCustomerRegion).Reference(e => e.Zone).LoadAsync()");
+    }
+
+    /// <summary>The one-hop floor: an action whose tree is empty still loads the entity's single links (P-13a's set). The floor is
+    /// a safety net for the tree's assumptions; the tree, not the floor, says what the action reads.</summary>
+    [Test]
+    public async Task ActionReads_ActionThatReadsNothing_StillLoadsTheOneHopFloor() {
+        var program = HostGenerator(CompileForHost(LinkedPoly)).Generate("ShopDbContext");
+        var preload = PreloadOf(program, "/api/orders/{id}/touch");
+
+        await Assert.That(HostGenerator(CompileForHost(LinkedPoly)).ReadsOf("Order", "Touch").Render()).IsEqualTo("this{}");
+        await Assert.That(preload).Contains("db.Entry(entity).Reference(e => e.Customer).LoadAsync()");
+    }
+
     // ── Shipped actions ───────────────────────────────────────
 
     /// <summary>`Section.Occupy` (through `invoke section.Occupy`) reads its own hall in `ParentFree` and invokes
@@ -397,10 +501,54 @@ public partial class MinimalApiGeneratorTests {
             }
             """;
 
-        var refusal = Assert.Throws<ActionReadsRefusedException>(() => Reads(poly, "Project", "Start"));
+        var refusal = Assert.Throws<ActionReadsRefusedException>(() => HostGenerator(CompileForHost(poly, generateHost: false)).ReadsOf("Project", "Start"));
 
         await Assert.That(refusal.Message).Contains("Action 'Project.Start' cannot be served over HTTP");
         await Assert.That(refusal.Message).Contains("a handler chain that registers further subscribers without end");
+    }
+
+    private const string SpawnPoly = """
+        domain Spawn
+        Project: entity {
+          tasks: many Task via project
+          Idle: stage { Start: action { transition to Running  create in tasks { } } }
+          Running: stage { }
+        }
+        Task: entity {
+          Tag: Text optional
+          project: Project via tasks
+          parent: Task
+          kids: many Task via parent
+          when project Running { create in kids { project: project } }
+        }
+        """;
+
+    /// <summary>A refused action is a generation error, not a quieter host: the compile of a document whose action the walk
+    /// refuses fails, naming the action and the reason. (A tree-walk recursion, <c>for kid in kids { invoke kid.Close }</c> on a
+    /// self-relationship, is not authorable: <c>DMEFF007</c>. The handler chain that keeps registering subscribers is.)</summary>
+    [Test]
+    public async Task ActionReads_RefusedAction_FailsTheHostCompile_NamingTheAction() {
+        var failure = Assert.Throws<InvalidOperationException>(() => CompileForHost(SpawnPoly));
+
+        await Assert.That(failure.Message).Contains("Action 'Project.Start' cannot be served over HTTP");
+        await Assert.That(failure.Message).Contains("a handler chain that registers further subscribers without end");
+    }
+
+    /// <summary><c>polyc build</c> of the same document (with its <c>uses</c> lines) exits non-zero, writes nothing, and the error names the action.</summary>
+    [Test]
+    public async Task ActionReads_RefusedAction_FailsPolycBuild_WithAnErrorNamingTheAction() {
+        var dir = Path.Combine(Path.GetTempPath(), "polyc-refused-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "tree.poly");
+        File.WriteAllText(path, "domain Spawn\nuses http\nuses sqlite\n" + SpawnPoly["domain Spawn".Length..].TrimStart());
+        var outDir = Path.Combine(dir, "out");
+        var stdout = new StringWriter();
+
+        var exit = global::Polyc.PolycApp.Run(["build", path, "--out", outDir], TextReader.Null, false, stdout, new StringWriter());
+
+        await Assert.That(exit).IsEqualTo(1);
+        await Assert.That(stdout.ToString()).Contains("Action 'Project.Start' cannot be served over HTTP");
+        await Assert.That(Directory.Exists(outDir)).IsFalse();
     }
 
     private const string OrderingPoly = """

@@ -2,6 +2,8 @@ using Poly.Compile;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.Packs.Product;
+using Poly.Tests.Docs;
+using Poly.Tests.DomainModeling.Analysis;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -198,6 +200,29 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(counting.ReadsOf("Line", "Check").Render()).IsEqualTo("this{Order{Lines[loaded]}}");
     }
 
+    /// <summary>With two to-ones of the same type on the item, only the inverse of the iterated collection is the owner:
+    /// <c>assignedTo</c> leads back to the user, <c>reviewedBy</c> is a new node.</summary>
+    [Test]
+    public async Task ActionReads_ItemWithTwoToOnesOfTheOwnersType_OnlyTheInverseIsTheOwner() {
+        const string poly = """
+            domain Desk
+            User: entity {
+              Name: Text
+              assigned: many Task via assignedTo
+              Go: action { for assigned as t invoke t.Check }
+            }
+            Task: entity {
+              assignedTo: User
+              reviewedBy: User
+              Mine: policy { assignedTo Name is "a" }
+              Theirs: policy { reviewedBy Name is "b" }
+              Check: action require Mine require Theirs { }
+            }
+            """;
+
+        await Assert.That(Reads(poly, "User", "Go")).IsEqualTo("this{Assigned[items]{ReviewedBy}}");
+    }
+
     /// <summary>Re-entering a method already on the stack with the same bindings reuses it: the reads are the ones being
     /// recorded, so it is not a cycle.</summary>
     [Test]
@@ -262,8 +287,10 @@ public partial class MinimalApiGeneratorTests {
 
     // ── The subscriber registry (#560) ────────────────────────
 
-    /// <summary>Pins the named hole: over HTTP the registry is empty, so the `when` handler's read of the watcher's region is
-    /// not in the tree. When #560 rewires subscribers the flag turns false and this test fails.</summary>
+    /// <summary>Pins the #560 statement: a registry holds only the subscribers registered during this request. A stored
+    /// item's registry has none, so finishing it runs no handler and the watcher's region is not in the tree (a registry the
+    /// action fills is walked: <see cref="ActionReads_HandlerOfASubscriberRegisteredInTheAction_IsWalked"/>). When #560
+    /// re-registers stored subscribers the flag turns false and this test fails.</summary>
     [Test]
     public async Task ActionReads_SubscribersEmptyOverHttp_HandlersAreNotWalked() {
         const string poly = """
@@ -284,6 +311,37 @@ public partial class MinimalApiGeneratorTests {
 
         await Assert.That(ActionReads.SubscribersEmptyOverHttp).IsTrue();
         await Assert.That(Reads(poly, "Item", "Finish")).IsEqualTo("this{}");
+    }
+
+    /// <summary>F1: a `create in` registers the owner in the new child's registry (<c>Item.Create</c> →
+    /// <c>watcher.AttachItems</c> → <c>child.RegisterWatcherItemsOpenSubscriber(this)</c>), and <c>CreateItems</c> then calls
+    /// <c>item.NotifyOpenSubscribers()</c>, which runs the owner's handler: <c>invoke region.Copy</c> reads the region's
+    /// zone. Over HTTP that action answered 500 against the simulator's success before the walk followed it.</summary>
+    [Test]
+    public async Task ActionReads_HandlerOfASubscriberRegisteredInTheAction_IsWalked() {
+        const string poly = """
+            domain Watch
+            Zone: entity { Label: Text }
+            Region: entity {
+              Name: Text
+              zone: Zone
+              Copy: action { assign Name to zone Label }
+            }
+            Watcher: entity {
+              region: Region
+              items: many Item
+              when items Open { invoke region.Copy }
+              Add: action -> Item { create in items { } }
+            }
+            Item: entity {
+              Tag: Text optional
+              watcher: Watcher via items
+              Open: stage { Finish: action { transition to Done } }
+              Done: stage { }
+            }
+            """;
+
+        await Assert.That(Reads(poly, "Watcher", "Add")).IsEqualTo("this{Items[loaded], Region{Zone}}");
     }
 
     // ── Refusals ──────────────────────────────────────────────
@@ -358,31 +416,59 @@ public partial class MinimalApiGeneratorTests {
     public static IEnumerable<string> WhitelistEntries() =>
         ActionReadsWalker.Whitelist.Select(e => $"{e.Receiver}.{e.Method}");
 
-    /// <summary>Each entry is reached with the action's own link as its argument (where the entry takes an entity):
-    /// the tree holds that link, read to pass it, and nothing through it.</summary>
+    /// <summary>Each entry is reached with an entity-capable argument (the port takes values only), and the tree holds what
+    /// the call reads: the link it is passed, and through <c>Success(x).Value</c> what is read off <c>x</c>. Without the
+    /// entry the same body refuses, so no entry is dead and no test passes vacuously.</summary>
     [Test]
     [MethodDataSource(nameof(WhitelistEntries))]
-    public async Task ActionReads_WhitelistEntry_ReadsNothingThroughItsArguments(string entry) {
-        var compile = CompileForHost(LinkedPoly);
+    public async Task ActionReads_WhitelistEntry_IsTheOnlyReasonTheCallIsFollowed(string entry) {
         var customer = new Member(new ThisReference(), "Customer");
-        var failure = new Invoke(new Member(new ClrTypeReference(typeof(DomainFailure)), "Policy"), new Constant("m"), new Constant("p"));
+        var policy = new Invoke(new Member(new ClrTypeReference(typeof(DomainFailure)), "Policy"), new Constant("m"), customer);
+        var resultOfCustomer = new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("Customer")]);
         var (call, expected) = entry switch {
             "Poly.Runtime.ActionScope.*" => ((Node)new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), "Touch"), customer), "this{Customer}"),
             "System.Object.ReferenceEquals" => (new Invoke(new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"), customer, customer), "this{Customer}"),
-            "Poly.Runtime.DomainResult.*" => (new Invoke(new Member(new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("Customer")]), "Success"), customer), "this{Customer}"),
-            "Poly.Runtime.DomainFailure.*" => (failure, "this{}"),
-            "Poly.Runtime.DomainFailure.At" => (new Invoke(new Member(failure, "At"), new Constant("Order.Touch")), "this{}"),
+            "Poly.Runtime.DomainResult.Success" => (new Assignment(new Variable("n"),
+                new Member(new Member(new Member(new Invoke(new Member(resultOfCustomer, "Success"), customer), "Value"), "Region"), "Name")),
+                "this{Customer{Region}}"),
+            "Poly.Runtime.DomainResult.Failure" => (new Invoke(new Member(resultOfCustomer, "Failure"), customer), "this{Customer}"),
+            "Poly.Runtime.DomainFailure.*" => (policy, "this{Customer}"),
+            "Poly.Runtime.DomainFailure.At" => (new Invoke(new Member(
+                new Invoke(new Member(new ClrTypeReference(typeof(DomainFailure)), "Policy"), new Constant("m"), new Constant("p")), "At"), customer),
+                "this{Customer}"),
             "Poly.Runtime.IStoragePort.*" => (new Invoke(new Member(new Parameter("db"), "Exists"), new Constant("Widget"), new Constant("Code"), new Constant("x")), "this{}"),
             _ => throw new InvalidOperationException($"No test for whitelist entry '{entry}'."),
         };
-        var generator = entry == "Poly.Runtime.IStoragePort.*"
+        var port = entry == "Poly.Runtime.IStoragePort.*";
+        var generator = port
             ? WithBody(CompileForHost(PortPoly), "Widget", "__BodyOfRecode", ReturnsSuccessAfter(call))
-            : WithBody(compile, "Order", "__BodyOfTouch", ReturnsSuccessAfter(call));
-        var reads = entry == "Poly.Runtime.IStoragePort.*"
-            ? generator.ReadsOf("Widget", "Recode").Render()
-            : generator.ReadsOf("Order", "Touch").Render();
+            : WithBody(CompileForHost(LinkedPoly), "Order", "__BodyOfTouch", ReturnsSuccessAfter(call));
+        var (owner, action) = port ? ("Widget", "Recode") : ("Order", "Touch");
+        var without = ActionReadsWalker.Whitelist.Where(e => $"{e.Receiver}.{e.Method}" != entry).ToList();
+
+        var reads = generator.ReadsOf(owner, action).Render();
+        var refusal = Assert.Throws<ActionReadsRefusedException>(() => generator.ReadsOf(owner, action, without));
 
         await Assert.That(reads).IsEqualTo(expected);
+        await Assert.That(refusal.Message).Contains($"Action '{owner}.{action}' cannot be served over HTTP");
+    }
+
+    /// <summary>A rename of a result's members or statics fails closed: an unknown name refuses, it does not drop reads.</summary>
+    [Test]
+    public async Task ActionReads_UnknownResultMemberOrStatic_IsRefused() {
+        var compile = CompileForHost(LinkedPoly);
+        var customer = new Member(new ThisReference(), "Customer");
+        var resultOfCustomer = new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("Customer")]);
+        var unknownMember = ReturnsSuccessAfter(new Assignment(new Variable("v"),
+            new Member(new Invoke(new Member(resultOfCustomer, "Success"), customer), "Payload")));
+        var unknownStatic = ReturnsSuccessAfter(new Assignment(new Variable("v"),
+            new Invoke(new Member(resultOfCustomer, "Ok"), customer)));
+
+        var member = Assert.Throws<ActionReadsRefusedException>(() => WithBody(compile, "Order", "__BodyOfTouch", unknownMember).ReadsOf("Order", "Touch"));
+        var call = Assert.Throws<ActionReadsRefusedException>(() => WithBody(compile, "Order", "__BodyOfTouch", unknownStatic).ReadsOf("Order", "Touch"));
+
+        await Assert.That(member.Message).Contains("member 'Payload' of a result");
+        await Assert.That(call.Message).Contains("which the walk does not know on a result");
     }
 
     /// <summary>The port takes values only: an entity argument refuses.</summary>
@@ -412,7 +498,14 @@ public partial class MinimalApiGeneratorTests {
 
     [Test]
     public async Task ActionReads_EveryNodeKind_IsClassified() {
-        var kinds = new[] { typeof(Node).Assembly, typeof(MinimalApiGenerator).Assembly }
+        // Every assembly the solution builds that can define a node; a kind in a pack outside it refuses at run time.
+        var kinds = new[] {
+                typeof(Node).Assembly, typeof(MinimalApiGenerator).Assembly, typeof(PolyCompiler).Assembly,
+                typeof(Poly.DslCompiler.DslCompiler).Assembly, typeof(Poly.Packs.Sqlite.SqliteLibrary).Assembly,
+                typeof(Poly.Packs.SqlServer.SqlServerLibrary).Assembly, typeof(Poly.Packs.MySql.MySqlLibrary).Assembly,
+                typeof(Poly.Mcp.Surface.PolySurfaceTools).Assembly, typeof(IStoragePort).Assembly,
+            }
+            .Distinct()
             .SelectMany(a => a.GetTypes())
             .Where(t => typeof(Node).IsAssignableFrom(t) && !t.IsAbstract)
             .ToList();
@@ -425,27 +518,84 @@ public partial class MinimalApiGeneratorTests {
 
     // ── The sweep ─────────────────────────────────────────────
 
-    public static IEnumerable<string> LowerableDomains() => GoldenDomains.Lowerable.Select(d => d.Path);
+    /// <summary>The shipped corpora, each through its own enumeration: every <c>*.poly</c> file in the repository
+    /// (<see cref="CorpusVerdictSweepTests.PolyFiles"/>: the golden, probe, swarm, demo and pack documents), the DSL guide's
+    /// fences composed through their wrappers (<see cref="GuideBlocks"/>), the demo IDE samples, the <c>poly_guide</c>
+    /// quickstart, and every <see cref="PackOracleDomains"/> fixture.</summary>
+    public static IEnumerable<string> ShippedCorpora() => ["files", "guide", "demo-samples", "quickstart", "pack-oracle"];
 
-    /// <summary>No action of a shipped document is refused: the owner chose loading over refusing.</summary>
-    [Test]
-    [MethodDataSource(nameof(LowerableDomains))]
-    public async Task ActionReads_EveryShippedAction_IsNotRefused(string relativePath) {
-        var compile = CompileForHost(File.ReadAllText(Path.Combine(GoldenDomains.RepoRoot, relativePath)));
-        var generator = HostGenerator(compile);
-        var behavior = BehaviorMetadata.From(compile.Domain, compile.Analysis);
+    internal static IEnumerable<(string Label, string Poly)> CorpusDocuments(string corpus) {
+        switch (corpus) {
+            case "files":
+                foreach (var file in CorpusVerdictSweepTests.PolyFiles())
+                    yield return (file, File.ReadAllText(Path.Combine(GuideBlocks.RepoRoot(), file)));
+                break;
+            case "guide":
+                var guide = GuideBlocks.Load();
+                foreach (var block in guide.Blocks.Where(b => b.Marker is not { Kind: GuideMarkerKind.Skip, Code: null }))
+                    yield return ($"guide fence {block.FirstLine}", GuideBlocks.Compose(block, guide.Wrappers).Text);
+                break;
+            case "demo-samples":
+                foreach (var (name, text) in CorpusVerdictSweepTests.DemoSamples())
+                    yield return ($"demo sample {name}", text);
+                break;
+            case "quickstart":
+                yield return ("poly_guide quickstart", CorpusVerdictSweepTests.QuickstartDocument());
+                break;
+            case "pack-oracle":
+                foreach (var property in typeof(PackOracleDomains).GetProperties().Where(p => p.PropertyType == typeof(PackOracleDomain)))
+                    yield return (property.Name, ((PackOracleDomain)property.GetValue(null)!).Poly);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(corpus), corpus, null);
+        }
+    }
+
+    internal sealed record CorpusSweep(int Documents, int Compiled, int Actions, IReadOnlyList<string> Refused);
+
+    /// <summary>Walks every action of every document of <paramref name="corpus"/> that compiles for a host (sqlite,
+    /// <c>http</c> loaded). A document that does not compile is skipped: its corpus pins that verdict elsewhere.</summary>
+    internal static CorpusSweep SweepCorpus(string corpus) {
+        var documents = 0;
+        var compiled = 0;
+        var actions = 0;
         var refused = new List<string>();
-        foreach (var entity in behavior.Entities) {
-            foreach (var action in entity.Actions.Select(a => a.Name).Distinct()) {
-                try {
-                    generator.ReadsOf(entity.Name, action);
-                }
-                catch (ActionReadsRefusedException refusal) {
-                    refused.Add(refusal.Message);
+        foreach (var (label, poly) in CorpusDocuments(corpus)) {
+            documents++;
+            HostCompile compile;
+            try {
+                compile = CompileForHost(poly);
+            }
+            catch (InvalidOperationException) {
+                continue;
+            }
+            compiled++;
+            var generator = HostGenerator(compile);
+            foreach (var entity in BehaviorMetadata.From(compile.Domain, compile.Analysis).Entities) {
+                foreach (var action in entity.Actions.Select(a => a.Name).Distinct()) {
+                    actions++;
+                    try {
+                        generator.ReadsOf(entity.Name, action);
+                    }
+                    catch (ActionReadsRefusedException refusal) {
+                        refused.Add($"{label}: {refusal.Message}");
+                    }
                 }
             }
         }
+        return new CorpusSweep(documents, compiled, actions, refused);
+    }
 
-        await Assert.That(refused).IsEmpty();
+    /// <summary>No action of a shipped document is refused (the owner chose loading over refusing). A known refusal would
+    /// be named here with its reason, so a new one fails the test; there is none.</summary>
+    private static readonly IReadOnlyList<string> KnownRefusals = [];
+
+    [Test]
+    [MethodDataSource(nameof(ShippedCorpora))]
+    public async Task ActionReads_EveryShippedAction_IsNotRefused(string corpus) {
+        var sweep = SweepCorpus(corpus);
+
+        await Assert.That(sweep.Compiled).IsGreaterThan(0);
+        await Assert.That(sweep.Refused).IsEquivalentTo(KnownRefusals);
     }
 }

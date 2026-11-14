@@ -16,17 +16,26 @@ public sealed partial class MinimalApiGenerator {
     /// the walk cannot follow or type refuses the action (<see cref="ActionReadsRefusedException"/>); it never under-reports.
     /// Create routes are not covered: only roots have a POST, and it passes null for every navigation, so a create reads no
     /// stored navigation state today. The rows that give a create route entity arguments (L-15a, P-11) must add it.
+    /// Known limits: a tree-walk recursion (<c>for kid in kids { invoke kid.Close }</c> where <c>Close</c> does the same)
+    /// refuses; a write through one tree path is not seen by a read of the same row through another path (not
+    /// constructible from the DSL today, since <c>link</c> does not lower); roots are keyed by the module's parameter name
+    /// while the host names a loaded parameter by its type, so the host maps them (two parameters of one type).
     /// </summary>
-    internal ActionReads ReadsOf(Entity entity, BehaviorAction action) {
-        if (_catalog is null)
-            throw new InvalidOperationException($"Action '{entity.Name}.{action.Name}' has no lowered module to read.");
-        return new ActionReadsWalker(_catalog, _storageLookup, _domain).Walk(entity.Name, action.Name);
-    }
+    internal ActionReads ReadsOf(Entity entity, BehaviorAction action) => ReadsOf(entity, action, ActionReadsWalker.Whitelist);
 
     /// <summary><see cref="ReadsOf(Entity, BehaviorAction)"/> by name.</summary>
-    internal ActionReads ReadsOf(string entityName, string actionName) {
+    internal ActionReads ReadsOf(string entityName, string actionName) => ReadsOf(entityName, actionName, ActionReadsWalker.Whitelist);
+
+    /// <summary>The walk over another whitelist: a test removes one entry to show the action then refuses.</summary>
+    internal ActionReads ReadsOf(string entityName, string actionName, IReadOnlyList<ActionReadsWalker.WhitelistEntry> whitelist) {
         var entity = _entities.Single(e => e.Name == entityName);
-        return ReadsOf(entity, GetBehaviorActions(entity).First(a => a.Name == actionName));
+        return ReadsOf(entity, GetBehaviorActions(entity).First(a => a.Name == actionName), whitelist);
+    }
+
+    private ActionReads ReadsOf(Entity entity, BehaviorAction action, IReadOnlyList<ActionReadsWalker.WhitelistEntry> whitelist) {
+        if (_catalog is null)
+            throw new InvalidOperationException($"Action '{entity.Name}.{action.Name}' has no lowered module to read.");
+        return new ActionReadsWalker(_catalog, _storageLookup, _domain, whitelist).Walk(entity.Name, action.Name);
     }
 }
 
@@ -34,9 +43,12 @@ public sealed partial class MinimalApiGenerator {
 /// name). The route parent of a nested action is the root's back-reference node, <c>this.&lt;BackReference&gt;</c>.</summary>
 internal sealed record ActionReads(string Entity, string Action, IReadOnlyList<ReadRoot> Roots) {
     /// <summary>
-    /// Over HTTP a subscriber registry (<c>_…Subscribers</c>) is always empty: the host never re-registers subscribers
-    /// after it loads an entity (#560). Iterating one reads nothing, so the walk does not follow the handlers. When #560
-    /// rewires subscribers this becomes false and the walk refuses those iterations instead.
+    /// Over HTTP a subscriber registry (<c>_…Subscribers</c>) holds only the subscribers registered during this request:
+    /// the host never re-registers subscribers after it loads an entity (#560), but a <c>create in</c> registers the
+    /// owner in the new child's registry (<c>Attach{Nav}</c>, <c>Create</c>), and a notify in the same action then runs
+    /// that owner's <c>when</c> handler. So the walk follows the handler for every subscriber registered during the walk,
+    /// and a registry nothing registered into reads nothing. When #560 re-registers stored subscribers after a load this
+    /// becomes false, and the walk refuses iterating a stored entity's registry instead.
     /// </summary>
     internal static bool SubscribersEmptyOverHttp => true;
 
@@ -128,8 +140,9 @@ internal sealed class ActionReadsWalker {
         : typeof(DomainObject).IsAssignableFrom(kind) ? NodeKindClass.Ontology
         : null;
 
-    /// <summary>A call outside the module that takes entities and reads no navigation of them.</summary>
-    internal sealed record WhitelistEntry(string Receiver, string Method, string Reads);
+    /// <summary>A call outside the module that takes entities and reads no navigation of them. <paramref name="Instance"/>
+    /// entries match a call on a value (a failure, the storage port), the others a static call on the receiver type.</summary>
+    internal sealed record WhitelistEntry(string Receiver, string Method, string Reads, bool Instance = false);
 
     /// <summary>
     /// The calls outside the module that may take an entity. Any other call outside the module with an entity-capable
@@ -138,12 +151,18 @@ internal sealed class ActionReadsWalker {
     internal static readonly IReadOnlyList<WhitelistEntry> Whitelist = [
         new("Poly.Runtime.ActionScope", "*",
             "scope bookkeeping: Touch snapshots the instance's own fields for rollback, Create records it; neither loads a navigation's target"),
-        new("System.Object", "ReferenceEquals", "reference identity of its two arguments"),
-        new("Poly.Runtime.DomainResult", "*", "wraps a value or a failure; Success(x) carries x to .Value"),
-        new("Poly.Runtime.DomainFailure", "*", "builds a failure from strings"),
-        new("Poly.Runtime.DomainFailure", "At", "prefixes a failure's path (an instance call on a failure)"),
-        new("Poly.Runtime.IStoragePort", "*", "unique-value checks on strings; values only, an entity argument refuses"),
+        new("System.Object", nameof(ReferenceEquals), "reference identity of its two arguments"),
+        new("Poly.Runtime.DomainResult", nameof(DomainResult.Success), "wraps a value; Success(x) carries x to .Value"),
+        new("Poly.Runtime.DomainResult", nameof(DomainResult.Failure), "wraps a failure; its .Value is null"),
+        new("Poly.Runtime.DomainFailure", "*", "builds a failure from a message and a path"),
+        new("Poly.Runtime.DomainFailure", nameof(DomainFailure.At), "prefixes a failure's path", Instance: true),
+        new("Poly.Runtime.IStoragePort", "*", "unique-value checks on strings; values only, an entity argument refuses", Instance: true),
     ];
+
+    /// <summary>The members of a <c>DomainResult&lt;T&gt;</c> the walk knows; any other refuses, so a rename fails closed.</summary>
+    private static readonly HashSet<string> ResultMembers = new(StringComparer.Ordinal) {
+        nameof(DomainResult<object>.IsSuccess), nameof(DomainResult<object>.Error), nameof(DomainResult<object>.ErrorMessage),
+    };
 
     private static readonly HashSet<string> CollectionTypeNames = new(StringComparer.Ordinal) {
         "List", "IList", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection", "ICollection", "HashSet", "ISet",
@@ -156,10 +175,16 @@ internal sealed class ActionReadsWalker {
     private readonly Dictionary<string, TypeInfo> _types = new(StringComparer.Ordinal);
     private readonly List<CallKey> _stack = [];
     private readonly Dictionary<(CallKey, int), Value> _memo = [];
+    private readonly IReadOnlyList<WhitelistEntry> _whitelist;
+    private readonly Dictionary<RegistryKey, List<Value>> _subscribers = [];
+    private readonly Dictionary<RegistryKey, List<PendingIteration>> _iterations = [];
+    private readonly HashSet<(PendingIteration, Value)> _walkedSubscribers = [];
     private int _epoch;
     private string _action = "";
 
-    internal ActionReadsWalker(CatalogIndex catalog, IReadOnlyDictionary<string, StorageEntity> storage, Domain domain) {
+    internal ActionReadsWalker(CatalogIndex catalog, IReadOnlyDictionary<string, StorageEntity> storage, Domain domain,
+        IReadOnlyList<WhitelistEntry> whitelist) {
+        _whitelist = whitelist;
         _catalog = catalog;
         _storage = storage;
         _entities = domain.Types.OfType<Entity>().ToDictionary(e => e.Name, StringComparer.Ordinal);
@@ -207,7 +232,18 @@ internal sealed class ActionReadsWalker {
     private sealed record PortValue : Value { public static readonly PortValue Instance = new(); }
     private sealed record EntityValue(Instance Instance) : Value;
     private sealed record CollectionValue(Collection Collection) : Value;
-    private sealed record RegistryValue(string Field) : Value;
+    private sealed record RegistryValue(RegistryKey Key) : Value;
+
+    /// <summary>One subscriber registry: the instance that holds it and its field.</summary>
+    private sealed record RegistryKey(Instance Owner, string Field);
+
+    /// <summary>An iteration over a registry, kept so a subscriber registered later in the walk is walked through it too.</summary>
+    private sealed class PendingIteration(ForEachLoop loop, Value? self, Dictionary<string, Value> env, CallKey[] stack) {
+        public ForEachLoop Loop { get; } = loop;
+        public Value? Self { get; } = self;
+        public Dictionary<string, Value> Env { get; } = env;
+        public CallKey[] Stack { get; } = stack;
+    }
     private sealed record ResultValue(Value Inner) : Value;
     /// <summary>Two different entity-capable values joined; any entity-wise use refuses.</summary>
     private sealed record ConflictValue(Value Left, Value Right) : Value;
@@ -699,11 +735,23 @@ internal sealed class ActionReadsWalker {
         var source = Eval(loop.Collection, frame);
         IReadOnlyList<Value> items;
         switch (source) {
-            case RegistryValue:
-                // The named hole (#560): over HTTP a subscriber registry is empty, so the handlers never run.
-                if (!ActionReads.SubscribersEmptyOverHttp)
-                    throw Refused(loop, "a subscriber registry, which the walk does not follow");
-                return;
+            case RegistryValue registry: {
+                    // #560: a registry holds only the subscribers registered during this request. Each one is walked
+                    // through this loop (its `when` handler), now or when a later registration arrives.
+                    if (!ActionReads.SubscribersEmptyOverHttp && registry.Key.Owner is StoredInstance)
+                        throw Refused(loop, "a stored entity's subscriber registry, which the walk does not follow");
+                    var pending = new PendingIteration(loop, frame.Self, new Dictionary<string, Value>(frame.Env, StringComparer.Ordinal), [.. _stack]);
+                    if (!_iterations.TryGetValue(registry.Key, out var iterations))
+                        _iterations[registry.Key] = iterations = [];
+                    iterations.Add(pending);
+                    var registered = _subscribers.GetValueOrDefault(registry.Key) ?? [];
+                    if (registered.Count == 0)
+                        return;
+                    items = [.. registered];
+                    foreach (var item in items)
+                        _walkedSubscribers.Add((pending, item));
+                    break;
+                }
             case CollectionValue collection:
                 items = ItemsOf(collection);
                 break;
@@ -773,10 +821,14 @@ internal sealed class ActionReadsWalker {
             case UnreachableValue or NullValue:
                 return UnreachableValue.Instance;
             case ResultValue result:
-                return member.MemberName == "Value" ? result.Inner : ScalarValue.Instance;
+                if (member.MemberName == nameof(DomainResult<object>.Value))
+                    return result.Inner;
+                return ResultMembers.Contains(member.MemberName)
+                    ? ScalarValue.Instance
+                    : throw Refused(member, $"member '{member.MemberName}' of a result, which the walk does not know");
             case EntityValue entity:
                 return ReadEntity(entity.Instance, member.MemberName, member);
-            case CollectionValue when member.MemberName == "Count":
+            case CollectionValue when member.MemberName == nameof(IReadOnlyCollection<object>.Count):
                 return ScalarValue.Instance;
             case OpaqueValue:
                 return OpaqueValue.Instance;
@@ -807,7 +859,7 @@ internal sealed class ActionReadsWalker {
                 }
                 return new CollectionValue(((StoredInstance)instance).Node.Child(member.Navigation!).AsCollection);
             case MemberKind.Registry:
-                return new RegistryValue(member.Name);
+                return new RegistryValue(new RegistryKey(instance, member.Name));
             case MemberKind.Scalar:
                 return ScalarValue.Instance;
             case MemberKind.Getter:
@@ -876,8 +928,13 @@ internal sealed class ActionReadsWalker {
                     ?? throw Refused(invoke, $"static call '{typeName}.{name}', which the module does not define");
                 return Call(method, null, staticArguments, invoke, typeName);
             }
-            if (WhitelistedStatic(typeName, name) is { } entry)
-                return entry.Receiver == "Poly.Runtime.DomainResult" ? ResultOf(target.Value, name, staticArguments) : ScalarValue.Instance;
+            var entry = WhitelistedStatic(typeName, name);
+            if (SimpleName(typeName) == nameof(DomainResult))
+                return entry is null
+                    ? throw Refused(invoke, $"call '{typeName}.{name}', which the walk does not know on a result")
+                    : ResultOf(target.Value, name, staticArguments);
+            if (entry is not null)
+                return ScalarValue.Instance;
             if (staticArguments.Any(IsEntityCapable))
                 throw Refused(invoke, $"call '{typeName}.{name}', outside the module and the whitelist, with an entity argument");
             return OpaqueValue.Instance;
@@ -893,17 +950,20 @@ internal sealed class ActionReadsWalker {
                         ?? throw Refused(invoke, $"call '{entity.Instance.Entity}.{name}', which the module does not define");
                     return Call(method, receiver, arguments, invoke);
                 }
-            case CollectionValue collection when name == "Add" && arguments.Count == 1:
+            case CollectionValue collection when name == nameof(List<object>.Add) && arguments.Count == 1:
                 Add(collection, arguments[0]);
                 return ScalarValue.Instance;
-            case RegistryValue when name == "Add":
+            case RegistryValue registry when name == nameof(List<object>.Add) && arguments.Count == 1:
+                Register(registry.Key, arguments[0], invoke);
                 return ScalarValue.Instance;
             case PortValue:
+                if (WhitelistedInstance("Poly.Runtime.IStoragePort", name) is null)
+                    throw Refused(invoke, $"storage-port call '{name}', which the whitelist does not name");
                 if (arguments.Any(IsEntityCapable))
                     throw Refused(invoke, $"storage-port call '{name}' with an entity argument");
                 return ScalarValue.Instance;
             case ScalarValue or OpaqueValue or ResultValue when !IsEntityCapable(receiver):
-                if (name == "At")
+                if (WhitelistedInstance("Poly.Runtime.DomainFailure", name) is not null)
                     return ScalarValue.Instance;
                 if (arguments.Any(IsEntityCapable))
                     throw Refused(invoke, $"call '{name}', outside the module and the whitelist, with an entity argument");
@@ -913,16 +973,61 @@ internal sealed class ActionReadsWalker {
         }
     }
 
-    private static WhitelistEntry? WhitelistedStatic(string typeName, string method) =>
-        Whitelist.FirstOrDefault(entry => (entry.Method == "*" || entry.Method == method) && entry.Receiver != "Poly.Runtime.IStoragePort"
+    private WhitelistEntry? WhitelistedStatic(string typeName, string method) =>
+        _whitelist.FirstOrDefault(entry => !entry.Instance && (entry.Method == "*" || entry.Method == method)
             && (typeName == entry.Receiver || typeName == SimpleName(entry.Receiver)
                 || (entry.Receiver == "System.Object" && typeName == "object")));
 
+    private WhitelistEntry? WhitelistedInstance(string receiver, string method) =>
+        _whitelist.FirstOrDefault(entry => entry.Instance && entry.Receiver == receiver && (entry.Method == "*" || entry.Method == method));
+
+    /// <summary>A whitelisted <c>DomainResult</c> static: <c>Success(x)</c> carries <c>x</c>, <c>Failure</c> carries null.</summary>
     private static Value ResultOf(Node receiver, string method, IReadOnlyList<Value> arguments) {
-        var generic = receiver is NamedTypeReference { TypeArguments.Count: > 0 };
-        if (!generic)
+        if (receiver is not NamedTypeReference { TypeArguments.Count: > 0 })
             return ScalarValue.Instance;
-        return method == "Success" && arguments.Count == 1 ? new ResultValue(arguments[0]) : new ResultValue(NullValue.Instance);
+        return method == nameof(DomainResult.Success) && arguments.Count == 1 ? new ResultValue(arguments[0]) : new ResultValue(NullValue.Instance);
+    }
+
+    /// <summary>Records <paramref name="subscriber"/> in a registry and walks every iteration of that registry already met.</summary>
+    private void Register(RegistryKey key, Value subscriber, Node site) {
+        if (subscriber is NullValue or UnreachableValue)
+            return;
+        if (subscriber is not EntityValue)
+            throw Refused(site, "a subscriber registration the walk cannot type to an instance");
+        if (!_subscribers.TryGetValue(key, out var registered))
+            _subscribers[key] = registered = [];
+        if (registered.Contains(subscriber))
+            return;
+        registered.Add(subscriber);
+        _epoch++;
+        foreach (var pending in _iterations.GetValueOrDefault(key)?.ToList() ?? []) {
+            if (_walkedSubscribers.Add((pending, subscriber)))
+                Replay(pending, subscriber);
+        }
+    }
+
+    /// <summary>Walks a registry loop met earlier for one subscriber registered after it, on the loop's own call stack.</summary>
+    private void Replay(PendingIteration pending, Value subscriber) {
+        var stack = _stack.ToList();
+        _stack.Clear();
+        _stack.AddRange(pending.Stack);
+        try {
+            var frame = new Frame(pending.Self) {
+                Env = new Dictionary<string, Value>(pending.Env, StringComparer.Ordinal) { [pending.Loop.LoopVariable.Name] = subscriber },
+            };
+            Eval(pending.Loop.Body, frame);
+            // The loop's frame has moved on; a value of the replayed body must not need to flow back into it.
+            if (frame.Returned is { } returned && IsEntityCapable(returned))
+                throw Refused(pending.Loop, "a handler result the walk cannot return into the notify that ran it");
+            foreach (var (name, value) in frame.Env) {
+                if (IsEntityCapable(value) && !Equals(pending.Env.GetValueOrDefault(name), value) && name != pending.Loop.LoopVariable.Name)
+                    throw Refused(pending.Loop, $"a value of a replayed handler ('{name}') the walk cannot flow back");
+            }
+        }
+        finally {
+            _stack.Clear();
+            _stack.AddRange(stack);
+        }
     }
 
     private Value Construct(New construct, Frame frame) {

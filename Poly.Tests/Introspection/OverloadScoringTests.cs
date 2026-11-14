@@ -912,10 +912,11 @@ public class OverloadScoringTests {
     }
 
     [Test]
-    public async Task Winner_NullableLongVersusNullableDecimalWithInt32_TiesWhereCSharpPicksLong_PinnedUntilRow847() {
+    public async Task Winner_NullableLongVersusNullableDecimalWithInt32_ScorerReturnsBothCandidates_TieNotWinner_PinnedUntilRow847() {
         // C# 12.6.4: long? is the better conversion target (long? converts implicitly to decimal?, not back), so C# binds
         // M(long?). Both candidates are tier 2 here (a built-in lifted conversion, no method), so the scorer keeps both and the
         // resolution pass takes the first by declaration order. Overload tie-breaking is row #847 (owner ruling); the deviation is pinned.
+        // This proves the TIE (both returned); the bound overload is measured end to end in ValueRepresentationEmitTests.OverloadTie_*.
         await Assert.That(CSharpCallOracle.Chosen([typeof(decimal?), typeof(long?)], typeof(int))).IsEqualTo("long?");
         var winners = Clr(typeof(NullableOverloads)).FindMatchingMethodOverloads("LongVsDecimal", [Clr(typeof(int))])
             .Select(static method => method.Parameters.Single().ParameterTypeDefinition.GetRuntimeType()!).ToArray();

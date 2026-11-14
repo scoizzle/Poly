@@ -24,6 +24,15 @@ public enum IntMark : int { None = 0, Low = 1, High = -70000 }
 
 public enum LongMark : long { None = 0, Low = 1, Big = 5_000_000_000 }
 
+public enum UIntMark : uint { None = 0, Low = 1, High = 4_000_000_000 }
+
+public enum SByteMark : sbyte { None = 0, Low = 1, High = -100 }
+
+/// <summary>A declared implicit operator that is visible in its result, so a reinterpreted word cannot pass for it.</summary>
+public readonly record struct Metres(double Value) {
+    public static implicit operator Metres(double value) => new(value + 1000);
+}
+
 public enum ULongMark : ulong { None = 0, Low = 1, Big = ulong.MaxValue }
 
 public class ValueRepresentationEmitTests {
@@ -556,6 +565,12 @@ public class ValueRepresentationEmitTests {
         R(typeof(long?), typeof(decimal?), 7L, 7m),
         R(typeof(long?), typeof(decimal?), null, null),
         R(typeof(int?), typeof(long?), 7, 7L),
+        R(typeof(char?), typeof(double?), 'x', 120.0),
+        R(typeof(char?), typeof(double?), null, null),
+        R(typeof(char?), typeof(float?), 'x', 120f),
+        R(typeof(char?), typeof(float?), null, null),
+        R(typeof(char?), typeof(decimal?), 'x', 120m),
+        R(typeof(char?), typeof(decimal?), null, null),
         R(typeof(long), typeof(double), 7L, 7.0),
         R(typeof(int), typeof(double), 7, 7.0),
         R(typeof(int), typeof(float), 7, 7f),
@@ -576,6 +591,17 @@ public class ValueRepresentationEmitTests {
         R(typeof(char), typeof(char?), 'x', 'x'),
         R(typeof(long), typeof(decimal), 7L, 7m),
         R(typeof(int), typeof(long), 7, 7L),
+        R(typeof(double), typeof(Metres?), 1.5, new Metres(1001.5)),
+        R(typeof(char), typeof(object), 'x', 'x'),
+        R(typeof(char), typeof(int?), 'x', 120),
+        R(typeof(ulong), typeof(object), ulong.MaxValue, ulong.MaxValue),
+        R(typeof(ulong), typeof(decimal?), ulong.MaxValue, 18446744073709551615m),
+        R(typeof(float), typeof(double), 1.5f, 1.5),
+        R(typeof(float), typeof(double?), 1.5f, 1.5),
+        R(typeof(UIntMark), typeof(UIntMark?), UIntMark.High, UIntMark.High),
+        R(typeof(SByteMark), typeof(SByteMark?), SByteMark.High, SByteMark.High),
+        R(typeof(nint?), typeof(long?), (nint)7, 7L),
+        R(typeof(nuint?), typeof(decimal?), (nuint)7, 7m),
         R(typeof(DateOnly?), typeof(DateOnly?), Day, Day),
         R(typeof(DateOnly?), typeof(DateOnly?), null, null),
         R(typeof(DateTimeOffset?), typeof(DateTimeOffset?), null, null),
@@ -654,6 +680,55 @@ public class ValueRepresentationEmitTests {
         var root = new Member(new New(new TypeReference("CtorBoundaryBox"), new Parameter("v", new ClrTypeReference(typeof(DateOnly)))), "Held");
         using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { Day }));
         await Assert.That(exec.Result.Value).IsEqualTo(Day);
+    }
+
+    public static class ClrNullableProbe {
+        public static object TakeDecimal(decimal? x) => x!;
+
+        public static object TakeLong(long? x) => x!;
+    }
+
+    private static object? ClrCall(string method, Type argument, object value) {
+        var root = new Invoke(new Member(new ClrTypeReference(typeof(ClrNullableProbe)), method), new Parameter("v", new ClrTypeReference(argument)));
+        using var exec = Interpreter.Execute(Interpreter.Compile(root), s => s.SetArgs(new object?[] { value }));
+        return exec.Result.Value;
+    }
+
+    /// <summary>A CLR method call (not a module method) reaches the lifted conversion through <c>ToClr</c>: C# binds both calls.</summary>
+    [Test]
+    public async Task ClrMethodArgument_LongIntoDecimalOptional_AndIntIntoLongOptional_ArriveAsCSharpPasses() {
+        await Assert.That(CSharpCallOracle.Binds(typeof(long), typeof(decimal?))).IsTrue();
+        await Assert.That(CSharpCallOracle.Binds(typeof(int), typeof(long?))).IsTrue();
+        var decimalSeen = ClrCall(nameof(ClrNullableProbe.TakeDecimal), typeof(long), 7L);
+        var longSeen = ClrCall(nameof(ClrNullableProbe.TakeLong), typeof(int), 7);
+        await Assert.That(decimalSeen).IsEqualTo(7m);
+        await Assert.That(decimalSeen!.GetType()).IsEqualTo(typeof(decimal));
+        await Assert.That(longSeen).IsEqualTo(7L);
+        await Assert.That(longSeen!.GetType()).IsEqualTo(typeof(long));
+    }
+
+    /// <summary>The overload tie measured end to end: both candidates tie, and a <c>decimal?</c>-first declaration binds
+    /// <c>decimal?</c> by order. C# binds <c>long?</c>. Row #847 (overload tie-breaking) removes the deviation.</summary>
+    [Test]
+    public async Task OverloadTie_NullableDecimalDeclaredFirst_BindsByOrder_WhereCSharpBindsLong() {
+        var asObject = new ClrTypeReference(typeof(object));
+        var v = new Parameter("v", new ClrTypeReference(typeof(int)));
+        Node Take(Type parameter, string name) => new MethodDefinitionNode("Take", asObject,
+            Parameters: [new Parameter("x", new ClrTypeReference(parameter))], Body: new Return(new Constant(name)));
+        var typeDef = new TypeDefinitionNode(Name: "TieBox",
+            Constructors: [new ConstructorDefinitionNode([], new Block([]))],
+            Methods: [
+                (MethodDefinitionNode)Take(typeof(decimal?), "decimal?"),
+                (MethodDefinitionNode)Take(typeof(long?), "long?"),
+                new MethodDefinitionNode("Run", asObject, Parameters: [v],
+                    Body: new Return(new Invoke(new Member(new ThisReference(), "Take"), v))),
+            ]);
+        var context = AnalysisContext.CreateDefault();
+        new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
+        var root = new Invoke(new Member(new New(new TypeReference("TieBox")), "Run"), new Parameter("v", new ClrTypeReference(typeof(int))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { 7 }));
+        await Assert.That(CSharpCallOracle.Chosen([typeof(decimal?), typeof(long?)], typeof(int))).IsEqualTo("long?");
+        await Assert.That(exec.Result.Value).IsEqualTo("decimal?");
     }
 
     /// <summary>The pairs C# refuses stay analysis errors: no member binds, so the call does not compile.</summary>

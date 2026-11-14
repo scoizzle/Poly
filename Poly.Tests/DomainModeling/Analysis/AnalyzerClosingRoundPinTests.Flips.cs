@@ -1612,6 +1612,8 @@ public partial class AnalyzerClosingRoundPinTests {
     /// is not a string literal, or into a Text slot, is DMMAT002 (the generated C# has no type for it: CS0173, CS1061);
     /// <c>T09a-unnamed-decimal</c>, a Decimal arm that came from unnamed arithmetic (<c>C + C</c>, <c>sum parts Price</c>) beside a
     /// Number arm into a Number is DMSEM003 (the simulator rejects the conditional and the C# compiler gives CS0266);
+    /// <c>T09a-absent-arithmetic</c>, arithmetic over a match that may be absent (a <c>null</c> arm) stored into a required target is
+    /// DMSEM003 (the C# compiler rejects <c>long?</c>, CS0266; the VM and <c>polyc</c> refused it; into an optional target it runs);
     /// <c>T09a-default-match</c>, a <c>match</c> in <c>default(...)</c> is DMSEM003 (the generated C# cannot print it, CS1737), added
     /// to cells already refused for their unresolved names. Updated by hand, one row per cell that flips.
     /// </summary>
@@ -1642,6 +1644,8 @@ public partial class AnalyzerClosingRoundPinTests {
         ("FormGridF3", "match { Flag -> null, else -> N + M } | default Color", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | default Widget", "DMMAT004+DMSEM005", "DMMAT004+DMSEM003+DMSEM005", "T09a-default-match"),
         ("Dead", "match with an untyped arm | default", "DMMAT004", "DMMAT004+DMSEM003", "T09a-default-match"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | form * N", "ok", "DMSEM003", "T09a-absent-arithmetic"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | N * form", "ok", "DMSEM003", "T09a-absent-arithmetic"),
         ("FormGrid", "C + C | match arm into Number", "ok", "DMSEM003", "T09a-unnamed-decimal"),
         ("FormGrid", "sum parts Price | match arm into Number", "ok", "DMSEM003", "T09a-unnamed-decimal")
     ];

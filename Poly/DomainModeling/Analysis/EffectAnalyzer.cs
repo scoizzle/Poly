@@ -815,6 +815,18 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
+        // L-15a: a required to-one is set when the source is created and cannot be unset or re-pointed, so a
+        // `create in` into it always fails at run time with a second link.
+        if (relationship.IsRequiredToOne()) {
+            context.ReportError(
+                createIn,
+                $"CreateIn into '{createIn.RelationshipName}' can never succeed: '{createIn.RelationshipName}' is a required to-one of " +
+                $"'{entity.Name}', so it is already set when the action runs. Declare it optional " +
+                $"('{createIn.RelationshipName}: {relationship.Target.TypeName} optional') to fill it here.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
         // Validate target entity exists
         if (!lookup.Types.TryGetValue(relationship.Target.TypeName, out var targetType) || targetType is not Entity targetEntity) {
             context.ReportError(

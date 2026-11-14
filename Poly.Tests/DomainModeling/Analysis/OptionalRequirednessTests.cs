@@ -323,6 +323,44 @@ public class OptionalRequirednessTests {
     }
 
     [Test]
+    public async Task CreateIn_IntoARequiredToOneOfTheSource_IsRefused() {
+        // L-15a: the source cannot exist without its kid and the link is permanent, so `create in kid` would
+        // always fail with a second link on both hosts. It is refused on the effect (DMEFF001).
+        var errors = Diagnose("""
+            domain ReqNavCreateIn
+            ReqKid: entity {
+              Name: Text
+            }
+            ReqParent: entity {
+              Name: Text
+              kid: ReqKid
+              AddKid: action { create in kid { Name: "x" } }
+            }
+            """);
+        var refused = errors.Where(d => d.Code == DomainModelDiagnosticCodes.EffectBinding).ToList();
+        await Assert.That(refused.Count).IsEqualTo(1);
+        await Assert.That(refused[0].Node).IsTypeOf<CreateEntityInRelationshipEffect>();
+        await Assert.That(refused[0].Message).Contains("'kid' is a required to-one of 'ReqParent'");
+        await Assert.That(refused[0].Message).Contains("kid: ReqKid optional");
+    }
+
+    [Test]
+    public async Task CreateIn_IntoAnOptionalToOneOfTheSource_IsLegal() {
+        var (_, analysis) = Evolve("""
+            domain ReqNavCreateInOk
+            OptKid: entity {
+              Name: Text
+            }
+            OptParent: entity {
+              Name: Text
+              kid: OptKid optional
+              AddKid: action { create in kid { Name: "x" } }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+    }
+
+    [Test]
     public async Task OptionalSelfToOne_IsLegal() {
         var (_, analysis) = Evolve("""
             domain ReqNavSelfOk

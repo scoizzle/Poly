@@ -564,15 +564,27 @@ never be required at create; a bare `hq: owned Address` is a positioned parse er
 policy (`policy { hq exists }`) to require it at a later stage. A bare navigation to the
 entity itself, or a cycle of required to-ones across entities (`a: B` with `b: A`), is
 **DMREL006**: no instance could ever be created first. Mark one side `optional`; an `owned`
-navigation breaks a cycle. An entity whose to-one navigations are all `optional` is a root.
+navigation breaks a cycle. An entity whose to-one navigations are all `optional` is a root
+structurally; storage and HTTP take root-ness from the aggregate, where an entity nothing
+owns is a root too. **Over HTTP, an entity with a required link has no `POST` route and no
+seed row**: a POST body carries scalars only, and its `Create` answers Required without the
+link. Create it through an action on its parent that uses `create in` (the parent's action
+route, e.g. `POST /api/patrons/{email}/checkout` for `CheckOut: action { create in loans {
+book: book } }`), or seed it in the app. An entity with a required link that no action
+creates is creatable only through an MCP create that passes the link, or in code. A `create
+in` into a required to-one of the source is **DMEFF001**: the link is already set when the
+action runs; declare it `optional` to fill it there.
 
 **A required link is permanent in this release.** The host refuses to unlink a required
 to-one ("Cannot unlink '<rel>': the navigation is required; delete the instance and create a
 new one to move it."), and a set to-one cannot be re-pointed, so move it by deleting and
-creating. The generated C# has no unlink operation. MCP `create_instance` takes properties
-only, so an entity with a required to-one cannot be created through it; create it through
-an action's `create in`. JSON Schema, SHACL and MCP describe do not show requiredness of a
-navigation yet.
+creating. The generated C# has no unlink operation. An MCP create (`poly_simulate`'s
+`create` step) takes a singular navigation as well as properties: its value is the id of an
+existing instance of the target, or an earlier step's alias
+(`{"Name":"Grace","account":"acme"}`). A required to-one must be given there; an optional one
+may be. An unknown id, an instance of another entity, a collection navigation or a value that
+is not an id fails on the navigation (`Lead.account`). JSON Schema, SHACL and MCP describe do
+not show requiredness of a navigation yet.
 Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because a bare `x: T` also reads back as one-to-one but fails closed when `T` is a Phase 1a keyword (`actor`, `schedule`, `parallel`, `for`, `function`; matched case-insensitively); `one T` is unambiguous.
 
 **Which entity is the root.** A collection nav (`children: many Child`) means the

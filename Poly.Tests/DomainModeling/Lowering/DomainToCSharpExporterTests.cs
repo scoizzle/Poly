@@ -486,12 +486,11 @@ public class DomainToCSharpExporterTests {
         await Assert.That(createLoans).IsNotNull();
 
         var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
-        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(loan, "Patron");
+        var filled = CreateInWiring.FilledNavigationName(analysis, "Patron", "loans");
         var expected = esm.CreateSlots
             .Where(s => !(s.IsSelfNavigation && s.Shape != CreateSlotShape.Scalar))
             .Where(s => s.Shape != CreateSlotShape.Collection)
-            .Where(s => autoWireBackRef is null
-                || !string.Equals(s.Name, autoWireBackRef.Name, StringComparison.Ordinal))
+            .Where(s => !string.Equals(s.Name, filled, StringComparison.Ordinal))
             .Select(s => DomainToCSharpExporter.ToCamelCase(s.Name))
             .ToArray();
         await Assert.That(createParams).IsEquivalentTo(expected, TUnit.Assertions.Enums.CollectionOrdering.Matching);

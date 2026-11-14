@@ -40,13 +40,21 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
     }
 
     private static void PublishRelationshipContracts(AnalysisContext context, Domain domain) {
+        var lookup = context.GetTypeLookup(domain);
+        Entity? EntityNamed(string name) =>
+            lookup is not null && lookup.Types.TryGetValue(name, out var type) ? type as Entity : null;
         var contracts = context.GetAllRelationships(domain)
             .Select(r => new RelationshipContract(
                 Name: r.Name,
                 SourceEntityName: r.Source.TypeName,
                 TargetEntityName: r.Target.TypeName,
                 Cardinality: r.Cardinality,
-                SourceOwnsTarget: r.SourceOwnsTarget))
+                SourceOwnsTarget: r.SourceOwnsTarget,
+                IsRequired: r.IsRequiredToOne(),
+                CreateInFilledNavigation: EntityNamed(r.Source.TypeName) is { } source
+                    && EntityNamed(r.Target.TypeName) is { } target
+                        ? CreateInWiring.FilledNavigation(source, r, target)?.Name
+                        : null))
             .ToList();
 
         context.SetMetadata(default, new RelationshipContractMetadata(contracts));

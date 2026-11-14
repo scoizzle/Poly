@@ -393,6 +393,33 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(wrong.Error).Contains("not 'Customer'");
     }
 
+    private const string RequiredLinks = """
+        domain ReqUnlink
+        ReqUnlinkPatron: entity { Name: Text }
+        ReqUnlinkLoan: entity {
+          Code: Text
+          borrower: ReqUnlinkPatron
+          reviewer: ReqUnlinkPatron optional
+        }
+        """;
+
+    [Test]
+    public async Task Unlink_RequiredToOne_IsRefused() {
+        // L-15a: a required to-one is permanent through the host; an optional one still unlinks.
+        var executor = ExecutorFor(RequiredLinks);
+        var ada = executor.Create("ReqUnlinkPatron", Values(("Name", "Ada"))).Instance!;
+        var loan = executor.Create("ReqUnlinkLoan", Values(("Code", "L1"), ("borrower", ada), ("reviewer", ada))).Instance!;
+
+        var refused = executor.Unlink("borrower", loan, ada);
+        await Assert.That(refused.Succeeded).IsFalse();
+        await Assert.That(refused.Failure?.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Link);
+        await Assert.That(refused.Error).IsEqualTo(Relationship.RequiredUnlinkViolationMessage("borrower"));
+        await Assert.That(ReferenceEquals(loan.Bag["Borrower"], ada.Bag)).IsTrue();
+
+        await Assert.That(executor.Unlink("reviewer", loan, ada).Succeeded).IsTrue();
+        await Assert.That(loan.Bag["Reviewer"]).IsNull();
+    }
+
     private const string Passports = """
         domain Travel
         Profile: entity { Bio: Text }

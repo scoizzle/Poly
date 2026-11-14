@@ -100,12 +100,18 @@ public sealed record RelationshipContractMetadata(
     IReadOnlyList<RelationshipContract> Contracts
 ) : IAnalysisMetadata;
 
+/// <param name="IsRequired">The navigation is a required to-one (L-15a): a create must bind it, and the
+/// host refuses to unlink it.</param>
+/// <param name="CreateInFilledNavigation">The navigation of the target that <c>create in</c> over this
+/// relationship fills with the source (<see cref="CreateInWiring.FilledNavigation"/>), or null.</param>
 public sealed record RelationshipContract(
     string Name,
     string SourceEntityName,
     string TargetEntityName,
     RelationshipCardinality Cardinality,
-    bool SourceOwnsTarget
+    bool SourceOwnsTarget,
+    bool IsRequired = false,
+    string? CreateInFilledNavigation = null
 );
 
 /// <summary>

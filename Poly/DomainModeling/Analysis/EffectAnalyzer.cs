@@ -631,7 +631,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
 
             // D: every required property must be provided (auto-wire only in create-in).
             ValidateRequiredInitializerCoverage(context, cei, targetEntity,
-                autoWireSourceEntity: null, cei.Initializers);
+                autoWireSourceEntity: null, createInRelationship: null, cei.Initializers);
 
             // P2′.3 / P2′′.2: When RelationshipName is set, validate relationship exists,
             // that the action entity is the relationship source, and that the created
@@ -854,7 +854,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         // D: every required property must be provided — the back-reference nav
         // (typed as the source entity) is auto-wired and may be omitted.
         ValidateRequiredInitializerCoverage(context, createIn, targetEntity,
-            autoWireSourceEntity: entity, createIn.Initializers);
+            autoWireSourceEntity: entity, createInRelationship: relationship, createIn.Initializers);
     }
 
     /// <summary>
@@ -877,13 +877,17 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     /// entry effects, or is the auto-wired back-reference navigation (the target's nav
     /// typed as the create-in source entity). Without this, the generated <c>Create</c>
     /// factory would fail at runtime on a missing required value — analysis catches the
-    /// bad authoring shape before the export/runtime path.
+    /// bad authoring shape before the export/runtime path. A required to-one navigation
+    /// (L-15a) must be bound the same way, unless it is the navigation <c>create in</c>
+    /// fills with the source (<see cref="CreateInWiring.FilledNavigation"/>, the rule
+    /// lowering reads).
     /// </summary>
     private static void ValidateRequiredInitializerCoverage(
         AnalysisContext context,
         Effect effect,
         Entity targetEntity,
         Entity? autoWireSourceEntity,
+        Relationship? createInRelationship,
         IReadOnlyList<PropertyBinding> initializers) {
         var provided = new HashSet<string>(
             initializers.Select(i => i.PropertyName), StringComparer.Ordinal);
@@ -904,6 +908,21 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 effect,
                 $"Create effect on '{targetEntity.Name}' does not provide required property '{prop.Name}'. " +
                 $"Every property without 'optional' must be set in the create / create in initializers (or have a default).",
+                DomainModelDiagnosticCodes.CreateMissingRequiredProperty);
+        }
+
+        var filled = autoWireSourceEntity is not null && createInRelationship is not null
+            ? CreateInWiring.FilledNavigation(autoWireSourceEntity, createInRelationship, targetEntity)
+            : null;
+        foreach (var nav in targetEntity.Navigations) {
+            if (!nav.IsRequiredToOne()) continue;
+            if (ReferenceEquals(nav, filled)) continue; // `create in` fills it with the source
+            if (provided.Contains(nav.Name)) continue;
+
+            context.ReportError(
+                effect,
+                $"Create effect on '{targetEntity.Name}' does not bind '{nav.Name}': " +
+                $"navigation '{nav.Name}' is required: bind it, or declare it `optional`.",
                 DomainModelDiagnosticCodes.CreateMissingRequiredProperty);
         }
     }

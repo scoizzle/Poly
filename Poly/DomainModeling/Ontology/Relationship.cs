@@ -38,6 +38,15 @@ public sealed record Relationship(
     /// a link's condition.
     /// </summary>
     public bool IsOptional { get; init; }
+
+    /// <summary>
+    /// True for a to-one navigation that is neither <c>optional</c> nor <c>owned</c>: a create must
+    /// bind it, the create guard fails it Required on null, and the host refuses to unlink it.
+    /// </summary>
+    public bool IsRequiredToOne() =>
+        (Cardinality is RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne)
+        && !SourceOwnsTarget
+        && !IsOptional;
     public IReadOnlyList<Stage> Stages { get; init; } = [];
     public IReadOnlyList<Policy> Policies { get; init; } = [];
     public sealed override IEnumerable<Node?> Children => [Source, Target, .. Properties, .. Stages, .. Policies];

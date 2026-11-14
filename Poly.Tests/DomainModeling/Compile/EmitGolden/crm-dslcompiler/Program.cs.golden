@@ -22,7 +22,7 @@ builder.Services.AddScoped<Poly.Runtime.IStoragePort, CrmDbContext>();
 
 var app = builder.Build();
 
-var schemaId = 1170465118;
+var schemaId = 503919559;
 
 using (var scope = app.Services.CreateScope())
 {
@@ -30,7 +30,7 @@ using (var scope = app.Services.CreateScope())
     var created = await db.Database.EnsureCreatedAsync();
     if (created)
     {
-        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 1170465118");
+        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 503919559");
     }
     else
     {

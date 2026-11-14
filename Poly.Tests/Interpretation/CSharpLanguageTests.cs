@@ -64,6 +64,38 @@ public class CSharpLanguageTests {
         await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(text))).IsEqualTo(text);
     }
 
+    // ── keyword-named types in expression position (E-10a, #924) ─────────────
+
+    [Test]
+    public async Task Write_NamedTypeReferenceInExpressionPosition_EscapesAKeywordLastSegment() {
+        var node = new Block(
+            new Assignment(new Variable("a"), new Member(new NamedTypeReference("Kw.event"), "A")),
+            new Assignment(new Variable("b"), new Invoke(new Member(new NamedTypeReference("class"), "Create"), new Constant(1))));
+        var text = CSharpLanguage.Write(node);
+        await Assert.That(text).Contains("Kw.@event.A");
+        await Assert.That(text).Contains("@class.Create(1)");
+    }
+
+    [Test]
+    public async Task Write_TypeReferenceCallee_StaysBare() {
+        var node = new Invoke(new Member(new TypeReference("string"), "Concat"), new Variable("a"), new Variable("b"));
+        await Assert.That(CSharpLanguage.Write(node)).Contains("string.Concat(a, b)");
+        var nameOf = new Invoke(new TypeReference("nameof"), new Variable("a"));
+        await Assert.That(CSharpLanguage.Write(nameOf)).Contains("nameof(a)");
+    }
+
+    [Test]
+    public async Task Read_EscapedTypeNamesInExpressions_WriteReadWriteIsIdempotent() {
+        const string source = "class C { void M() { var a = Kw.@event.A; var b = Kw.@class.Create(1); var c = @event.B; var d = string.Concat(a, b); } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(source));
+        await Assert.That(written).Contains("Kw.@event.A");
+        await Assert.That(written).Contains("Kw.@class.Create(1)");
+        await Assert.That(written).Contains("@event.B");
+        await Assert.That(written).Contains("string.Concat(a, b)");
+        await Assert.That(SyntaxErrors(written)).IsEmpty();
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(written))).IsEqualTo(written);
+    }
+
     // ── switch cases ─────────────────────────────────────────────────────────
 
     [Test]

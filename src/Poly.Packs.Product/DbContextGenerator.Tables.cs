@@ -131,7 +131,7 @@ public sealed partial class DbContextGenerator {
         // Issue 8: nameof must receive a Member expression, not a string Constant
         var nameofCall = new Invoke(
             new TypeReference("nameof"),
-            new Member(new TypeReference(entityName), nav.PropertyName));
+            new Member(new NamedTypeReference(entityName), nav.PropertyName));
 
         return new Invoke(
             new Member(

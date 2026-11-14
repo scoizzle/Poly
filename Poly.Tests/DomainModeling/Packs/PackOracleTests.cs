@@ -963,7 +963,52 @@ public class PackOracleTests {
         await Assert.That((int)supplied.StatusCode).IsEqualTo(201);
     }
 
-    /// <summary>L-08b half 2: for a required Number, Text, Boolean, Date and enum, an absent member and a JSON
+    /// <summary>E-10a (#923): the generated <c>.http</c> sample for an entity with a required DateTime, Time and Duration
+    /// is a body the host binds: sent as it stands, it creates the row.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostThing_TemporalHttpSampleBody_Returns201(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var compiled = new Poly.Compile.PolyCompiler(
+                Poly.Packs.Product.ProductCatalog.Catalog,
+                new Poly.DomainModeling.Compile.SessionOptions(
+                    Poly.Packs.Product.ProductCatalog.Catalog, Poly.DomainModeling.Compile.ExtensionCatalog.ProductAuthoring))
+            .Compile(PackOracleDomains.Temporal923.Poly, "Temporal923.poly", CancellationToken.None);
+        await Assert.That(compiled.Succeeded).IsTrue();
+        var http = compiled.Files.Single(f => f.FileName == "demo.http").Source;
+        var match = System.Text.RegularExpressions.Regex.Match(
+            http, @"POST [^\r\n]*/api/things\r?\nContent-Type: application/json\r?\n\r?\n(\{.*?\r?\n\})", System.Text.RegularExpressions.RegexOptions.Singleline);
+        await Assert.That(match.Success).IsTrue().Because(http);
+
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Temporal923);
+        using var created = await oracle.Client.PostAsync(
+            "/api/things", new StringContent(match.Groups[1].Value, Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(match.Groups[1].Value + " -> " + await created.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>E-10a (#924): an enum and an entity named like C# keywords boot, answer a POST with 201 and list the row.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task KeywordNamedEntityAndEnum_PostCreatesAndGetReturnsTheRow(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.KeywordNames924);
+
+        using var thing = await oracle.Client.PostAsync(
+            "/api/things", new StringContent("""{"Name":"a","Kind":"A"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)thing.StatusCode).IsEqualTo(201).Because(await thing.Content.ReadAsStringAsync());
+        using var klass = await oracle.Client.PostAsync(
+            "/api/classes", new StringContent("""{"Name":"b"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)klass.StatusCode).IsEqualTo(201).Because(await klass.Content.ReadAsStringAsync());
+
+        using var list = await oracle.Client.GetAsync("/api/classes");
+        await Assert.That(await list.Content.ReadAsStringAsync()).Contains("\"b\"");
+        using var things = await oracle.Client.GetAsync("/api/things");
+        await Assert.That(await things.Content.ReadAsStringAsync()).Contains("\"a\"");
+    }
+
+    /// <summary>L-08b half 2: for a required Number, Text, Boolean, Date, DateTime, Time, Duration and enum, an absent member and a JSON
     /// <c>null</c> answer exactly what the simulator answers for the same create (Required, the same path and
     /// message); an empty string for the Text is a value on both.</summary>
     [Test]
@@ -981,6 +1026,9 @@ public class PackOracleTests {
             ["Born"] = "2026-01-01",
             ["Tier"] = "Low",
             ["Price"] = 1.5,
+            ["Stamp"] = "2026-01-01T10:00:00Z",
+            ["Clock"] = "10:30:00",
+            ["Span"] = "01:30:00",
         };
         var sim = new Dictionary<string, object?> {
             ["Label"] = "a",
@@ -989,6 +1037,9 @@ public class PackOracleTests {
             ["Born"] = new DateOnly(2026, 1, 1),
             ["Tier"] = "Low",
             ["Price"] = 1.5m,
+            ["Stamp"] = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc),
+            ["Clock"] = new TimeOnly(10, 30),
+            ["Span"] = new TimeSpan(1, 30, 0),
         };
 
         async Task CompareAsync(string name, Func<Dictionary<string, JsonNode?>, Dictionary<string, JsonNode?>> shapeJson,

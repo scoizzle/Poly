@@ -165,14 +165,14 @@ app.Run();
 internal record BookDto
 {
     [Range(0, 1000)]
-    public long Stock { get; init; }
+    public long? Stock { get; init; }
     [Required]
     [MinLength(2)]
     [MaxLength(50)]
-    public string Title { get; init; } = default!;
+    public string? Title { get; init; }
     [Required]
     [RegularExpression("^[A-Z]{2}-[0-9]{3}$")]
-    public string Code { get; init; } = default!;
+    public string? Code { get; init; }
 }
 
 internal record RestockDto

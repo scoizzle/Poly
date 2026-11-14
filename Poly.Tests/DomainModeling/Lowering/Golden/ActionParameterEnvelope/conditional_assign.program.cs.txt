@@ -139,9 +139,9 @@ app.Run();
 internal record BookDto
 {
     [Range(0, 1000)]
-    public long Stock { get; init; }
+    public long? Stock { get; init; }
     [Range(5, 50)]
-    public long Pages { get; init; }
+    public long? Pages { get; init; }
 }
 
 internal record RestockDto

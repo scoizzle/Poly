@@ -181,7 +181,7 @@ public class RangeAttributeArgumentsTests {
             }
             """);
 
-        await Assert.That(prog).Contains("[Range(typeof(decimal), \"0\", \"100000000\")]\n    public decimal ListPrice { get; init; }");
+        await Assert.That(prog).Contains("[Range(typeof(decimal), \"0\", \"100000000\")]\n    public decimal? ListPrice { get; init; }");
         await Assert.That(prog).DoesNotContain("[Range(0.0, 100000000.0)]");
         await Assert.That(prog).DoesNotContain("System.Decimal");
     }
@@ -216,7 +216,7 @@ public class RangeAttributeArgumentsTests {
             Item: entity { Big: Number range(0, 5000000000) }
             """);
 
-        await Assert.That(prog).Contains("[Range(0.0, 5000000000.0)]\n    public long Big { get; init; }");
+        await Assert.That(prog).Contains("[Range(0.0, 5000000000.0)]\n    public long? Big { get; init; }");
     }
 
     [Test]

@@ -113,7 +113,7 @@ app.Run();
 internal record BookDto
 {
     [Range(0, 1000)]
-    public long Stock { get; init; }
+    public long? Stock { get; init; }
 }
 
 internal record ShiftDto

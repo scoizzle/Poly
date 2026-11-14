@@ -139,15 +139,15 @@ app.Run();
 internal record PairDto
 {
     [Range(0, 100)]
-    public long Lo { get; init; }
+    public long? Lo { get; init; }
     [Range(50, 200)]
-    public long Hi { get; init; }
+    public long? Hi { get; init; }
     [Required]
     [RegularExpression("^[A-Z]+$")]
-    public string Code { get; init; } = default!;
+    public string? Code { get; init; }
     [Required]
     [RegularExpression("^[0-9]+$")]
-    public string Tag { get; init; } = default!;
+    public string? Tag { get; init; }
 }
 
 internal record BothDto

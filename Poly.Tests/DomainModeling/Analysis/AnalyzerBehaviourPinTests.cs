@@ -470,6 +470,15 @@ public class AnalyzerBehaviourPinTests {
         "if (Mood == (match { Flag -> Happy, else -> Tag })) { assign T to 1 }", "", "DMMAT002")]
     [Arguments("a nested match with an enum member and a Text literal into the enum", "T: UnifMood default(Happy)",
         "assign T to match { Flag -> match { Flag -> Happy, else -> \"Sad\" }, else -> Happy }", "", "ok")]
+    [Arguments("an enum member with a Text literal that names no member, assigned", "T: UnifMood default(Happy)",
+        "assign T to match { Flag -> Happy, else -> \"Nope\" }", "", "DMSEM003")]
+    [Arguments("an enum member with a Text literal that names no member, compared", "T: Number default(0)",
+        "if (Mood == (match { Flag -> Happy, else -> \"Nope\" })) { assign T to 1 }", "", "DMSEM003")]
+    [Arguments("an enum member with a Text literal that names a member, compared", "T: Number default(0)",
+        "if (Mood == (match { Flag -> Happy, else -> \"Sad\" })) { assign T to 1 }", "", "ok")]
+    [Arguments("a parameter that shadows the enum property: lowering still adapts by the property name, analysis gives no slot",
+        "T: Number default(0)\n  Cmp: action (Mood: UnifMood) { if (Mood == (match { Flag -> Happy, else -> \"Sad\" })) { assign T to 1 } }",
+        "assign T to 1", "", "DMMAT002")]
     [Arguments("an enum member with a Text literal as an invoke argument", "T: UnifMood default(Happy)\n  Set: action (m: UnifMood) { assign T to m }",
         "invoke Set(m: match { Flag -> Happy, else -> \"Sad\" })", "", "DMMAT002")]
     [Arguments("a comparison with a match that may be absent", "T: Number default(0)",
@@ -495,6 +504,53 @@ public class AnalyzerBehaviourPinTests {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
         var found = result.Analysis.Diagnostics.Where(d => d.Code == code && d.Node is MatchExpr).Select(d => (MatchExpr)d.Node).ToList();
         await Assert.That(found.Select(m => (m.Line, m.Col)).Distinct()).IsEquivalentTo([(line, column)]);
+    }
+
+    /// <summary>T-09a fix round 2: a string literal in an enum match that names no member of the enum is the plain form's own error
+    /// (<c>CheckEnumMember</c>: DMSEM003 "is not a member of enum"), reported at the match keyword (a DSL string literal carries no
+    /// position), in an assign and in a comparison.</summary>
+    [Test]
+    [Arguments("T: UnifMood default(Happy)", "assign T to match { Flag -> Happy, else -> \"Nope\" }")]
+    [Arguments("T: Number default(0)", "if (Mood == (match { Flag -> Happy, else -> \"Nope\" })) { assign T to 1 }")]
+    public async Task NonMemberLiteralInAnEnumMatch_IsReportedAtTheLiteral(string members, string body) {
+        var dsl = MatchDsl("  " + members, body, "");
+        var keyword = dsl.IndexOf("match", StringComparison.Ordinal);
+        var line = dsl[..keyword].Count(c => c == '\n') + 1;
+        var column = keyword - dsl[..keyword].LastIndexOf('\n');
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
+        var found = result.Analysis.Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility && d.Node is MatchExpr)
+            .ToList();
+        await Assert.That(found.Select(d => d.Message).Distinct()).IsEquivalentTo(["'Nope' is not a member of enum 'UnifMood'"]);
+        await Assert.That(found.Select(d => (((MatchExpr)d.Node).Line, ((MatchExpr)d.Node).Col)).Distinct()).IsEquivalentTo([(line, column)]);
+    }
+
+    /// <summary>
+    /// T-09a fix round 2 (API only): an unnamed Decimal arm (<c>Dec * 2</c>) merges to an unnamed Decimal, so a match of such arms is
+    /// accepted into an API-declared Decimal alias (<c>Cents</c>), as it was on the base, and still refused into a Number. An alias
+    /// cannot run on any host on the base (the simulator: "Type with name 'Cents' not found"; the C#: CS0246), so this is analysis only.
+    /// </summary>
+    [Test]
+    [Arguments("Cents", "Dec * 2", "Dec + 1", "ok")]
+    [Arguments("Cents", "Dec * 2", "0", "ok")]
+    [Arguments("Decimal", "Dec * 2", "Dec * 3", "ok")]
+    [Arguments("Number", "Dec * 2", "Dec * 3", "R")]
+    [Arguments("Number", "Qty", "Dec * 2", "R")]
+    public async Task UnnamedDecimalArms_IntoADeclaredDecimalAlias_AreAccepted_AndIntoANumberRefused(string target, string first, string second, string expected) {
+        static DomainExpression Arm(string text) => text switch {
+            "Dec * 2" => DomainExpression.Multiply(DomainExpression.Property("Dec"), DomainExpression.Literal(2L)),
+            "Dec * 3" => DomainExpression.Multiply(DomainExpression.Property("Dec"), DomainExpression.Literal(3L)),
+            "Dec + 1" => DomainExpression.Add(DomainExpression.Property("Dec"), DomainExpression.Literal(1L)),
+            "Qty" => DomainExpression.Property("Qty"),
+            _ => DomainExpression.Literal(long.Parse(text, System.Globalization.CultureInfo.InvariantCulture)),
+        };
+        var host = Host("H",
+            [new Property("P", Ref(target), []), new Property("Dec", Ref("Decimal"), []), new Property("Qty", Ref("Number"), []), new Property("Flag", Ref("Boolean"), [])],
+            [new DmAction("Go", InvocationResult.Void, [],
+                [new AssignEffect(DomainExpression.Property("P"),
+                    DomainExpression.Match([new MatchArm(DomainExpression.Property("Flag"), Arm(first))], Arm(second)))], [])]);
+        var verdict = Run(Dom(BaseTypes(true), [host]));
+        await Assert.That(Encode(verdict).ToString()).IsEqualTo(expected == "ok" ? "." : expected);
     }
 
     [Test]

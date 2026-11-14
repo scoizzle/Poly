@@ -202,9 +202,13 @@ public class AbsenceParityTests {
 
     private static string ScenarioDsl(string members, string body, string extra = "") => $$"""
         domain Shop
+        uses temporal
         AbxMood: enum { Happy, Sad }
         AbxBox: entity {
           W: Decimal default(0)
+        }
+        AbxOptBox: entity {
+          W: Decimal optional
         }
         AbxScn: entity {
           Qty: Number default(3)
@@ -212,9 +216,15 @@ public class AbsenceParityTests {
           Opt: Number optional
           Opt2: Number optional
           OptDec: Decimal optional
+          OptTxt: Text optional
+          OptBool: Boolean optional
+          OptMood: AbxMood optional
+          OptDate: Date optional
+          OptDate2: Date optional
           Flag: Boolean default(true)
           Mood: AbxMood default(Happy)
           boxes: many AbxBox
+          obox: many AbxOptBox
         {{members}}
           Run: action { {{body}} }
         }
@@ -226,16 +236,19 @@ public class AbsenceParityTests {
     /// <summary>One row, four scenarios in order: (Flag true, Opt absent), (true, present), (false, absent), (false, present).
     /// Present means Opt is 4 and Opt2 is 5. The observed member of each is joined with <c>|</c>, <c>-</c> for absent. Both hosts
     /// must agree, <c>polyc check</c> must accept, and the values are the ones written in the row, worked out by hand.</summary>
-    private static async Task AssertScenarios(string id, string dsl, string observed, string expected) {
+    private static async Task AssertScenarios(string id, string dsl, string observed, string expected, long[]? qtys = null) {
         var gate = GateParity.Check(dsl, SimStep.Create("AbxScn", """{"Flag":false,"Opt":4,"Opt2":5}""", "o"), SimStep.Invoke("o", "Run"));
         await Assert.That(gate.Analysis).IsTrue().Because(gate.ToString());
         await Assert.That(gate.Holds).IsTrue().Because(gate.ToString());
         var outcomes = await ParityScenario.FromDsl(dsl, "AbsenceScn_" + id).AssertAgree(side => {
-            foreach (var (flag, present) in Scenarios) {
-                if (present) side.Create("AbxScn", ("Flag", flag), ("Opt", 4L), ("Opt2", 5L));
-                else side.Create("AbxScn", ("Flag", flag));
-                side.Invoke("Run");
-            }
+            foreach (var qty in qtys ?? [3L])
+                foreach (var (flag, present) in Scenarios) {
+                    if (present)
+                        side.Create("AbxScn", ("Flag", flag), ("Qty", qty), ("Opt", 4L), ("Opt2", 5L), ("OptTxt", "x"), ("OptBool", true),
+                            ("OptMood", "Sad"), ("OptDate", new DateOnly(2026, 1, 2)), ("OptDate2", new DateOnly(2026, 1, 3)));
+                    else side.Create("AbxScn", ("Flag", flag), ("Qty", qty));
+                    side.Invoke("Run");
+                }
         });
         var seen = outcomes.Where(o => o.Step.StartsWith("invoke", StringComparison.Ordinal))
             .Select(o => o.Success ? o.State[observed] ?? "-" : "FAIL " + o.Message);
@@ -280,6 +293,44 @@ public class AbsenceParityTests {
     public async Task MatchWithAnOptionalArm_ConvertedOrUnderArithmetic_MeansTheSameOnEveryHost(
         string id, string members, string body, string expected) =>
         await AssertScenarios(id, ScenarioDsl("  " + members, body), "T", expected);
+
+    /// <summary>
+    /// T-09a fix round 2 (F4, a nested match): an absent-able match nested in another match is filled inside the outer arm's
+    /// branch, so an inner arm that cannot be evaluated (<c>10 / Qty</c> with Qty 0) is not evaluated when the outer arm is not
+    /// taken, as the conditional chain did on the base. Eight scenarios: Qty 0 then 2, each with (Flag true, Opt absent),
+    /// (true, present), (false, absent), (false, present).
+    /// </summary>
+    [Test]
+    [Arguments("H1", "T: Number optional", "assign T to match { Qty == 0 -> 0, else -> match { Flag -> Opt, else -> 10 / Qty } }", "", "T", "0|0|0|0|-|4|5|5")]
+    [Arguments("H2", "T: Number optional", "assign T to match { Qty == 0 -> 0, else -> match { Flag -> null, else -> 10 / Qty } }", "", "T", "0|0|0|0|-|-|5|5")]
+    [Arguments("H3", "T: Number default(0)",
+        "if ((match { Qty == 0 -> 0, else -> match { Flag -> Opt, else -> 10 / Qty } }) > 4) { assign T to 1 }", "", "T", "0|0|0|0|0|0|1|1")]
+    [Arguments("H4", "T: Number optional", "assign T to match { Qty == 0 -> 0, else -> match { Flag -> Opt, else -> AbxDiv(10, Qty) } }",
+        "function AbxDiv(a: Number, b: Number): Number = a / b", "T", "0|0|0|0|-|4|5|5")]
+    [Arguments("H5", "T: Number optional", "assign T to match { Qty == 0 -> 0, Flag -> Opt, else -> 10 / Qty }", "", "T", "0|0|0|0|-|4|5|5")]
+    public async Task NestedAbsentableMatch_IsEvaluatedOnlyWhenItsArmIsTaken_OnEveryHost(
+        string id, string members, string body, string extra, string observed, string expected) =>
+        await AssertScenarios(id, ScenarioDsl("  " + members, body, extra), observed, expected, [0L, 2L]);
+
+    /// <summary>
+    /// T-09a fix round 2 (F3): optional arms of every kind in a match, in a target position and in a no-target position, and the
+    /// shapes the optional local newly serves (a nested optional match in a Decimal match, a comparison with a Decimal, arithmetic
+    /// then a comparison, a <c>create in</c> initializer). Opt is absent then 4; Opt2 absent then 5; Dec 2.5.
+    /// </summary>
+    [Test]
+    [Arguments("I1", "T: Decimal optional", "assign T to match { Qty > 9 -> 1.5, else -> match { Flag -> Opt, else -> Dec } }", "T", "-|4|2.5|2.5")]
+    [Arguments("I2", "T: Number default(0)", "if ((match { Flag -> Opt, else -> 1.5 }) > Dec) { assign T to 1 }", "T", "0|1|0|0")]
+    [Arguments("I3", "T: Number default(0)", "if (((match { Flag -> Opt, else -> Opt2 }) + 1) > 3) { assign T to 1 }", "T", "0|1|0|1")]
+    [Arguments("I5", "T: Number default(0)", "if ((match { Flag -> OptTxt, else -> \"dflt\" }) == \"x\") { assign T to 1 }", "T", "0|1|0|0")]
+    [Arguments("I6", "T: Boolean optional", "assign T to match { Flag -> OptBool, else -> false }", "T", "-|True|False|False")]
+    [Arguments("I7", "T: Number default(0)", "if ((match { Flag -> OptBool, else -> false }) == true) { assign T to 1 }", "T", "0|1|0|0")]
+    [Arguments("I8", "T: Date optional", "assign T to match { Flag -> OptDate, else -> OptDate2 }", "T", "-|1/2/2026|-|1/3/2026")]
+    [Arguments("I9", "T: Number default(0)", "if ((match { Flag -> OptDate, else -> OptDate2 }) != null) { assign T to 1 }", "T", "0|1|0|1")]
+    [Arguments("I10", "T: AbxMood optional", "assign T to match { Flag -> OptMood, else -> Happy }", "T", "-|Sad|Happy|Happy")]
+    [Arguments("I11", "T: Number default(0)", "if ((match { Flag -> OptMood, else -> Mood }) != null) { assign T to 1 }", "T", "0|1|1|1")]
+    [Arguments("I12", "T: Number default(0)", "create in obox { W: match { Flag -> Opt, else -> 1.5 } }\n  assign T to count obox where W == 4", "T", "0|1|0|0")]
+    public async Task OptionalArmOfEveryKind_MeansTheSameOnEveryHost(string id, string members, string body, string observed, string expected) =>
+        await AssertScenarios(id, ScenarioDsl("  " + members, body), observed, expected);
 
     /// <summary>
     /// T-09a fix round (F5): a match whose arms are all Number into a Decimal slot is no longer adapted arm by arm (the deleted

@@ -52,6 +52,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             if (!IsTyped(type))
                 RequireTyped(context, value, type, match, props, parameters, enumTypes);
         }
+        // A string literal beside an enum member names a member of the slot's enum, as the plain `Mood == "Nope"` requires (the
+        // generated C# cannot type `Flag ? Mood.Happy : "Nope"`): the plain form's own message and code, at the match (a string
+        // literal from the DSL carries no position).
+        if (unification.AllTyped && unification.Mismatches.Count == 0 && Family(unification.Unified) is TypeFamily.Enum
+            && unification.Unified.DomainName is { } slotEnum && armHint is { } slotType && Family(slotType) is TypeFamily.Enum
+            && string.Equals(slotType.DomainName, slotEnum, StringComparison.Ordinal))
+            foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else))
+                if (value is Literal { Value: string literal })
+                    CheckEnumMember(context, match, slotEnum, literal, enumTypes);
         foreach (var (first, second) in unification.Mismatches)
             context.ReportError(match,
                 $"'match' arm values do not unify: '{DescribeArm(first)}' and '{DescribeArm(second)}'{where}.",
@@ -112,9 +121,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 mismatches.Add((element, TextFamily));
         }
 
-        // A Decimal that came from unnamed arithmetic (`Dec * 2`) takes the Decimal name, so the name rule of `Compatible` keeps it
-        // out of a Number slot whichever arm comes first (the arithmetic itself is T-07's and keeps its null name).
-        if (unified is { Definition.PrimitiveType: Prim.Decimal, DomainName: null } unnamed)
+        // A Decimal that came from unnamed arithmetic (`Dec * 2`) takes the Decimal name where the slot is a Number that is not a
+        // Decimal, so the name rule of `Compatible` keeps it out of that slot whichever arm comes first. Into a declared Decimal
+        // alias (`Cents`, API only) it stays unnamed and is accepted as on the base (the arithmetic itself is T-07's).
+        if (unified is { Definition.PrimitiveType: Prim.Decimal, DomainName: null } unnamed
+            && target is { } numberSlot && Family(numberSlot) is TypeFamily.Number && numberSlot.Definition?.PrimitiveType is not Prim.Decimal)
             unified = unnamed with { DomainName = "Decimal" };
         // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
         var result = mismatches.Count > 0 ? firstKnown!.Value.AsOptional(false) : unified ?? TextFamily;

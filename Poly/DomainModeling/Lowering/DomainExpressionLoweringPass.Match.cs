@@ -40,11 +40,19 @@ public sealed partial class DomainExpressionLoweringPass {
         var otherwise = Arm(m.Else, target, typing.ArmTypes[^1], toDecimal, slot);
         if (slot is not null) {
             var result = _names.Next("match");
-            Node chain = new Assignment(result, otherwise.Value);
+            // A nested match that can be absent fills its own local with statements of its own: they run inside the branch of the arm
+            // that holds it, so an inner arm is not evaluated when the outer arm is not taken (as the conditional chain did).
+            bool Lazy(DomainExpression arm) =>
+                arm is MatchExpr inner && _analysis.GetMetadata<MatchTypingMetadata>(inner) is { Unified.Optional: true };
+            LoweredExpression Hoisted(LoweredExpression lowered, DomainExpression arm) =>
+                Lazy(arm) ? lowered with { Statements = [] } : lowered;
+            Node Take(LoweredExpression lowered, DomainExpression arm) =>
+                new Block([.. Lazy(arm) ? lowered.Statements : [], new Assignment(result, lowered.Value)]);
+            Node chain = Take(otherwise, m.Else);
             for (var i = arms.Count - 1; i >= 0; i--)
-                chain = new IfStatement(arms[i].Condition.Value,
-                    new Block([new Assignment(result, arms[i].Value.Value)]), new Block([chain]));
-            var parts = LoweredExpression.Combine([.. arms.SelectMany(a => new[] { a.Condition, a.Value }), otherwise], result);
+                chain = new IfStatement(arms[i].Condition.Value, Take(arms[i].Value, m.Arms[i].Value), new Block([chain]));
+            var parts = LoweredExpression.Combine(
+                [.. arms.SelectMany((a, i) => new[] { a.Condition, Hoisted(a.Value, m.Arms[i].Value) }), Hoisted(otherwise, m.Else)], result);
             return new LoweredExpression(
                 [.. parts.Statements, new Assignment(result, new SN.TypeCast(new Constant(null), slot)), chain], [.. parts.Variables, result], result);
         }

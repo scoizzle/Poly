@@ -1,15 +1,16 @@
+using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 using Poly.Runtime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
-/// L-03v (#683, #605, #623): a whole-number arm of a <c>match</c> assigned to a Decimal slot is converted in
-/// Lower, so the simulator and the printed C# store the same value; the VM rejects a conditional whose arms
-/// differ in representation instead of reading a scalar word as a heap handle. A non-literal arm
-/// (<c>else -> Qty</c>) and a <c>match</c> with no target (<c>match { … } * 2</c>) are not converted here: they
-/// fail closed with a positioned rejection, and T-09 owns converting them (those rows then flip to
-/// <c>AssertAgree</c>).
+/// L-03v (#683, #605, #623) and T-09a: a <c>match</c> has one type, and Lower converts every arm to it with an
+/// explicit cast, so the simulator and the printed C# store the same value for a whole-number arm, a non-literal
+/// Number arm (<c>else -> Qty</c>) and a <c>match</c> with no target (<c>match { … } * 2</c>). The VM still rejects
+/// a conditional whose arms differ in representation instead of reading a scalar word as a heap handle: that is the
+/// backstop for an API-built tree, not the DSL's defence.
 /// </summary>
 public class CalleeFrameIsolationTests {
     private const string Dsl = """
@@ -125,62 +126,182 @@ public class CalleeFrameIsolationTests {
         await Assert.That(dec).IsEqualTo(2m);
     }
 
-    /// <summary>A non-literal arm and a target-less match are not converted in this slice: the VM rejects the
-    /// mixed-representation conditional with a positioned error, never a wrong stored value. T-09 converts them.</summary>
+    /// <summary>T-09a: a non-literal Number arm and a target-less match are converted to Decimal in Lower: the simulator
+    /// and the printed C# store the same value, taken from the arm the condition picks.</summary>
     [Test]
-    [Arguments("match { Qty > 1 -> 1.5, else -> Qty }")]
-    [Arguments("match { Qty > 1 -> 1.5, else -> 2 } * 2")]
-    public async Task DecimalMatch_NonLiteralOrTargetlessArm_FailsClosed(string rhs) {
-        var (domain, _) = EvolvedDomain.FromDsl(Stage(rhs));
-        var exec = ModuleExec.For(domain);
-        var created = exec.Create("Inv", new Dictionary<string, object?>());
-        await Assert.That(created.Succeeded).IsTrue();
-
-        string message;
-        try {
-            var invoked = exec.Invoke(created.Instance!, "Price");
-            message = invoked.Succeeded ? "(succeeded)" : invoked.Error ?? "";
-        }
-        catch (InvalidOperationException ex) {
-            message = ex.Message;
-        }
-        await Assert.That(message).Contains("VM compile rejected: conditional arms differ in representation");
-        await Assert.That(message).DoesNotContain("__BodyOf");
+    [Arguments("match { Qty > 1 -> 1.5, else -> Qty }", 5L, "1.5")]
+    [Arguments("match { Qty > 1 -> 1.5, else -> Qty }", 0L, "0")]
+    [Arguments("match { Qty > 1 -> 1.5, else -> Qty }", 1L, "1")]
+    [Arguments("match { Qty > 1 -> 1.5, else -> 2 } * 2", 5L, "3.0")]
+    [Arguments("match { Qty > 1 -> 1.5, else -> 2 } * 2", 0L, "4")]
+    public async Task DecimalMatch_NonLiteralOrTargetlessArm_AgreesOnBothHosts(string rhs, long qty, string expected) {
+        var outcomes = await ParityScenario
+            .FromDsl(Stage(rhs), "DecimalMatchConverted" + rhs.Aggregate(17, (h, c) => unchecked(h * 31 + c)).ToString("x") + "_" + qty)
+            .AssertAgree(side => {
+                side.Create("Inv", ("Qty", qty));
+                side.Invoke("Price");
+            });
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["Dec"]).IsEqualTo(expected);
     }
 
-    /// <summary>Behaviour change (L-03b): <c>Maybe</c> invokes <c>Price</c> only when <c>Qty is 5</c>. On master the
-    /// untaken branch let <c>Maybe</c> succeed even though <c>Price</c>'s body cannot compile. A caller of an action whose
-    /// body cannot compile now fails to compile (strictly more fail-closed), with the body's own reason and never the
-    /// private body method's name. T-09 makes <c>Price</c> compile and flips this test. An unrelated action still runs.</summary>
+    /// <summary>T-09a: <c>Maybe</c> invokes <c>Price</c> only when <c>Qty is 5</c>. <c>Price</c>'s body now compiles (its
+    /// Number arm is converted to Decimal), so the caller compiles and runs on both hosts, and an unrelated action
+    /// still runs. L-03b made a caller of a body that cannot compile fail to compile; that is no longer reached.</summary>
     [Test]
-    public async Task CallerOfAnUncompilableAction_FailsToCompile_WithTheBodysOwnReason() {
-        var (domain, _) = EvolvedDomain.FromDsl("""
+    public async Task CallerOfADecimalNumberMatchAction_Runs() {
+        var outcomes = await ParityScenario.FromDsl("""
             domain P
 
             Inv: entity {
               Qty: Number default(0)
               Dec: Decimal default(0)
-              Price: action { assign Dec to match { Qty > 1 -> 1.5, else -> Qty } }
+              Price: action { assign Dec to match { Qty > 9 -> 1.5, else -> Qty } }
               Maybe: action { if (Qty is 5) { invoke Price } }
               Bump: action { assign Qty to Qty + 1 }
             }
-            """);
-        var exec = ModuleExec.For(domain);
-        var created = exec.Create("Inv", new Dictionary<string, object?>());
-        await Assert.That(created.Succeeded).IsTrue();
+            """, "CallerOfDecimalNumberMatch").AssertAgree(side => {
+            side.Create("Inv", ("Qty", 5L));
+            side.Invoke("Maybe");
+            side.Invoke("Bump");
+        });
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["Dec"]).IsEqualTo("5");
+        await Assert.That(outcomes[2].State["Qty"]).IsEqualTo("6");
+    }
 
+    // ── T-09a: the position × host matrix ───────────────────────────────────
+
+    private const string ArmsMixed = "match { Flag -> 1.5, else -> Qty }";
+
+    /// <summary>One position a <c>match</c> with a Decimal and a non-literal Number arm is written in, and what the
+    /// observed member reads for Flag true and Flag false (Qty is 3).</summary>
+    public sealed record MatchPosition(
+        string Name, string Members, string Body, string Extra, string Observed, string WhenTrue, string WhenFalse) {
+        public override string ToString() => Name;
+    }
+
+    public static IEnumerable<MatchPosition> MatchPositions() {
+        yield return new("assign", "", $"assign Dec to {ArmsMixed}", "", "Dec", "1.5", "3");
+        yield return new("function argument", "", $"assign Dec to MxTwice({ArmsMixed})",
+            "function MxTwice(v: Decimal): Decimal = v * 2", "Dec", "3.0", "6");
+        yield return new("invoke argument", "", $"invoke Take(x: {ArmsMixed})", "", "Dec", "1.5", "3");
+        yield return new("create initializer", "boxes: many MxBox", $"create in boxes {{ W: {ArmsMixed} }}\n  assign Dec to sum boxes W",
+            "MxBox: entity {\n  W: Decimal default(0)\n}", "Dec", "1.5", "3");
+        yield return new("policy body", $"Ok: policy {{ ({ArmsMixed}) > 2 }}", "assign Dec to 0", "", "Ok", "False", "True");
+        yield return new("quantifier body", $"AnyBig: policy {{ any lines where ({ArmsMixed}) > 2 }}", "assign Dec to 0", "",
+            "AnyBig", "False", "True");
+        yield return new("for where filter", "", $"for l in lines where ({ArmsMixed}) > 2 {{ assign Dec to 9 }}", "", "Dec", "0", "9");
+        yield return new("entry effect", $"Open: stage {{ entry {{ assign Dec to {ArmsMixed} }} }}", "assign Qty to Qty", "", "Dec", "1.5", "3");
+        yield return new("exit effect", $"Open: stage {{ exit {{ assign Dec to {ArmsMixed} }} }}\n  Closed: stage {{ }}", "transition to Closed", "",
+            "Dec", "1.5", "3");
+        yield return new("nested match", "", "assign Dec to match { Flag -> match { Qty > 1 -> 1.5, else -> Qty }, else -> 2 }", "",
+            "Dec", "1.5", "2");
+        yield return new("guard operand", "", $"if (({ArmsMixed}) > 2) {{ assign Dec to 9 }}", "", "Dec", "0", "9");
+        yield return new("target-less operand", "", $"assign Dec to ({ArmsMixed}) * 2", "", "Dec", "3.0", "6");
+    }
+
+    private static string PositionDsl(MatchPosition position) => $$"""
+        domain P
+
+        MxLine: entity {
+          Qty: Number default(3)
+          Flag: Boolean default(true)
+        }
+        {{position.Extra}}
+        MxInv: entity {
+          Qty: Number default(3)
+          Dec: Decimal default(0)
+          Flag: Boolean default(true)
+          lines: many MxLine
+          Take: action (x: Decimal) { assign Dec to x }
+          Run: action { {{position.Body}} }
+          {{position.Members}}
+        }
+        """;
+
+    /// <summary>
+    /// T-09a, amendment 3: a <c>match</c> whose arms are Decimal and a non-literal Number means the same in every position
+    /// it is written in, on the simulator, the generated C# and <c>polyc check</c>; the observed member is the arm
+    /// the condition picks, converted to Decimal.
+    /// </summary>
+    [Test]
+    [MethodDataSource(nameof(MatchPositions))]
+    public async Task DecimalNumberMatch_AtEveryPosition_MeansTheSameOnEveryHost(MatchPosition position) {
+        var dsl = PositionDsl(position);
+        var isPolicy = position.Observed is "Ok" or "AnyBig";
+        var gate = GateParity.Check(dsl,
+            [SimStep.Create("MxInv", """{"Flag":false}""", "o"), SimStep.Invoke("o", "Run"),
+                .. isPolicy ? [SimStep.Evaluate("MxInv", position.Observed, "o")] : Array.Empty<SimStep>()]);
+        await Assert.That(gate.Analysis).IsTrue().Because(gate.ToString());
+        await Assert.That(gate.Holds).IsTrue().Because(gate.ToString());
+
+        var block = isPolicy ? 4 : 3;
+        var outcomes = await ParityScenario.FromDsl(dsl, "MatchPosition" + position.Name.Replace(' ', '_').Replace('-', '_'))
+            .AssertAgree(side => {
+                foreach (var flag in new[] { true, false }) {
+                    var line = side.Create("MxLine", ("Qty", 3L), ("Flag", flag));
+                    side.Create("MxInv", ("Flag", flag), ("lines", new[] { line }));
+                    side.Invoke("Run");
+                    if (isPolicy) side.EvaluatePolicy(position.Observed);
+                }
+            });
+        await Assert.That(outcomes[block - 1].State[position.Observed]).IsEqualTo(position.WhenTrue);
+        await Assert.That(outcomes[2 * block - 1].State[position.Observed]).IsEqualTo(position.WhenFalse);
+    }
+
+    /// <summary>A <c>match</c> in <c>default(...)</c> is a positioned analysis error: the generated C# prints a default as a constant
+    /// parameter default and cannot print it, even when every arm has the same type (found with the position matrix).</summary>
+    [Test]
+    [Arguments("Decimal default(match { true -> 1.5, else -> 2 })")]
+    [Arguments("Number default(match { true -> 1, else -> 2 })")]
+    public async Task Match_InADefault_IsAPositionedAnalysisError(string property) {
+        var gate = GateParity.Check($$"""
+            domain P
+            MxDef: entity {
+              D2: {{property}}
+              Go: action { assign D2 to D2 }
+            }
+            """);
+        await Assert.That(gate.Analysis).IsFalse().Because(gate.ToString());
+        await Assert.That(gate.AnalysisSummary).Contains("a 'match' is not supported in default(...)");
+    }
+
+    /// <summary>A function body may not hold a <c>match</c> (<c>FunctionImpureBody</c>, already so on the base; this slice adds no
+    /// refusal here): a Decimal and Number match as a function's return is never reached by Lower.</summary>
+    [Test]
+    public async Task DecimalNumberMatch_AsAFunctionReturn_IsRefusedAsItWasOnTheBase() {
+        var gate = GateParity.Check("""
+            domain P
+            function MxPick(f: Boolean, q: Number): Decimal = match { f -> 1.5, else -> q }
+            MxFn: entity {
+              Qty: Number default(3)
+              Dec: Decimal default(0)
+              Run: action { assign Dec to MxPick(true, Qty) }
+            }
+            """);
+        await Assert.That(gate.Analysis).IsFalse().Because(gate.ToString());
+        await Assert.That(gate.AnalysisSummary).Contains("MxPick").And.Contains("MatchExpr");
+    }
+
+    /// <summary>
+    /// T-09a, amendment 3: Lower reads the match typing the analysis stamped and fails closed, positioned, when it is
+    /// absent: a <c>match</c> that was never analysed does not lower to a conditional of unknown arm types.
+    /// </summary>
+    [Test]
+    public async Task LowerMatch_WithoutTheTypingStamp_FailsClosed_AtTheMatch() {
+        var match = new MatchExpr(
+            [new MatchArm(DomainExpression.Literal(true), DomainExpression.Literal(1L))], DomainExpression.Literal(2L), Line: 7, Col: 12);
+        var subject = new Poly.Ast.Nodes.Parameter("this");
+        var pass = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(subject));
         string message;
         try {
-            var invoked = exec.Invoke(created.Instance!, "Maybe");
-            message = invoked.Succeeded ? "(succeeded)" : invoked.Error ?? "";
+            _ = pass.LowerExpression(match, subject);
+            message = "(lowered)";
         }
         catch (InvalidOperationException ex) {
             message = ex.Message;
         }
-        await Assert.That(message).Contains("VM compile rejected: conditional arms differ in representation");
-        await Assert.That(message).DoesNotContain("__BodyOf");
-
-        await Assert.That(exec.Invoke(created.Instance!, "Bump").Succeeded).IsTrue();
-        await Assert.That(created.Instance!.Bag["Qty"]).IsEqualTo(1L);
+        await Assert.That(message).Contains("'match' has no analysed type").And.Contains("line 7, col 12");
     }
 }

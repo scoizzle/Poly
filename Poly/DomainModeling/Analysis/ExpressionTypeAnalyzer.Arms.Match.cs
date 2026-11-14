@@ -6,6 +6,7 @@ using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
+using Prim = Poly.Introspection.PrimitiveType;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Analysis;
@@ -23,6 +24,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
         var where = match.Line > 0 ? $" (line {match.Line}, col {match.Col})" : "";
+        // Lowering passes a match's slot to every arm value, a nested match included (`Arm` to `AdaptTo` to `LowerMatch`), so a
+        // child match takes its parent's slot before it is walked.
+        if (context.GetMetadata<MatchTargetMetadata>(match) is { } slot)
+            foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else))
+                StampMatchTarget(context, value, slot.Target);
         foreach (var arm in match.Arms) {
             var condition = InferType(context, arm.Condition, props, parameters, enumTypes);
             if (!IsTyped(condition))
@@ -40,20 +46,27 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         WalkExpression(context, match.Else, props, parameters, enumTypes);
         CheckMatchNames(context, match, match.Else, props, parameters, enumTypes, where);
 
-        ExprType? reference = null;
-        foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else)) {
-            var type = ArmType(context, value, props, parameters, enumTypes, hint: null);
-            if (!IsTyped(type)) {
+        var armHint = context.GetMetadata<MatchTargetMetadata>(match)?.Target;
+        var unification = UnifyMatch(context, match, props, parameters, enumTypes, hint: null, target: armHint);
+        foreach (var (value, type) in match.Arms.Select(a => a.Value).Append(match.Else).Zip(unification.ArmTypes)) {
+            if (!IsTyped(type))
                 RequireTyped(context, value, type, match, props, parameters, enumTypes);
-                continue;
-            }
-            if (Family(type) is TypeFamily.Null) continue;
-            if (reference is null) { reference = type; continue; }
-            if (!Unifies(reference.Value, type))
-                context.ReportError(match,
-                    $"'match' arm values do not unify: '{Describe(reference.Value)}' and '{Describe(type)}'{where}.",
-                    DomainModelDiagnosticCodes.MatchArmTypeMismatch);
         }
+        // A string literal beside an enum member names a member of the slot's enum, as the plain `Mood == "Nope"` requires (the
+        // generated C# cannot type `Flag ? Mood.Happy : "Nope"`): the plain form's own message and code, at the match (a string
+        // literal from the DSL carries no position).
+        if (unification.AllTyped && unification.Mismatches.Count == 0 && Family(unification.Unified) is TypeFamily.Enum
+            && unification.Unified.DomainName is { } slotEnum && armHint is { } slotType && Family(slotType) is TypeFamily.Enum
+            && string.Equals(slotType.DomainName, slotEnum, StringComparison.Ordinal))
+            foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else))
+                if (value is Literal { Value: string literal })
+                    CheckEnumMember(context, match, slotEnum, literal, enumTypes);
+        foreach (var (first, second) in unification.Mismatches)
+            context.ReportError(match,
+                $"'match' arm values do not unify: '{DescribeArm(first)}' and '{DescribeArm(second)}'{where}.",
+                DomainModelDiagnosticCodes.MatchArmTypeMismatch);
+        if (unification.AllTyped && unification.Mismatches.Count == 0 && context.GetMetadata<MatchTypingMetadata>(match) is null)
+            context.SetMetadata(match, new MatchTypingMetadata(unification.Unified, unification.ArmTypes));
 
         var seen = new List<string>();
         foreach (var arm in match.Arms) {
@@ -68,15 +81,101 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Two known arm types unify when they share a family (an enum, an entity or a value type: the same name), or one
-    /// is an enum and the other Text, as in comparisons. By family across the numeric tower until T-09.
+    /// What a <c>match</c>'s arms unify to (T-09a): the one function <c>CheckMatch</c> (the verdict and the stamp) and
+    /// <c>InferMatch</c> (the type) both read, so they cannot differ. <see cref="Unified"/> is the first known non-null arm
+    /// type when the arms do not unify (so nothing downstream cascades), optional when an arm is <c>null</c> or optional.
     /// </summary>
-    private static bool Unifies(ExprType a, ExprType b) =>
-        Family(a) == Family(b)
-            ? Family(a) is not (TypeFamily.Enum or TypeFamily.Entity or TypeFamily.Value)
-              || string.Equals(a.DomainName, b.DomainName, StringComparison.Ordinal)
-            : (Family(a) is TypeFamily.Enum && Family(b) is TypeFamily.Text)
-              || (Family(b) is TypeFamily.Enum && Family(a) is TypeFamily.Text);
+    private sealed record MatchUnification(
+        ExprType Unified, IReadOnlyList<ExprType> ArmTypes, IReadOnlyList<(ExprType First, ExprType Second)> Mismatches, bool AllTyped);
+
+    /// <summary>
+    /// Every known arm type is merged into one: the same family (an enum, an entity or a value type: the same name), the
+    /// same primitive, or a Decimal with an integer arm (<c>long</c> to <c>decimal</c> is exact, and lowering casts the
+    /// integer arm). A Decimal with a Float, Date with DateTime, and an enum with a Text that is not a string literal into an
+    /// enum slot do not unify (DMMAT002). An optional arm is no obstacle: lowering fills an optional local, and a <c>long?</c>
+    /// arm assigned into it converts as a plain assignment does, on every host.
+    /// </summary>
+    private MatchUnification UnifyMatch(
+        AnalysisContext context, MatchExpr match,
+        Dictionary<string, string>? props, Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes, ExprType? hint, ExprType? target) {
+        var values = match.Arms.Select(a => a.Value).Append(match.Else).ToList();
+        var types = values.Select(v => ArmType(context, v, props, parameters, enumTypes, hint)).ToList();
+        if (!types.All(IsTyped))
+            return new MatchUnification(ExprType.Unresolved, types, [], AllTyped: false);
+
+        var optional = types.Any(t => t.Optional);
+        var mismatches = new List<(ExprType, ExprType)>();
+        ExprType? unified = null;
+        var firstKnown = types.Cast<ExprType?>().FirstOrDefault(t => Family(t!.Value) is not TypeFamily.Null);
+        foreach (var type in types.Where(t => Family(t) is not TypeFamily.Null)) {
+            if (unified is null) { unified = type.AsOptional(false); continue; }
+            if (MergeArmTypes(unified.Value, type) is { } merged) unified = merged;
+            else mismatches.Add((unified.Value, type));
+        }
+        if (unified is { } element && mismatches.Count == 0) {
+            if (Family(element) is TypeFamily.Enum && values.Zip(types).Any(pair => Family(pair.Second) is TypeFamily.Text)
+                && !(target is { } slot && Family(slot) is TypeFamily.Enum
+                     && string.Equals(slot.DomainName, element.DomainName, StringComparison.Ordinal)
+                     && values.Zip(types).All(pair => Family(pair.Second) is not TypeFamily.Text || pair.First is Literal { Value: string })))
+                mismatches.Add((element, TextFamily));
+        }
+
+        // A Decimal that came from unnamed arithmetic (`Dec * 2`) takes the Decimal name where the slot is a Number that is not a
+        // Decimal, so the name rule of `Compatible` keeps it out of that slot whichever arm comes first. Into a declared Decimal
+        // alias (`Cents`, API only) it stays unnamed and is accepted as on the base (the arithmetic itself is T-07's).
+        if (unified is { Definition.PrimitiveType: Prim.Decimal, DomainName: null } unnamed
+            && target is { } numberSlot && Family(numberSlot) is TypeFamily.Number && numberSlot.Definition?.PrimitiveType is not Prim.Decimal)
+            unified = unnamed with { DomainName = "Decimal" };
+        // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
+        var result = mismatches.Count > 0 ? firstKnown!.Value.AsOptional(false) : unified ?? TextFamily;
+        return new MatchUnification(result.AsOptional(optional), types, mismatches, AllTyped: true);
+    }
+
+    private static bool IsIntegerClass(ExprType type) => type.Definition?.PrimitiveType is Prim.Int32 or Prim.Int64;
+
+    /// <summary>
+    /// Two known, non-null arm types merged, or null when they do not unify: an enum with Text (the caller decides the
+    /// slot), Decimal with an integer arm (Decimal), and otherwise one family and one primitive.
+    /// </summary>
+    private static ExprType? MergeArmTypes(ExprType a, ExprType b) {
+        if (Family(a) != Family(b))
+            return Family(a) is TypeFamily.Enum && Family(b) is TypeFamily.Text ? a
+                : Family(b) is TypeFamily.Enum && Family(a) is TypeFamily.Text ? b.AsOptional(false)
+                : null;
+        if (Family(a) is TypeFamily.Enum or TypeFamily.Entity or TypeFamily.Value)
+            return string.Equals(a.DomainName, b.DomainName, StringComparison.Ordinal) ? a : null;
+        if (Family(a) is not TypeFamily.Number)
+            return a.Definition?.PrimitiveType == b.Definition?.PrimitiveType ? a : null;
+        var (left, right) = (a.Definition?.PrimitiveType, b.Definition?.PrimitiveType);
+        if (left == right) return a;
+        if (left is Prim.Decimal && IsIntegerClass(b)) return a;
+        if (right is Prim.Decimal && IsIntegerClass(a)) return b.AsOptional(false);
+        return null;
+    }
+
+    /// <summary>An arm type as DMMAT002 names it: a number by its real type (<see cref="Describe"/> keeps one word for the family).</summary>
+    private static string DescribeArm(ExprType type) {
+        var name = Family(type) is TypeFamily.Number
+            ? type.Definition?.PrimitiveType switch {
+                Prim.Int64 => "Number",
+                Prim.Int32 => "Int32",
+                Prim.Float32 => "Float32",
+                Prim.Float64 => "Float",
+                _ => Describe(type),
+            }
+            : Describe(type);
+        return type.Optional ? name + " optional" : name;
+    }
+
+    /// <summary>
+    /// Stamps the slot a <c>match</c> value is assigned into on the match itself, so that its verdict (an enum arm with a
+    /// Text arm) can read it when the match is walked. Only the first stamp stays; any other value is left alone.
+    /// </summary>
+    private static void StampMatchTarget(AnalysisContext context, DomainExpression value, ExprType target) {
+        if (value is MatchExpr match && IsTyped(target) && context.GetMetadata<MatchTargetMetadata>(match) is null)
+            context.SetMetadata(match, new MatchTargetMetadata(target));
+    }
 
     /// <summary>
     /// A position- and identity-free structural key for an expression: type, scalar members (not
@@ -134,22 +233,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// The unified value type of a <c>match</c>: the first arm type that is known and not null, optional when an arm is
-    /// <c>null</c> or optional; Unresolved when an arm has no type. <paramref name="hint"/> is the target's type, which a
-    /// bare enum member arm takes first (A6).
+    /// The unified value type of a <c>match</c> (<see cref="UnifyMatch"/>): the type its arms unify to, optional when an arm
+    /// is <c>null</c> or optional; Unresolved when an arm has no type. <paramref name="hint"/> is the target's type, which a
+    /// bare enum member arm takes first (A6) and which an enum and Text arm unify into.
     /// </summary>
     private ExprType InferMatch(
         AnalysisContext context, MatchExpr match,
         Dictionary<string, string>? props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes, ExprType? hint) {
-        var types = match.Arms.Select(a => a.Value).Append(match.Else)
-            .Select(v => ArmType(context, v, props, parameters, enumTypes, hint)).ToList();
-        if (!types.All(IsTyped))
-            return ExprType.Unresolved;
-        // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
-        var unified = types.Cast<ExprType?>().FirstOrDefault(t => Family(t!.Value) is not TypeFamily.Null) ?? TextFamily;
-        return unified.AsOptional(types.Any(t => t.Optional));
-    }
+        Dictionary<string, EnumType> enumTypes, ExprType? hint) =>
+        UnifyMatch(context, match, props, parameters, enumTypes, hint, target: hint ?? context.GetMetadata<MatchTargetMetadata>(match)?.Target).Unified;
 
     /// <summary>
     /// The first <c>null</c> arm value of <paramref name="value"/> when it is a <c>match</c>, nested arms included:

@@ -167,19 +167,33 @@ public class TemporalFailClosedAnalysisTests {
     }
 
     /// <summary>
-    /// #484: no door compares an optional value (the simulator and <c>polyc</c> refuse <c>Nullable&lt;TimeSpan&gt;</c> against
-    /// <c>TimeSpan</c>), so a bare duration compared with an optional Duration is refused, either operand order and operator.
-    /// An optional Duration reached through a path read (<c>part Gap &gt; 1 Hours</c>) is not seen by this check until T-06a.
+    /// T-21d (#484): an optional Duration compared with a bare duration is C#'s lifted comparison, either operand order: it
+    /// runs on every door (<c>AnalysisGateParityTests</c>), so analysis accepts it. A bare duration beside an optional DATE is
+    /// still the pack's own refusal, naming the type it met.
     /// </summary>
     [Test]
     [Arguments("Slow: policy { Gap > 1 Hours }")]
     [Arguments("Slow: policy { Gap == 1 Hours }")]
     [Arguments("Slow: policy { 1 Hours >= Gap }")]
-    public async Task OptionalDuration_ComparedWithABareDuration_IsRefusedAtAnalysis(string members) {
+    public async Task OptionalDuration_ComparedWithABareDuration_IsAccepted(string members) {
         var result = Evolve(DurationDocument(members), ExtensionCatalog.Core.Language);
 
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(Errors(result).Any(e => e.Contains("optional Duration", StringComparison.Ordinal) && e.Contains("#484", StringComparison.Ordinal)))
+        await Assert.That(Errors(result)).IsEmpty();
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task OptionalDate_ComparedWithABareDuration_KeepsTheBareDurationMessage() {
+        var result = Evolve($$"""
+            domain T
+            uses temporal
+            Item: entity {
+              OptDue: Date optional
+              Slow: policy { OptDue > 1 Hours }
+            }
+            """, ExtensionCatalog.Core.Language);
+
+        await Assert.That(Errors(result).Any(e => e.Contains("comparison operand '1 Hours' is a bare duration with no temporal left operand (only a Duration takes it; got 'Date')", StringComparison.Ordinal)))
             .IsTrue().Because(string.Join(" | ", Errors(result)));
     }
 

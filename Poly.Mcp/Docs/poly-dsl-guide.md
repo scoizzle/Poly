@@ -566,11 +566,17 @@ entity itself, or a cycle of required to-ones across entities (`a: B` with `b: A
 **DMREL006**: no instance could ever be created first. Mark one side `optional`; an `owned`
 navigation breaks a cycle. An entity whose to-one navigations are all `optional` is a root
 structurally; storage and HTTP take root-ness from the aggregate, where an entity nothing
-owns is a root too. **Over HTTP, an entity with a required link has no `POST` route and no
-seed row**: a POST body carries scalars only. Declaring the link `optional` keeps the route. A
-parent action that uses `create in` creates one only when the parent has a collection of it
-(`CheckOut: action { create in loans { book: book } }` serves `POST
-/api/patrons/{email}/checkout`). An MCP create takes the link. A `create in` into a required
+owns is a root too. **Over HTTP, the create body carries each required link as the linked
+entity's route key** (`"CourseId": "CS101"` for `course: Course`, the target's `unique`
+property): the host looks the target up as an action's entity argument is looked up (404 when
+no such row), loads what the create reads on it, and passes it to `Create`. A link left out
+or sent as `null` answers 400 `Required` at `Section.course`, the simulator's answer. An
+**optional** link is not settable in a create body yet: create, then fill it with an action,
+or use an MCP create, which takes it. An entity whose required link's target has no natural
+key (a shadow `id`) has no `POST` route, since no value a client could send names the
+target; it is created by a parent action's `create in`, which exists only when the parent has
+a collection of it (`CheckOut: action { create in loans { book: book } }` serves `POST
+/api/patrons/{email}/checkout`). An entity with a required link is not seeded. A `create in` into a required
 to-one of the source is **DMEFF001**: the link is already set when the action runs; declare
 it `optional` to fill it there.
 

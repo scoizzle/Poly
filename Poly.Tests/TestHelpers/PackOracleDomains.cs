@@ -665,8 +665,9 @@ public static class PackOracleDomains {
         """,
         "/api/gizmos");
 
-    /// <summary>L-15a (#683): <c>Order</c> has a required link and no parent, so it is an aggregate root whose
-    /// <c>Create</c> answers Required unless the link is supplied, which a POST body cannot do. It stays out of
+    /// <summary>L-15a (#683), P-11b (#687): <c>Order</c> has a required link and no parent, so it is an aggregate root whose
+    /// <c>Create</c> answers Required unless the link is supplied. <c>Customer</c> has no natural key (a shadow key), so
+    /// there is no value a POST body could carry for the link and <c>Order</c> keeps no POST route. It stays out of
     /// <see cref="All"/>.</summary>
     public static PackOracleDomain RequiredLink683 { get; } = new(
         "RequiredLink683",
@@ -685,6 +686,112 @@ public static class PackOracleDomains {
         }
         """,
         "/api/orders");
+
+    /// <summary>P-11b (#687): university-shaped, with natural keys so the whole flow is reachable over HTTP. <c>Section</c>
+    /// has a required <c>course</c> (a root: <c>Course</c> has no collection of sections), so its POST body carries the
+    /// course's key. Course, section, student and enroll, then <c>Close</c> (a policy that reads through the link). It stays
+    /// out of <see cref="All"/>; <see cref="WithoutHostLibraries"/> is its simulator side.</summary>
+    public static PackOracleDomain CreateLink11b { get; } = new(
+        "CreateLink11b",
+        """
+        domain Campus
+        uses http
+        uses sqlite
+
+        Course: entity {
+          Code: Text unique
+          Credits: Number
+        }
+
+        Student: entity {
+          Email: Text unique
+          OpenCredits: Number default(0)
+          enrollments: many Enrollment via student
+          Enroll: action (offering: Section) -> Enrollment {
+            assign OpenCredits to OpenCredits + 3
+            create in enrollments { section: offering }
+          }
+        }
+
+        Section: entity {
+          Code: Text unique
+          Cap: Number
+          course: Course
+          enrollments: many Enrollment via section
+          BigCourse: policy { course Credits >= 3 }
+          Open: stage {
+            Close: action require BigCourse { transition to Closed }
+          }
+          Closed: stage { }
+        }
+
+        Enrollment: entity {
+          section: Section
+          student: Student
+        }
+        """,
+        "/api/courses");
+
+    /// <summary>P-11b (#687): two required links to targets of the SAME type, with a policy per link that reads through it,
+    /// so a swapped pair is a different answer. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain TwoLinks11b { get; } = new(
+        "TwoLinks11b",
+        """
+        domain Flights
+        uses http
+        uses sqlite
+
+        Airport: entity {
+          Code: Text unique
+          Capacity: Number
+        }
+
+        Route: entity {
+          Code: Text unique
+          Hits: Number default(0)
+          origin: Airport
+          destination: Airport
+          BigOrigin: policy { origin Capacity >= 100 }
+          BigDestination: policy { destination Capacity >= 100 }
+          FromBig: action require BigOrigin { assign Hits to Hits + 1 }
+          ToBig: action require BigDestination { assign Hits to Hits + 1 }
+        }
+        """,
+        "/api/airports");
+
+    /// <summary>P-11b (#687): the section's initial entry reads through the link and one hop further (<c>course region Name</c>),
+    /// so the create route must load the course's <c>Region</c> before it calls <c>Create</c>, from the same read tree an
+    /// action route loads. The region is made by a course action (an owned part). It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain CreateLinkReads11b { get; } = new(
+        "CreateLinkReads11b",
+        """
+        domain Chain
+        uses http
+        uses sqlite
+
+        Region: entity {
+          Code: Text unique
+          Name: Text
+        }
+
+        Course: entity {
+          Code: Text unique
+          region: owned Region optional
+          MakeRegion: action -> Region { create in region { Code: "r1"  Name: "North" } }
+        }
+
+        Section: entity {
+          Code: Text unique
+          Label: Text optional
+          course: Course
+          Open: stage { entry { assign Label to course region Name } }
+        }
+        """,
+        "/api/courses");
+
+    /// <summary>A fixture's document without its host libraries: the simulator's side of the same model.</summary>
+    public static string WithoutHostLibraries(PackOracleDomain fixture) =>
+        fixture.Poly.Replace("uses http\n", "", StringComparison.Ordinal).Replace("uses sqlite\n", "", StringComparison.Ordinal);
 
     /// <summary>The simulator's side of <see cref="RequiredOmitted683"/>: the same entity, no host libraries.</summary>
     public const string RequiredOmittedSimulatorDsl = """

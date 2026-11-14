@@ -587,10 +587,10 @@ public class VerificationSummaryTests {
     }
 
     [Test]
-    public async Task RowWithoutAFact_CarriesNullEnrichment() {
+    public async Task LengthParameterWrite_RowCarriesItsFact() {
         // A parameter with no `length` constraint flowing into a length-constrained property warns
-        // (DMEFF008) yet records no fact — Length is not WriteRelevant until V-08 — so the row's
-        // enrichment is null by design, not missing data.
+        // (DMEFF008). Length is write-relevant since V-08, so the write records a fact and the row
+        // is enriched with its property, constraint and reason (V-04 pinned this row as null).
         var text = new DmPrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entity = new Entity("Item",
             [new Property("Notes", new DomainTypeReference("Text"), [new LengthConstraint(0, 50)])],
@@ -605,14 +605,51 @@ public class VerificationSummaryTests {
 
         var finding = WithCode(analysis, DomainModelDiagnosticCodes.EffectConstraintViolation).Single();
         await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Warning);
-        await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(model)!.Unverified).IsEmpty();
+        await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(model)!.Unverified.Count).IsEqualTo(1);
         var summary = analysis.GetVerification(model);
         await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
         var row = summary.UnverifiedWrites.Single();
         await Assert.That(row.Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
-        await Assert.That(row.Property).IsNull();
-        await Assert.That(row.Constraint).IsNull();
-        await Assert.That(row.Reason).IsNull();
+        await Assert.That(row.Property).IsEqualTo("Notes");
+        await Assert.That(row.Constraint).IsEqualTo("length(0, 50)");
+        await Assert.That(row.Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+    }
+
+    [Test]
+    public async Task Division_IsUnknown() {
+        // #579: `/` is not modelled by the interval flow; the write is unverified, never proven.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              X: Number range(0, 10)
+              Y: Number range(0, 3)
+              Run: action { assign Y to X / 2 }
+            }
+            """);
+
+        var summary = result.Analysis.GetVerification(result.Root);
+
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.UnsupportedOperator);
+    }
+
+    [Test]
+    public async Task MatchResult_IsUnknown() {
+        // #608: a `match` result has no interval, so the write is unverified, never proven.
+        var result = Parse("""
+            domain Test
+            Inv: entity {
+              Qty: Number range(0, 100) default(0)
+              Open: stage {
+                MatchOver: action { assign Qty to match { Qty >= 0 -> 500, else -> 1 } }
+              }
+            }
+            """);
+
+        var summary = result.Analysis.GetVerification(result.Root);
+
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.UnsupportedOperator);
     }
 
     [Test]
@@ -637,6 +674,30 @@ public class VerificationSummaryTests {
         await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Violated);
         await Assert.That(summary.Violations).IsEqualTo(1);
         await Assert.That(summary.UnverifiedWrites).IsEmpty();
+    }
+
+    [Test]
+    [Arguments("pattern(\"^\\\\d{5}$\")", "pattern(\"^\\\\d+$\")")]
+    [Arguments("equals(\"x\")", "equals(\"y\")")]
+    public async Task ObservedFlow_DifferentPatternOrEquals_IsAWarningNeverAnError(string source, string target) {
+        // Different pattern text or a different expected value proves nothing about a value being
+        // outside: the pair is an unverified DMCS003 warning plus a fact, never a DMEFF008 error.
+        var (domain, analysis) = RunFlowed($$"""
+            domain Orders
+            Source: entity {
+              Code: Text {{source}}
+            }
+            Target: entity {
+              Code: Text {{target}}
+            }
+            """, [new ObservedFlow("Source.Code", "Target.Code")]);
+
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var warning = WithCode(analysis, DomainModelDiagnosticCodes.ConstraintUndecided).Single();
+        await Assert.That(warning.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(WithCode(analysis, DomainModelDiagnosticCodes.EffectConstraintViolation)).IsEmpty();
+        await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(domain)!.Unverified.Count).IsEqualTo(1);
+        await Assert.That(analysis.GetVerification(domain).Verdict).IsEqualTo(CheckVerdict.Unknown);
     }
 
     [Test]

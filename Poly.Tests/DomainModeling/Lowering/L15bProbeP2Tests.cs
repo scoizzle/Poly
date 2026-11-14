@@ -109,6 +109,31 @@ public class L15bProbeP2Tests {
     }
 
     [Test]
+    public async Task Corpus() {
+        var root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "Poly.slnx")))
+            root = Path.GetDirectoryName(root)!;
+        var docs = new List<(string, string)>();
+        foreach (var d in Poly.Tests.TestHelpers.GoldenDomains.Compilable)
+            docs.Add(("golden/" + d.Name, Poly.Tests.Quality.GoldenPackDomains.FromGolden(d).Poly));
+        foreach (var f in new[] { "docs/probes/dogfood/hotel.poly", "docs/probes/dogfood/crm.poly", "docs/probes/dogfood/university.poly", "demo/Poly.RestApi/library.poly" })
+            docs.Add((f, File.ReadAllText(Path.Combine(root, f))));
+        var sb = new StringBuilder();
+        foreach (var (name, poly) in docs) {
+            sb.AppendLine("##### " + name);
+            try {
+                using var m = EfModel.Create(poly, "corpus");
+                if (m.BuildError is { } err) { sb.AppendLine("MODEL DOES NOT BUILD: " + err.Split('\n')[0]); continue; }
+                var fks = m.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()).ToList();
+                foreach (var fk in fks.OrderBy(f => f.DeclaringEntityType.Name))
+                    sb.AppendLine($"{fk.DeclaringEntityType.ClrType.Name}.{fk.Properties[0].Name}->{fk.PrincipalEntityType.ClrType.Name} req={fk.IsRequired} del={fk.DeleteBehavior} uniq={fk.IsUnique}" + (fk.Properties[0].Name.EndsWith("1") ? "  <<< DUPLICATE?" : ""));
+            }
+            catch (Exception ex) { sb.AppendLine("COMPILE: " + ex.Message.Split('\n')[0]); }
+        }
+        await File.WriteAllTextAsync(Out + "corpus.txt", sb.ToString());
+    }
+
+    [Test]
     public async Task RawAndDeleteBehaviour() {
         using var m = EfModel.Create(Shapes).EnsureSchema();
         var sb = new StringBuilder();

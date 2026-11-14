@@ -485,6 +485,11 @@ public class CSharpWriterUnitTests {
         var golden = (await File.ReadAllTextAsync(Path.Combine(root!, relativePath))).Replace("\r\n", "\n");
 
         var round = CSharpLanguage.Write(CSharpLanguage.Read(golden));
+        // The reader qualifies a using-scoped type only when its assembly is already loaded in the process (a type
+        // lookup by bare name scans loaded assemblies), so a golden that uses EF's types round-trips with or without the
+        // qualification depending on whether an earlier test loaded EF. The qualification is the only difference allowed.
+        if (!golden.Contains("Microsoft.EntityFrameworkCore.", StringComparison.Ordinal))
+            round = round.Replace("Microsoft.EntityFrameworkCore.", "", StringComparison.Ordinal);
 
         if (KnownRoundTripFindings.TryGetValue(relativePath.Replace('\\', '/'), out var finding))
             await Assert.That(round).IsNotEqualTo(golden).Because($"known finding no longer reproduces: {finding}");

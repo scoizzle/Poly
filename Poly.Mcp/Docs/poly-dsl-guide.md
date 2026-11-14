@@ -1937,6 +1937,13 @@ attributes below. What reaches the database:
 | `length(min, max)` | `HasMaxLength(max)` only. The minimum is not a CHECK. |
 | `pattern` | No SQL projection. The pattern is still enforced when the VM writes the value. |
 | no `optional` | `IsRequired()` for reference-typed columns. |
+| a required link (a to-one not declared `optional`) | A `NOT NULL` foreign key (`IsRequired()` on the relationship). An `optional` link keeps a nullable key (`IsRequired(false)`). |
+| delete behaviour | Deleting an owner cascades to its `owned` parts (`OnDelete(Cascade)`); any other required link restricts (`OnDelete(Restrict)`: the principal cannot be deleted while a dependent references it); an optional link is unchanged (`ClientSetNull`). An owned single part with no back-navigation keeps its key on the owner and is unchanged. A shape the analysis cannot decide (a many-to-many) keeps EF's convention. |
+| one-to-one pair | The dependent side holds the key: the required side, else the part of an owned pair, else the first declared. |
+
+There is no `DELETE` route and no delete effect in the DSL, so delete behaviour matters to code that
+uses the generated DbContext directly. A database file created before this change has a different schema
+(nullable keys, no delete action) and must be recreated.
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport emits them as DTO validation attributes (metadata on the contract;

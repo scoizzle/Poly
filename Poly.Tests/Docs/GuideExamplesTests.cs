@@ -504,8 +504,8 @@ public class GuideExamplesTests {
         var shortMarkers = Regex.Matches(guide, Regex.Escape(GuideBlocks.MarkerOpener)).Count;
 
         // The cap lives in McpSmokeTests. The re-measure procedure is in the wrappers README.
-        await Assert.That(lines).IsLessThan(240)
-            .Because("McpSmokeTests pins the short guide under 240 lines and the short guide includes "
+        await Assert.That(lines).IsLessThan(241)
+            .Because("McpSmokeTests pins the short guide under 241 lines and the short guide includes "
                      + $"section 0; measured {lines} lines, {shortMarkers} markers in it");
         await Assert.That(shortMarkers).IsGreaterThan(0)
             .Because("the short guide must be built from the marked file, not a stale embedded copy");

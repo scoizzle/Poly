@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
+using Poly.Compile;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -999,5 +1000,157 @@ public partial class MinimalApiGeneratorTests {
         foreach (var p in Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
             AddFrom(p);
         return byName.Values.ToList();
+    }
+
+    // ── S-decl: the schema id in the generated host ─────────────────
+
+    private const string CounterHeader = "domain Counter\nuses http\nuses sqlite\n";
+
+    private const string CounterBody = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+        }
+        """;
+
+    private static string HostProgram(string poly) {
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", result.Diagnostics.Where(d => d.IsError).Select(d => d.Message)));
+        return result.Files.Single(f => f.FileName == "Program.cs").Source;
+    }
+
+    private static int? SchemaIdOf(string poly) {
+        var match = System.Text.RegularExpressions.Regex.Match(HostProgram(poly), @"var schemaId = (\d+);");
+        return match.Success ? int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
+    }
+
+    [Test]
+    public async Task SchemaId_TwoGenerations_AreIdentical_AndPositive() {
+        var first = SchemaIdOf(CounterHeader + CounterBody);
+        var second = SchemaIdOf(CounterHeader + CounterBody);
+
+        await Assert.That(first).IsNotNull();
+        await Assert.That(first).IsEqualTo(second);
+        await Assert.That(first!.Value).IsGreaterThan(0);
+    }
+
+    [Test]
+    [Arguments("a required property is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Label: Text length(1, 10)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a property is renamed", "Tally: entity {\n  Name: Text unique length(1, 20)\n  Count: Number default(0) range(0, 1000000)\n  Bump: action { assign Count to Count + 1 }\n}")]
+    [Arguments("an entity is added", CounterBody + "\nOther: entity {\n  Code: Text length(1, 5)\n}")]
+    [Arguments("a Number becomes optional", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number optional range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a unique index is dropped", "Tally: entity {\n  Name: Text length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a length bound changes", "Tally: entity {\n  Name: Text unique length(1, 30)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a link is added", CounterBody + "\nOwner: entity {\n  Code: Text length(1, 5)\n  tallies: many Tally\n}")]
+    [Arguments("a stage is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}")]
+    [Arguments("a column is removed", "Tally: entity {\n  Name: Text unique length(1, 20)\n}")]
+    [Arguments("a Number becomes a Decimal", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Decimal default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("an entity is renamed", "Count: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a table name is set", "Tally: entity table(\"TALLY_ROWS\") {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    public async Task SchemaId_SchemaChange_Differs(string change, string body) {
+        var baseline = SchemaIdOf(CounterHeader + CounterBody);
+        var changed = SchemaIdOf(CounterHeader + body);
+
+        await Assert.That(changed).IsNotNull().Because(change);
+        await Assert.That(changed).IsNotEqualTo(baseline).Because(change);
+    }
+
+    private const string Tally1 = "Tally: entity {\n  Name: Text unique length(1, 20)\n";
+
+    [Test]
+    [Arguments("Date becomes DateTime", Tally1 + "  When: Date optional\n}", Tally1 + "  When: DateTime optional\n}")]
+    [Arguments("Text becomes an enum", Tally1 + "  Kind: Text optional\n}", "Level: enum { Low, High }\n" + Tally1 + "  Kind: Level optional\n}")]
+    // The CHECK constraint is emitted only for a range the analysis proves; an action that writes N from a free parameter
+    // removes the proof, so the CHECK goes: a real schema difference (the guide says so).
+    [Arguments("an action changes whether a range is proven", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 10)\n}", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 10)\n  Set: action (v: Number) { assign N to v }\n}")]
+    [Arguments("a stage is removed", Tally1 + "  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}", Tally1 + "}")]
+    [Arguments("a navigation is removed", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n}")]
+    [Arguments("a link becomes owned", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many owned Tally\n}")]
+    [Arguments("an entity is removed", Tally1 + "}\nOther: entity {\n  Code: Text unique\n}", Tally1 + "}")]
+    public async Task SchemaId_BetweenTwoDocuments_Differs(string change, string a, string b) {
+        await Assert.That(SchemaIdOf(CounterHeader + b)).IsNotEqualTo(SchemaIdOf(CounterHeader + a)).Because(change);
+    }
+
+    /// <summary>A <c>key(...)</c> designation changes routes, not a table or an index (the key index is never printed).</summary>
+    [Test]
+    public async Task SchemaId_KeyDesignationChange_HasNoDatabaseEffect_SoTheIdStays() {
+        var a = CounterHeader + "Tally: entity key(Name) {\n  Name: Text unique length(1, 20)\n  Code: Text unique length(1, 20)\n}";
+        var b = CounterHeader + "Tally: entity key(Code) {\n  Name: Text unique length(1, 20)\n  Code: Text unique length(1, 20)\n}";
+
+        await Assert.That(SchemaIdOf(b)).IsEqualTo(SchemaIdOf(a));
+    }
+
+    [Test]
+    public async Task SchemaId_LineEndings_AreNormalisedBeforeHashing() {
+        var unix = "poly-schema-id/1\nb.Property<int>(\"Id\");\nb.HasKey(\"Id\");\n";
+        var windows = unix.Replace("\n", "\r\n", StringComparison.Ordinal);
+
+        await Assert.That(MinimalApiGenerator.FoldSchemaId(MinimalApiGenerator.NormalizeSchemaIdInput(windows)))
+            .IsEqualTo(MinimalApiGenerator.FoldSchemaId(MinimalApiGenerator.NormalizeSchemaIdInput(unix)));
+        await Assert.That(MinimalApiGenerator.NormalizeSchemaIdInput(windows)).IsEqualTo(unix);
+    }
+
+    [Test]
+    [Arguments("an action body", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 2 }\n}")]
+    [Arguments("an action is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n  Reset: action { assign N to 0 }\n}")]
+    [Arguments("a policy is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Positive: policy { N > 0 }\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a comment", "// a note\nTally: entity {\n  // another\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    public async Task SchemaId_NonSchemaChange_Unchanged(string change, string body) {
+        var baseline = SchemaIdOf(CounterHeader + CounterBody);
+        var changed = SchemaIdOf(CounterHeader + body);
+
+        await Assert.That(changed).IsEqualTo(baseline).Because(change);
+    }
+
+    [Test]
+    public async Task SchemaId_SqliteHost_CreatedSetsIt_ExistingIsCompared_AndNamesTheFile() {
+        var program = HostProgram(CounterHeader + CounterBody);
+
+        await Assert.That(program).Contains("var created = await db.Database.EnsureCreatedAsync();");
+        await Assert.That(program).Contains("PRAGMA user_version");
+        await Assert.That(program).Contains("different version of the model");
+        await Assert.That(program.IndexOf("different version of the model", StringComparison.Ordinal))
+            .IsLessThan(program.IndexOf("SeedAsync(db)", StringComparison.Ordinal));
+    }
+
+    [Test]
+    [Arguments("uses persistence")]
+    [Arguments("uses sqlserver")]
+    public async Task SchemaId_NonSqliteHost_HasNoCheck(string store) {
+        var program = HostProgram("domain Counter\nuses http\n" + store + "\n" + CounterBody);
+
+        await Assert.That(program).DoesNotContain("user_version");
+        await Assert.That(program).DoesNotContain("schemaId");
+    }
+
+    internal static MinimalApiGenerator GeneratorFor(string poly) {
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None);
+        var domain = result.Domain!;
+        var analysis = result.Analysis!;
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        return new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate);
+    }
+
+    private static string WithoutWhitespace(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+    /// <summary>The id is computed from a second <c>DbContextGenerator</c> run, so a drift from the artifact the app
+    /// actually compiles must fail here: the hashed body is the <c>OnModelCreating</c> text of the emitted file.</summary>
+    [Test]
+    public async Task SchemaId_HashedModelText_IsTheOnModelCreatingOfTheEmittedDbContext() {
+        var poly = CounterHeader + "Level: enum { Low, High }\n" + CounterBody.Replace("Bump:", "Kind: Level optional\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n  Bump:", StringComparison.Ordinal)
+            + "\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}";
+        var emitted = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None).Files.Single(f => f.FileName == "CounterDbContext.cs").Source;
+        var input = GeneratorFor(poly).SchemaIdInput();
+        var body = input.Split('\n').Skip(1).TakeWhile(l => !l.StartsWith("column ", StringComparison.Ordinal)
+            && !l.StartsWith("stage ", StringComparison.Ordinal) && !l.StartsWith("navigation ", StringComparison.Ordinal));
+
+        await Assert.That(WithoutWhitespace(emitted)).Contains(WithoutWhitespace(string.Join("\n", body)));
     }
 }

@@ -21,6 +21,7 @@ public sealed partial class MinimalApiGenerator {
     private readonly Domain _domain;
     private readonly List<Entity> _entities;
     private readonly string _domainName;
+    private readonly StorageModel _storageModel;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
     private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
@@ -51,6 +52,7 @@ public sealed partial class MinimalApiGenerator {
         _vendor = vendor;
         _catalog = catalog;
         _domain = domain;
+        _storageModel = storageModel;
         _entities = domain.Types.OfType<Entity>().ToList();
         _domainName = domain.Name;
         _storageLookup = storageModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
@@ -242,12 +244,13 @@ public sealed partial class MinimalApiGenerator {
                     TypeArguments = [new TypeReference(dbContextName)]
                 })
         };
+        var scopeVariables = new List<Variable> { dbVar };
         if (string.Equals(_vendor, "sqlite", StringComparison.Ordinal)) {
-            scopeBody.Add(new Await(
-                new Invoke(
-                    new Member(
-                        new Member(new Variable("db"), "Database"),
-                        "EnsureCreatedAsync"))));
+            var schemaId = SchemaId();
+            var createdVar = new Variable("created");
+            topLevelStatements.Add(Init("schemaId", new Constant(schemaId)));
+            scopeBody.AddRange(BuildSqliteSchemaCheck(dbVar, createdVar, schemaId));
+            scopeVariables.Add(createdVar);
         }
         scopeBody.Add(new Await(new Invoke(new Variable("SeedAsync"), new Variable("db"))));
         topLevelStatements.Add(new UsingStatement(
@@ -255,7 +258,7 @@ public sealed partial class MinimalApiGenerator {
                 new Invoke(new Member(
                     new Member(new TypeReference(AppVar), "Services"),
                     "CreateScope"))),
-            new Block(scopeBody, [dbVar])));
+            new Block(scopeBody, [.. scopeVariables])));
 
         // ── Endpoints ──
         foreach (var entity in _entities.Where(e => GetStorageEntity(e).IsRoot))

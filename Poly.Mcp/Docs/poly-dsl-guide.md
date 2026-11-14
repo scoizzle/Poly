@@ -567,7 +567,7 @@ entity itself, or a cycle of required to-ones across entities (`a: B` with `b: A
 navigation breaks a cycle. An entity whose to-one navigations are all `optional` is a root
 structurally; storage and HTTP take root-ness from the aggregate, where an entity nothing
 owns is a root too. **Over HTTP, an entity with a required link has no `POST` route and no
-seed row**: a POST body carries scalars only. Declaring the link `optional` keeps the route. A
+seed row** <!-- TODO(orchestrator): P-11b -->: a POST body carries scalars only. Declaring the link `optional` keeps the route. A
 parent action that uses `create in` creates one only when the parent has a collection of it
 (`CheckOut: action { create in loans { book: book } }` serves `POST
 /api/patrons/{email}/checkout`). An MCP create takes the link. A `create in` into a required
@@ -2159,3 +2159,126 @@ Order: entity {
 ```
 
 This domain parses, analyzes clean, and round-trips through `apply_dsl` → `export_dsl`.
+
+## 14. Stability in this release
+
+What an author or a client may rely on in this release, what may still change, and what is known to be wrong. A
+"known wrong" item says what a user sees, on which host, and the row or issue that removes it.
+
+### Stable
+
+- **The DSL** as this guide documents it.
+- **The JSON body of an entity**: its declared scalars (camel-cased member names) and, when the entity has stages,
+  `currentStage`.
+- **The HTTP failure shape**: a failure the domain raises is ProblemDetails whose `title` is the failure kind (see
+  *HTTP failures*, section 11). The statuses are `400` for `Required`, `Range`, `Length`, `Pattern`, `Enum`,
+  `Arithmetic`, `Argument` and `Constraint`; `409` for `Stage`, `Link`, `Unique` and `Conflict` (nothing raises
+  `Conflict` yet); `422` for `Policy`; `500` for `Cascade`; and `404` with title `Not Found` for an unknown id. A body
+  the host's JSON binder refuses (a wrong JSON type, an unknown enum string, a JSON `null` for an action argument) is
+  a `400` with an empty body, not ProblemDetails (see *Known wrong*).
+
+### Not stable
+
+- **Navigations in a JSON body**: whether they appear, and their shape, may change.
+- **The C# surface**: C# text read or written by the C# reader and writer, and trees built through the API.
+- **Generated C# member names** beyond those this guide documents.
+- **MCP tool output text.**
+
+### Databases
+
+SQLite is the supported store. A generated SQLite app embeds an id for its schema and stamps a database it creates
+with it (`PRAGMA user_version`). Pointed at a file made by a different version of the model, it exits at startup, before
+it listens, with one line that names the file. A file that has tables and no id (made by an app generated before this
+check, or by another tool) is refused the same way: nothing can vouch for it, and every SQLite database made by an
+earlier release is such a file. The id covers tables, columns and their types and nullability, the stage column of an
+entity with stages, keys, indexes, relationships and check constraints. A change to an action body, a policy, a comment,
+a route or a `key(...)` designation does not change it, unless the change decides whether a `range` is proven: a CHECK
+constraint is emitted only for a proven range, so adding or removing that CHECK changes the id. There are no migrations:
+delete the file, or run the app from another directory (the path is fixed in the generated host: `<domain>.db`,
+relative to the working directory). SQL Server and in-memory hosts have no startup check.
+
+What the id does not cover, and what that costs:
+
+- **Enum members and stage names** are stored as integers by declaration order. Inserting, reordering or removing a
+  member or a stage keeps the id and silently re-labels the stored rows (renaming one, or adding one at the end, is
+  harmless). This is a known wrong item too.
+- **Reordering declarations** (properties, entities, links) changes the id although the schema is the same: the file is
+  refused, and deleting it is the only way on.
+- **A later release** whose generator prints the model differently refuses every existing database; the first line of
+  the id's input (`poly-schema-id/1`) is the version of that input.
+- **Two instances started at once on a fresh file, or a crash between creating the tables and writing the id,** leave a
+  file the next start refuses: delete it.
+
+### New in this release, where you will meet it
+
+- A bare to-one link is required and permanent; `optional` opts out (section 4, *A to-one navigation is required*).
+- `null` is always the absence of a value, and an empty string is a value (section 3, *`null` and optional values*).
+- A literal written `7.0` is a whole number, so `7.0 / 2` is 3 (section 8, *Integer division*).
+- `==` and `!=` on a value type: see the `==` item under *Known wrong*.
+
+### Known wrong
+
+- **Two creates with the same unique value, at once** (every host with a unique index): one answers `500` instead of
+  `409 Unique`, because the unique index refuses the second save after the host's check has passed. Removed by P-09.
+- **A read through a to-one link that is not linked** (both hosts) answers differently by position. A guard, a policy
+  read or an `invoke` refuses the action with `Required` (`400` over HTTP). A comparison through the unlinked hop is
+  false for every operator, `!=` and `is not` included, whereas an absent value at the end of a set link makes `!=`
+  true. An `assign` from it fails: the simulator reports `Member 'Score' requires a non-null instance`, and over HTTP
+  the generated C# throws and the host answers `500`. Removed by #936.
+- **`==` on a value type** (simulator): it compares the JSON text of an argument payload, so equal values with their
+  fields in another order, or `2` against `2.0` in a `Decimal` field, are unequal there; the generated C# is right.
+  Removed by X-06.
+- **`when` handlers over HTTP** (generated app): a handler fires only when its subscriber was registered in the same
+  request. A handler that watches a stored entity's later transition does not fire, though it does in the simulator. It
+  is the first item of the next release (#560). The shipped actions it affects are crm `Opportunity.Win` and
+  `Ticket.Close` (to `Account`), hotel `ReleaseSection` and `ReleaseHall` (to `Guest`), university `Enrollment.Drop`,
+  `Enrollment.Complete` and `Enrollment.Confirm`, grep `Line` Marked and `Source` Scanned, and the library loans
+  Returned.
+- **The library demo's `Overdue` stage** has no transition into it (DMSS007), so `when loans Overdue` cannot fire on any
+  host. This is a defect of the demo document, not of a host; the document's author removes it.
+- **Links and ids in a `GET`** (generated app): a link comes back null or unloaded, and a `many` collection comes back
+  empty although it has members (#594). An entity without a natural key has no `id` in its JSON body, and its create
+  answers `200` with no `Location` (P-12).
+- **An action called with `{}`, or with a `null` Number or Boolean argument** (simulator and HTTP): it stores `0` or
+  `false`. Over HTTP an explicit JSON `null` is a `400` with an empty body. Removed by X-05.
+- **Overloads, `M(decimal?)` declared before `M(long?)`** (C# surface only): an `int` argument binds `decimal?` where C#
+  binds `long?`. Removed by #847.
+- **A natural key containing `/`** (HTTP): the create succeeds, but no route reaches the row, and the `Location` of key
+  `a/b` reaches a different row whose key is literally `a%2Fb`. Removed by P-12 and F-13.
+- **Optional and defaulted properties in a create body** (HTTP): they are ignored, because the create DTO carries the
+  required scalars only; the simulator accepts them (P-11). A wrong JSON type, or an unknown enum string for a required
+  enum, answers `400` with an empty body (P-14).
+- **An optional unique key** (generated app): a `Text unique optional` property on an entity with a required scalar
+  stops the host at boot, and every create on a `Date unique optional` key answers `409`, the first included (#611).
+- **A `Binary` property**: analysis accepts it and every host then fails with `Type with name 'Binary' not found`
+  (#905).
+- **A stored `DateTime` in a `GET`** (generated app) comes back without its `Z`: the clock time is right, the UTC
+  marker is lost through SQLite. Removed by #937.
+- **Names**: a property named `Created` (#927) and an action named `Add` on an entity that has a `many` link and a
+  `unique` property (#934) fail to build. A domain named like a C# keyword is refused, and a domain named `DateTime`
+  that declares a `DateTime` property does not compile (CS0118) (E-10).
+- **Assigning an absent optional Text**: the simulator stores `""`, the generated C# stores `null` (#929).
+- **A stage `require` at create**: it is not checked when an instance is created (#576, L-17).
+- **`assign Qty to Dec * 2`** (a Number target, a Decimal operand): analysis accepts it and the generated C# does not
+  compile (T-07).
+- **A `Decimal` with a `range`** (SQLite host): it is stored as TEXT with a CHECK, so a valid create can fail: a `POST`
+  of crm `Product` (`ListPrice: Decimal range(0, 100000000)`) and of hotel `RoomType` answers `500` (#559, P-05).
+- **An entity with no required scalar** (generated app): the host does not compile (`ItemDto` could not be found), for
+  an entity of only optional properties and for one of only defaulted properties (P-11; #588, #641).
+- **An entity with a required link** (generated app) has no `POST` route, create DTO, `.http` sample or seed row, so it
+  cannot be created over HTTP (a `POST` answers `405`); saas `Account` cannot be created over HTTP at all, because the
+  target of its required link has no create route. <!-- TODO(orchestrator): P-11b restores the route with the link in the request body; rewrite this item after it lands. -->
+- **An action the generator cannot follow**, such as a `when` handler chain that keeps registering subscribers, is
+  refused when the app is generated, not served (#560).
+- **`poly_export csharp`** prints one file-scoped `namespace` line per entity and enum for a domain with more than one,
+  so its single-file output does not compile (CS1529, CS8954); the host files are unaffected (theme E, #685).
+- **Enum members and stage names** are stored as integers by declaration order: inserting, reordering or removing one
+  re-labels stored rows with no error (see *Databases*). No check exists in this release, and no row removes it: there
+  are no migrations.
+- **The database accepts a null foreign key** for a required link: only the generated C# checks it. <!-- TODO(orchestrator): L-15a half (b) (EF IsRequired/OnDelete) removes this item; delete it after it lands. --> Removed by L-15a half (b).
+- **MCP `add relationship`** cannot write `optional`, and JSON Schema, SHACL and MCP describe do not show a link's
+  requiredness. Removed by L-15.
+- **An optional temporal value compared with a different temporal type** (C# surface only): it is refused although C#
+  defines the comparison (T-21b).
+- **`poly_check`** answers `unknown` for every write it did not verify, and an action parameter cannot carry a
+  constraint (F-08), so a parameter written to a bounded property is always `unknown`.

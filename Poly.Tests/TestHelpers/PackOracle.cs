@@ -34,12 +34,18 @@ public sealed class PackOracleBootOptions {
 
     /// <summary>False returns right after launch, without waiting for the listening line.</summary>
     public bool WaitForReady { get; init; } = true;
+
+    /// <summary>An existing directory to run in instead of a fresh one, so two boots share one database file. The
+    /// oracle never deletes it; whoever made it does.</summary>
+    public string? RunDirectory { get; init; }
 }
 
 /// <summary>A boot that did not reach a listening host. The child, if one started, is already dead.</summary>
 public sealed class PackOracleBootException(
-    string message, int? childPid, string? runDirectory, string errorTail, Exception? inner = null)
+    string message, int? childPid, string? runDirectory, string errorTail, Exception? inner = null, int? exitCode = null)
     : Exception(message, inner) {
+    /// <summary>The child's exit code when it exited before listening, else null.</summary>
+    public int? ExitCode { get; } = exitCode;
     public int? ChildPid { get; } = childPid;
     public string? RunDirectory { get; } = runDirectory;
     public string ErrorTail { get; } = errorTail;
@@ -94,10 +100,13 @@ public sealed class PackOracle : IAsyncDisposable {
     private readonly RingBuffer _stderr;
     private readonly string _pidFilePath;
     private readonly string _runDirectory;
+    private readonly bool _ownsRunDirectory;
     private int _disposed;
 
     private PackOracle(
-        Process process, HttpClient client, RingBuffer stdout, RingBuffer stderr, string runDirectory, string pidFilePath) {
+        Process process, HttpClient client, RingBuffer stdout, RingBuffer stderr, string runDirectory, string pidFilePath,
+        bool ownsRunDirectory) {
+        _ownsRunDirectory = ownsRunDirectory;
         _process = process;
         Client = client;
         _stdout = stdout;
@@ -182,12 +191,14 @@ public sealed class PackOracle : IAsyncDisposable {
         var slotHeld = true;
         var started = false;
         string? runDirectory = null;
+        var ownsRunDirectory = true;
         string? pidFile = null;
         Process? process = null;
         var stdout = new RingBuffer();
         var stderr = new RingBuffer();
         try {
-            runDirectory = Path.Combine(WorkRoot, Guid.NewGuid().ToString("N"));
+            ownsRunDirectory = options.RunDirectory is null;
+            runDirectory = options.RunDirectory ?? Path.Combine(WorkRoot, Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(runDirectory);
 
             var ready = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -220,7 +231,7 @@ public sealed class PackOracle : IAsyncDisposable {
             pidFile = WritePidFile(process, runDirectory, app.Directory, launchedUtc);
 
             if (!options.WaitForReady) {
-                var detached = new PackOracle(process, NewClient(null), stdout, stderr, runDirectory, pidFile);
+                var detached = new PackOracle(process, NewClient(null), stdout, stderr, runDirectory, pidFile, ownsRunDirectory);
                 _live[detached] = 0;
                 slotHeld = false;
                 return detached;
@@ -231,10 +242,10 @@ public sealed class PackOracle : IAsyncDisposable {
                 await KillAndWaitAsync(process);
                 throw new PackOracleBootException(
                     $"'{app.DomainName}' exited before listening (exit {SafeExitCode(process)}).\n{Diagnostics(stdout, stderr)}",
-                    process.Id, runDirectory, stderr.Tail());
+                    process.Id, runDirectory, stderr.Tail(), exitCode: SafeExitCode(process));
             }
 
-            var oracle = new PackOracle(process, NewClient(new Uri(ready.Task.Result)), stdout, stderr, runDirectory, pidFile);
+            var oracle = new PackOracle(process, NewClient(new Uri(ready.Task.Result)), stdout, stderr, runDirectory, pidFile, ownsRunDirectory);
             _live[oracle] = 0;
             slotHeld = false;
             return oracle;
@@ -257,7 +268,7 @@ public sealed class PackOracle : IAsyncDisposable {
                 finally {
                     try {
                         process?.Dispose();
-                        Cleanup(runDirectory, pidFile);
+                        Cleanup(ownsRunDirectory ? runDirectory : null, pidFile);
                     }
                     finally {
                         _childSlots.Release();
@@ -394,7 +405,7 @@ public sealed class PackOracle : IAsyncDisposable {
         }
         finally {
             _process.Dispose();
-            Cleanup(_runDirectory, _pidFilePath);
+            Cleanup(_ownsRunDirectory ? _runDirectory : null, _pidFilePath);
             _childSlots.Release();
         }
     }
@@ -701,7 +712,7 @@ public sealed class PackOracle : IAsyncDisposable {
                 }
                 catch (System.ComponentModel.Win32Exception) {
                 }
-                Cleanup(oracle._runDirectory, oracle._pidFilePath);
+                Cleanup(oracle._ownsRunDirectory ? oracle._runDirectory : null, oracle._pidFilePath);
             }
         };
         return true;

@@ -22,10 +22,31 @@ builder.Services.AddScoped<Poly.Runtime.IStoragePort, LibraryDbContext>();
 
 var app = builder.Build();
 
+var schemaId = 2142194103;
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<LibraryDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    var created = await db.Database.EnsureCreatedAsync();
+    if (created)
+    {
+        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 2142194103");
+    }
+    else
+    {
+        var found = await db.Database.SqlQueryRaw<int>("SELECT user_version AS Value FROM pragma_user_version").SingleAsync();
+        var databaseFile = System.IO.Path.GetFullPath(db.Database.GetDbConnection().DataSource);
+        if (found == 0)
+        {
+            Console.Error.WriteLine($"The database '{databaseFile}' has tables but no schema id (it was created before schema ids existed, or by another tool), so it is treated as a different version of the model; delete it, or run the app from another directory.");
+            Environment.Exit(1);
+        }
+        if (found != schemaId)
+        {
+            Console.Error.WriteLine($"The database '{databaseFile}' was created by a different version of the model (it has schema id {found}, this build has {schemaId}); delete it, or run the app from another directory.");
+            Environment.Exit(1);
+        }
+    }
     await SeedAsync(db);
 }
 

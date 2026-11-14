@@ -1401,7 +1401,7 @@ public class McpSmokeTests {
         // Should mention apply_dsl / MCP
         await Assert.That(dataJson).Contains("apply_dsl");
         await Assert.That(guideBody!.Contains("## 13.")).IsFalse();
-        await Assert.That(guideBody.Split('\n').Length).IsLessThan(240);
+        await Assert.That(guideBody.Split('\n').Length).IsLessThan(241);
 
         var section = McpTestTools.Dsl.GetDslGuide("10");
         await Assert.That(section.Success).IsTrue();

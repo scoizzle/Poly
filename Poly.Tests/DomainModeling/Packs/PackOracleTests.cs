@@ -3,7 +3,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
+using Poly.Tests.DomainModeling.Lowering;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Packs;
@@ -247,6 +249,165 @@ public class PackOracleTests {
         using var after = JsonDocument.Parse(await second.Client.GetStringAsync("/api/tallies"));
         await Assert.That(NamesOf(after)).DoesNotContain("t1");
         await Assert.That(second.DatabasePath).IsNotEqualTo(firstDb);
+    }
+
+    private const string CounterTally = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+        }
+        """;
+
+    private const string StagedCounterTally = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+          Open: stage { Close: action { transition to Done } }
+          Done: stage { }
+        }
+        """;
+
+    private static PackOracleDomain Counter(string name, string body) =>
+        new(name, "domain Counter\nuses http\nuses sqlite\n" + body, "/api/tallies");
+
+    private static async Task<string> WithRunDirectory(Func<string, Task> body) {
+        var directory = Path.Combine(Path.GetTempPath(), "poly-schema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try {
+            await body(directory);
+        }
+        finally {
+            Directory.Delete(directory, recursive: true);
+        }
+        return directory;
+    }
+
+    private static int ReadUserVersion(string database) {
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA user_version";
+        return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task PostTally(PackOracle oracle, string json) {
+        using var post = await oracle.Client.PostAsync("/api/tallies", new StringContent(json, Encoding.UTF8, "application/json"));
+        await Assert.That((int)post.StatusCode).IsEqualTo(201);
+    }
+
+    private static async Task AssertRefusedAtStartup(string directory, PackOracleDomain model, params string[] expected) {
+        PackOracleBootException? failure = null;
+        try {
+            await using var unexpected = await PackOracle.BootAsync(model, options: new PackOracleBootOptions { RunDirectory = directory });
+        }
+        catch (PackOracleBootException refused) {
+            failure = refused;
+        }
+        await Assert.That(failure).IsNotNull().Because("the app must exit at startup, not listen");
+        await Assert.That(failure!.ExitCode).IsNotNull();
+        await Assert.That(failure.ExitCode).IsNotEqualTo(0);
+        foreach (var text in expected)
+            await Assert.That(failure.ErrorTail).Contains(text);
+        await Assert.That(failure.ErrorTail.Split('\n').Count(l => l.Contains("counter.db", StringComparison.Ordinal))).IsEqualTo(1);
+    }
+
+    /// <summary>S-decl: a database made by a different schema fails at startup, not on the first request.
+    /// Each change here makes the old file unusable (a column, a rename, a table).</summary>
+    [Test]
+    [Timeout(300_000)]
+    [Arguments("required property added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Label: Text length(1, 10)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("property renamed", "Tally: entity {\n  Name: Text unique length(1, 20)\n  Count: Number default(0) range(0, 1000000)\n  Bump: action { assign Count to Count + 1 }\n}")]
+    [Arguments("entity added", CounterTally + "\nOther: entity {\n  Code: Text length(1, 5)\n}")]
+    [Arguments("stage added", StagedCounterTally)]
+    public async Task Boot_OldSchemaDatabase_ExitsWithClearMessage(string change, string changedBody, CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            await using (var first = await PackOracle.BootAsync(
+                Counter("SchemaA", CounterTally), options: new PackOracleBootOptions { RunDirectory = directory })) {
+                await PostTally(first, """{"Name":"t1"}""");
+            }
+            var database = Path.Combine(directory, "counter.db");
+            var before = ReadUserVersion(database);
+
+            await AssertRefusedAtStartup(
+                directory, Counter("SchemaB", changedBody),
+                "different version of the model", "counter.db");
+
+            await Assert.That(before).IsNotEqualTo(0);
+            await Assert.That(ReadUserVersion(database)).IsEqualTo(before);
+            _ = change;
+        });
+    }
+
+    /// <summary>A stage is a column EF maps by convention (nothing prints it), so the id carries a line for it: without one,
+    /// the document with a stage boots on the old file and every request for the entity answers 500.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_StageAdded_ExitsWithClearMessage(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        const string plain = "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n}";
+        const string staged = "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}";
+        await WithRunDirectory(async directory => {
+            await using (var first = await PackOracle.BootAsync(
+                Counter("SchemaA", plain), options: new PackOracleBootOptions { RunDirectory = directory }))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            await AssertRefusedAtStartup(directory, Counter("SchemaB", staged), "different version of the model", "counter.db");
+        });
+    }
+
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_SameSchema_Twice_Serves(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var options = new PackOracleBootOptions { RunDirectory = directory };
+            await using (var first = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            await using var second = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options);
+            using var seen = JsonDocument.Parse(await second.Client.GetStringAsync("/api/tallies"));
+            await Assert.That(NamesOf(seen)).Contains("t1");
+            await PostTally(second, """{"Name":"t2"}""");
+        });
+    }
+
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_ActionBodyChanged_SameSchema_Serves(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var options = new PackOracleBootOptions { RunDirectory = directory };
+            await using (var first = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            var edited = CounterTally.Replace("N + 1", "N + 2", StringComparison.Ordinal);
+            await using var second = await PackOracle.BootAsync(Counter("SchemaB", edited), options: options);
+            using var seen = JsonDocument.Parse(await second.Client.GetStringAsync("/api/tallies"));
+            await Assert.That(NamesOf(seen)).Contains("t1");
+            await PostTally(second, """{"Name":"t2"}""");
+        });
+    }
+
+    /// <summary>A file with tables and <c>user_version = 0</c> (made before this slice, or by another tool) cannot be
+    /// vouched for, so it is a different schema: fail closed.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_DatabaseWithTablesAndNoSchemaId_IsRefused(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var database = Path.Combine(directory, "counter.db");
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False")) {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "CREATE TABLE Tallies (Id INTEGER PRIMARY KEY, name TEXT, n INTEGER)";
+                command.ExecuteNonQuery();
+            }
+
+            await AssertRefusedAtStartup(directory, Counter("SchemaA", CounterTally), "no schema id", "different version of the model", "counter.db");
+        });
     }
 
     private static List<string> NamesOf(JsonDocument array) =>
@@ -1538,5 +1699,78 @@ public class PackOracleTests {
                 await Assert.That(Kind(listed)).IsEqualTo(kind).Because($"list member {name}");
             }
         }
+    }
+
+    /// <summary>The schema id's input must account for every column, foreign key and index the database really has: the
+    /// app is booted, the file it created is read back (EF's own output, not a second reading of the model), and each
+    /// table, column and key is looked up in the hashed input. A stage column (EF maps it by convention) or a foreign key
+    /// (derived from a navigation) that no line of the input names fails here.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task SchemaId_Input_AccountsForEveryColumnForeignKeyAndIndexOfTheCreatedDatabase(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        const string body = """
+            Level: enum { Low, High }
+            Tally: entity {
+              Name: Text unique length(1, 20)
+              N: Number default(0) range(0, 1000000)
+              Price: Decimal optional
+              Born: DateTime optional
+              Kind: Level optional
+              Open: stage { Close: action { transition to Done } }
+              Done: stage { }
+            }
+            Owner: entity {
+              Code: Text unique
+              tallies: many Tally
+              spare: Spare optional
+            }
+            Spare: entity {
+              Label: Text unique
+            }
+            """;
+        var model = Counter("SchemaCover", body);
+        var input = Poly.Tests.DomainModeling.Lowering.MinimalApiGeneratorTests.GeneratorFor(model.Poly).SchemaIdInput();
+        var flat = new string(input.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        var navigationNames = input.Split('\n').Where(l => l.StartsWith("navigation ", StringComparison.Ordinal))
+            .SelectMany(l => new[] { l.Split(' ')[1].Split('.')[0], l.Split(' ')[1].Split('.')[1], l.Split(' ')[3] }).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unaccounted = new List<string>();
+
+        await WithRunDirectory(async directory => {
+            await using (await PackOracle.BootAsync(model, options: new PackOracleBootOptions { RunDirectory = directory })) { }
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(directory, "counter.db")};Pooling=False");
+            connection.Open();
+            List<string> Query(string sql, Func<Microsoft.Data.Sqlite.SqliteDataReader, string> read) {
+                using var command = connection.CreateCommand();
+                command.CommandText = sql;
+                using var reader = command.ExecuteReader();
+                var rows = new List<string>();
+                while (reader.Read())
+                    rows.Add(read(reader));
+                return rows;
+            }
+            var tables = Query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", r => r.GetString(0));
+            await Assert.That(tables.Count).IsEqualTo(3);
+            foreach (var table in tables) {
+                var foreignKeys = Query($"SELECT \"from\" FROM pragma_foreign_key_list('{table}')", r => r.GetString(0)).ToHashSet();
+                foreach (var column in Query($"SELECT name FROM pragma_table_info('{table}')", r => r.GetString(0))) {
+                    var accounted =
+                        Regex.IsMatch(input, $@"^column \w+\.{Regex.Escape(column)} ", RegexOptions.Multiline)
+                        || (column == "CurrentStage" && Regex.IsMatch(input, @"^stage \w+\.CurrentStage ", RegexOptions.Multiline))
+                        || ((column == "Id" || column == "PolyId") && flat.Contains($"Property<int>(\"{column}\")", StringComparison.Ordinal))
+                        || (foreignKeys.Contains(column) && navigationNames.Contains(column.EndsWith("Id", StringComparison.Ordinal) ? column[..^2] : column));
+                    if (!accounted)
+                        unaccounted.Add($"{table}.{column}");
+                }
+                foreach (var index in Query($"SELECT name FROM pragma_index_list('{table}') WHERE origin = 'c'", r => r.GetString(0))) {
+                    foreach (var column in Query($"SELECT name FROM pragma_index_info('{index}')", r => r.GetString(0))) {
+                        if (!foreignKeys.Contains(column) && !flat.Contains($"HasIndex(x=>x.", StringComparison.Ordinal))
+                            unaccounted.Add($"{table} index on {column}");
+                    }
+                }
+            }
+        });
+
+        await Assert.That(unaccounted).IsEmpty();
     }
 }

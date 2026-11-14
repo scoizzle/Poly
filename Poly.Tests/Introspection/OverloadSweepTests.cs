@@ -133,13 +133,6 @@ public class OverloadSweepTests {
     ];
 
     /// <summary>
-    /// L-04a: the initial stage's entry and every subscription handler RETURN a failure where they threw one. The
-    /// <c>ConstraintFailureException</c> constructor and <c>ErrorMessage</c> sites leave these units; <c>Failure</c>, <c>Error</c>,
-    /// <c>IsSuccess</c> and <c>Success</c> sites arrive (the entry now returns a result and Create propagates it), and a
-    /// first occurrence can move. Each affected unit's identity set changes by exactly those lines; no call site rebinds
-    /// to another overload of the same method.
-    /// </summary>
-    /// <summary>
     /// L-08b: every Create parameter is <c>T? x = default</c> and the lowered body owns Required and the defaults, so a
     /// runtime default (<c>now</c>, <c>today</c>) moves from the constructor into <c>Create</c>, and a required value-type
     /// property gets its first <c>DomainFailure.Required</c> / <c>DomainResult&lt;T&gt;.Failure</c> guard. Only first occurrences
@@ -148,6 +141,13 @@ public class OverloadSweepTests {
     private const string L08bWhy = "L-08b: the lowered Create owns Required and defaults (runtime defaults move from the constructor "
         + "into Create; a required value-type slot gains a Required guard), no overload winner changes";
 
+    /// <summary>
+    /// L-04a: the initial stage's entry and every subscription handler RETURN a failure where they threw one. The
+    /// <c>ConstraintFailureException</c> constructor and <c>ErrorMessage</c> sites leave these units; <c>Failure</c>, <c>Error</c>,
+    /// <c>IsSuccess</c> and <c>Success</c> sites arrive (the entry now returns a result and Create propagates it), and a
+    /// first occurrence can move. Each affected unit's identity set changes by exactly those lines; no call site rebinds
+    /// to another overload of the same method.
+    /// </summary>
     private const string L04aWhy = "L-04a: a failure that was thrown is returned (ConstraintFailureException.ctor and ErrorMessage out; "
         + "DomainResult.Failure, Error, IsSuccess and Success in), no overload winner changes";
 

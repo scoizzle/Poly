@@ -425,7 +425,8 @@ Token: entity {
 }
 ```
 
-A property without `optional` rejects a missing or empty Text value when it is written.
+A property without `optional` rejects a missing (null) value when it is written, for every
+type. An empty string is a value: refusing it is the job of `length(1, …)` (a `Length` failure).
 The word `required` is not a constraint. Writing it is a positioned parse error:
 a property is required unless it is marked `optional`.
 

@@ -102,10 +102,12 @@ public sealed partial class EffectLoweringPass {
             }
         }
         // Requiredness is a fact on this branch (a property is required unless it is
-        // marked 'optional'), not a constraint object, so it is decided here.
+        // marked 'optional'), not a constraint object, so it is decided here. Required
+        // means non-null, so any string constant, "" included, satisfies it; a length or
+        // pattern that refuses "" was checked in the loop above.
         if (NeedsRequiredValueCheck(prop)) {
             if (prop.Type.TypeName is "Text" or "String") {
-                if (value is not Constant { Value: string requiredText } || requiredText.Length == 0)
+                if (value is not Constant { Value: string })
                     return false;
             }
             else if (value is Constant { Value: null }) {

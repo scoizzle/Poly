@@ -158,9 +158,9 @@ See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full tool surface and usa
 - **Stable:** the DSL as the guide documents it; the JSON body of an entity (its declared scalars, plus `currentStage` when it has stages); and the HTTP failure shape (ProblemDetails whose `title` is the failure kind, with the statuses the guide lists).
 - **Not stable:** navigations in a JSON body (whether they appear, and their shape); the C# surface (C# text and API-built trees); generated C# member names beyond those the guide documents; the text MCP tools return.
 - **Databases:** SQLite is the supported store. A generated app exits at startup when its SQLite file was made by a different version of the model, and there are no migrations: delete the file. A SQLite file made before this check existed is refused the same way. SQL Server and in-memory hosts have no startup check.
-- **Known wrong:** the guide's *Stability in this release* (section 11) lists the behaviour known to be wrong in this release, each item with the row or issue that removes it.
+- **Known wrong:** the guide's *Stability in this release* (section 14) lists the behaviour known to be wrong in this release, each item with the row or issue that removes it.
 
-Full lists: [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md), section 11 (*Stability in this release*).
+Full lists: [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md), section 14 (*Stability in this release*).
 
 ## Architecture
 

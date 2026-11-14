@@ -1401,7 +1401,7 @@ public class McpSmokeTests {
         // Should mention apply_dsl / MCP
         await Assert.That(dataJson).Contains("apply_dsl");
         await Assert.That(guideBody!.Contains("## 13.")).IsFalse();
-        await Assert.That(guideBody.Split('\n').Length).IsLessThan(240);
+        await Assert.That(guideBody.Split('\n').Length).IsLessThan(241);
 
         var section = McpTestTools.Dsl.GetDslGuide("10");
         await Assert.That(section.Success).IsTrue();
@@ -1415,6 +1415,15 @@ public class McpSmokeTests {
         // A number names a heading number only: there is no section 1, and "1" must not
         // match the "N1" in section 4's title.
         await Assert.That(McpTestTools.Dsl.GetDslGuide("1").Success).IsFalse();
+
+        // The release declarations are reachable by number and by title, and listed in the short guide's index.
+        foreach (var key in new[] { "14", "Stability in this release" }) {
+            var stability = McpTestTools.Dsl.GetDslGuide(key);
+            await Assert.That(stability.Success).IsTrue();
+            var stabilityBody = stability.Data!.GetType().GetProperty("guide")!.GetValue(stability.Data) as string;
+            await Assert.That(stabilityBody).Contains("Known wrong");
+        }
+        await Assert.That(guideBody).Contains("14. Stability in this release");
 
         // add/remove point here for their payloads, so section 12 must carry them.
         var shapes = McpTestTools.Dsl.GetDslGuide("12");

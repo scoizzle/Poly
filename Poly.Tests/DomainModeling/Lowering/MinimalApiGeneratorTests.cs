@@ -721,10 +721,110 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(http.Success).IsTrue();
         var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(host).Contains("Kw.@event? Kind");
-        // The rest of a keyword-named enum's host (the seed's `Kw.event.A`, the entity file) is unescaped on the base
-        // too, so the whole host does not compile yet; the DTO line must not be one of the errors.
-        var dtoLine = host.Split('\n').Select((text, index) => (text, line: index + 1)).Single(l => l.text.Contains("Kw.@event? Kind")).line;
-        await Assert.That(CompileHost(http.Files!).Where(e => e.StartsWith($"Program.cs: Program.cs({dtoLine},", StringComparison.Ordinal))).IsEmpty();
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    /// <summary>E-10a (#924): the hosts' own names reach C# through the expression position too.</summary>
+    [Test]
+    [Arguments("event: enum { A, B }\n            Thing: entity {\n              Name: Text unique\n              Kind: event\n            }")]
+    [Arguments("class: entity {\n              Name: Text unique\n            }")]
+    [Arguments("class: entity {\n              Name: Text unique\n              things: many Thing\n            }\n            Thing: entity {\n              Name: Text unique\n              owner: class\n            }")]
+    public async Task KeywordNamedTypes_HostAndPlainExportCompile(string body) {
+        var poly = "domain Kw\n            uses sqlite\n            " + body;
+
+        var db = new Compiler().Compile(poly, CompileMode.Db, DbmsPack.Sqlite);
+        await Assert.That(db.Success).IsTrue();
+        await Assert.That(CompileHost(db.Files!).Where(e => !e.Contains("CS5001", StringComparison.Ordinal))).IsEmpty();
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    [Test]
+    public async Task KeywordNamedEnum_SimulatorAndGeneratedCSharpAgreeOnACreateAndAnAction() {
+        var scenario = ParityScenario.FromDsl("""
+            domain Kw
+            uses persistence
+            event: enum { A, B }
+            Thing: entity {
+              Name: Text unique
+              Kind: event
+              Flip: action { assign Kind to "B" }
+            }
+            """, "KeywordEnumParity");
+
+        var outcomes = await scenario.AssertAgree(side => {
+            side.Create("Thing", ("Name", "a"), ("Kind", "A"));
+            side.Invoke("Flip");
+        });
+
+        await Assert.That(outcomes.Select(o => o.Success)).IsEquivalentTo([true, true]);
+        await Assert.That(outcomes[1].State["Kind"]).IsEqualTo("B");
+    }
+
+    [Test]
+    public async Task KeywordNamedEntity_SimulatorAndGeneratedCSharpAgreeOnACreateAndAnAction() {
+        var scenario = ParityScenario.FromDsl("""
+            domain Kw
+            uses persistence
+            class: entity {
+              Name: Text unique
+              Done: Boolean default(false)
+              Finish: action { assign Done to true }
+            }
+            """, "KeywordEntityParity");
+
+        var outcomes = await scenario.AssertAgree(side => {
+            side.Create("class", ("Name", "a"));
+            side.Invoke("Finish");
+        });
+
+        await Assert.That(outcomes.Select(o => o.Success)).IsEquivalentTo([true, true]);
+        await Assert.That(outcomes[1].State["Done"]).IsEqualTo("True");
+    }
+
+    /// <summary>E-10a (#923): a primitive type of a library (the temporal <c>DateTime</c>) is not a generated
+    /// domain type, so the host never namespace-qualifies it.</summary>
+    [Test]
+    public async Task RequiredTemporalMembers_HostCompiles() {
+        const string poly = """
+            domain Shop
+            uses temporal
+            uses sqlite
+            uses http
+            Thing: entity {
+              Name: Text unique
+              Dt: DateTime
+              Tm: Time
+              Du: Duration
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(http.Files!.Single(f => f.FileName == "Program.cs").Source).DoesNotContain("Shop.DateTime");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    [Test]
+    public async Task ActionParameterOfDateTime_HostCompiles() {
+        const string poly = """
+            domain Shop
+            uses temporal
+            uses sqlite
+            uses http
+            Thing: entity {
+              Name: Text unique
+              Book: action (at: DateTime) { }
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
     }
 
     /// <summary>An entity whose create takes an entity-typed property gets no POST route and no DTO, not a route

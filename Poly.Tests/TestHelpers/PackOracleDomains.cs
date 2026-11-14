@@ -411,6 +411,9 @@ public static class PackOracleDomains {
           Born: Date
           Tier: Grade
           Price: Decimal
+          Stamp: DateTime
+          Clock: Time
+          Span: Duration
         }
         """,
         "/api/gizmos");
@@ -450,8 +453,50 @@ public static class PackOracleDomains {
           Born: Date
           Tier: Grade
           Price: Decimal
+          Stamp: DateTime
+          Clock: Time
+          Span: Duration
         }
         """;
+
+    /// <summary>E-10a (#923): a required DateTime, Time and Duration on a creatable root. Stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain Temporal923 { get; } = new(
+        "Temporal923",
+        """
+        domain Shop
+        uses temporal
+        uses sqlite
+        uses http
+
+        Thing: entity {
+          Name: Text unique
+          Dt: DateTime
+          Tm: Time
+          Du: Duration
+        }
+        """,
+        "/api/things");
+
+    /// <summary>E-10a (#924): an enum and an entity named like C# keywords. Stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain KeywordNames924 { get; } = new(
+        "KeywordNames924",
+        """
+        domain Kw
+        uses sqlite
+        uses http
+
+        event: enum { A, B }
+
+        Thing: entity {
+          Name: Text unique
+          Kind: event
+        }
+
+        class: entity {
+          Name: Text unique
+        }
+        """,
+        "/api/things");
 
     /// <summary>P-12a (#687 row P-12): natural keys of each route-key type (Text, Number, Date), a shadow-key
     /// entity, and a keyed entity with a scalar of several types plus a stage for the body-member contract.

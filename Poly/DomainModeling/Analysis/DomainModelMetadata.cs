@@ -49,6 +49,20 @@ internal sealed record BinaryTyping(
     ExprType Result, NumericKind Kind, bool IsIntegerDivision, bool MayOverflow, bool Checked);
 
 /// <summary>
+/// What the analyzer states about one <c>match</c> (T-09a): the one type its arms unify to (<see cref="Unified"/>,
+/// optional when an arm is <c>null</c> or optional) and each arm's own type, the arms in order then the <c>else</c>.
+/// <c>CheckMatch</c> writes it once, from the function inference uses, when every arm is typed and unifies; lowering
+/// reads it to convert each arm to the unified type and fails closed, positioned, when it is absent.
+/// </summary>
+internal sealed record MatchTypingMetadata(ExprType Unified, IReadOnlyList<ExprType> ArmTypes) : IAnalysisMetadata;
+
+/// <summary>
+/// The slot a <c>match</c> is assigned into, stamped by the site that knows it (an assign, a create or invoke argument, a
+/// default) before the match is walked: an enum member and a Text string arm unify only into that enum.
+/// </summary>
+internal sealed record MatchTargetMetadata(ExprType Target) : IAnalysisMetadata;
+
+/// <summary>
 /// The domain's type model for this analysis run, stamped on the <see cref="Domain"/> node by
 /// <c>ExpressionTypeAnalyzer</c>. Consumer contract: a reader runs after the <c>DomainExpressionType</c>
 /// pass and fails closed when the stamp is absent.

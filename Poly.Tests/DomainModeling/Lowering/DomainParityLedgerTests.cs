@@ -9,7 +9,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// A flip is a finding, never a row edit.
 /// </summary>
 public class DomainParityLedgerTests {
-    const string ThemeFormat = @"\A[A-Z]{1,2}-[0-9]{2}\z";
+    const string ThemeFormat = @"\A[A-Z]{1,2}-[0-9]{2}[a-z]?\z";
 
     internal static bool IsSliceId(string value) => System.Text.RegularExpressions.Regex.IsMatch(value, ThemeFormat);
 

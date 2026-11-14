@@ -27,8 +27,10 @@ public interface IExpressionTypeCheck {
 
 /// <summary>
 /// Where the analyzer reached a pack-owned expression, stamped on the node by the walk sites that know it (an assign
-/// value, a create initializer, a comparison operand, a comparison operand beside an optional property). <see cref="Default"/> is every other position, and a
-/// <c>default(...)</c> (see <see cref="ExpressionTypeCheckScope.DefaultTargetTypeName"/>).
+/// value, a create initializer, a comparison operand). <see cref="Default"/> is every other position, and a
+/// <c>default(...)</c> (see <see cref="ExpressionTypeCheckScope.DefaultTargetTypeName"/>). <see cref="OptionalOperand"/> is
+/// no longer stamped (T-21d: a comparison with an optional operand is C#'s lifted comparison and is accepted); the member
+/// stays because removing a public enum member is not a slice's call.
 /// </summary>
 public enum CheckSite { Default, Assign, Operand, OptionalOperand }
 

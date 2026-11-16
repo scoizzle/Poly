@@ -183,21 +183,6 @@ internal static class StrictGateCensus {
         return string.Join('\n', lines);
     }
 
-    /// <summary>Every dead cell analysis accepts, through every door with <see cref="ResidualSteps"/>.</summary>
-    internal static string DeadDoorRows() {
-        var lines = new List<string> { "residual form | dead position = doors" };
-        foreach (var form in ResidualForms)
-            foreach (var position in DeadPositions) {
-                if (DeadDocument(form, position) is not { } dsl) continue;
-                var result = GateParity.Check(dsl, ResidualSteps);
-                var doors = !result.Analysis
-                    ? "analysis rejects"
-                    : $"simulate={Door(result.Simulate, result.SimulateSummary)} csharp={Door(result.CSharp, result.CSharpSummary)} polyc={Door(result.PolycCheck, result.PolycSummary)}";
-                lines.Add($"{form.Label} | {position} = {doors}");
-            }
-        return string.Join('\n', lines);
-    }
-
     /// <summary>The scenario every residual cell runs through the doors: create, the action, leave the first stage.</summary>
     internal static readonly SimStep[] ResidualSteps = [
         SimStep.Create("Order", """{"Stamp":"2026-01-02T00:00:00","Day":"2026-01-02"}""", "o"),
@@ -224,28 +209,6 @@ internal static class StrictGateCensus {
                 lines.Add($"{form.Label} | {position} = {(ResidualDocument(form, position) is { } dsl ? Verdict(dsl) : "n/a")}");
         return string.Join('\n', lines);
     }
-
-    /// <summary>
-    /// Every residual cell analysis accepts, through every door with <see cref="ResidualSteps"/>: the class evidence
-    /// the census needs ON MASTER (a document that passes every door there and fails after the flip is a regression).
-    /// On a head that rejects the cell, only analysis runs.
-    /// </summary>
-    internal static string ResidualDoorRows() {
-        var lines = new List<string> { "residual form | position = doors" };
-        foreach (var form in ResidualForms)
-            foreach (var position in ResidualPositions(form)) {
-                if (ResidualDocument(form, position) is not { } dsl) continue;
-                var result = GateParity.Check(dsl, ResidualSteps);
-                var doors = !result.Analysis
-                    ? "analysis rejects"
-                    : $"simulate={Door(result.Simulate, result.SimulateSummary)} csharp={Door(result.CSharp, result.CSharpSummary)} polyc={Door(result.PolycCheck, result.PolycSummary)}";
-                lines.Add($"{form.Label} | {position} = {doors}");
-            }
-        return string.Join('\n', lines);
-    }
-
-    private static string Door(bool? ok, string? summary) =>
-        ok is true ? "ok" : $"REFUSES ({(summary ?? "").Split('\n')[0].Trim()[..Math.Min(90, (summary ?? "").Split('\n')[0].Trim().Length)]})";
 
     /// <summary>Every grid this slice's verdicts move, by name: the T-04 and T-05a pins plus the residual grid.</summary>
     internal static IReadOnlyList<(string Name, Func<string> Rows)> Grids() => [

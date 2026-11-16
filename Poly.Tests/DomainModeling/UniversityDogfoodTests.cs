@@ -15,7 +15,8 @@ namespace Poly.Tests.DomainModeling;
 /// <summary>
 /// Combined dogfood: one University domain covering enroll/create-in, require-not,
 /// Rel-exists, subscriptions, for-invoke, same-stage dispatch, unique, pattern,
-/// enums, and export compile.
+/// and enums. Its printed C# is compiled by <c>ParityTests.PrintedCSharpCompiles</c> and snapshotted by
+/// <c>EmitGoldenTests</c>.
 /// </summary>
 public class UniversityDogfoodTests {
     private static string PolyText() {
@@ -51,37 +52,6 @@ public class UniversityDogfoodTests {
             dir = Directory.GetParent(dir)?.FullName;
         }
         throw new InvalidOperationException("Could not find repo root from " + AppContext.BaseDirectory);
-    }
-
-    [Test]
-    public async Task University_Export_Compiles() {
-        var (domain, analysis) = Evolve();
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        var cs = new CSharpGenerator().Generate(types);
-
-        await Assert.That(cs).DoesNotContain("void Notify(string stageName)");
-        await Assert.That(cs).Contains("Instructor? instructor = default");
-        await Assert.That(cs).Contains("IEnumerable<Enrollment>? enrollments = default");
-        await Assert.That(cs).Contains("void AttachEnrollments");
-        await Assert.That(cs).Contains("section.AttachEnrollments");
-        await Assert.That(cs).Contains("this.Waitlist.Count");
-        await Assert.That(cs).Contains("this.Enrollments.Count");
-        await Assert.That(cs).DoesNotContain("Policy 'HasWaiters' requires store-aware");
-        await Assert.That(cs).Contains("if (score >= 70L)");
-        await Assert.That(cs).Contains("WhenEachEnrollmentCompleted");
-
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
-        var references = RoslynReferences.Platform;
-        var compilation = CSharpCompilation.Create(
-            "UniversityExport",
-            [tree],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        var errors = compilation.GetDiagnostics()
-            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-            .Select(d => d.ToString())
-            .ToArray();
-        await Assert.That(errors).IsEmpty();
     }
 
     [Test]

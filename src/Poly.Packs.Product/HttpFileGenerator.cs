@@ -111,14 +111,12 @@ public sealed class HttpFileGenerator {
                 var scalarProps = GetCreateScalarParams(entity)
                     .Select(p => entity.Properties.First(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal)))
                     .ToList();
-                // A Required link is sent as the target's key (the target's sample key, as the route examples use).
+                // A Required link is sent as the target's key, the value the target's own create sample posts for it, so
+                // the target's sample and this one succeed in file order. CreatesDirectly guarantees a natural key.
                 var members = scalarProps.Select(p => $"\"{p.Name}\": {GetExampleJsonValue(p)}")
-                    .Concat(GetCreateSlots(entity).Where(MinimalApiGenerator.IsRequiredLink).Select(slot => {
-                        var target = _storageLookup[slot.Type.TypeName];
-                        var key = MinimalApiGenerator.RouteKeyFor(target);
-                        var example = GetKeyExample(target);
-                        return $"\"{MinimalApiGenerator.CreateLinkMemberName(slot.Name)}\": {(key.ClrType is "long" or "int" ? example : $"\"{example}\"")}";
-                    }))
+                    .Concat(GetCreateSlots(entity).Where(MinimalApiGenerator.IsRequiredLink).Select(slot =>
+                        $"\"{MinimalApiGenerator.CreateLinkMemberName(slot.Name)}\": "
+                        + GetExampleJsonValue(MinimalApiGenerator.RouteKeyFor(_storageLookup[slot.Type.TypeName]).Property!)))
                     .ToList();
                 for (int i = 0; i < members.Count; i++)
                     sb.AppendLine($"    {members[i]}{(i < members.Count - 1 ? "," : "")}");

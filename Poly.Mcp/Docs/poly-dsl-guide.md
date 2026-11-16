@@ -571,12 +571,15 @@ entity's route key** (`"CourseId": "CS101"` for `course: Course`, the target's `
 property): the host looks the target up as an action's entity argument is looked up (404 when
 no such row), loads what the create reads on it, and passes it to `Create`. A link left out
 or sent as `null` answers 400 `Required` at `Section.course`, the simulator's answer. An
-**optional** link is not settable in a create body yet: create, then fill it with an action,
-or use an MCP create, which takes it. An entity whose required link's target has no natural
+**optional** link is not settable in a create body yet: use an MCP create, which takes it,
+or, where the document has an action that fills it, create then call that action. An entity whose required link's target has no natural
 key (a shadow `id`) has no `POST` route, since no value a client could send names the
 target; it is created by a parent action's `create in`, which exists only when the parent has
 a collection of it (`CheckOut: action { create in loans { book: book } }` serves `POST
-/api/patrons/{email}/checkout`). An entity with a required link is not seeded. A `create in` into a required
+/api/patrons/{email}/checkout`). An entity with a required link is not seeded. The member is named `<Link>Id`, like an
+action's entity-reference member; when a required scalar of the entity already has that name
+(`CourseId` next to `course: Course`) the entity gets no `POST` route, DTO or sample, with no
+diagnostic, so rename one of them. A `create in` into a required
 to-one of the source is **DMEFF001**: the link is already set when the action runs; declare
 it `optional` to fill it there.
 

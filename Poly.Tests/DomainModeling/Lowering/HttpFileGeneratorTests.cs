@@ -45,10 +45,33 @@ public class HttpFileGeneratorTests {
             """)).Replace("\r\n", "\n");
 
         await Assert.That(http).Contains("### Create a new section");
-        await Assert.That(http).Contains("\"Code\": \"example-code\",\n    \"CourseId\": \"example-value\"\n}");
-        await Assert.That(http).Contains("\"Title\": \"sample\",\n    \"ShelfId\": 42\n}");
+        await Assert.That(http).Contains("\"Code\": \"example-code\",\n    \"CourseId\": \"example-code\"\n}");
+        await Assert.That(http).Contains("\"Title\": \"sample\",\n    \"ShelfId\": 0\n}");
         await Assert.That(http).Contains("### Create a new customer");
         await Assert.That(http).DoesNotContain("### Create a new order");
+    }
+
+    /// <summary>P-11b: the link member carries exactly the value the target's own create sample posts for its key, for a
+    /// Text, a Number and a Date key, so the samples succeed in file order.</summary>
+    [Test]
+    public async Task CreateSample_RequiredLink_SendsTheValueTheTargetsCreateSamplePosts() {
+        var http = Render(ParseDomain("""
+            domain Uni
+            uses temporal
+            Course: entity { Code: Text unique }
+            Section: entity { Code: Text unique  course: Course }
+            Shelf: entity { Slot: Number unique }
+            Book: entity { Title: Text  shelf: Shelf }
+            Day: entity { On: Date unique }
+            Event: entity { Title: Text  day: Day }
+            """));
+
+        string Member(string text, string name) =>
+            System.Text.RegularExpressions.Regex.Match(text, "\"" + name + "\": ([^,\r\n]+)").Groups[1].Value;
+        await Assert.That(Member(http, "CourseId")).IsEqualTo(Member(http, "Code")).Because(http);
+        await Assert.That(Member(http, "ShelfId")).IsEqualTo(Member(http, "Slot")).Because(http);
+        await Assert.That(Member(http, "DayId")).IsEqualTo(Member(http, "On")).Because(http);
+        await Assert.That(Member(http, "DayId")).IsNotEqualTo("\"example\"");
     }
 
     [Test]

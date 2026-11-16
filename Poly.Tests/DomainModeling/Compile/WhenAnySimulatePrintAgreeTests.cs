@@ -185,10 +185,7 @@ public class WhenAnySimulatePrintAgreeTests {
 
     internal static Assembly CompileGenerated(string cs, string assemblyName) {
         var tree = CSharpSyntaxTree.ParseText(cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             assemblyName,
             [tree],

@@ -248,11 +248,7 @@ internal static class CSharpOperatorOracle {
             }
             return text.Append("}\n").ToString();
         }
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Where(static p => Path.GetFileName(p) is "System.Private.CoreLib.dll" or "System.Runtime.dll")
-            .Select(static p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray();
+        var references = RoslynReferences.Core;
         var parse = new CSharpParseOptions(LanguageVersion.CSharp11);
         var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
 

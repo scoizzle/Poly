@@ -1382,10 +1382,7 @@ public class DomainToCSharpExporterTests {
         var csharp = new CSharpGenerator().Generate(typeDefs);
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + ExportedCSharp.MissingPolyRuntimeUsings(csharp) + csharp);
 
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             "ExportCompileSmoke",
             [tree],
@@ -3198,10 +3195,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + ExportedCSharp.MissingPolyRuntimeUsings(cs) + cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             "PublicCreateWireInverses",
             [tree],
@@ -4283,10 +4277,7 @@ public class DomainToCSharpExporterTests {
 
     private static string[] CompileExported(string cs) {
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + ExportedCSharp.MissingPolyRuntimeUsings(cs) + cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             "Pr39Export",
             [tree],

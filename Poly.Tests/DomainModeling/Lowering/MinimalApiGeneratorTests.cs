@@ -966,40 +966,12 @@ public partial class MinimalApiGeneratorTests {
         var compilation = CSharpCompilation.Create(
             "ProgramEntityHost",
             trees,
-            HostReferences(),
+            RoslynReferences.Host,
             new CSharpCompilationOptions(OutputKind.ConsoleApplication));
         return compilation.GetDiagnostics()
             .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
             .Select(d => $"{d.Location.SourceTree?.FilePath}: {d}")
             .ToArray();
-    }
-
-    private static List<MetadataReference> HostReferences() {
-        var byName = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
-        void AddFrom(string path) {
-            var name = Path.GetFileName(path);
-            if (!byName.ContainsKey(name) && File.Exists(path))
-                byName[name] = MetadataReference.CreateFromFile(path);
-        }
-        var tpa = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES");
-        if (tpa is not null)
-            foreach (var p in tpa.Split(Path.PathSeparator))
-                AddFrom(p);
-        var coreDir = Path.GetDirectoryName(typeof(object).Assembly.Location);
-        var sharedDir = coreDir is not null ? Path.GetDirectoryName(Path.GetDirectoryName(coreDir)) : null;
-        var aspNetRoot = sharedDir is not null ? Path.Combine(sharedDir, "Microsoft.AspNetCore.App") : null;
-        if (aspNetRoot is not null && Directory.Exists(aspNetRoot) && coreDir is not null) {
-            var version = Path.GetFileName(coreDir);
-            var aspNetDir = Directory.Exists(Path.Combine(aspNetRoot, version))
-                ? Path.Combine(aspNetRoot, version)
-                : Directory.GetDirectories(aspNetRoot).OrderByDescending(Path.GetFileName, StringComparer.Ordinal).FirstOrDefault();
-            if (aspNetDir is not null)
-                foreach (var p in Directory.GetFiles(aspNetDir, "*.dll"))
-                    AddFrom(p);
-        }
-        foreach (var p in Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
-            AddFrom(p);
-        return byName.Values.ToList();
     }
 
     // ── S-decl: the schema id in the generated host ─────────────────

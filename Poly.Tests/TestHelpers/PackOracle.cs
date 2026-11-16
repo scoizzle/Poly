@@ -876,7 +876,7 @@ public sealed class PackOracle : IAsyncDisposable {
         var compilation = CSharpCompilation.Create(
             "app",
             trees,
-            DslCompilerCompileOracleTests.GatherReferences(),
+            RoslynReferences.Host,
             new CSharpCompilationOptions(OutputKind.ConsoleApplication, optimizationLevel: OptimizationLevel.Release));
         using var stream = File.Create(outputPath);
         var emitted = compilation.Emit(stream, cancellationToken: cancel);
@@ -902,7 +902,7 @@ public sealed class PackOracle : IAsyncDisposable {
         var shared = SharedFrameworkRoot() + Path.DirectorySeparatorChar;
         var self = typeof(PackOracle).Assembly.GetName().Name;
         var files = new List<ReferenceFile>();
-        foreach (var reference in DslCompilerCompileOracleTests.GatherReferences().OfType<PortableExecutableReference>()) {
+        foreach (var reference in RoslynReferences.Host.OfType<PortableExecutableReference>()) {
             var path = reference.FilePath;
             if (path is null)
                 continue;
@@ -981,7 +981,7 @@ public sealed class PackOracle : IAsyncDisposable {
         var runtime = $"{Environment.Version.Major}.{Environment.Version.Minor}.0";
         var coreDir = Path.GetFileName(Path.GetDirectoryName(typeof(object).Assembly.Location));
         var aspNetRoot = Path.Combine(SharedFrameworkRoot(), "Microsoft.AspNetCore.App");
-        if (DslCompilerCompileOracleTests.ResolveSharedFrameworkVersion(aspNetRoot, coreDir) is null)
+        if (RoslynReferences.ResolveSharedFrameworkVersion(aspNetRoot, coreDir) is null)
             throw new InvalidOperationException($"No Microsoft.AspNetCore.App shared framework under '{aspNetRoot}'; the generated host cannot run.");
         // The floor is major.minor.0: the host rolls forward to the machine's patch.
         return $$"""

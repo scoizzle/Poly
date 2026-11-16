@@ -274,9 +274,7 @@ public class CSharpLanguageTests {
     }
 
     private static IReadOnlyList<string> CompilationErrors(string text) {
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path));
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             "PrintedSwitch",
             [CSharpSyntaxTree.ParseText(text)],

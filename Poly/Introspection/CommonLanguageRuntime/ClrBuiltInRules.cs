@@ -85,7 +85,7 @@ internal static class ClrBuiltInRules {
     /// <c>bool ==(D, D)</c>, declared by <c>D</c>, which compares invocation lists; two different delegate types have none
     /// (CS0019). A delegate beside <c>object</c> or <c>System.Delegate</c> is reference equality.
     /// </summary>
-    public static DeclaredOperator? ReferenceEquality(ClrTypeDefinition owner, ITypeDefinition? other, ClrTypeDefinitionRegistry provider, OperatorKind kind) {
+    public static ClrTypeOperator? ReferenceEquality(ClrTypeDefinition owner, ITypeDefinition? other, ClrTypeDefinitionRegistry provider, OperatorKind kind) {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(provider);
         if (kind is not (OperatorKind.Equal or OperatorKind.NotEqual))
@@ -97,16 +97,12 @@ internal static class ClrBuiltInRules {
         if (IsDelegateType(left) && IsDelegateType(right)) {
             if (left != right)
                 return null;
-            return new DeclaredOperator(
-                new ClrIntrinsicOperator(kind, owner, provider.GetTypeDefinition(typeof(bool)), [owner, owner]),
-                PlatformApplied: true);
+            return new ClrTypeOperator(kind, owner, provider.GetTypeDefinition(typeof(bool)), [owner, owner]);
         }
         if (!ReferenceConversionExists(left, right))
             return null;
         var objectDefinition = provider.GetTypeDefinition(typeof(object));
-        return new DeclaredOperator(
-            new ClrIntrinsicOperator(kind, objectDefinition, provider.GetTypeDefinition(typeof(bool)), [objectDefinition, objectDefinition]),
-            PlatformApplied: true);
+        return new ClrTypeOperator(kind, objectDefinition, provider.GetTypeDefinition(typeof(bool)), [objectDefinition, objectDefinition]);
     }
 
     private static bool IsReference(Type type) =>
@@ -157,14 +153,13 @@ internal static class ClrBuiltInRules {
     /// so both operands of a pair reach the same operator. The definition does not know its side: a shift answers as
     /// the left operand, and a right operand answering as left yields (Int32, Int32) or nothing that applies.
     /// </summary>
-    public static IReadOnlyList<DeclaredOperator> Operators(ClrTypeDefinition owner, PrimitiveType? other, ClrTypeDefinitionRegistry provider, OperatorKind kind) {
+    public static IReadOnlyList<ClrTypeOperator> Operators(ClrTypeDefinition owner, PrimitiveType? other, ClrTypeDefinitionRegistry provider, OperatorKind kind) {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(provider);
         if (owner.RuntimeType.GetPrimitiveType() is not { } self)
             return [];
-        return [.. Signatures(self, other, kind).Select(signature => new DeclaredOperator(
-            new ClrIntrinsicOperator(kind, Definition(signature.Declaring), Definition(signature.Result), [.. signature.Parameters.Select(Definition)]),
-            PlatformApplied: true))];
+        return [.. Signatures(self, other, kind).Select(signature =>
+            new ClrTypeOperator(kind, Definition(signature.Declaring), Definition(signature.Result), [.. signature.Parameters.Select(Definition)]))];
 
         ClrTypeDefinition Definition(PrimitiveType type) => provider.GetTypeDefinition(type.GetClrType()!);
     }

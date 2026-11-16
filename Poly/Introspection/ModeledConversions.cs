@@ -2,8 +2,7 @@ namespace Poly.Introspection;
 
 /// <summary>
 /// Poly's modeled-type conversion convention: a one-parameter static member named <c>op_Implicit</c> or <c>op_Explicit</c>
-/// in <see cref="ITypeDefinition.Methods"/>, declared on the source or the destination, the same convention
-/// <see cref="ModeledOperators"/> uses for <c>op_*</c> operators. A convention of Poly, not a platform fact.
+/// in <see cref="ITypeDefinition.Methods"/>, declared on the source or the destination.
 /// </summary>
 internal static class ModeledConversions {
     /// <summary>The conversion from <paramref name="source"/> to <paramref name="destination"/> a modeled definition declares, implicit preferred.</summary>

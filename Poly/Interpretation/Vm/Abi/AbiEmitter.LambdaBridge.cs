@@ -700,8 +700,8 @@ public static partial class AbiEmitter {
         if (definition.GetOperator(kind, null) is not { } resolution)
             throw RejectOperator(node, $"the type provider defines no {kind} operator for '{TypeName(operand.Type)}'");
         var lifted = Nullable.GetUnderlyingType(operand.Type) is not null;
-        var parameter = Lift(RuntimeTypeOf(resolution.Signature.Parameters.Single().ParameterTypeDefinition, node), lifted);
-        var expected = Lift(RuntimeTypeOf(resolution.Result, node), lifted);
+        var parameter = Lift(RuntimeTypeOf(resolution.Parameters.Single().ParameterTypeDefinition, node), lifted);
+        var expected = Lift(RuntimeTypeOf(resolution.ResultTypeDefinition, node), lifted);
         var converted = ConvertOperand(node, operand, parameter);
         var result = Combine(node, () => factory(converted));
         if (result.Type != expected)
@@ -732,9 +732,9 @@ public static partial class AbiEmitter {
         var rightDefinition = OperandDefinition(right.Type, node, ctx);
         if (leftDefinition.GetOperator(kind, rightDefinition) is not { } resolution)
             throw RejectOperator(node, $"the type provider defines no {kind} operator for '{TypeName(left.Type)}' and '{TypeName(right.Type)}'");
-        var parameters = resolution.Signature.Parameters
+        var parameters = resolution.Parameters
             .Select(parameter => Lift(RuntimeTypeOf(parameter.ParameterTypeDefinition, node), lifted)).ToArray();
-        var result = RuntimeTypeOf(resolution.Result, node);
+        var result = RuntimeTypeOf(resolution.ResultTypeDefinition, node);
         return (ConvertOperand(node, left, parameters[0]), ConvertOperand(node, right, parameters[1]), comparison ? result : Lift(result, lifted));
     }
 

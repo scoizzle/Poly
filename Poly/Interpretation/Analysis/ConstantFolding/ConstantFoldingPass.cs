@@ -648,10 +648,10 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// invoked method throws (<see cref="TargetInvocationException"/>) declines. The result must be of the operator's
     /// result type.
     /// </summary>
-    private static bool TryEvaluate(OperatorKind kind, OperatorResolution resolution, object left, object? right, out object? result) {
+    private static bool TryEvaluate(OperatorKind kind, ITypeOperator resolution, object left, object? right, out object? result) {
         result = null;
-        var parameters = resolution.Signature.Parameters.ToArray();
-        if (!resolution.Result.TryGetRuntimeType(out var resultType))
+        var parameters = resolution.Parameters.ToArray();
+        if (!resolution.ResultTypeDefinition.TryGetRuntimeType(out var resultType))
             return false;
         try {
             if (!TryConvert(left, parameters[0].ParameterTypeDefinition, out var x))
@@ -659,7 +659,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             object? y = null;
             if (parameters.Length > 1 && !TryConvert(right!, parameters[1].ParameterTypeDefinition, out y))
                 return false;
-            result = resolution.PlatformApplied ? ApplyPlatformOperator(kind, x, y) : InvokeDeclaredOperator(kind, resolution.Signature, x, y);
+            result = resolution.Method is { } method ? InvokeDeclaredOperator(kind, method, x, y) : ApplyPlatformOperator(kind, x, y);
         }
         catch (Exception ex) when (ex is OverflowException or DivideByZeroException or TargetInvocationException or InvalidCastException) {
             result = null;

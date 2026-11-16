@@ -207,7 +207,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 _ => Introspection.OperatorKind.Divide,
             };
             return left.Definition!.GetOperator(kind, right.Definition) is { } resolution
-                ? new ExprType(resolution.Result, Optional: false, DomainName: null).AsOptional(absent)
+                ? new ExprType(resolution.ResultTypeDefinition, Optional: false, DomainName: null).AsOptional(absent)
                 : ExprType.Unresolved;
         }
         if (expr is Add or Subtract && IsDate(left) && IsNumeric(right))

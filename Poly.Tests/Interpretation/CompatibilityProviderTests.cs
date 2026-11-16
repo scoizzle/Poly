@@ -176,12 +176,12 @@ public class CompatibilityProviderTests {
 
     [Test]
     public async Task DeclaredComparisons_ProviderAnswersDeclaredOrPlatform() {
-        await Assert.That(OperatorOperands.Clr(typeof(string)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(string))) is { PlatformApplied: false }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(Guid)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(Guid))) is { PlatformApplied: false }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(DateTime)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(DateTime))) is { PlatformApplied: false }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(TimeSpan)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(TimeSpan))) is { PlatformApplied: false }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(double)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(double))) is { PlatformApplied: true }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(float)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(float))) is { PlatformApplied: true }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(string)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(string))) is { Method: not null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(Guid)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(Guid))) is { Method: not null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(DateTime)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(DateTime))) is { Method: not null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(TimeSpan)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(TimeSpan))) is { Method: not null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(double)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(double))) is { Method: null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(float)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(float))) is { Method: null }).IsTrue();
     }
 
     // ---- a nullable char beside a number (lock amendment 4): rejected on master, accepted since the VM is shown correct ----

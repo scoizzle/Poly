@@ -154,6 +154,8 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeProperty> Properties => [];
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
+        public IEnumerable<ITypeOperator> Operators => [];
+        ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
     }
 
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {

@@ -24,7 +24,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (leftKind is NumericKind.None || rightKind is NumericKind.None) return;
         if (leftType.Definition!.GetOperator(kind, rightType.Definition) is not { } resolution) return;
 
-        var result = new ExprType(resolution.Result, Optional: false, DomainName: null);
+        var result = new ExprType(resolution.ResultTypeDefinition, Optional: false, DomainName: null);
         var integer = leftKind is NumericKind.Integer64 && rightKind is NumericKind.Integer64;
         context.SetMetadata(node, new TypedExpressionMetadata(result, new BinaryTyping(
             result,

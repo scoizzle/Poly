@@ -76,6 +76,12 @@ public interface ITypeDefinition {
     IEnumerable<ITypeConstructor> Constructors { get; }
 
     /// <summary>
+    /// Gets the operators that apply to operands of this type. A platform decides which: a .NET primitive lists the
+    /// operators its numeric promotion reaches, which another type may declare.
+    /// </summary>
+    IEnumerable<ITypeOperator> Operators { get; }
+
+    /// <summary>
     /// Gets the primitive type identifier if this type is a primitive type, null otherwise.
     /// Primitive types are the atomic building blocks from which all other types are composed.
     /// </summary>
@@ -106,9 +112,9 @@ public interface ITypeDefinition {
     internal bool IsAssignableWithoutConversion(ITypeDefinition source) => TypeDefinitionExtensions.IsAssignableByHierarchy(this, source);
 
     /// <summary>
-    /// The operators of <paramref name="kind"/> this definition declares when it meets <paramref name="other"/>
-    /// (null: the other operand is this type). Modeled definitions declare static <c>op_*</c> members and ignore
-    /// <paramref name="other"/>; a platform adds the operators it leaves to its compiler, which depend on the pair.
+    /// The operator <paramref name="kind"/> applied to this type and <paramref name="right"/> (null for a unary kind),
+    /// or null when none applies or several do. Which operators are candidates and how one is chosen is the platform's
+    /// rule; consumers ask through <see cref="TypeDefinitionOperatorExtensions.GetOperator"/>.
     /// </summary>
-    internal IEnumerable<DeclaredOperator> GetOperators(OperatorKind kind, ITypeDefinition? other = null) => ModeledOperators.Find(this, kind);
+    internal ITypeOperator? ResolveOperator(OperatorKind kind, ITypeDefinition? right);
 }

@@ -392,7 +392,7 @@ internal static class BridgeGrid {
             var right = c.Right is null ? null : registry.GetTypeDefinition(c.Right.Underlying);
             if (c.Right is not null && right is null)
                 return null;
-            return left.GetOperator(kind, right) is { } resolution && resolution.Result.TryGetRuntimeType(out var result) ? result : null;
+            return left.GetOperator(kind, right) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var result) ? result : null;
         }
         if (c.Right is { } armType) {
             if (armType.Clr == c.Left.Clr)
@@ -893,7 +893,7 @@ internal static class BridgeGrid {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var left = registry.GetTypeDefinition(c.Left.Underlying)!;
         var right = c.Right is null ? null : registry.GetTypeDefinition(c.Right.Underlying)!;
-        return left.GetOperator(c.Op!.Value, right) is { } resolution && resolution.Result.TryGetRuntimeType(out var type) ? type : null;
+        return left.GetOperator(c.Op!.Value, right) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var type) ? type : null;
     }
 
     /// <summary>

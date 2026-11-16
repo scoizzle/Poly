@@ -16,7 +16,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private readonly Lazy<IReadOnlyList<ClrTypeMember>> _members;
 
     private readonly ClrTypeDefinitionRegistry _provider;
-    private readonly ConcurrentDictionary<(OperatorKind Kind, PrimitiveType? Other), IReadOnlyList<DeclaredOperator>> _operators = new();
+    private readonly ConcurrentDictionary<(OperatorKind Kind, PrimitiveType? Other), IReadOnlyList<ClrTypeOperator>> _operatorsBeside = new();
+    private readonly Lazy<IReadOnlyList<ClrTypeOperator>> _operators;
 
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
@@ -55,6 +56,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             GetMethodSignature));
         _constructors = new(() => BuildConstructorCollection(type, this, provider));
         _members = new(() => BuildMemberCollection(Fields, Properties, Methods));
+        _operators = new(() => [.. Enum.GetValues<OperatorKind>().SelectMany(kind => OperatorsBeside(kind, null))]);
     }
 
     public string Name => RuntimeType.Name;
@@ -71,6 +73,12 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     public IReadOnlyList<ClrConstructor> Constructors => _constructors.Value;
     public IReadOnlyList<ClrTypeMember> Members => _members.Value;
 
+    /// <summary>
+    /// The operators that apply to two operands of this type (one, for a unary kind): what <see cref="OperatorsBeside"/>
+    /// offers beside this type itself, for every kind. A promoted operator is declared by the type it promotes to.
+    /// </summary>
+    public IReadOnlyList<ClrTypeOperator> Operators => _operators.Value;
+
     ITypeDefinition? ITypeDefinition.BaseType => BaseType;
     IEnumerable<ITypeDefinition> ITypeDefinition.Interfaces => Interfaces;
     IEnumerable<ITypeField> ITypeDefinition.Fields => Fields;
@@ -78,6 +86,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     IEnumerable<ITypeMethod> ITypeDefinition.Methods => Methods;
     IEnumerable<ITypeConstructor> ITypeDefinition.Constructors => Constructors;
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members;
+    IEnumerable<ITypeOperator> ITypeDefinition.Operators => Operators;
+    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
     PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
     public TypeKind Kind => GetTypeKind(RuntimeType);
@@ -147,37 +157,37 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     }
 
     /// <summary>
-    /// The operators C# applies itself beside <paramref name="other"/>, then the reflected static special-name <c>op_*</c>
-    /// members, except a native integer's, which C# 11 does not consult. Where the CLR also declares an intrinsic's
-    /// exact signature (Double and Single declare their comparisons), the intrinsic is the answer. The built-in rules read the other operand only through its
-    /// primitive, so the cache is keyed by the kind and that primitive: keyed by the kind alone, the first pair would
-    /// answer for every other; keyed by the other definition, it would grow without bound on fresh synthetic
-    /// collection types, which are a new instance per resolve. Reference equality depends on the other definition itself,
-    /// so it is answered beside the cache (<see cref="ClrBuiltInRules.ReferenceEquality"/>).
+    /// The operators this type offers beside an operand of <paramref name="other"/> (null: this type): the operators C#
+    /// applies itself, then the reflected static special-name <c>op_*</c> members, except a native integer's, which C# 11
+    /// does not consult. Where the CLR also declares an intrinsic's exact signature (Double and Single declare their
+    /// comparisons), the intrinsic is the answer. The built-in rules read the other operand only through its primitive,
+    /// so the cache is keyed by the kind and that primitive: keyed by the kind alone, the first pair would answer for
+    /// every other; keyed by the other definition, it would grow without bound on fresh synthetic collection types,
+    /// which are a new instance per resolve. Reference equality depends on the other definition itself, so it is
+    /// answered beside the cache (<see cref="ClrBuiltInRules.ReferenceEquality"/>).
     /// </summary>
-    IEnumerable<DeclaredOperator> ITypeDefinition.GetOperators(OperatorKind kind, ITypeDefinition? other) {
+    internal IReadOnlyList<ClrTypeOperator> OperatorsBeside(OperatorKind kind, ITypeDefinition? other) {
         OperatorShape.ArityOf(kind);
         var otherPrimitive = other is null ? GetPrimitiveTypeId(RuntimeType) : other.PrimitiveType;
-        var declared = _operators.GetOrAdd((kind, otherPrimitive), key => {
+        var offered = _operatorsBeside.GetOrAdd((kind, otherPrimitive), key => {
             var intrinsic = ClrBuiltInRules.Operators(this, key.Other, _provider, key.Kind);
             var reflected = (ClrBuiltInRules.IsNativeInteger(RuntimeType) ? [] : FindOperators(key.Kind))
-                .Where(method => !intrinsic.Any(declared => SameSignature(declared.Signature, method)))
-                .Select(static method => new DeclaredOperator(method, PlatformApplied: false));
+                .Where(method => !intrinsic.Any(builtIn => SameSignature(builtIn, method)))
+                .Select(method => new ClrTypeOperator(key.Kind, method));
             return [.. intrinsic, .. reflected];
         });
-        return ClrBuiltInRules.ReferenceEquality(this, other, _provider, kind) is { } reference ? [.. declared, reference] : declared;
+        return ClrBuiltInRules.ReferenceEquality(this, other, _provider, kind) is { } reference ? [.. offered, reference] : offered;
     }
 
-    private static bool SameSignature(ITypeMethod a, ITypeMethod b) {
-        var (pa, pb) = (a.Parameters.ToArray(), b.Parameters.ToArray());
-        return string.Equals(a.Name, b.Name, StringComparison.Ordinal)
-            && ReferenceEquals(a.MemberTypeDefinition, b.MemberTypeDefinition)
+    private static bool SameSignature(ClrTypeOperator intrinsic, ClrMethod method) {
+        var (pa, pb) = (intrinsic.Parameters.ToArray(), method.Parameters.ToArray());
+        return ReferenceEquals(intrinsic.ResultTypeDefinition, method.MemberTypeDefinition)
             && pa.Length == pb.Length
             && pa.Zip(pb).All(static pair => ReferenceEquals(pair.First.ParameterTypeDefinition, pair.Second.ParameterTypeDefinition));
     }
 
     internal IEnumerable<ClrMethod> FindOperators(OperatorKind kind) {
-        if (ModeledOperators.NameOf(kind) is not { } name)
+        if (ClrOperatorNames.NameOf(kind) is not { } name)
             return [];
         var arity = OperatorShape.ArityOf(kind);
         const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;

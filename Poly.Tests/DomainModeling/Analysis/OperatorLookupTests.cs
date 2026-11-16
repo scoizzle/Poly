@@ -52,6 +52,10 @@ internal sealed class ModeledTypeSet : ITypeDefinitionProvider {
         new(name, new NamedTypeReference(result),
             [.. parameters.Select((type, index) => new Parameter($"p{index}", new NamedTypeReference(type)))],
             IsStatic: true);
+
+    /// <summary>A static member marked as the <paramref name="kind"/> operator: <c>static result Kind(parameters)</c>.</summary>
+    public static MethodDefinitionNode Operator(OperatorKind kind, string result, params string[] parameters) =>
+        Static(kind.ToString(), result, parameters) with { Operator = kind };
 }
 
 /// <summary>
@@ -63,15 +67,15 @@ public class OperatorLookupTests {
 
     private static ITypeDefinition Def(string name) => Model.Resolve(name).Definition!;
 
-    private static OperatorResolution? Op(string left, OperatorKind kind, string? right) =>
+    private static ITypeOperator? Op(string left, OperatorKind kind, string? right) =>
         Def(left).GetOperator(kind, right is null ? null : Def(right));
 
-    private static ITypeDefinition[] ParametersOf(OperatorResolution resolution) =>
-        [.. resolution.Signature.Parameters.Select(static p => p.ParameterTypeDefinition)];
+    private static ITypeDefinition[] ParametersOf(ITypeOperator resolution) =>
+        [.. resolution.Parameters.Select(static p => p.ParameterTypeDefinition)];
 
-    private static async Task AssertResult(OperatorResolution? resolution, ITypeDefinition expected) {
+    private static async Task AssertResult(ITypeOperator? resolution, ITypeDefinition expected) {
         await Assert.That(resolution).IsNotNull();
-        await Assert.That(resolution!.Value.Result).IsSameReferenceAs(expected);
+        await Assert.That(resolution!.ResultTypeDefinition).IsSameReferenceAs(expected);
     }
 
     // ---- numeric family ----
@@ -80,7 +84,7 @@ public class OperatorLookupTests {
     public async Task Number_Div_Number_IsInt64IntegerDivision() {
         var resolution = Op("Number", OperatorKind.Divide, "Number");
         await AssertResult(resolution, OperatorOperands.Clr(typeof(long)));
-        await Assert.That(resolution!.Value.PlatformApplied).IsTrue();
+        await Assert.That(resolution!.Method).IsNull();
     }
 
     [Test]
@@ -88,9 +92,9 @@ public class OperatorLookupTests {
         var resolution = Op("Decimal", OperatorKind.Add, "Number");
         var decimalType = OperatorOperands.Clr(typeof(decimal));
         await AssertResult(resolution, decimalType);
-        await Assert.That(resolution!.Value.PlatformApplied).IsFalse();
-        await Assert.That(resolution.Value.Signature.DeclaringTypeDefinition).IsSameReferenceAs(decimalType);
-        var parameters = ParametersOf(resolution.Value);
+        await Assert.That(resolution!.Method).IsNotNull();
+        await Assert.That(resolution.Method!.DeclaringTypeDefinition).IsSameReferenceAs(decimalType);
+        var parameters = ParametersOf(resolution);
         await Assert.That(parameters.Length).IsEqualTo(2);
         await Assert.That(parameters[0]).IsSameReferenceAs(decimalType);
         await Assert.That(parameters[1]).IsSameReferenceAs(decimalType);
@@ -99,7 +103,7 @@ public class OperatorLookupTests {
     [Test]
     public async Task Decimal_Plus_Number_RequiresImplicitNumberToDecimalOperandConversion() {
         // R6: the conversion is a statement the tree makes. The interface names it; the ABI must not invent it.
-        var resolution = Op("Decimal", OperatorKind.Add, "Number")!.Value;
+        var resolution = Op("Decimal", OperatorKind.Add, "Number")!;
         var operands = new[] { Def("Decimal"), Def("Number") };
         var parameters = ParametersOf(resolution);
         await Assert.That(ReferenceEquals(parameters[0], operands[0])).IsTrue();
@@ -112,7 +116,7 @@ public class OperatorLookupTests {
     public async Task Number_Plus_Decimal_ResolvesDecimalOperator() {
         var resolution = Op("Number", OperatorKind.Add, "Decimal");
         await AssertResult(resolution, OperatorOperands.Clr(typeof(decimal)));
-        await Assert.That(resolution!.Value.PlatformApplied).IsFalse();
+        await Assert.That(resolution!.Method).IsNotNull();
     }
 
     [Test]
@@ -172,7 +176,7 @@ public class OperatorLookupTests {
         await AssertResult(single.GetOperator(OperatorKind.Multiply, single), single);
         var comparison = single.GetOperator(OperatorKind.LessThan, single);
         await AssertResult(comparison, OperatorOperands.Clr(typeof(bool)));
-        await Assert.That(comparison!.Value.PlatformApplied).IsTrue();
+        await Assert.That(comparison!.Method).IsNull();
         // The sibling: Float32 with Float64 is Float64.
         await AssertResult(single.GetOperator(OperatorKind.Add, OperatorOperands.Clr(typeof(double))), OperatorOperands.Clr(typeof(double)));
     }
@@ -183,7 +187,7 @@ public class OperatorLookupTests {
     public async Task Text_Plus_Text_IsText() {
         var resolution = Op("Text", OperatorKind.Add, "Text");
         await AssertResult(resolution, OperatorOperands.Clr(typeof(string)));
-        await Assert.That(resolution!.Value.PlatformApplied).IsTrue();
+        await Assert.That(resolution!.Method).IsNull();
     }
 
     [Test]
@@ -261,18 +265,18 @@ public class OperatorLookupTests {
         var vec = OperatorOperands.Clr(typeof(Vec));
         var resolution = vec.GetOperator(OperatorKind.Add, vec);
         await AssertResult(resolution, vec);
-        await Assert.That(resolution!.Value.PlatformApplied).IsFalse();
-        await Assert.That(resolution.Value.Signature.DeclaringTypeDefinition).IsSameReferenceAs(vec);
+        await Assert.That(resolution!.Method).IsNotNull();
+        await Assert.That(resolution.Method!.DeclaringTypeDefinition).IsSameReferenceAs(vec);
     }
 
     [Test]
     public async Task ValueTypeOperatorMember_Modeled_IsFoundOnTheDeclaringDefinition() {
         var set = new ModeledTypeSet();
-        var vec = set.Add("Vec", ModeledTypeSet.Static("op_Addition", "Vec", "Vec", "Vec"));
+        var vec = set.Add("Vec", ModeledTypeSet.Operator(OperatorKind.Add, "Vec", "Vec", "Vec"));
         var resolution = ((ITypeDefinition)vec).GetOperator(OperatorKind.Add, vec);
         await AssertResult(resolution, vec);
-        await Assert.That(resolution!.Value.PlatformApplied).IsFalse();
-        await Assert.That(resolution.Value.Signature.DeclaringTypeDefinition).IsSameReferenceAs(vec);
+        await Assert.That(resolution!.Method).IsNotNull();
+        await Assert.That(resolution.Method!.DeclaringTypeDefinition).IsSameReferenceAs(vec);
         // The sibling: an operator the type does not declare is none.
         await Assert.That(((ITypeDefinition)vec).GetOperator(OperatorKind.Subtract, vec)).IsNull();
     }
@@ -282,8 +286,8 @@ public class OperatorLookupTests {
         var set = new ModeledTypeSet();
         var x = set.Add("X", ModeledTypeSet.Static("op_Implicit", "X", "L"));
         var y = set.Add("Y", ModeledTypeSet.Static("op_Implicit", "Y", "R"));
-        var l = set.Add("L", ModeledTypeSet.Static("op_Addition", "X", "X", "R"));
-        var r = set.Add("R", ModeledTypeSet.Static("op_Addition", "Y", "L", "Y"));
+        var l = set.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "X", "X", "R"));
+        var r = set.Add("R", ModeledTypeSet.Operator(OperatorKind.Add, "Y", "L", "Y"));
         await Assert.That(((ITypeDefinition)x).ResolveConversionFrom(l)).IsNotNull();
         await Assert.That(((ITypeDefinition)y).ResolveConversionFrom(r)).IsNotNull();
         // (X, R) needs L to X; (L, Y) needs R to Y. Both apply and neither is all-identity.
@@ -291,7 +295,7 @@ public class OperatorLookupTests {
         // The sibling: with the second candidate gone the first is the only one.
         var set2 = new ModeledTypeSet();
         set2.Add("X", ModeledTypeSet.Static("op_Implicit", "X", "L"));
-        var l2 = set2.Add("L", ModeledTypeSet.Static("op_Addition", "X", "X", "R"));
+        var l2 = set2.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "X", "X", "R"));
         var r2 = set2.Add("R");
         await AssertResult(((ITypeDefinition)l2).GetOperator(OperatorKind.Add, r2), set2.GetTypeDefinition("X")!);
     }
@@ -299,12 +303,12 @@ public class OperatorLookupTests {
     [Test]
     public async Task TwoIdentityCandidates_IsNone() {
         var set = new ModeledTypeSet();
-        var l = set.Add("L", ModeledTypeSet.Static("op_Addition", "L", "L", "R"));
-        var r = set.Add("R", ModeledTypeSet.Static("op_Addition", "R", "L", "R"));
+        var l = set.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "L", "L", "R"));
+        var r = set.Add("R", ModeledTypeSet.Operator(OperatorKind.Add, "R", "L", "R"));
         await Assert.That(((ITypeDefinition)l).GetOperator(OperatorKind.Add, r)).IsNull();
         // The sibling: one identity candidate wins.
         var set2 = new ModeledTypeSet();
-        var l2 = set2.Add("L", ModeledTypeSet.Static("op_Addition", "L", "L", "R"));
+        var l2 = set2.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "L", "L", "R"));
         var r2 = set2.Add("R");
         await AssertResult(((ITypeDefinition)l2).GetOperator(OperatorKind.Add, r2), l2);
     }
@@ -318,12 +322,12 @@ public class OperatorLookupTests {
 
         var difference = Op("DateTime", OperatorKind.Subtract, "DateTime");
         await AssertResult(difference, timeSpan);
-        await Assert.That(difference!.Value.PlatformApplied).IsFalse();
-        await Assert.That(difference.Value.Signature.DeclaringTypeDefinition).IsSameReferenceAs(dateTime);
+        await Assert.That(difference!.Method).IsNotNull();
+        await Assert.That(difference.Method!.DeclaringTypeDefinition).IsSameReferenceAs(dateTime);
 
         var shifted = Op("DateTime", OperatorKind.Add, "Duration");
         await AssertResult(shifted, dateTime);
-        await Assert.That(shifted!.Value.Signature.DeclaringTypeDefinition).IsSameReferenceAs(dateTime);
+        await Assert.That(shifted!.Method!.DeclaringTypeDefinition).IsSameReferenceAs(dateTime);
     }
 
     [Test]
@@ -339,7 +343,7 @@ public class OperatorLookupTests {
         // Pinned to what the CLR declares today; the analyzer rejects it (ledgered).
         var resolution = Op("Duration", OperatorKind.Add, "Duration");
         await AssertResult(resolution, OperatorOperands.Clr(typeof(TimeSpan)));
-        await Assert.That(resolution!.Value.PlatformApplied).IsFalse();
+        await Assert.That(resolution!.Method).IsNotNull();
     }
 
     // ---- arity and failure ----
@@ -408,8 +412,8 @@ public class OperatorLookupTests {
         };
         await Assert.That(expected.Count).IsEqualTo(Enum.GetValues<OperatorKind>().Length);
         foreach (var (kind, name) in expected)
-            await Assert.That(ModeledOperators.NameOf(kind)).IsEqualTo(name);
-        await Assert.That(() => ModeledOperators.NameOf((OperatorKind)99)).ThrowsExactly<ArgumentOutOfRangeException>();
+            await Assert.That(ClrOperatorNames.NameOf(kind)).IsEqualTo(name);
+        await Assert.That(() => ClrOperatorNames.NameOf((OperatorKind)99)).ThrowsExactly<ArgumentOutOfRangeException>();
     }
 
     // ---- T-24: every operator C# defines for the built-in types, with the C# binder as the oracle ----
@@ -496,7 +500,7 @@ public class OperatorLookupTests {
                     // parameter the wider count type itself.
                     if (IsPolicyShift(kind, right) && Binder(kind, One(left, kind), 1) is { } shifted) {
                         policy++;
-                        if (ClrOp(left, kind, right) is not { } policyShift || !policyShift.Result.TryGetRuntimeType(out var shiftResult) || shiftResult != shifted
+                        if (ClrOp(left, kind, right) is not { } policyShift || !policyShift.ResultTypeDefinition.TryGetRuntimeType(out var shiftResult) || shiftResult != shifted
                             || ParametersOf(policyShift).Select(static p => p.GetRuntimeType()).ToArray() is not [var l, var r] || l != shifted || r != right)
                             mismatches.Add($"{cell}: policy expects C#'s int-count shift ({NameOf(shifted)}) over ({NameOf(left)}, {NameOf(right!)})");
                         continue;
@@ -507,7 +511,7 @@ public class OperatorLookupTests {
                     if (expected is null) {
                         undefined++;
                         if (resolution is { } extra)
-                            mismatches.Add($"{cell}: C# none, provider {extra.Result.Name}");
+                            mismatches.Add($"{cell}: C# none, provider {extra.ResultTypeDefinition.Name}");
                         continue;
                     }
                     defined++;
@@ -515,9 +519,9 @@ public class OperatorLookupTests {
                         mismatches.Add($"{cell}: C# {NameOf(expected)}, provider none");
                         continue;
                     }
-                    if (!found.Result.TryGetRuntimeType(out var result) || result != expected)
-                        mismatches.Add($"{cell}: C# {NameOf(expected)}, provider {found.Result.Name}");
-                    var parameters = found.Signature.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
+                    if (!found.ResultTypeDefinition.TryGetRuntimeType(out var result) || result != expected)
+                        mismatches.Add($"{cell}: C# {NameOf(expected)}, provider {found.ResultTypeDefinition.Name}");
+                    var parameters = found.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
                     var bound = BinderParameters(kind, left, right);
                     for (var i = 0; i < operands.Length; i++) {
                         if (!parameters[i].TryGetRuntimeType(out var parameter) || parameter != bound[i])
@@ -541,12 +545,12 @@ public class OperatorLookupTests {
         kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
         && count?.GetPrimitiveType() is { } primitive && ClrBuiltInRules.IsPolicyShiftCount(primitive);
 
-    private static OperatorResolution? ClrOp(Type left, OperatorKind kind, Type? right) =>
+    private static ITypeOperator? ClrOp(Type left, OperatorKind kind, Type? right) =>
         OperatorOperands.Clr(left).GetOperator(kind, right is null ? null : OperatorOperands.Clr(right));
 
-    private static async Task AssertParameters(OperatorResolution? resolution, params Type[] expected) {
+    private static async Task AssertParameters(ITypeOperator? resolution, params Type[] expected) {
         await Assert.That(resolution).IsNotNull();
-        var parameters = ParametersOf(resolution!.Value);
+        var parameters = ParametersOf(resolution!);
         await Assert.That(parameters.Length).IsEqualTo(expected.Length);
         for (var i = 0; i < expected.Length; i++)
             await Assert.That(parameters[i]).IsSameReferenceAs(OperatorOperands.Clr(expected[i]));
@@ -649,7 +653,7 @@ public class OperatorLookupTests {
         var text = OperatorOperands.Clr(typeof(string));
         var resolution = ClrOp(typeof(string), OperatorKind.Add, typeof(int));
         await AssertResult(resolution, text);
-        await Assert.That(resolution!.Value.PlatformApplied).IsTrue();
+        await Assert.That(resolution!.Method).IsNull();
         await AssertParameters(resolution, typeof(string), typeof(object));
         var boxing = OperatorOperands.Clr(typeof(object)).ResolveConversionFrom(OperatorOperands.Clr(typeof(int)));
         await Assert.That(boxing?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
@@ -669,9 +673,9 @@ public class OperatorLookupTests {
         ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", new ClrTypeReference(typeof(long)),
             [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true));
         var number = OperatorOperands.Clr(typeof(long));
-        var offered = number.GetOperators(OperatorKind.Add, cents).Single();
-        await Assert.That(offered.PlatformApplied).IsTrue();
-        await Assert.That(offered.Signature.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, number))).IsTrue();
+        var offered = ((ClrTypeDefinition)number).OperatorsBeside(OperatorKind.Add, cents).Single();
+        await Assert.That(offered.Method).IsNull();
+        await Assert.That(offered.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, number))).IsTrue();
         await Assert.That(number.ResolveConversionFrom(cents)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         var resolution = number.GetOperator(OperatorKind.Add, cents);
         await AssertResult(resolution, number);
@@ -679,7 +683,7 @@ public class OperatorLookupTests {
         await AssertResult(cents.GetOperator(OperatorKind.Add, number), number);
         // The sibling: without the conversion the same operator is offered and does not apply.
         ITypeDefinition plain = set.Add("Plain");
-        await Assert.That(number.GetOperators(OperatorKind.Add, plain).Count()).IsEqualTo(1);
+        await Assert.That(((ClrTypeDefinition)number).OperatorsBeside(OperatorKind.Add, plain).Count).IsEqualTo(1);
         await Assert.That(number.GetOperator(OperatorKind.Add, plain)).IsNull();
     }
 

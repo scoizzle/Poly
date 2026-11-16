@@ -439,4 +439,14 @@ public class CSharpReaderTests {
         await Assert.That(() => CSharpLanguage.Read("class C { void M() { $\"{(x == \"a\")}\"; } }"))
             .Throws<FormatException>();
     }
+
+    [Test]
+    public async Task Read_StaticOpMethod_IsMarkedAsItsOperator_AnInstanceOneIsNot() {
+        var unit = CSharpLanguage.Read(
+            "public class Vec { public static Vec op_Addition(Vec a, Vec b) { return a; } public Vec op_Subtraction(Vec a, Vec b) { return a; } public static Vec Add(Vec a, Vec b) { return a; } }");
+        var methods = unit.Types[0].Methods!;
+        await Assert.That(methods[0].Operator).IsEqualTo(Poly.Introspection.OperatorKind.Add);
+        await Assert.That(methods[1].Operator).IsNull();
+        await Assert.That(methods[2].Operator).IsNull();
+    }
 }

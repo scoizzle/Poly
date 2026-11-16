@@ -26,6 +26,12 @@ public sealed record MethodDefinitionNode(
     /// </summary>
     public IReadOnlyList<AttributeNode> Attributes { get; init; } = [];
 
+    /// <summary>
+    /// The operator this static method defines on its declaring type, or null for an ordinary method. The name does
+    /// not make a method an operator: a reader sets this from its language's own operator form.
+    /// </summary>
+    public Poly.Introspection.OperatorKind? Operator { get; init; }
+
     public override IEnumerable<Node?> Children {
         get {
             yield return ReturnType;

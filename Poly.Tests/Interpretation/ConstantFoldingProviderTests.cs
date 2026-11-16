@@ -184,7 +184,7 @@ internal static class ConstantFoldGrid {
         }
     }
 
-    public static OperatorResolution? Resolution(FoldGridRow row) =>
+    public static ITypeOperator? Resolution(FoldGridRow row) =>
         ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Left.Clr!).GetOperator(row.Op,
             row.Right is null ? null : ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Right.Clr!));
 
@@ -196,7 +196,7 @@ internal static class ConstantFoldGrid {
         if (Resolution(row) is not { } resolution)
             return null;
         try {
-            var parameters = resolution.Signature.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
+            var parameters = resolution.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
             static object? Convert(object? value, ITypeDefinition target) =>
                 value is null || !target.TryGetRuntimeType(out var type) || value.GetType() == type || type == typeof(object)
                     ? value
@@ -710,7 +710,7 @@ public class ConstantFoldingProviderTests {
 
     // ---- the delta: folds that stop (provider-undefined) and the named new folds ----
 
-    private static OperatorResolution? Operator<TLeft, TRight>(OperatorKind kind) =>
+    private static ITypeOperator? Operator<TLeft, TRight>(OperatorKind kind) =>
         ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TLeft)).GetOperator(kind, ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TRight)));
 
     [Test]
@@ -788,7 +788,7 @@ public class ConstantFoldingProviderTests {
     [Test]
     public async Task Int64ShiftedByInt64_Declines_PolicyDefined_AndInt32ShiftFolds() {
         // T-22a: the provider defines it by Poly's shift-count policy; the fold cell table still has no Int64 count.
-        await Assert.That(Operator<long, long>(OperatorKind.ShiftLeft)?.Result.GetRuntimeType()).IsEqualTo(typeof(long));
+        await Assert.That(Operator<long, long>(OperatorKind.ShiftLeft)?.ResultTypeDefinition.GetRuntimeType()).IsEqualTo(typeof(long));
         await AssertDoesNotFold(new ShiftLeft(new Constant(1L), new Constant(3L)));
         await AssertDoesNotFold(new ShiftRight(new Constant(16L), new Constant(2L)));
         await AssertFolds(new ShiftLeft(new Constant(1), new Constant(3)), 8);

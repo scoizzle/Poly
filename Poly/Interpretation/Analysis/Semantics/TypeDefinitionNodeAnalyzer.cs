@@ -257,6 +257,18 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     public IEnumerable<ITypeMethod> Methods => _methods.Value;
     public IEnumerable<ITypeConstructor> Constructors => _constructors.Value;
 
+    /// <summary>
+    /// The declared static methods marked as an operator (<see cref="MethodDefinitionNode.Operator"/>) whose parameter
+    /// count is the operator's arity. A method's name never makes it an operator.
+    /// </summary>
+    public IEnumerable<ITypeOperator> Operators => _declaredMethods.Value
+        .Where(static method => method.IsStatic
+            && method.DefinitionNode.Operator is { } kind
+            && method.Parameters.Count() == OperatorShape.ArityOf(kind))
+        .Select(static method => new AstOperatorDefinition(method.DefinitionNode.Operator!.Value, method));
+
+    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
+
     // AST-based types are dictionary-backed at runtime
     public Type RuntimeType => typeof(IDictionary<string, object>);
 
@@ -547,6 +559,17 @@ internal sealed class AstMethodDefinition(MethodDefinitionNode node, AstTypeDefi
     public bool IsStatic => _node.IsStatic;
 
     public Mutability Mutability => Mutability.Mutable;
+}
+
+/// <summary>
+/// ITypeOperator implementation backed by a MethodDefinitionNode AST marked as an operator.
+/// </summary>
+internal sealed class AstOperatorDefinition(OperatorKind kind, AstMethodDefinition method) : ITypeOperator {
+    public OperatorKind Kind => kind;
+    public ITypeDefinition DeclaringTypeDefinition => method.DeclaringTypeDefinition;
+    public IEnumerable<IParameter> Parameters => method.Parameters;
+    public ITypeDefinition ResultTypeDefinition => method.MemberTypeDefinition;
+    public ITypeMethod? Method => method;
 }
 
 /// <summary>
@@ -1118,6 +1141,8 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public IEnumerable<ITypeProperty> Properties => _count is null ? [_item] : [_item, _count];
     public IEnumerable<ITypeMethod> Methods => [_add];
     public IEnumerable<ITypeConstructor> Constructors => [_ctor, _copy];
+    public IEnumerable<ITypeOperator> Operators => [];
+    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     public PrimitiveType? PrimitiveType => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(System.Collections.IList);
@@ -1193,6 +1218,8 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     public IEnumerable<ITypeProperty> Properties => [];
     public IEnumerable<ITypeMethod> Methods => [];
     public IEnumerable<ITypeConstructor> Constructors => [];
+    public IEnumerable<ITypeOperator> Operators => [];
+    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     public PrimitiveType? PrimitiveType => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(object);

@@ -66,20 +66,20 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
             _ => throw new InvalidOperationException($"Domain type '{name}' is a '{declared.GetType().Name}', which has no definition shape.")
         };
         MethodDefinitionNode[]? methods = declaresEquality
-            ? [Equality("op_Equality", name), Equality("op_Inequality", name)]
+            ? [Equality(OperatorKind.Equal, name), Equality(OperatorKind.NotEqual, name)]
             : null;
         return new AstTypeDefinition(new TypeDefinitionNode(name, Kind: kind, Methods: methods), this);
     }
 
     /// <summary>
-    /// The one operator an enum or entity declares: <c>static Boolean op(T, T)</c>. Declared members are
-    /// how a modeled definition answers <c>GetOperators</c>; ordering and arithmetic stay undeclared.
+    /// The one operator an enum or entity declares: <c>static Boolean op(T, T)</c>, a method marked as the operator.
+    /// Marked methods are how a modeled definition answers <c>Operators</c>; ordering and arithmetic stay undeclared.
     /// </summary>
-    private static MethodDefinitionNode Equality(string operatorName, string typeName) =>
-        new(operatorName,
+    private static MethodDefinitionNode Equality(OperatorKind kind, string typeName) =>
+        new(kind.ToString(),
             new PrimitiveTypeReference(Introspection.PrimitiveType.Boolean),
             [new Parameter("left", new NamedTypeReference(typeName)), new Parameter("right", new NamedTypeReference(typeName))],
-            IsStatic: true);
+            IsStatic: true) { Operator = kind };
 
     private static ITypeDefinition? TemporalMeaning(PrimitiveSemantics semantics) => semantics switch {
         PrimitiveSemantics.Date => Clr(typeof(DateOnly)),

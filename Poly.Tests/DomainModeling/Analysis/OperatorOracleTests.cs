@@ -146,12 +146,10 @@ internal static class OperatorOracle {
 
     /// <summary>C#'s verdict on the shift, from Roslyn for a native operand and from the runtime binder otherwise.</summary>
     private static bool CSharpRejectsShift(OperatorKind kind, Type left, Type count) {
-        if (Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(left) || Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(count))
-            return !Poly.Tests.Introspection.CSharpOperatorOracle.Answer(kind, left, count).Defined;
+        if (CSharpOperatorOracle.IsNativeForm(left) || CSharpOperatorOracle.IsNativeForm(count))
+            return !CSharpOperatorOracle.Answer(kind, left, count).Defined;
         try {
-            dynamic x = Activator.CreateInstance(left)!;
-            dynamic y = Activator.CreateInstance(count)!;
-            _ = kind is OperatorKind.ShiftLeft ? x << y : x >> y;
+            CSharpOperatorBinder.Apply(kind, Activator.CreateInstance(left)!, Activator.CreateInstance(count)!);
             return false;
         }
         catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException) {
@@ -322,8 +320,8 @@ internal static class OperatorOracle {
         // T-18b: a native-integer cell's word is read as the type the program states (a nuint at or above 2^63 is not a
         // negative long); when that type is not the tree's, a word that is the tree's value under the tree's type is a
         // type divergence only. The 8,800 cells without a native operand keep the raw read they were pinned with.
-        var native = Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(left.Clr!)
-            || (right?.Clr is { } rightClr && Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(rightClr));
+        var native = CSharpOperatorOracle.IsNativeForm(left.Clr!)
+            || (right?.Clr is { } rightClr && CSharpOperatorOracle.IsNativeForm(rightClr));
         foreach (var (name, leftValue, rightValue) in ArgumentSets(left, right)) {
             try {
                 var args = right is null ? new[] { leftValue } : [leftValue, rightValue];
@@ -396,16 +394,16 @@ internal static class OperatorOracle {
             if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
                 && rightType?.GetPrimitiveType() is { } countType && ClrBuiltInRules.IsPolicyShiftCount(countType)) {
                 var count = PolicyCount(rightValue!);
-                if (Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(leftType)) {
-                    var answer = Poly.Tests.Introspection.CSharpOperatorOracle.Value(kind, leftType, typeof(int), leftValue, count);
+                if (CSharpOperatorOracle.IsNativeForm(leftType)) {
+                    var answer = CSharpOperatorOracle.Value(kind, leftType, typeof(int), leftValue, count);
                     return answer.Throws is null ? answer.Value : null;
                 }
                 var promoted = resolution.Parameters.First().ParameterTypeDefinition.GetRuntimeType()!;
                 dynamic shifted = System.Convert.ChangeType(leftValue is char c0 ? (int)c0 : leftValue!, promoted, CultureInfo.InvariantCulture);
                 return kind is OperatorKind.ShiftLeft ? shifted << count : shifted >> count;
             }
-            if (Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(leftType) || (rightType is not null && Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(rightType))) {
-                var answer = Poly.Tests.Introspection.CSharpOperatorOracle.Value(kind, leftType, rightType, leftValue, rightValue);
+            if (CSharpOperatorOracle.IsNativeForm(leftType) || (rightType is not null && CSharpOperatorOracle.IsNativeForm(rightType))) {
+                var answer = CSharpOperatorOracle.Value(kind, leftType, rightType, leftValue, rightValue);
                 return answer.Throws is null ? answer.Value : null;
             }
             var parameters = resolution.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();

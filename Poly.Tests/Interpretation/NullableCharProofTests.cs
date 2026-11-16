@@ -118,7 +118,7 @@ internal static class NullableCharGrid {
                     ? Format(exec.RawValue != 0)
                     : exec.Result.Value is null ? "null"
                     // A native integer is not IConvertible: GetValue cannot convert to it, so the boxed result is read as it is.
-                    : Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(resultType) ? Format(exec.Result.Value)
+                    : CSharpOperatorOracle.IsNativeForm(resultType) ? Format(exec.Result.Value)
                     : Format(typeof(ExecutionResult).GetMethod(nameof(ExecutionResult.GetValue))!.MakeGenericMethod(resultType).Invoke(exec, null));
             }
             catch (Exception ex) {
@@ -150,10 +150,10 @@ internal static class NullableCharGrid {
     /// binder applies IntPtr's declared members, not C# 11's native-integer operators.
     /// </summary>
     private static string Binder(OperatorKind kind, Type left, Type right, object? l, object? r) {
-        if (Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(left) || Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(right)) {
-            if (!Poly.Tests.Introspection.CSharpOperatorOracle.Answer(kind, left, right).Defined)
+        if (CSharpOperatorOracle.IsNativeForm(left) || CSharpOperatorOracle.IsNativeForm(right)) {
+            if (!CSharpOperatorOracle.Answer(kind, left, right).Defined)
                 return "binder rejects the pair";
-            var answer = Poly.Tests.Introspection.CSharpOperatorOracle.Value(kind, left, right, l, r);
+            var answer = CSharpOperatorOracle.Value(kind, left, right, l, r);
             return answer.Throws is { } thrown ? $"binder throws {thrown}" : Format(answer.Value);
         }
         if (l is null || r is null) {
@@ -165,22 +165,7 @@ internal static class NullableCharGrid {
             };
         }
         try {
-            dynamic x = l;
-            dynamic y = r;
-            object result = kind switch {
-                OperatorKind.Add => x + y,
-                OperatorKind.Subtract => x - y,
-                OperatorKind.Multiply => x * y,
-                OperatorKind.Divide => x / y,
-                OperatorKind.Modulo => x % y,
-                OperatorKind.Equal => x == y,
-                OperatorKind.NotEqual => x != y,
-                OperatorKind.LessThan => x < y,
-                OperatorKind.LessThanOrEqual => x <= y,
-                OperatorKind.GreaterThan => x > y,
-                OperatorKind.GreaterThanOrEqual => x >= y,
-                _ => throw new ArgumentOutOfRangeException(nameof(kind))
-            };
+            var result = CSharpOperatorBinder.Apply(kind, l, r);
             return Format(result);
         }
         catch (RuntimeBinderException) {

@@ -84,6 +84,19 @@ public class PolySurfaceV2Tests {
     }
 
     [Test]
+    [Arguments("14")]
+    [Arguments("Stability in this release")]
+    public async Task Guide_StabilitySection_IsFoundByNumberAndByTitle(string topic) {
+        var surface = Surface();
+
+        var response = surface.Guide(topic);
+
+        await Assert.That(response.Ok).IsTrue();
+        var guide = JsonSerializer.SerializeToNode(response.Data)!["guide"]!.GetValue<string>();
+        await Assert.That(guide).Contains("Known wrong");
+    }
+
+    [Test]
     public async Task Define_ValidDocumentAppliesAndBumpsRevision() {
         var surface = Surface();
         var workspace = Open(surface);

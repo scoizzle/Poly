@@ -72,7 +72,7 @@ public class PackOracleMatrixTests {
 
     [Test]
     public async Task FromGolden_DomainWithoutMatrixRow_DoesNotThrow() {
-        // A NoBoot domain has no matrix row; deriving its fixture must still work so the boot (not the derivation) is what fails.
+        // A golden domain with no matrix row still derives a fixture (its list path falls back to "/"); hotel is filtered out here only to exercise that path.
         var withoutRow = RequestMatrix.All.Where(m => m.Domain != "hotel").ToList();
 
         var fixture = GoldenPackDomains.FromGolden(Golden("hotel"), withoutRow);

@@ -116,6 +116,14 @@ public class DbContextNavigationRequirednessTests {
         }
         """;
 
+    private const string SelfTree = Head + """
+        Node: entity {
+          Label: Text
+          parent: Node optional
+          children: many Node via parent
+        }
+        """;
+
     private static async Task<EfModel> Build(string poly, string name = "Probe") {
         var model = EfModel.Create(poly, name);
         await Assert.That(model.BuildError).IsNull();
@@ -252,6 +260,30 @@ public class DbContextNavigationRequirednessTests {
         await Assert.That(fk.DeleteBehavior).IsEqualTo(DeleteBehavior.Cascade);
     }
 
+    [Test]
+    public async Task ShippedCrm_Contact_HasExactlyOneAccountForeignKey() {
+        // crm: Account.opportunities and Account.tickets declare `via account` into other entities; before the resolver fix
+        // Account.contacts and Contact.account did not pair, and explicit statements would have added AccountId1.
+        var crm = await File.ReadAllTextAsync(Path.Combine(RepoRoot(), "docs/probes/dogfood/crm.poly"));
+        using var m = await Build(crm, "crm");
+        var contact = m.Entity("Contact");
+        await Assert.That(contact.GetForeignKeys().Count(fk => fk.PrincipalEntityType.ClrType.Name == "Account")).IsEqualTo(1);
+        await Assert.That(contact.GetProperties().Select(p => p.Name).Where(n => n.StartsWith("AccountId", StringComparison.Ordinal)).ToList())
+            .IsEquivalentTo(new[] { "AccountId" });
+        await Assert.That(m.Fk("Contact", "Account").PrincipalToDependent!.Name).IsEqualTo("Contacts");
+    }
+
+    [Test]
+    public async Task SelfReference_ParentAndChildrenVia_IsOneForeignKey_Optional() {
+        using var m = await Build(SelfTree);
+        var keys = m.Entity("Node").GetForeignKeys().ToList();
+        await Assert.That(keys.Count).IsEqualTo(1);
+        await Assert.That(keys[0].IsRequired).IsFalse();
+        await Assert.That(keys[0].DeleteBehavior).IsEqualTo(DeleteBehavior.ClientSetNull);
+        await Assert.That(keys[0].DependentToPrincipal!.Name).IsEqualTo("Parent");
+        await Assert.That(keys[0].PrincipalToDependent!.Name).IsEqualTo("Children");
+    }
+
     // ── fail closed ──────────────────────────────────────────────────────────────────────────────────
 
     [Test]
@@ -342,7 +374,7 @@ public class DbContextNavigationRequirednessTests {
         Exec(m, "INSERT INTO Sections (cap, CourseId) VALUES (1, 1)");
 
         await Assert.That(Exec(m, "DELETE FROM Courses")).Contains("FOREIGN KEY constraint failed");
-        await Assert.That(() => RemoveWithDependent(m, "Course", 1, "Section")).ThrowsException();
+        await Assert.That(() => RemoveWithDependent(m, "Course", 1, "Section")).Throws<InvalidOperationException>();
         await Assert.That(Scalar(m, "SELECT COUNT(*) FROM Sections")).IsEqualTo("1");
         await Assert.That(Scalar(m, "SELECT CourseId FROM Sections")).IsEqualTo("1");
     }

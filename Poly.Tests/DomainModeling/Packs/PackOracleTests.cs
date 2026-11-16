@@ -176,6 +176,32 @@ public class PackOracleTests {
         await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
+    /// <summary>L-15b: the one-to-one write path through the host. <c>Issue</c> creates the owned part with its owner as the
+    /// back-reference, so the part's NOT NULL unique key is set; the row is read back from the database by value.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithBidirectionalInternalOneToOne_IssueWritesThePart_ReadBackByValue() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceiptBidirectional604);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var issued = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/issue", new StringContent("""{"Note":"paid"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)issued.StatusCode).IsEqualTo(200);
+
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={oracle.DatabasePath};Mode=ReadOnly");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT r.note, o.code FROM Receipts r JOIN Orders o ON o.Id = r.OrderId";
+        using var reader = command.ExecuteReader();
+        var rows = new List<(string Note, string Code)>();
+        while (reader.Read())
+            rows.Add((reader.GetString(0), reader.GetString(1)));
+        await Assert.That(rows).IsEquivalentTo(new[] { ("paid", "ORD1") });
+    }
+
     [Test]
     [Category("OracleFull")]
     public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_Boots_Issue791() {

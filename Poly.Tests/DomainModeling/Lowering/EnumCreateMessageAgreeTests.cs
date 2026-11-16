@@ -32,9 +32,7 @@ public class EnumCreateMessageAgreeTests {
     /// <summary>The printed factory must compile warning-free (hosts use TreatWarningsAsErrors).</summary>
     private static async Task AssertDiagnosticsFree(string csharp) {
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + csharp);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             "EnumCreateMessageSmoke", [tree], references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));

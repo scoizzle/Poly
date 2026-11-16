@@ -1,8 +1,8 @@
 namespace Poly.Tests.TestHelpers;
 
 /// <summary>
-/// T-05b census, B-entity in the DSL: each FlipsB B-entity rule shape written as a whole document where the DSL can
-/// express it, with the scenario every residual cell runs. The FlipsB B-entity rows themselves are API-built.
+/// T-05b, B-entity in the DSL: each B-entity rule shape written as a whole document where the DSL can express it, with
+/// the scenario every residual cell runs. The B-entity grid rows themselves are API-built.
 /// </summary>
 internal static class EntityShapes {
     internal const string Fixture = """

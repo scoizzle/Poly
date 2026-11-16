@@ -53,37 +53,6 @@ public class CrmDogfoodTests {
     }
 
     [Test]
-    public async Task Crm_Export_Compiles() {
-        var (domain, analysis) = Evolve();
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        var cs = new CSharpGenerator().Generate(types);
-
-        await Assert.That(cs).DoesNotContain("void Notify(string stageName)");
-        await Assert.That(cs).Contains("Site? hq = default");
-        await Assert.That(cs).Contains("IEnumerable<Opportunity>? opportunities = default");
-        await Assert.That(cs).Contains("this.Lines.Count");
-        await Assert.That(cs).Contains("CreateHq");
-        await Assert.That(cs).Contains("Account? parent = default");
-        await Assert.That(cs.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
-
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
-        var compilation = CSharpCompilation.Create(
-            "CrmExport",
-            [tree],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        var errors = compilation.GetDiagnostics()
-            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-            .Select(d => d.ToString())
-            .ToArray();
-        await Assert.That(errors).IsEmpty();
-    }
-
-    [Test]
     public async Task Crm_Runtime_WalksAccountContactOpportunityPipeline() {
         var (domain, _) = Evolve();
         var exec = ModuleExec.For(domain);

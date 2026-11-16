@@ -398,6 +398,9 @@ public static class AstParity {
             var thrown = ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
             return (ParityDisposal.Executed, $"throw {thrown.GetType().Name}: {thrown.Message}");
         }
+        finally {
+            RoslynReferences.Unload(assembly);
+        }
     }
 
     /// <summary>Reflection arguments for the printed entry point: the seed values, converted to the parameter types.</summary>

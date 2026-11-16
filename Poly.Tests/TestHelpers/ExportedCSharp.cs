@@ -58,9 +58,7 @@ public static class ExportedCSharp {
     /// <summary>Compiles exported C# with Roslyn and loads the assembly.</summary>
     public static Assembly CompileAndLoad(string cs, string assemblyName = "ExportedDomain") {
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + MissingPolyRuntimeUsings(cs) + cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             assemblyName,
             [tree],
@@ -83,9 +81,7 @@ public static class ExportedCSharp {
             .Where(f => f.FileName.EndsWith(".cs", StringComparison.Ordinal))
             .Select(f => CSharpSyntaxTree.ParseText(f.Source, path: f.FileName))
             .ToArray();
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             assemblyName,
             trees,
@@ -112,9 +108,7 @@ public static class ExportedCSharp {
         var trees = files
             .Select(f => CSharpSyntaxTree.ParseText(f.Source, path: f.FileName))
             .ToArray();
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+        var references = RoslynReferences.Platform;
         var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
             .WithGeneralDiagnosticOption(ReportDiagnostic.Error);
         var compilation = CSharpCompilation.Create(assemblyName, trees, references, options);

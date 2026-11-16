@@ -46,65 +46,6 @@ public class DslCompilerCompileOracleTests {
     private static Compiler CompilerWithHttpHost() =>
         new Compiler().Load(new HttpLibrary());
 
-    internal static List<MetadataReference> GatherReferences() {
-        var byName = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
-
-        void AddFrom(string path) {
-            var name = Path.GetFileName(path);
-            if (!byName.ContainsKey(name) && File.Exists(path))
-                byName[name] = MetadataReference.CreateFromFile(path);
-        }
-
-        // 1. .NET shared framework.
-        var tpa = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES");
-        if (tpa is not null)
-            foreach (var p in tpa.Split(Path.PathSeparator))
-                AddFrom(p);
-
-        // 2. ASP.NET Core shared framework (WebApplication, routing, http) — the version
-        // matching the process runtime. Scanning ALL installed versions (the machine may
-        // also hold 8.0/9.0 runtimes) makes the reference set depend on directory
-        // enumeration order: an old facade can win the by-name dedupe and emit CS1701
-        // against the 10.0 references (seen on ubuntu-latest, which preinstalls 8.0).
-        var coreDir = Path.GetDirectoryName(typeof(object).Assembly.Location);          // .../Microsoft.NETCore.App/<ver>
-        var sharedDir = coreDir is not null ? Path.GetDirectoryName(Path.GetDirectoryName(coreDir)) : null; // .../shared
-        var aspNetCoreRoot = sharedDir is not null
-            ? Path.Combine(sharedDir, "Microsoft.AspNetCore.App")
-            : null;
-        var aspNetCoreDir = ResolveSharedFrameworkVersion(aspNetCoreRoot, Path.GetFileName(coreDir));
-        if (aspNetCoreDir is not null && Directory.Exists(aspNetCoreDir))
-            foreach (var p in Directory.GetFiles(aspNetCoreDir, "*.dll", SearchOption.AllDirectories))
-                AddFrom(p);
-
-        // 3. EF Core + transitive deps from the test output.
-        foreach (var p in Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
-            AddFrom(p);
-
-        return byName.Values.ToList();
-    }
-
-    /// <summary>Picks the ASP.NET Core shared-framework version dir matching the process
-    /// runtime version, falling back to the highest installed GA version.</summary>
-    internal static string? ResolveSharedFrameworkVersion(string? aspNetCoreRoot, string? coreVersion) {
-        if (aspNetCoreRoot is null || !Directory.Exists(aspNetCoreRoot))
-            return null;
-
-        var versionDirs = Directory.GetDirectories(aspNetCoreRoot)
-            .Select(Path.GetFileName)
-            .Where(v => v is not null && Version.TryParse(v, out _))
-            .Select(v => Version.Parse(v!))
-            .OrderByDescending(v => v)
-            .ToList();
-        if (versionDirs.Count == 0) return null;
-
-        if (coreVersion is not null && Version.TryParse(coreVersion, out var exact)) {
-            var exactDir = versionDirs.FirstOrDefault(v => v == exact);
-            if (exactDir is not null)
-                return Path.Combine(aspNetCoreRoot, exactDir.ToString());
-        }
-        return Path.Combine(aspNetCoreRoot, versionDirs[0].ToString());
-    }
-
     private static async Task AssertSolutionCompiles(string? polyText = null) {
         var result = CompilerWithHttpHost().Compile(polyText ?? Dsl, CompileMode.All, DbmsPack.Sqlite);
         if (!result.Success)
@@ -138,7 +79,7 @@ public class DslCompilerCompileOracleTests {
         var compilation = CSharpCompilation.Create(
             "DslCompileSmoke",
             trees,
-            GatherReferences(),
+            RoslynReferences.Host,
             new CSharpCompilationOptions(OutputKind.ConsoleApplication));
 
         var errors = compilation.GetDiagnostics()

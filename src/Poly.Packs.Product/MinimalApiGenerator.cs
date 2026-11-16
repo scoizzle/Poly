@@ -92,14 +92,29 @@ public sealed partial class MinimalApiGenerator {
     private IReadOnlyList<CreateSlot> GetRequiredScalarSlots(Entity entity) =>
         [.. GetCreateSlots(entity).Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })];
 
+    /// <summary>A Required link: a Required singular-navigation create slot, which the POST body carries as the target's key.</summary>
+    internal static bool IsRequiredLink(CreateSlot slot) =>
+        slot is { Shape: CreateSlotShape.Reference, Kind: CreateSlotKind.Required };
+
+    private IReadOnlyList<CreateSlot> GetRequiredLinkSlots(Entity entity) =>
+        [.. GetCreateSlots(entity).Where(IsRequiredLink)];
+
+    /// <summary>The create DTO member that carries a Required link: named as an action DTO names an entity ref.</summary>
+    internal static string CreateLinkMemberName(string slotName) => Pascalize(slotName) + "Id";
+
     /// <summary>
     /// One argument per create slot, in slot order: a Required scalar slot comes from
-    /// <paramref name="scalar"/>, and every other slot is <c>null</c>, which the lowered
-    /// <c>Create</c> reads as "not supplied" (its default applies, or it stays unset).
+    /// <paramref name="scalar"/>, a Required link from <paramref name="link"/> when given, and every other slot is
+    /// <c>null</c>, which the lowered <c>Create</c> reads as "not supplied" (its default applies, or it stays unset,
+    /// or a Required link answers Required).
     /// </summary>
-    private Dictionary<string, Node> BuildCreateArgs(Entity entity, Func<Property, Node> scalar) {
+    private Dictionary<string, Node> BuildCreateArgs(Entity entity, Func<Property, Node> scalar, Func<CreateSlot, Node>? link = null) {
         var args = new Dictionary<string, Node>(StringComparer.Ordinal);
         foreach (var slot in GetCreateSlots(entity)) {
+            if (link is not null && IsRequiredLink(slot)) {
+                args[ToCamelCase(slot.Name)] = link(slot);
+                continue;
+            }
             if (slot is not { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required }) {
                 args[ToCamelCase(slot.Name)] = new Constant(null!);
                 continue;
@@ -310,8 +325,8 @@ public sealed partial class MinimalApiGenerator {
     /// slot in slot order. A contributed dependency sits where the lowered signature
     /// puts it, so it is woven into the slot arguments rather than appended.
     /// </summary>
-    private List<Node> BuildCreateCallArgs(Entity entity, Func<Property, Node> scalar) {
-        var declared = BuildCreateArgs(entity, scalar);
+    private List<Node> BuildCreateCallArgs(Entity entity, Func<Property, Node> scalar, Func<CreateSlot, Node>? link = null) {
+        var declared = BuildCreateArgs(entity, scalar, link);
         var method = RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0
             ? null
             : ModuleMethod(entity, "Create");

@@ -963,8 +963,140 @@ public class PackOracleTests {
         await Assert.That((int)supplied.StatusCode).IsEqualTo(201);
     }
 
-    /// <summary>L-15a (#683): a root with a required link has no POST route (the path answers 405, as for any
-    /// method the route does not map), not a route whose every request answers 400 Required.</summary>
+    private static DepthStep Row(string entity, string key, string path, string http, string? sim = null) =>
+        new(entity, key, null, path, http, sim ?? http);
+
+    /// <summary>P-11b (#687; owner ruling 2026-11-14, "the create request carries the link"): a section created over HTTP
+    /// carries its course as the course's key. The university flow (course, section, student, enroll, close) answers what
+    /// the simulator answers, step by step and by value, and the policy that reads through the link agrees on both sides.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostSection_CarryingItsCourseKey_RunsTheUniversityFlowLikeTheSimulator(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.CreateLink11b, [
+            Row("Course", "CS101", "/api/courses", """{"Code":"CS101","Credits":4}"""),
+            Row("Course", "CS102", "/api/courses", """{"Code":"CS102","Credits":1}"""),
+            Row("Section", "S1", "/api/sections", """{"Code":"S1","Cap":10,"CourseId":"@Course:CS101"}""", """{"Code":"S1","Cap":10,"course":"@Course:CS101"}"""),
+            Row("Section", "S2", "/api/sections", """{"Code":"S2","Cap":10,"CourseId":"@Course:CS102"}""", """{"Code":"S2","Cap":10,"course":"@Course:CS102"}"""),
+            Row("Student", "ann", "/api/students", """{"Email":"ann@x.io"}"""),
+            Act("Student", "ann", "Enroll", "/api/students/ann@x.io/enroll", http: """{"OfferingId":"@Section:S1"}""", sim: """{"offering":"@Section:S1"}"""),
+            Act("Section", "S1", "Close", "/api/sections/S1/close"),
+            Act("Section", "S2", "Close", "/api/sections/S2/close"),
+        ], [
+            new DepthRead("Student", "ann", "/api/students/ann@x.io", "OpenCredits", "3"),
+            new DepthRead("Section", "S1", "/api/sections/S1", "Cap", "10"),
+        ]);
+    }
+
+    /// <summary>P-11b: two required links to targets of one type are two DTO members and two locals. A swapped pair would
+    /// be a different answer to a policy that reads through each link, on the simulator and over HTTP alike.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostRoute_TwoLinksToOneEntityType_AreNotSwapped(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.TwoLinks11b, [
+            Row("Airport", "SFO", "/api/airports", """{"Code":"SFO","Capacity":200}"""),
+            Row("Airport", "JFK", "/api/airports", """{"Code":"JFK","Capacity":50}"""),
+            Row("Route", "R1", "/api/routes", """{"Code":"R1","OriginId":"@Airport:SFO","DestinationId":"@Airport:JFK"}""", """{"Code":"R1","origin":"@Airport:SFO","destination":"@Airport:JFK"}"""),
+            Row("Route", "R2", "/api/routes", """{"Code":"R2","OriginId":"@Airport:JFK","DestinationId":"@Airport:SFO"}""", """{"Code":"R2","origin":"@Airport:JFK","destination":"@Airport:SFO"}"""),
+            Act("Route", "R1", "FromBig", "/api/routes/R1/frombig"),
+            Act("Route", "R1", "ToBig", "/api/routes/R1/tobig"),
+            Act("Route", "R2", "FromBig", "/api/routes/R2/frombig"),
+            Act("Route", "R2", "ToBig", "/api/routes/R2/tobig"),
+        ], [
+            new DepthRead("Route", "R1", "/api/routes/R1", "Hits", "1"),
+            new DepthRead("Route", "R2", "/api/routes/R2", "Hits", "1"),
+        ]);
+    }
+
+    /// <summary>P-11b: the create route loads what the lowered create reads through the link (the section's initial entry reads
+    /// <c>course region Name</c>), from the same read tree an action route loads: the label is the region's name, the same
+    /// on the simulator and over HTTP, and persisted. A course with no region leaves it unset on both.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostSection_WhoseEntryReadsThroughTheCourse_LoadsTheRegionFirst(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.CreateLinkReads11b, [
+            Row("Course", "C1", "/api/courses", """{"Code":"C1"}"""),
+            Act("Course", "C1", "MakeRegion", "/api/courses/C1/makeregion", makes: "Region:r1"),
+            Row("Section", "S1", "/api/sections", """{"Code":"S1","CourseId":"@Course:C1"}""", """{"Code":"S1","course":"@Course:C1"}"""),
+        ], [
+            new DepthRead("Section", "S1", "/api/sections/S1", "Label", "North"),
+        ]);
+    }
+
+    /// <summary>P-11b: a key that names no course is the same 404 an action's entity argument gets, naming the course, and
+    /// creates nothing; the same body with the course made is a 201 with the section's own <c>Location</c>.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostSection_UnknownCourseKey_Returns404NamingTheCourse(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.CreateLink11b);
+
+        using var unknown = await oracle.Client.PostAsync(
+            "/api/sections", new StringContent("""{"Code":"S9","Cap":5,"CourseId":"NOPE"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)unknown.StatusCode).IsEqualTo(404);
+        await Assert.That(unknown.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+        using var problem = JsonDocument.Parse(await unknown.Content.ReadAsStringAsync());
+        await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Not Found");
+        await Assert.That(problem.RootElement.GetProperty("detail").GetString()).IsEqualTo("Course not found");
+        using var absent = await oracle.Client.GetAsync("/api/sections/S9");
+        await Assert.That((int)absent.StatusCode).IsEqualTo(404);
+
+        using var course = await oracle.Client.PostAsync(
+            "/api/courses", new StringContent("""{"Code":"NOPE","Credits":3}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)course.StatusCode).IsEqualTo(201);
+        using var created = await oracle.Client.PostAsync(
+            "/api/sections", new StringContent("""{"Code":"S9","Cap":5,"CourseId":"NOPE"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(await created.Content.ReadAsStringAsync());
+        await Assert.That(created.Headers.Location?.ToString()).IsEqualTo("/api/sections/S9");
+        using var got = await oracle.Client.GetAsync("/api/sections/S9");
+        await Assert.That((int)got.StatusCode).IsEqualTo(200);
+    }
+
+    /// <summary>P-11b: a link left out of the body, or sent as JSON <c>null</c>, reaches the module as a null link and
+    /// answers what the simulator answers for the same create: Required at <c>Section.course</c>, the same message. The host
+    /// adds no check of its own.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostSection_OmittedOrNullCourse_AnswersWhatTheSimulatorAnswers(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var harness = PolySurfaceHarness.New();
+        var workspace = harness.Open();
+        var defined = harness.Define(workspace, PackOracleDomains.WithoutHostLibraries(PackOracleDomains.CreateLink11b));
+        await Assert.That(defined.Success).IsTrue().Because(defined.Summary);
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.CreateLink11b);
+
+        foreach (var (name, http, sim) in new[] {
+            ("omitted", """{"Code":"S9","Cap":5}""", """{"Code":"S9","Cap":5}"""),
+            ("null", """{"Code":"S9","Cap":5,"CourseId":null}""", """{"Code":"S9","Cap":5,"course":null}"""),
+        }) {
+            var expected = harness.Create(workspace, "Section", sim);
+            await Assert.That(expected.Ok).IsFalse().Because($"{name}: the simulator's answer");
+            var kind = expected.Data?["failure"]?["kind"]?.GetValue<string>();
+            var elementPath = expected.Data?["failure"]?["elementPath"]?.GetValue<string>();
+            var message = expected.Data?["failure"]?["message"]?.GetValue<string>();
+            await Assert.That(kind).IsEqualTo("Required").Because(name);
+            await Assert.That(elementPath).IsEqualTo("Section.course").Because(name);
+
+            using var response = await oracle.Client.PostAsync("/api/sections", new StringContent(http, Encoding.UTF8, "application/json"));
+            await Assert.That((int)response.StatusCode).IsEqualTo(400).Because(name);
+            await Assert.That(response.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json").Because(name);
+            using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo(kind).Because(name);
+            await Assert.That(problem.RootElement.GetProperty("elementPath").GetString()).IsEqualTo(elementPath).Because(name);
+            await Assert.That(problem.RootElement.GetProperty("detail").GetString()).IsEqualTo(message).Because(name);
+        }
+    }
+
+    /// <summary>L-15a (#683), P-11b: a root whose required link has a target with no natural key has no POST route (the path
+    /// answers 405, as for any method the route does not map), not a route whose every request answers 400 Required: there is
+    /// no value a body could carry for the link.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]

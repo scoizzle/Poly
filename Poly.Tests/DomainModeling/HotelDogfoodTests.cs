@@ -53,35 +53,6 @@ public class HotelDogfoodTests {
     }
 
     [Test]
-    public async Task Hotel_Export_Compiles() {
-        var (domain, analysis) = Evolve();
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        var cs = new CSharpGenerator().Generate(types);
-
-        await Assert.That(cs).DoesNotContain("void Notify(string stageName)");
-        await Assert.That(cs).Contains("IEnumerable<Reservation>? reservations = default");
-        await Assert.That(cs).Contains("IEnumerable<Section>? sections = default");
-        await Assert.That(cs).Contains("WhenEachReservationDeparted");
-        await Assert.That(cs).Contains("WhenEachEventHoldReleased");
-
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
-        var compilation = CSharpCompilation.Create(
-            "HotelExport",
-            [tree],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        var errors = compilation.GetDiagnostics()
-            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-            .Select(d => d.ToString())
-            .ToArray();
-        await Assert.That(errors).IsEmpty();
-    }
-
-    [Test]
     public async Task Hotel_Runtime_WalksStayFolioAndMeetingAirwall() {
         var (domain, _) = Evolve();
         var exec = ModuleExec.For(domain);

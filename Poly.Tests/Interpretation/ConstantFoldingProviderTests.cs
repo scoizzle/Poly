@@ -201,32 +201,9 @@ internal static class ConstantFoldGrid {
                 value is null || !target.TryGetRuntimeType(out var type) || value.GetType() == type || type == typeof(object)
                     ? value
                     : System.Convert.ChangeType(value is char c ? (int)c : value, type, CultureInfo.InvariantCulture);
-            dynamic x = Convert(row.LeftValue, parameters[0])!;
-            dynamic? y = parameters.Length > 1 ? Convert(row.RightValue, parameters[1]) : null;
-            object? value = row.Op switch {
-                OperatorKind.Add => x + y,
-                OperatorKind.Subtract => x - y,
-                OperatorKind.Multiply => x * y,
-                OperatorKind.Divide => x / y,
-                OperatorKind.Modulo => x % y,
-                OperatorKind.Equal => x == y,
-                OperatorKind.NotEqual => x != y,
-                OperatorKind.LessThan => x < y,
-                OperatorKind.LessThanOrEqual => x <= y,
-                OperatorKind.GreaterThan => x > y,
-                OperatorKind.GreaterThanOrEqual => x >= y,
-                OperatorKind.And => (bool)x && (bool)y!,
-                OperatorKind.Or => (bool)x || (bool)y!,
-                OperatorKind.Not => !(bool)x,
-                OperatorKind.BitwiseAnd => x & y,
-                OperatorKind.BitwiseOr => x | y,
-                OperatorKind.BitwiseXor => x ^ y,
-                OperatorKind.ShiftLeft => x << y,
-                OperatorKind.ShiftRight => x >> y,
-                OperatorKind.UnaryMinus => -x,
-                OperatorKind.BitwiseNot => ~x,
-                _ => null
-            };
+            var x = Convert(row.LeftValue, parameters[0])!;
+            var y = parameters.Length > 1 ? Convert(row.RightValue, parameters[1]) : null;
+            object? value = CSharpOperatorBinder.Apply(row.Op, x, y);
             return Typed(value);
         }
         catch (Exception ex) {

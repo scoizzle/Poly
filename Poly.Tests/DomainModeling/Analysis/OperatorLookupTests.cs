@@ -432,41 +432,7 @@ public class OperatorLookupTests {
         : Convert.ChangeType(1, type, CultureInfo.InvariantCulture);
 
     /// <summary>The type of the result the C# runtime binder gives for runtime-typed (non-constant) operands, or null when C# defines no operator.</summary>
-    private static Type? Binder(OperatorKind kind, object left, object? right) {
-        dynamic l = left;
-        dynamic? r = right;
-        try {
-            object result = kind switch {
-                OperatorKind.Add => l + r,
-                OperatorKind.Subtract => l - r,
-                OperatorKind.Multiply => l * r,
-                OperatorKind.Divide => l / r,
-                OperatorKind.Modulo => l % r,
-                OperatorKind.Equal => l == r,
-                OperatorKind.NotEqual => l != r,
-                OperatorKind.LessThan => l < r,
-                OperatorKind.LessThanOrEqual => l <= r,
-                OperatorKind.GreaterThan => l > r,
-                OperatorKind.GreaterThanOrEqual => l >= r,
-                OperatorKind.And => l && r,
-                OperatorKind.Or => l || r,
-                OperatorKind.BitwiseAnd => l & r,
-                OperatorKind.BitwiseOr => l | r,
-                OperatorKind.BitwiseXor => l ^ r,
-                OperatorKind.ShiftLeft => l << r,
-                OperatorKind.ShiftRight => l >> r,
-                OperatorKind.Not => !l,
-                OperatorKind.UnaryMinus => -l,
-                OperatorKind.UnaryPlus => +l,
-                OperatorKind.BitwiseNot => ~l,
-                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
-            };
-            return result.GetType();
-        }
-        catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException) {
-            return null;
-        }
-    }
+    private static Type? Binder(OperatorKind kind, object left, object? right) => CSharpOperatorBinder.ResultType(kind, left, right);
 
     /// <summary>
     /// The parameter types C# binds a defined cell to. A comparison's Boolean result hides the promoted type, so a

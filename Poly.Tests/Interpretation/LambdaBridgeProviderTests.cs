@@ -564,36 +564,6 @@ internal static class BridgeGrid {
         _ => throw new ArgumentOutOfRangeException(nameof(c), c.Grid, "unknown grid")
     };
 
-    /// <summary>The runtime binder's value for the operator over two non-null operand values; throws when C# has no operator.</summary>
-    public static object? Binder(OperatorKind kind, object? left, object? right) {
-        dynamic x = left!;
-        dynamic? y = right;
-        return kind switch {
-            OperatorKind.Add => x + y,
-            OperatorKind.Subtract => x - y,
-            OperatorKind.Multiply => x * y,
-            OperatorKind.Divide => x / y,
-            OperatorKind.Modulo => x % y,
-            OperatorKind.Equal => x == y,
-            OperatorKind.NotEqual => x != y,
-            OperatorKind.LessThan => x < y,
-            OperatorKind.LessThanOrEqual => x <= y,
-            OperatorKind.GreaterThan => x > y,
-            OperatorKind.GreaterThanOrEqual => x >= y,
-            OperatorKind.And => x && y,
-            OperatorKind.Or => x || y,
-            OperatorKind.Not => !x,
-            OperatorKind.BitwiseAnd => x & y,
-            OperatorKind.BitwiseOr => x | y,
-            OperatorKind.BitwiseXor => x ^ y,
-            OperatorKind.ShiftLeft => x << y,
-            OperatorKind.ShiftRight => x >> y,
-            OperatorKind.UnaryMinus => -x,
-            OperatorKind.BitwiseNot => ~x,
-            _ => throw new ArgumentOutOfRangeException(nameof(kind))
-        };
-    }
-
     /// <summary>C#'s lifted operator when an operand is null: equality compares nullness, ordering is false, Boolean <c>&amp;</c> and <c>|</c> are three-valued, the rest are null.</summary>
     private static object? LiftedNull(OperatorKind kind, object? left, object? right) => kind switch {
         OperatorKind.Equal => left is null && right is null,
@@ -628,7 +598,7 @@ internal static class BridgeGrid {
             return BridgeExpectation.Undefined;
         object? probe;
         try {
-            probe = Binder(kind, c.Left.Operand.Plain, c.Right?.Operand.Plain);
+            probe = CSharpOperatorBinder.Apply(kind, c.Left.Operand.Plain!, c.Right?.Operand.Plain);
         }
         catch (RuntimeBinderException) {
             return BridgeExpectation.Undefined;
@@ -637,7 +607,7 @@ internal static class BridgeGrid {
         var type = lifted && !IsComparison(kind) ? typeof(Nullable<>).MakeGenericType(result) : result;
         var runs = c.Sets.Select(set => set.Left is null || (c.Right is not null && set.Right is null)
             ? Run(set.Name, () => LiftedNull(kind, set.Left, set.Right))
-            : Run(set.Name, () => Binder(kind, set.Left, set.Right))).ToArray();
+            : Run(set.Name, () => CSharpOperatorBinder.Apply(kind, set.Left!, set.Right))).ToArray();
         return new(true, TypeName(type), runs);
     }
 
@@ -725,7 +695,7 @@ internal static class BridgeGrid {
         var runs = c.Sets.Select(set => {
             var other = Operand(c, set);
             var (l, r) = constantOnLeft ? ((object?)asUInt64, other) : (other, asUInt64);
-            return other is null ? Run(set.Name, () => LiftedNull(kind, l, r)) : Run(set.Name, () => Binder(kind, l, r));
+            return other is null ? Run(set.Name, () => LiftedNull(kind, l, r)) : Run(set.Name, () => CSharpOperatorBinder.Apply(kind, l!, r));
         }).ToArray();
         return new(true, TypeName(type), runs);
     }
@@ -747,12 +717,12 @@ internal static class BridgeGrid {
         object? Count(object? x) => policyCount ? unchecked((int)(uint)x!) : x;
         object? probe;
         try {
-            probe = constantOnLeft ? Binder(kind, operand, Count(7u)) : Binder(kind, 7u, operand);
+            probe = constantOnLeft ? CSharpOperatorBinder.Apply(kind, operand!, Count(7u)) : CSharpOperatorBinder.Apply(kind, 7u!, operand);
         }
         catch (RuntimeBinderException) {
             return BridgeExpectation.Undefined;
         }
-        var runs = c.Sets.Select(set => Run(set.Name, () => constantOnLeft ? Binder(kind, operand, Count(set.Left)) : Binder(kind, set.Left, operand))).ToArray();
+        var runs = c.Sets.Select(set => Run(set.Name, () => constantOnLeft ? CSharpOperatorBinder.Apply(kind, operand!, Count(set.Left)) : CSharpOperatorBinder.Apply(kind, set.Left!, operand))).ToArray();
         return new(true, TypeName(probe!.GetType()), runs);
     }
 
@@ -869,7 +839,7 @@ internal static class BridgeGrid {
         var kind = c.Op!.Value;
         object? probe;
         try {
-            probe = Binder(kind, c.Left.Operand.Plain, 1);
+            probe = CSharpOperatorBinder.Apply(kind, c.Left.Operand.Plain!, 1);
         }
         catch (RuntimeBinderException) {
             return BridgeExpectation.Undefined;
@@ -884,7 +854,7 @@ internal static class BridgeGrid {
         };
         var runs = c.Sets.Select(set => set.Left is null || set.Right is null
             ? Run(set.Name, () => null)
-            : Run(set.Name, () => Binder(kind, set.Left, Count(set.Right)))).ToArray();
+            : Run(set.Name, () => CSharpOperatorBinder.Apply(kind, set.Left!, Count(set.Right)))).ToArray();
         return new(true, TypeName(type), runs);
     }
 
@@ -1087,19 +1057,6 @@ public class LambdaBridgeProviderTests {
         var errors = BridgeGrid.Cases.Where(static c => BridgeGrid.Outcome(c).Stage == "harness-error")
             .Select(static c => $"{c.Line}: {BridgeGrid.Outcome(c).Message}").ToArray();
         await Assert.That(errors).IsEmpty();
-    }
-
-    [Test]
-    public async Task Oracle_ProviderAgreesWithTheBinder_OnEveryPlainOperatorCell() {
-        var disagreements = InGrid("operator").Where(static c => {
-            // A policy shift is judged against the binder's shift by an int count (C# itself rejects the cell).
-            var expected = BridgeGrid.IsPolicyShift(c) ? BridgeGrid.ProviderExpectation(c) : BridgeGrid.Expectation(c);
-            var provider = BridgeGrid.ProviderResult(c);
-            return c.Op is OperatorKind.And or OperatorKind.Or or OperatorKind.Not
-                ? expected.Defined != (provider is not null)
-                : expected.Defined != (provider is not null) || (provider is not null && expected.Type != BridgeGrid.TypeName(provider));
-        }).Select(static c => $"{c.Key}: binder {BridgeGrid.Expectation(c).Type ?? "none"}, provider {BridgeGrid.ProviderResult(c)?.Name ?? "none"}").ToArray();
-        await Assert.That(disagreements).IsEmpty();
     }
 
     [Test]

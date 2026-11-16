@@ -920,6 +920,19 @@ public partial class MinimalApiGeneratorTests {
             }
             compiled++;
             var generator = HostGenerator(compile);
+            // The create route of every POST-able entity walks its lowered Create: a refusal is named, not a skipped document.
+            var storage = compile.Analysis.GetMetadata<StorageMappingMetadata>(compile.Domain)!.Storage.Entities
+                .ToDictionary(e => e.Name, StringComparer.Ordinal);
+            var entities = compile.Domain.Types.OfType<Entity>().ToList();
+            foreach (var entity in entities.Where(e => storage[e.Name].IsRoot
+                         && MinimalApiGenerator.CreatesDirectly(entities, e, compile.Analysis.GetStructure(e)!.CreateSlots, storage))) {
+                try {
+                    generator.ReadsOfCreate(entity);
+                }
+                catch (ActionReadsRefusedException refusal) {
+                    refused.Add($"{label}: {refusal.Message}");
+                }
+            }
             foreach (var entity in BehaviorMetadata.From(compile.Domain, compile.Analysis).Entities) {
                 foreach (var action in entity.Actions.Select(a => a.Name).Distinct()) {
                     actions++;

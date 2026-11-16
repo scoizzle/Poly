@@ -37,14 +37,20 @@ public sealed class HttpFileGenerator {
     }
 
     /// <summary>
-    /// The entity's CREATE-signature scalar params (the complete constructor
-    /// metadata, non-nav) — the DTO/JSON body mirrors what Entity.Create(...) takes.
+    /// The entity's Required scalar create slots — the members of the create DTO the
+    /// JSON body sends to Entity.Create(...).
     /// </summary>
-    private IReadOnlyList<ConstructorParameterOrder> GetCreateScalarParams(Entity entity) {
+    private IReadOnlyList<CreateSlot> GetCreateScalarParams(Entity entity) {
         if (_analysis.GetStructure(entity) is { } esm)
-            return esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
+            return [.. esm.CreateSlots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })];
         return [];
     }
+
+    // The same published create slots the generated host reads for its POST route.
+    private IReadOnlyList<CreateSlot> GetCreateSlots(Entity entity) =>
+        _analysis.GetStructure(entity)?.CreateSlots
+        ?? throw new InvalidOperationException(
+            $"EntityStructureMetadata is required for the create slots of entity '{entity.Name}'.");
 
     private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];
 
@@ -93,23 +99,30 @@ public sealed class HttpFileGenerator {
             sb.AppendLine($"### List all {Pluralize(ToCamelCase(entity.Name))}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}");
             sb.AppendLine();
-            sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(store.KeyProperty?.Name ?? "id")}");
+            sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(MinimalApiGenerator.RouteKeyFor(store).Property?.Name ?? "id")}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}/{keyExample}");
             sb.AppendLine();
-            sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
-            sb.AppendLine($"POST {_baseUrl}/api/{route}");
-            sb.AppendLine("Content-Type: application/json");
-            sb.AppendLine();
-            sb.AppendLine("{");
-            var scalarProps = GetCreateScalarParams(entity)
-                .Select(p => entity.Properties.First(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal)))
-                .ToList();
-            for (int i = 0; i < scalarProps.Count; i++) {
-                var comma = i < scalarProps.Count - 1 ? "," : "";
-                sb.AppendLine($"    \"{scalarProps[i].Name}\": {GetExampleJsonValue(scalarProps[i])}{comma}");
+            if (MinimalApiGenerator.CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) {
+                sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
+                sb.AppendLine($"POST {_baseUrl}/api/{route}");
+                sb.AppendLine("Content-Type: application/json");
+                sb.AppendLine();
+                sb.AppendLine("{");
+                var scalarProps = GetCreateScalarParams(entity)
+                    .Select(p => entity.Properties.First(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal)))
+                    .ToList();
+                // A Required link is sent as the target's key, the value the target's own create sample posts for it, so
+                // the target's sample and this one succeed in file order. CreatesDirectly guarantees a natural key.
+                var members = scalarProps.Select(p => $"\"{p.Name}\": {GetExampleJsonValue(p)}")
+                    .Concat(GetCreateSlots(entity).Where(MinimalApiGenerator.IsRequiredLink).Select(slot =>
+                        $"\"{MinimalApiGenerator.CreateLinkMemberName(slot.Name)}\": "
+                        + GetExampleJsonValue(MinimalApiGenerator.RouteKeyFor(_storageLookup[slot.Type.TypeName]).Property!)))
+                    .ToList();
+                for (int i = 0; i < members.Count; i++)
+                    sb.AppendLine($"    {members[i]}{(i < members.Count - 1 ? "," : "")}");
+                sb.AppendLine("}");
+                sb.AppendLine();
             }
-            sb.AppendLine("}");
-            sb.AppendLine();
         }
 
         if (!isRoot) {
@@ -183,8 +196,9 @@ public sealed class HttpFileGenerator {
         param.IsEntityRef ? Pascalize(param.Name) + "Id" : Pascalize(param.Name);
 
     private static string GetKeyExample(StorageEntity store) {
-        if (store.KeyProperty is null) return "1";
-        return store.KeyClrType switch {
+        var key = MinimalApiGenerator.RouteKeyFor(store);
+        if (key.Property is null) return "1";
+        return key.ClrType switch {
             "string" => "example-value",
             "long" or "int" => "42",
             "Guid" => "550e8400-e29b-41d4-a716-446655440000",
@@ -213,6 +227,8 @@ public sealed class HttpFileGenerator {
             "Boolean" or "Bool" => "false",
             "DateTime" or "Timestamp" => "\"2026-07-20T00:00:00Z\"",
             "Date" or "DateOnly" => "\"2026-07-20\"",
+            "Time" or "TimeOnly" => "\"10:30:00\"",
+            "Duration" or "TimeSpan" => "\"01:30:00\"",
             "Decimal" => "0.0",
             "Float" or "Double" => "0.0",
             "Guid" or "Uuid" => "\"550e8400-e29b-41d4-a716-446655440000\"",
@@ -235,6 +251,8 @@ public sealed class HttpFileGenerator {
             "Boolean" or "Bool" => "false",
             "DateTime" or "Timestamp" => "\"2026-07-20T00:00:00Z\"",
             "Date" or "DateOnly" => "\"2026-07-20\"",
+            "Time" or "TimeOnly" => "\"10:30:00\"",
+            "Duration" or "TimeSpan" => "\"01:30:00\"",
             "Decimal" => "0.0",
             "Float" or "Double" => "0.0",
             "Guid" or "Uuid" => "\"550e8400-e29b-41d4-a716-446655440000\"",

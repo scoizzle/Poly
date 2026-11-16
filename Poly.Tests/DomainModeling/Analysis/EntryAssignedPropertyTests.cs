@@ -449,7 +449,7 @@ public sealed class EntryAssignedPropertyTests {
         var z = domain.Types.OfType<Entity>().Single(e => e.Name == "Z");
         var structure = analysis.GetStructure(z)!;
 
-        await Assert.That(structure.ConstructorParameters.Any(p => p.Name == "P")).IsTrue();
+        await Assert.That(structure.CreateSlots.Any(s => s.Name == "P" && s.Kind == CreateSlotKind.Required)).IsTrue();
         await Assert.That(structure.RequiredPropertyNames.Contains("P")).IsTrue();
         await Assert.That(structure.EntryAssignedPropertyNames.Contains("P")).IsFalse();
         await Assert.That(StageEntryFacts.EntryAssignedProperties(z, domain).Contains("P")).IsTrue();

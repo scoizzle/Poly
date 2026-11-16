@@ -182,18 +182,25 @@ public class CatalogArtifactOracleTests {
             .Where(t => t.Name == entityName)
             .SelectMany(t => t.Methods ?? []);
 
-    // Creates one instance per entity (two passes, so entity-typed values find a target)
-    // and invokes every action on it. Failures are expected and ignored: the executor
-    // compiles the method before it runs it, and the compiled body is what is read.
+    // Creates one instance per entity (repeated passes, so entity-typed values and required
+    // to-one links find a target) and invokes every action on it. Failures are expected and
+    // ignored: the executor compiles the method before it runs it, and the compiled body is
+    // what is read.
     static void Exercise(ModuleInstanceExecutor executor, Domain domain) {
         var entities = domain.Types.OfType<Entity>().ToList();
         var made = new Dictionary<string, ModuleInstance>(StringComparer.Ordinal);
-        for (var pass = 0; pass < 2; pass++) {
+        for (var pass = 0; pass < Math.Max(2, entities.Count); pass++) {
             foreach (var entity in entities) {
                 if (made.ContainsKey(entity.Name))
                     continue;
-                var values = entity.Properties.ToDictionary(
-                    p => p.Name, p => Synthesize(domain, made, p.Type.TypeName), StringComparer.OrdinalIgnoreCase);
+                // Entry-assigned properties are not Create parameters, so they are not supplied.
+                var entryAssigned = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
+                var values = entity.Properties.Where(p => !entryAssigned.Contains(p.Name)).ToDictionary(
+                    p => p.Name, p => SynthesizeFor(domain, made, p), StringComparer.OrdinalIgnoreCase);
+                // L-15a: a required to-one is passed, as an entity-typed property is, so the
+                // entity is created once its target exists.
+                foreach (var nav in entity.Navigations.Where(n => n.IsRequiredToOne()))
+                    values[nav.Name] = made.GetValueOrDefault(nav.Target.TypeName);
                 try {
                     if (executor.Create(entity.Name, values) is { Succeeded: true, Instance: { } instance })
                         made[entity.Name] = instance;
@@ -217,6 +224,27 @@ public class CatalogArtifactOracleTests {
     static Dictionary<string, object?> ArgsOf(Domain domain, Dictionary<string, ModuleInstance> made, Action action) =>
         action.Parameters.ToDictionary(
             p => p.Name, p => Synthesize(domain, made, p.Type.TypeName), StringComparer.OrdinalIgnoreCase);
+
+    // A property value that satisfies the property's own length and pattern constraints where a
+    // simple candidate does, so a constrained root is created and its dependents find their target.
+    static object? SynthesizeFor(Domain domain, Dictionary<string, ModuleInstance> made, Property property) {
+        var value = Synthesize(domain, made, property.Type.TypeName);
+        if (value is not string)
+            return value;
+        var length = property.Constraints.OfType<LengthConstraint>().FirstOrDefault();
+        var pattern = property.Constraints.OfType<PatternConstraint>().FirstOrDefault();
+        var min = Math.Max(1, length?.MinLength ?? 1);
+        string[] candidates = [new string('x', min), "a@b.c", "ABC-1234", "AB123", "12345", "12345678", "MD-123456",
+            "WH-123", "ABCDEFGH123456789"];
+        foreach (var candidate in candidates) {
+            if (length is not null && (candidate.Length < length.MinLength || candidate.Length > length.MaxLength))
+                continue;
+            if (pattern is not null && !System.Text.RegularExpressions.Regex.IsMatch(candidate, pattern.Pattern))
+                continue;
+            return candidate;
+        }
+        return value;
+    }
 
     static object? Synthesize(Domain domain, Dictionary<string, ModuleInstance> made, string typeName) {
         if (made.TryGetValue(typeName, out var instance))

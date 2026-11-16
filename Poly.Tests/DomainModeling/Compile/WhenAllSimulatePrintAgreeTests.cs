@@ -22,7 +22,7 @@ public class WhenAllSimulatePrintAgreeTests {
             domain Watch
             WorkItem: entity {
               Code: Text
-              board: Board via items
+              board: Board via items optional
               Draft: stage {
                 Prep: action { transition to Ready }
                 Finish: action { transition to Done }
@@ -85,7 +85,7 @@ public class WhenAllSimulatePrintAgreeTests {
             domain Watch
             WorkItem: entity {
               Code: Text
-              board: Board via items
+              board: Board via items optional
               Draft: stage {
                 Prep: action { transition to Ready }
               }
@@ -134,7 +134,7 @@ public class WhenAllSimulatePrintAgreeTests {
             domain Watch
             WorkItem: entity {
               Code: Text
-              board: Board via items
+              board: Board via items optional
               Finish: action { transition to Done }
               Draft: stage {
                 Finish: action { transition to Done }

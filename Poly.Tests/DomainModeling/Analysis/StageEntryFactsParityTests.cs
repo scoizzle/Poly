@@ -496,7 +496,7 @@ public class StageEntryFactsParityTests {
         domain C4
         Z: entity {
           Kids: many Z
-          parent: Z via Kids
+          parent: Z via Kids optional
           N: Number default(0)
           Flag: Number default(0)
           A: stage {

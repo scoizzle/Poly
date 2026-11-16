@@ -18,7 +18,7 @@ internal class Product : Poly.Runtime.IActionScoped
     public string Sku { get; private set; } = default!;
     public string Name { get; private set; } = default!;
     public decimal ListPrice { get; private set; }
-    internal static DomainResult<Product> Create(string sku, string name, decimal listPrice, Poly.Runtime.IStoragePort db)
+    internal static DomainResult<Product> Create(Poly.Runtime.IStoragePort db, string? sku = default, string? name = default, decimal? listPrice = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -41,39 +41,46 @@ internal class Product : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Product> __BodyOfCreate(string sku, string name, decimal listPrice, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Product> __BodyOfCreate(string? sku, string? name, decimal? listPrice, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(sku))
+        if (sku == null)
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Required("'Sku' is required.", "Product.Sku"));
         }
-        if (sku.Length < 3L)
+        var __sku = sku;
+        if (__sku.Length < 3L)
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Length("'Sku' must be at least 3 characters.", "Product.Sku"));
         }
-        if (sku.Length > 32L)
+        if (__sku.Length > 32L)
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Length("'Sku' must be at most 32 characters.", "Product.Sku"));
         }
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Product.Name"));
         }
-        if (listPrice < 0m)
+        var __name = name;
+        if (listPrice == null)
+        {
+            return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Required("'ListPrice' is required.", "Product.ListPrice"));
+        }
+        var __listPrice = (decimal)listPrice;
+        if (__listPrice < 0m)
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Range("'ListPrice' must be >= 0.", "Product.ListPrice"));
         }
-        if (listPrice > 100000000m)
+        if (__listPrice > 100000000m)
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Range("'ListPrice' must be <= 100000000.", "Product.ListPrice"));
         }
-        if (Product.ExistsWithSku(db, sku))
+        if (Product.ExistsWithSku(db, __sku))
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Sku' value is already used on another 'Product'.", "Product.Sku"));
         }
-        var created = new Product(sku, name, listPrice);
+        var created = new Product(__sku, __name, __listPrice);
         Poly.Runtime.ActionScope.Create(created, "Product");
-        db.Record("Product", "Sku", sku);
+        db.Record("Product", "Sku", __sku);
         return DomainResult<Product>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

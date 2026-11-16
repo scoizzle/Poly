@@ -523,9 +523,10 @@ public sealed partial class ModuleInstanceExecutor {
         return false;
     }
 
-    private static object? DefaultOf(Parameter parameter) => parameter.DefaultValue switch {
-        Constant constant => constant.Value,
-        Member member => member.MemberName,
-        _ => null
-    };
+    /// <summary>
+    /// The create door's one rule for absence: a value not supplied, or supplied as
+    /// <c>null</c>, is omitted. Null is always the absence of a value (owner ruling,
+    /// 2026-11-13); JSON over HTTP cannot tell the two apart either. An empty string is a value.
+    /// </summary>
+    private static bool IsOmittedAtCreate(bool supplied, object? raw) => !supplied || raw is null;
 }

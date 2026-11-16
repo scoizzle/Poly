@@ -47,54 +47,6 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// For a self-relationship <c>create in rel</c>, the unique singular navigation on
-    /// <paramref name="targetEntity"/> whose target is <paramref name="sourceEntityName"/>.
-    /// This is the peer the new instance wires to <c>this</c> (e.g. <c>Account.parent</c>
-    /// for a <c>create in children</c>); null when there is none or it is ambiguous.
-    /// Unlike <see cref="FindAutoWireBackReference"/>, it does not skip self-relationships.
-    /// </summary>
-    private static Relationship? FindSelfRelPeerSingular(Entity targetEntity, string sourceEntityName) {
-        Relationship? found = null;
-        var count = 0;
-        foreach (var nav in targetEntity.Navigations) {
-            if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-                continue;
-            if (string.Equals(nav.Target.TypeName, sourceEntityName, StringComparison.Ordinal)) {
-                found = nav;
-                count++;
-            }
-        }
-        return count == 1 ? found : null;
-    }
-
-    /// <summary>
-    /// The auto-wire back-reference for a <c>create in Rel</c> export: the single
-    /// singular navigation on <paramref name="targetEntity"/> whose target is
-    /// <paramref name="sourceEntityName"/>. Returns null when ambiguous (multiple
-    /// singular back-refs), when the back-ref is a collection, or for
-    /// self-relationships (which use the existing <c>IsBackReference</c> path).
-    /// Single source of truth for both <see cref="AddCreateNavMethod"/> (factory
-    /// signature + <c>this</c> wiring) and the call-site arg list
-    /// (<c>EffectLoweringPass.CreateEntityInRelationship</c>).
-    /// </summary>
-    internal static Relationship? FindAutoWireBackReference(Entity targetEntity, string sourceEntityName) {
-        if (string.Equals(sourceEntityName, targetEntity.Name, StringComparison.Ordinal))
-            return null; // self-relationships use the existing IsBackReference path
-
-        Relationship? found = null;
-        var count = 0;
-        foreach (var nav in targetEntity.Navigations) {
-            if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-                continue;
-            if (string.Equals(nav.Target.TypeName, sourceEntityName, StringComparison.Ordinal)) {
-                found = nav;
-                count++;
-            }
-        }
-        return count == 1 ? found : null;
-    }
-
-    /// <summary>
     /// Collection inverses on <paramref name="peerEntity"/> targeting
     /// <paramref name="childEntityName"/> — same rule as runtime
     /// <c>TryLinkInverseCollection</c>. <c>Unique</c> is set only when
@@ -191,51 +143,6 @@ public sealed partial class DomainToCSharpExporter {
                         AccessModifier: AccessModifier.Private),
                     AccessModifier: DomainAccess.NavigationAccess(entity, targetType, domain)
                 ));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Constructor parameters and assignments for navigation slots, taken from the
-    /// COMPLETE published signature (<see cref="EntityStructureMetadata.ConstructorParameters"/>).
-    /// </summary>
-    private static void AddNavigationCtorParameters(
-        EntityStructureMetadata esm, Domain domain, INodeMetadataProvider metadata,
-        List<Parameter> ctorParams, List<Node> ctorAssignments) {
-        // ── Constructor params for navs — from the COMPLETE signature (ESM) ──
-        // EntityStructureMetadata.ConstructorParameters now includes collection navs
-        // (IsCollection). This is the single source of truth for the emitted Create(...)
-        // signature — no per-consumer re-derivation of cardinality/order here (the
-        // callers already read the same bag). Order matches the nav loop above
-        // (relationship order), so output is unchanged.
-        foreach (var navParam in esm.ConstructorParameters.Where(p => p.IsNavigation)) {
-            var paramName = ToCamelCase(navParam.Name);
-            if (navParam.IsCollection) {
-                var fieldName = $"_{paramName}";
-                var targetType = new NamedTypeReference(navParam.Type.TypeName);
-                var listType = new NamedTypeReference("List", TypeArguments: [targetType]);
-                var enumerableType = new NamedTypeReference("IEnumerable", TypeArguments: [targetType]);
-                ctorParams.Add(new Parameter(
-                    paramName,
-                    new OptionalTypeReference(enumerableType),
-                    DefaultValue: new Constant(null)));
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), fieldName),
-                    new New(listType, [
-                        new Syntactic.Coalesce(
-                            new Parameter(paramName),
-                            new New(listType))])));
-            }
-            else {
-                // Singular nav (incl. back-reference): optional (unlinked at create).
-                var pascalName = ToPascalCase(navParam.Name);
-                var propRef = new OptionalTypeReference(
-                    MapDomainTypeRef(navParam.Type, domain, metadata));
-                ctorParams.Add(new Parameter(
-                    paramName, propRef, DefaultValue: new Constant(null)));
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), pascalName),
-                    new Parameter(paramName)));
             }
         }
     }

@@ -59,11 +59,11 @@ public class CrmDogfoodTests {
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).DoesNotContain("void Notify(string stageName)");
-        await Assert.That(cs).Contains("Site? hq = null");
-        await Assert.That(cs).Contains("IEnumerable<Opportunity>? opportunities = null");
+        await Assert.That(cs).Contains("Site? hq = default");
+        await Assert.That(cs).Contains("IEnumerable<Opportunity>? opportunities = default");
         await Assert.That(cs).Contains("this.Lines.Count");
         await Assert.That(cs).Contains("CreateHq");
-        await Assert.That(cs).Contains("Account? parent = null");
+        await Assert.That(cs).Contains("Account? parent = default");
         await Assert.That(cs.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
 
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
@@ -93,13 +93,16 @@ public class CrmDogfoodTests {
             ["Name"] = "Acme",
             ["Industry"] = "Technology"
         }).Instance!;
-        var proposeUnlinked = exec.Create("Opportunity", new Dictionary<string, object?> {
+        // L-15a: `account` is a required to-one, so an Opportunity without one is refused at create (before,
+        // it was created and Propose was blocked by HasAccount; that guard is removed, since every
+        // Opportunity that can exist has its account).
+        var orphan = exec.Create("Opportunity", new Dictionary<string, object?> {
             ["Title"] = "Orphan",
             ["Amount"] = 1000m,
-        }).Instance!;
-        var blocked = exec.Invoke(proposeUnlinked, "Propose");
-        await Assert.That(blocked.Succeeded).IsFalse();
-        await Assert.That(blocked.Error).Contains("HasAccount");
+        });
+        await Assert.That(orphan.Succeeded).IsFalse();
+        await Assert.That(orphan.Failure!.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Required);
+        await Assert.That(orphan.Failure.ElementPath).IsEqualTo("Opportunity.account");
 
         var contact = exec.Invoke(account, "AddContact", new Dictionary<string, object?> {
             ["name"] = "Ada",
@@ -215,6 +218,8 @@ public class CrmDogfoodTests {
         await Assert.That(exec.Invoke(lostDeal.Instance!, "Lose").Succeeded).IsTrue();
         await Assert.That(ModuleReads.Stage(lostDeal.Instance!)).IsEqualTo("Lost");
 
+        // Lead.account is optional (a lead has no account until it is converted), so Convert is blocked by
+        // HasAccount until the account is linked.
         var lead = exec.Create("Lead", new Dictionary<string, object?> {
             ["Name"] = "Grace",
             ["Email"] = "grace@acme.test",

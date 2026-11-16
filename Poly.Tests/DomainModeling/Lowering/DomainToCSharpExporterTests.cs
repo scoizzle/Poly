@@ -58,10 +58,7 @@ public class DomainToCSharpExporterTests {
               require not HasFines
             {
               assign CurrentBorrowCount to CurrentBorrowCount + 1
-              // CreateIn initializers set scalar properties only — to-one navs
-              // (like Loan.book) cannot be bound here (analyzer rejects; runtime
-              // would throw). The Loan/Book link is left for a future link effect.
-              create in loans { }
+              create in loans { book: book }
             }
             Suspend: action {
               assign Status to "Suspended"
@@ -71,7 +68,7 @@ public class DomainToCSharpExporterTests {
             CloseAccount: action { transition to Closed }
           }
           when loans Overdue {
-            create Fine { Amount: 5 Reason: "Overdue item" }
+            create in fines { Amount: 5 Reason: "Overdue item" }
             assign OutstandingFines to OutstandingFines + 5
           }
           when loans Returned {
@@ -190,8 +187,16 @@ public class DomainToCSharpExporterTests {
     /// this pairing an error (Q10, #659) — the pre-S-11 expectation was that analysis
     /// accepted it and lowering only skipped the attach.
     /// </summary>
+    private static Task AssertAmbiguousInverseIsAnalysisError(
+        string poly, string reportedNav, params string[] candidates) =>
+        AssertAmbiguousInverseIsAnalysisError(poly, reportedNav, candidates, unboundRequired: []);
+
+    /// <summary>
+    /// As above, for a fixture whose create also leaves required to-ones unbound (L-15a): each of
+    /// <paramref name="unboundRequired"/> is one DMEFF011, and there is no other error.
+    /// </summary>
     private static async Task AssertAmbiguousInverseIsAnalysisError(
-        string poly, string reportedNav, params string[] candidates) {
+        string poly, string reportedNav, string[] candidates, string[] unboundRequired) {
         var domain = ApplyWithoutAnalysis(poly);
         var analysis = DomainModelAnalyzer.Analyze(domain);
         var errors = analysis.Diagnostics
@@ -202,7 +207,10 @@ public class DomainToCSharpExporterTests {
         var allErrors = analysis.Diagnostics
             .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
             .ToList();
-        await Assert.That(allErrors.Count).IsEqualTo(1);
+        await Assert.That(allErrors.Count).IsEqualTo(1 + unboundRequired.Length);
+        foreach (var unbound in unboundRequired)
+            await Assert.That(allErrors.Count(d => d.Code == DomainModelDiagnosticCodes.CreateMissingRequiredProperty
+                && d.Message.Contains($"navigation '{unbound}' is required", StringComparison.Ordinal))).IsEqualTo(1);
         var nav = (Relationship)errors[0].Node;
         await Assert.That(nav.Name).IsEqualTo(reportedNav);
         foreach (var candidate in candidates)
@@ -478,7 +486,7 @@ public class DomainToCSharpExporterTests {
         var loan = domain.Types.OfType<Entity>().Single(e => e.Name == "Loan");
         var esm = analysis.GetMetadata<EntityStructureMetadata>(loan);
         await Assert.That(esm).IsNotNull();
-        await Assert.That(esm!.ConstructorParameters.Count).IsGreaterThan(0);
+        await Assert.That(esm!.CreateSlots.Count).IsGreaterThan(0);
 
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var patron = types.First(t => t.Name == "Patron");
@@ -486,16 +494,14 @@ public class DomainToCSharpExporterTests {
         await Assert.That(createLoans).IsNotNull();
 
         var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
-        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(loan, "Patron");
-        var expected = esm.ConstructorParameters
-            .Where(p => !p.IsBackReference)
-            .Where(p => autoWireBackRef is null
-                || !string.Equals(p.Name, autoWireBackRef.Name, StringComparison.Ordinal))
-            .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name))
-            .Concat(DomainToCSharpExporter.TrailingOmittableProperties(loan, analysis)
-                .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name)))
+        var filled = CreateInWiring.FilledNavigationName(analysis, "Patron", "loans");
+        var expected = esm.CreateSlots
+            .Where(s => !(s.IsSelfNavigation && s.Shape != CreateSlotShape.Scalar))
+            .Where(s => s.Shape != CreateSlotShape.Collection)
+            .Where(s => !string.Equals(s.Name, filled, StringComparison.Ordinal))
+            .Select(s => DomainToCSharpExporter.ToCamelCase(s.Name))
             .ToArray();
-        await Assert.That(createParams).IsEquivalentTo(expected);
+        await Assert.That(createParams).IsEquivalentTo(expected, TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
 
     [Test]
@@ -609,7 +615,8 @@ public class DomainToCSharpExporterTests {
             }
             """;
 
-        await AssertAmbiguousInverseIsAnalysisError(dsl, "orders", "customer", "primaryContact");
+        // L-15a: neither back-reference is filled (the pairing is ambiguous), so both are unbound.
+        await AssertAmbiguousInverseIsAnalysisError(dsl, "orders", ["customer", "primaryContact"], ["customer", "primaryContact"]);
     }
 
     [Test]
@@ -619,7 +626,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
               }
@@ -644,7 +651,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
               children: many Account
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
@@ -671,7 +678,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
               children: many Account
               Active: stage {
                 AddChild: action { create in children { Name: "x" } }
@@ -702,7 +709,7 @@ public class DomainToCSharpExporterTests {
             }
             Item: entity {
               Name: Text
-              order: Order
+              order: Order optional
               Active: stage {
                 Add: action { create in order { Code: "x" } }
               }
@@ -757,8 +764,8 @@ public class DomainToCSharpExporterTests {
             domain Test
             Account: entity {
               Name: Text
-              primary: Account
-              secondary: Account
+              primary: Account optional
+              secondary: Account optional
               children: many Account
               Active: stage {
                 Add: action { create in children { Name: "x" } }
@@ -770,7 +777,7 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_CreateNavIsPublic_AttachNavIsInternal() {
+    public async Task Export_CreateNavIsInternal_AttachNavIsInternal() {
         const string dsl = """
             domain Test
             Child: entity {
@@ -844,7 +851,7 @@ public class DomainToCSharpExporterTests {
             // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
             new Relationship("TrackedBy",
                 new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -904,7 +911,7 @@ public class DomainToCSharpExporterTests {
             // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
             new Relationship("TrackedBy",
                 new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -1028,7 +1035,7 @@ public class DomainToCSharpExporterTests {
             // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
             new Relationship("TrackedBy",
                 new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -1069,7 +1076,7 @@ public class DomainToCSharpExporterTests {
             // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
             new Relationship("TrackedBy",
                 new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -1582,7 +1589,8 @@ public class DomainToCSharpExporterTests {
         await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
         await Assert.That(csharp).Contains("DateTime.UtcNow");
         await Assert.That(csharp).DoesNotContain("DateTime.Today");
-        await Assert.That(csharp).Contains("??");
+        // L-08b: Create applies the runtime default to an omitted value, before the constructor.
+        await Assert.That(csharp).Contains("(openedAt == null ? DateTime.UtcNow : (DateTime)openedAt)");
     }
 
     [Test]
@@ -1863,9 +1871,9 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task EsmConstructorSignature_IncludesCollectionNavs() {
-        // The shared constructor metadata (EntityStructureMetadata.ConstructorParameters)
-        // is now the COMPLETE create signature — collection navs included with
-        // IsCollection=true. Consumers read this instead of re-scanning
+        // The shared create metadata (EntityStructureMetadata.CreateSlots) is the
+        // COMPLETE create signature — collection navs included with
+        // Shape=Collection. Consumers read this instead of re-scanning
         // domain.Relationships (the CS7036 bug class).
         var (domain, analysis) = ParseAndAnalyze("""
             domain Demo
@@ -1881,14 +1889,12 @@ public class DomainToCSharpExporterTests {
         var esm = analysis.GetMetadata<EntityStructureMetadata>(compilation);
         await Assert.That(esm).IsNotNull();
 
-        var tokens = esm!.ConstructorParameters.Single(p => p.Name == "tokens");
-        await Assert.That(tokens.IsNavigation).IsTrue();
-        await Assert.That(tokens.IsCollection).IsTrue();
-        await Assert.That(tokens.IsBackReference).IsFalse();
+        var tokens = esm!.CreateSlots.Single(s => s.Name == "tokens");
+        await Assert.That(tokens.Shape).IsEqualTo(CreateSlotShape.Collection);
+        await Assert.That(tokens.IsSelfNavigation).IsFalse();
 
-        var source = esm.ConstructorParameters.Single(p => p.Name == "source");
-        await Assert.That(source.IsNavigation).IsTrue();
-        await Assert.That(source.IsCollection).IsFalse();
+        var source = esm.CreateSlots.Single(s => s.Name == "source");
+        await Assert.That(source.Shape).IsEqualTo(CreateSlotShape.Reference);
     }
 
     [Test]
@@ -1960,8 +1966,9 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        // Severity is a trailing optional CreateDiagnostics param defaulting to the DSL default.
-        await Assert.That(cs).Contains("CreateDiagnostics(string code, Severity severity = Severity.Warning)");
+        // L-08b: Severity is a `T? x = default` CreateDiagnostics param; the target's Create applies the DSL default.
+        await Assert.That(cs).Contains("CreateDiagnostics(string? code = default, Severity? severity = default)");
+        await Assert.That(cs).Contains("(severity == null ? Severity.Warning : (Severity)severity)");
         await Assert.That(cs).Contains("this.CreateDiagnostics(");
         await Assert.That(cs).Contains("Severity.Hint");
         await Assert.That(cs).DoesNotContain("CreateIn(");
@@ -2175,7 +2182,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("Create(string name, IEnumerable<Pallet>? pallets = null)");
+        await Assert.That(cs).Contains("Create(string? name = default, IEnumerable<Pallet>? pallets = default)");
         await Assert.That(cs).Contains("pallets ?? new List<Pallet>()");
     }
 
@@ -2243,7 +2250,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("Create(string name, Advisor? advisor = null)");
+        await Assert.That(cs).Contains("Create(string? name = default, Advisor? advisor = default)");
     }
 
     [Test]
@@ -2292,8 +2299,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("Create(string email)");
-        await Assert.That(cs).DoesNotContain("long visits = 0L");
+        await Assert.That(cs).Contains("Create(string? email = default)");
+        await Assert.That(cs).DoesNotContain("visits");
         await Assert.That(cs).Contains("this.Visits = 0L");
     }
 
@@ -2415,7 +2422,7 @@ public class DomainToCSharpExporterTests {
             Fine: entity {
               Amount: Number
               Reason: Text
-              patron: Patron
+              patron: Patron optional
             }
             """);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
@@ -3008,11 +3015,11 @@ public class DomainToCSharpExporterTests {
             domain CrmTiny
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
             }
             Contact: entity {
               Name: Text
-              account: owned Account
+              account: owned Account optional
               OpenAccount: action (name: Text) {
                 create in account { Name: name }
               }
@@ -3228,10 +3235,6 @@ public class DomainToCSharpExporterTests {
                     callArgs[i] = args[i];
                 else if (parameters[i].HasDefaultValue)
                     callArgs[i] = parameters[i].DefaultValue;
-                else if (parameters[i].ParameterType == typeof(string))
-                    callArgs[i] = "";
-                else if (parameters[i].ParameterType == typeof(bool))
-                    callArgs[i] = false;
                 else
                     callArgs[i] = null;
             }
@@ -3371,7 +3374,10 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree() {
-        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        // Both hosts create the loans before their patron and link them through the collection, so the
+        // borrower is linked late (L-15a: `optional` in this variant). Every loan is created with a book.
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl.Replace(
+            "  borrower: Patron\n", "  borrower: Patron optional\n", StringComparison.Ordinal));
         var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
@@ -3386,9 +3392,17 @@ public class DomainToCSharpExporterTests {
             return p;
         }
 
+        var book = exec.Create("Book", new Dictionary<string, object?> {
+            ["Title"] = "T",
+            ["Author"] = "A",
+            ["ISBN"] = "1234567890",
+            ["Pages"] = 10L,
+            ["Genre"] = "Fiction"
+        }).Instance!;
         ModuleInstance NewLoan(string status) {
             var loan = exec.Create("Loan", new Dictionary<string, object?> {
-                ["Status"] = status
+                ["Status"] = status,
+                ["book"] = book
             }).Instance!;
             return loan;
         }
@@ -3411,8 +3425,11 @@ public class DomainToCSharpExporterTests {
         var patronType = asm.GetType("Patron")!;
         var loanType = asm.GetType("Loan")!;
 
+        var printedBook = ExportedCSharp.CreateEntity(asm.GetType("Book")!,
+            ("title", "T"), ("author", "A"), ("isbn", "1234567890"), ("pages", 10L),
+            ("genre", Enum.Parse(asm.GetType("Genre")!, "Fiction")));
         object MakeLoan(string status) =>
-            ExportedCSharp.CreateEntity(loanType, ("status", status));
+            ExportedCSharp.CreateEntity(loanType, ("status", status), ("book", printedBook));
 
         object LoanList(params object[] loans) {
             var arr = Array.CreateInstance(loanType, loans.Length);
@@ -3451,7 +3468,7 @@ public class DomainToCSharpExporterTests {
           B: stage { }
         }
         Tr: entity {
-          Tracks: Paper
+          Tracks: Paper optional
           P: stage {
             when Tracks B {
               transition to Q
@@ -3503,7 +3520,7 @@ public class DomainToCSharpExporterTests {
               B: stage { }
             }
             Tr: entity {
-              Tracks: Paper
+              Tracks: Paper optional
               P: stage {
                 Adopt: action { create in Tracks { Title: "x" } }
                 when Tracks B { transition to Q }
@@ -3907,7 +3924,7 @@ public class DomainToCSharpExporterTests {
               children: many Child
               Flag: Text
               P: stage {
-                Add: action { create in children { Name: "n" } }
+                Add: action (b: Board) { create in children { Name: "n" board: b } }
                 when children A { assign Flag to "y" }
               }
             }
@@ -4169,8 +4186,8 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> Create(");
-        var total = create.IndexOf("long total", StringComparison.Ordinal);
-        var reason = create.IndexOf("cancelReason", StringComparison.Ordinal);
+        var total = create.IndexOf("long? total = default", StringComparison.Ordinal);
+        var reason = create.IndexOf("string? cancelReason = default", StringComparison.Ordinal);
         await Assert.That(total).IsGreaterThanOrEqualTo(0);
         await Assert.That(reason).IsGreaterThan(total);
 
@@ -4212,14 +4229,18 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
+        // L-08b: an action-written required property gets no invented value; omitting it fails Required.
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Visit> Create(");
-        await Assert.That(create).Contains("string reason");
-        await Assert.That(create).DoesNotContain("string reason = \"\"");
+        await Assert.That(create).Contains("string? reason = default");
+        await Assert.That(create).Contains("Poly.Runtime.DomainFailure.Required(\"'Reason' is required.\", \"Visit.Reason\")");
+        await Assert.That(create).DoesNotContain("= \"\"");
         var warehouse = ExportedCSharp.ExtractMethod(cs, "DomainResult<Warehouse> Create(");
-        await Assert.That(warehouse).Contains("long capacity");
-        await Assert.That(warehouse).DoesNotContain("long capacity = 0L");
+        await Assert.That(warehouse).Contains("long? capacity = default");
+        await Assert.That(warehouse).Contains("Poly.Runtime.DomainFailure.Required(\"'Capacity' is required.\", \"Warehouse.Capacity\")");
+        await Assert.That(warehouse).DoesNotContain("= 0L");
         var truck = ExportedCSharp.ExtractMethod(cs, "DomainResult<Truck> Create(");
-        await Assert.That(truck).Contains("TruckStatus status = TruckStatus.Idle");
+        await Assert.That(truck).Contains("TruckStatus? status = default");
+        await Assert.That(truck).Contains("(status == null ? TruckStatus.Idle : (TruckStatus)status)");
     }
 
     [Test]

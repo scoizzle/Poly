@@ -6,7 +6,9 @@ namespace Poly.Runtime;
 /// never prints a second table. P-14 (<c>HttpFailureMapping</c>) is the intended consumer.
 /// </summary>
 /// <remarks>
-/// Unique, Link and Conflict are 409; Cascade is 500; the other ten kinds are 400.
+/// Unique, Link, Conflict and Stage are 409; Policy is 422; Cascade is 500; the other eight kinds are 400.
+/// Stage and Policy are owner rulings (#677): a stage failure conflicts with the resource's current
+/// state, and a policy is a <c>require</c> guard (not authorisation, so not 403) that refused the request.
 /// A kind added to the closed, append-only enum must gain an explicit arm here: an
 /// out-of-range value throws, it never inherits "bad request" silently.
 /// </remarks>
@@ -37,10 +39,13 @@ public static class DomainFailureStatus {
         // Q7: an omitted required value is a bad request.
         DomainFailureKind.Required => 400,
 
-        // Stage and Policy are 400 provisionally and unruled; 409, 403 and 422 are open
-        // alternatives for the owner (#687 risk 3).
-        DomainFailureKind.Stage => 400,
-        DomainFailureKind.Policy => 400,
+        // Owner ruling (#677): an action the current stage does not offer conflicts with the
+        // resource's state.
+        DomainFailureKind.Stage => 409,
+
+        // Owner ruling (#677): a require guard refused the request. It is not authorisation, so
+        // not 403, and the request is well-formed, so not 400.
+        DomainFailureKind.Policy => 422,
 
         DomainFailureKind.Range => 400,
         DomainFailureKind.Length => 400,

@@ -14,8 +14,9 @@ public sealed partial class ModuleInstanceExecutor {
     /// Tool-layer value → module argument. Three steps: entity-typed parameters take
     /// instance ids; JSON-ish scalars become the declared domain type (dates, guids,
     /// integral Number, Decimal, Boolean); then the module parameter's own CLR shape
-    /// (null Text is <c>""</c>, 0/1 Boolean, primitive conversion) so the VM reads
-    /// the value the way a bag read would.
+    /// (0/1 Boolean, primitive conversion) so the VM reads the value the way a bag read
+    /// would. A null Text stays null: null is the absence of a value and an empty string is
+    /// a value (owner ruling 2026-11-13), so the module, not this door, answers Required.
     /// </summary>
     private object? CoerceValue(
         Parameter parameter, string? domainTypeName, object? raw, string label, bool namedTypeFailure = false) {
@@ -33,7 +34,7 @@ public sealed partial class ModuleInstanceExecutor {
         if (raw is null && parameter.DefaultValue is Constant { Value: null } && !IsTextLike(parameter))
             return null;
         if (raw is null && IsTextLike(parameter))
-            raw = "";
+            return null;
         var typeName = ParameterTypeName(parameter);
         if (string.Equals(typeName, "Boolean", StringComparison.Ordinal))
             raw = raw switch {

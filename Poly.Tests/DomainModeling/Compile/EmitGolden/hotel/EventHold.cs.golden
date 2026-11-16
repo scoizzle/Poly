@@ -22,7 +22,7 @@ internal class EventHold : Poly.Runtime.IActionScoped
     private List<Guest>? _guestEventsReleasedSubscribers;
     private int _notifyDepth;
     private EventHold() { }
-    private EventHold(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest = null, Hall? hall = null, Section? section = null)
+    private EventHold(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest, Hall? hall, Section? section)
     {
         this.Headcount = headcount;
         this.Capacity = capacity;
@@ -80,10 +80,6 @@ internal class EventHold : Poly.Runtime.IActionScoped
         if (!this.PartyFits())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'PartyFits'.", "EventHold.Confirm", "PartyFits"));
-        }
-        if (!this.HasSpace())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'HasSpace'.", "EventHold.Confirm", "HasSpace"));
         }
         this.CurrentStage = EventHoldStage.Confirmed;
         return DomainResult.Success();
@@ -150,10 +146,6 @@ internal class EventHold : Poly.Runtime.IActionScoped
         if (this.CurrentStage != EventHoldStage.Confirmed)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'StartHall' requires stage 'Confirmed' on entity 'EventHold'.", "EventHold.StartHall", "Confirmed"));
-        }
-        if (!this.HasHall())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'StartHall' blocked by policy 'HasHall'.", "EventHold.StartHall", "HasHall"));
         }
         if (this.HasSection())
         {
@@ -247,10 +239,6 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'ReleaseHall' requires stage 'InUse' on entity 'EventHold'.", "EventHold.ReleaseHall", "InUse"));
         }
-        if (!this.HasHall())
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'ReleaseHall' blocked by policy 'HasHall'.", "EventHold.ReleaseHall", "HasHall"));
-        }
         if (this.HasSection())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'ReleaseHall' blocked by policy 'HasSection'.", "EventHold.ReleaseHall", "HasSection"));
@@ -325,9 +313,7 @@ internal class EventHold : Poly.Runtime.IActionScoped
     }
     public bool DatesValid() => this.EndDate > this.StartDate;
     public bool PartyFits() => this.Headcount <= this.Capacity;
-    public bool HasHall() => this.Hall != null;
     public bool HasSection() => this.Section != null;
-    public bool HasSpace() => this.Hall != null || this.Section != null;
     internal void RegisterGuestEventsReleasedSubscriber(Guest subscriber)
     {
         Poly.Runtime.ActionScope.Touch(this);
@@ -367,7 +353,7 @@ internal class EventHold : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<EventHold> Create(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest = null, Hall? hall = null, Section? section = null)
+    internal static DomainResult<EventHold> Create(long? headcount = default, long? capacity = default, decimal? dayRate = default, DateOnly? startDate = default, DateOnly? endDate = default, Guest? guest = default, Hall? hall = default, Section? section = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -390,33 +376,68 @@ internal class EventHold : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<EventHold> __BodyOfCreate(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest, Hall? hall, Section? section)
+    private static DomainResult<EventHold> __BodyOfCreate(long? headcount, long? capacity, decimal? dayRate, DateOnly? startDate, DateOnly? endDate, Guest? guest, Hall? hall, Section? section)
     {
-        if (headcount < 1L)
+        if (headcount == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'Headcount' is required.", "EventHold.Headcount"));
+        }
+        var __headcount = (long)headcount;
+        if (__headcount < 1L)
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Headcount' must be >= 1.", "EventHold.Headcount"));
         }
-        if (headcount > 5000L)
+        if (__headcount > 5000L)
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Headcount' must be <= 5000.", "EventHold.Headcount"));
         }
-        if (capacity < 1L)
+        if (capacity == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'Capacity' is required.", "EventHold.Capacity"));
+        }
+        var __capacity = (long)capacity;
+        if (__capacity < 1L)
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be >= 1.", "EventHold.Capacity"));
         }
-        if (capacity > 5000L)
+        if (__capacity > 5000L)
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be <= 5000.", "EventHold.Capacity"));
         }
-        if (dayRate < 0m)
+        if (dayRate == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'DayRate' is required.", "EventHold.DayRate"));
+        }
+        var __dayRate = (decimal)dayRate;
+        if (__dayRate < 0m)
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be >= 0.", "EventHold.DayRate"));
         }
-        if (dayRate > 100000m)
+        if (__dayRate > 100000m)
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "EventHold.DayRate"));
         }
-        var created = new EventHold(headcount, capacity, dayRate, startDate, endDate, guest, hall, section);
+        if (startDate == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'StartDate' is required.", "EventHold.StartDate"));
+        }
+        var __startDate = (DateOnly)startDate;
+        if (endDate == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'EndDate' is required.", "EventHold.EndDate"));
+        }
+        var __endDate = (DateOnly)endDate;
+        if (guest == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'guest' is required.", "EventHold.guest"));
+        }
+        var __guest = guest;
+        if (hall == null)
+        {
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'hall' is required.", "EventHold.hall"));
+        }
+        var __hall = hall;
+        var created = new EventHold(__headcount, __capacity, __dayRate, __startDate, __endDate, __guest, __hall, section);
         Poly.Runtime.ActionScope.Create(created, "EventHold");
         if (guest != null)
         {

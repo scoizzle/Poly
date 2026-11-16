@@ -200,6 +200,37 @@ public sealed class CSharpExportCompileTests {
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
+    // L-16a: Create{Nav} is internal on every entity, public ones included. Read from the compiled compilation's
+    // symbols (the wrapper and its private body), never from printed text.
+    [Test]
+    public async Task CreateNav_OnPublicEntity_IsInternal() {
+        var e = Export("""
+            domain Shop
+
+            public entity Line {
+              Qty: Number default(1)
+            }
+
+            public entity Order {
+              Total: Number default(0)
+              lines: many Line
+              AddLine: action (qty: Number) {
+                create in lines { Qty: qty }
+              }
+            }
+            """);
+
+        var order = e.Type("Order");
+        await Assert.That(order.DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        var createNav = e.Methods("Order", "CreateLines").ToArray();
+        await Assert.That(createNav.Length).IsEqualTo(1);
+        await Assert.That(createNav[0].DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(order.GetMembers().OfType<IMethodSymbol>()
+            .Where(m => m.Name.Contains("CreateLines", StringComparison.Ordinal))
+            .All(m => m.DeclaredAccessibility is Accessibility.Internal or Accessibility.Private)).IsTrue();
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
     private static string DbContextText(Exported e) =>
         e.Files.Single(f => f.FileName.EndsWith("DbContext.cs", StringComparison.Ordinal)).Source;
 
@@ -247,7 +278,7 @@ public sealed class CSharpExportCompileTests {
 
             public entity Order {
               Code: Text unique length(3, 8)
-              receipt: one Receipt
+              receipt: one Receipt optional
               public action Issue (note: Text) { create in receipt { Note: note } }
             }
             """);
@@ -314,7 +345,9 @@ public sealed class CSharpExportCompileTests {
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
-    // The predicate is exactly "owner public AND target internal": every other pairing prints and maps as before.
+    // The predicate is exactly "owner public AND target internal": every other pairing prints and maps as before. The
+    // explicit mapping is the one inside the entity block (`b.HasMany(`); the relationship statements after the entity
+    // blocks (L-15b: `modelBuilder.Entity<T>().HasMany(`) are declared for every decided relationship.
     [Test]
     [Arguments("public entity", "public entity")]
     [Arguments("", "")]
@@ -339,8 +372,8 @@ public sealed class CSharpExportCompileTests {
 
         await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
         var db = DbContextText(e);
-        await Assert.That(db).DoesNotContain("HasMany(");
-        await Assert.That(db).DoesNotContain("HasOne(");
+        await Assert.That(db).DoesNotContain("b.HasMany(");
+        await Assert.That(db).DoesNotContain("b.HasOne(");
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
@@ -368,8 +401,8 @@ public sealed class CSharpExportCompileTests {
 
         await Assert.That(e.Type("Order").GetMembers("Receipt").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
         var db = DbContextText(e);
-        await Assert.That(db).DoesNotContain("HasMany(");
-        await Assert.That(db).DoesNotContain("HasOne(");
+        await Assert.That(db).DoesNotContain("b.HasMany(");
+        await Assert.That(db).DoesNotContain("b.HasOne(");
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
@@ -572,5 +605,37 @@ public sealed class CSharpExportCompileTests {
 
         await Assert.That(text).Contains("internal class ShopDbContext");
         await Assert.That(text).Contains("public record OrderDto");
+    }
+
+    /// <summary>L-24b: a generated value type's properties are init-only, so a setter can be removed later without breaking a caller.</summary>
+    [Test]
+    public async Task ValueType_PropertiesAreInitOnly() {
+        var e = Export("""
+            domain Vals
+
+            Cost: value {
+              Amount: Number
+              Currency: Text
+            }
+
+            public value PubCost {
+              Amount: Number
+            }
+
+            Holder: entity {
+              Count: Number default(0)
+            }
+            """);
+
+        foreach (var typeName in new[] { "Cost", "PubCost" }) {
+            var props = e.Type(typeName).GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsImplicitlyDeclared).ToArray();
+            await Assert.That(props).IsNotEmpty();
+            foreach (var prop in props) {
+                await Assert.That(prop.GetMethod).IsNotNull();
+                await Assert.That(prop.SetMethod).IsNotNull().Because($"{typeName}.{prop.Name} has no init accessor");
+                await Assert.That(prop.SetMethod!.IsInitOnly).IsTrue().Because($"{typeName}.{prop.Name} is settable, not init-only");
+            }
+        }
+        await Assert.That(e.Diagnostics).IsEmpty();
     }
 }

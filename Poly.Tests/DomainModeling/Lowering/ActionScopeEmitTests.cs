@@ -34,7 +34,7 @@ public class ActionScopeEmitTests {
           Score: Number range(0, 10) default(3)
           Tag: Text optional
           items: many Item
-          owner: Owner
+          owner: Owner optional
           Add: action (code: Text) {
             create in items { Code: code }
           }
@@ -202,7 +202,8 @@ public class ActionScopeEmitTests {
         // generated `target{N}` variable). The test pins the printed side of that argument.
         var (cs, _) = Print(Dsl, "ActionScopeNames");
         // L-03c adds `__depth`, the notify cascade's entry depth (a local of Notify{Stage}Subscribers).
-        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+)$");
+        // L-08b adds the effective-value local of each Required or Defaulted create slot (`__` + the slot).
+        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+|code|label|score)$");
         var stray = Regex.Matches(cs, @"\b__\w+").Select(m => m.Value).Where(n => !allowed.IsMatch(n)).Distinct().ToList();
         await Assert.That(string.Join(",", stray)).IsEqualTo("");
 

@@ -56,7 +56,7 @@ public class Item3LowerPopulateTests {
             }
             Tracker: entity {
               Status: Text
-              Tracks: Order
+              Tracks: Order optional
               Pending: stage {
                 when Tracks Active {
                   assign Status to "Triggered"
@@ -121,7 +121,7 @@ public class Item3LowerPopulateTests {
             }
             Tracker: entity {
               Status: Text
-              Tracks: Order
+              Tracks: Order optional
               Pending: stage {
                 when Tracks Active {
                   assign Status to "Triggered"
@@ -261,7 +261,7 @@ public class Item3LowerPopulateTests {
             }
             Tracker: entity {
               Status: Text
-              Tracks: Order
+              Tracks: Order optional
               Pending: stage {
                 when Tracks Active as order {
                   assign Status to order Plate

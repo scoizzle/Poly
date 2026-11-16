@@ -94,7 +94,7 @@ public class GuideClaimsTests {
         domain Owned
         A: entity {
           N: Number
-          kid: owned B
+          kid: owned B optional
         }
         B: entity {
           M: Number

@@ -260,7 +260,7 @@ public sealed partial class LanguageSurfaceTests {
             }
             Order: entity {
               lines: many owned Line via order
-              header: owned Header via owner
+              header: owned Header via owner optional
             }
             """;
 
@@ -305,7 +305,7 @@ public sealed partial class LanguageSurfaceTests {
               shift: Shift
             }
             Shift: entity {
-              doctor: Doctor
+              doctor: Doctor optional
             }
             """);
 
@@ -338,7 +338,7 @@ public sealed partial class LanguageSurfaceTests {
         var dsl = """
             domain OneVia
             Department: entity {
-              x: one Employee via owner
+              x: one Employee via owner optional
             }
             Employee: entity {
               owner: Department via x

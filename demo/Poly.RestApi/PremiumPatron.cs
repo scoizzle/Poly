@@ -9,13 +9,13 @@ namespace Library;
 internal class PremiumPatron : Poly.Runtime.IActionScoped
 {
     private PremiumPatron() { }
-    private PremiumPatron(string name, string email, long rewardPoints, bool priorityAccess, PremiumTier tier = PremiumTier.Silver)
+    private PremiumPatron(string name, string email, long rewardPoints, PremiumTier tier, bool priorityAccess)
     {
         this.Name = name;
         this.Email = email;
         this.RewardPoints = rewardPoints;
-        this.PriorityAccess = priorityAccess;
         this.Tier = tier;
+        this.PriorityAccess = priorityAccess;
     }
     public string Name { get; private set; } = default!;
     public string Email { get; private set; } = default!;
@@ -25,13 +25,13 @@ internal class PremiumPatron : Poly.Runtime.IActionScoped
     public bool IsLoyal() => this.RewardPoints >= 100L;
     public bool HasPriority() => this.PriorityAccess;
     public bool UnlimitedItems() => this.Tier == PremiumTier.Platinum || this.PriorityAccess;
-    internal static DomainResult<PremiumPatron> Create(string name, string email, long rewardPoints, bool priorityAccess, Poly.Runtime.IStoragePort db, PremiumTier tier = PremiumTier.Silver)
+    internal static DomainResult<PremiumPatron> Create(Poly.Runtime.IStoragePort db, string? name = default, string? email = default, long? rewardPoints = default, PremiumTier? tier = default, bool? priorityAccess = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = PremiumPatron.__BodyOfCreate(name, email, rewardPoints, priorityAccess, tier, db);
+            var __result = PremiumPatron.__BodyOfCreate(name, email, rewardPoints, tier, priorityAccess, db);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -48,31 +48,44 @@ internal class PremiumPatron : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<PremiumPatron> __BodyOfCreate(string name, string email, long rewardPoints, bool priorityAccess, PremiumTier tier, Poly.Runtime.IStoragePort db)
+    private static DomainResult<PremiumPatron> __BodyOfCreate(string? name, string? email, long? rewardPoints, PremiumTier? tier, bool? priorityAccess, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "PremiumPatron.Name"));
         }
-        if (string.IsNullOrEmpty(email))
+        var __name = name;
+        if (email == null)
         {
             return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "PremiumPatron.Email"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
+        var __email = email;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "PremiumPatron.Email"));
         }
-        if (tier != PremiumTier.Silver && tier != PremiumTier.Gold && tier != PremiumTier.Platinum)
+        if (rewardPoints == null)
         {
-            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", tier, "' is not a valid member of PremiumTier for property 'Tier'."), "PremiumPatron.Tier"));
+            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Required("'RewardPoints' is required.", "PremiumPatron.RewardPoints"));
         }
-        if (PremiumPatron.ExistsWithEmail(db, email))
+        var __rewardPoints = (long)rewardPoints;
+        var __tier = (tier == null ? PremiumTier.Silver : (PremiumTier)tier);
+        if (__tier != PremiumTier.Silver && __tier != PremiumTier.Gold && __tier != PremiumTier.Platinum)
+        {
+            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __tier, "' is not a valid member of PremiumTier for property 'Tier'."), "PremiumPatron.Tier"));
+        }
+        if (priorityAccess == null)
+        {
+            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Required("'PriorityAccess' is required.", "PremiumPatron.PriorityAccess"));
+        }
+        var __priorityAccess = (bool)priorityAccess;
+        if (PremiumPatron.ExistsWithEmail(db, __email))
         {
             return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'PremiumPatron'.", "PremiumPatron.Email"));
         }
-        var created = new PremiumPatron(name, email, rewardPoints, priorityAccess, tier);
+        var created = new PremiumPatron(__name, __email, __rewardPoints, __tier, __priorityAccess);
         Poly.Runtime.ActionScope.Create(created, "PremiumPatron");
-        db.Record("PremiumPatron", "Email", email);
+        db.Record("PremiumPatron", "Email", __email);
         return DomainResult<PremiumPatron>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

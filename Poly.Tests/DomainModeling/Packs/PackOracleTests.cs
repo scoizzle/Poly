@@ -3,7 +3,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
+using Poly.Tests.DomainModeling.Lowering;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Packs;
@@ -165,42 +167,50 @@ public class PackOracleTests {
         await Assert.That(await QtysAsync("ORD2")).IsEquivalentTo(new[] { 7 });
     }
 
-    [Test]
-    public async Task PublicEntityWithBidirectionalInternalOneToOne_IsPinnedAsNotBooting_Issue791() {
-        var fixture = PackOracleDomains.PublicOrderInternalReceiptBidirectional604;
-
-        await Assert.That(fixture.Boots).IsFalse();
-        await Assert.That(fixture.NotBootingReason).Contains("#791");
-        await Assert.ThrowsAsync<Exception>(async () => {
-            await using var oracle = await PackOracle.BootAsync(fixture);
-        });
-    }
-
-    /// <summary>P-18 (#791) flips this to booting. The harness refuses any Boots:false fixture before compiling, so the real
-    /// boot is forced with Boots = true and the child must die: EF cannot determine the dependent side.</summary>
+    /// <summary>#791: EF could not determine the dependent side of a one-to-one pair and the host exited at boot. L-15b declares
+    /// it (the required side, else the part of an owned pair, else the first declared), so the pair boots.</summary>
     [Test]
     [Category("OracleFull")]
-    public async Task PublicEntityWithBidirectionalInternalOneToOne_BootFails_Issue791() {
-        var ex = await Assert.ThrowsAsync<PackOracleBootException>(async () => {
-            await using var oracle = await PackOracle.BootAsync(
-                PackOracleDomains.PublicOrderInternalReceiptBidirectional604 with { Boots = true });
-        });
+    public async Task PublicEntityWithBidirectionalInternalOneToOne_Boots_Issue791() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceiptBidirectional604);
 
-        await Assert.That(ex!.Message).Contains("dependent side");
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+    }
+
+    /// <summary>L-15b: the one-to-one write path through the host. <c>Issue</c> creates the owned part with its owner as the
+    /// back-reference, so the part's NOT NULL unique key is set; the row is read back from the database by value.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithBidirectionalInternalOneToOne_IssueWritesThePart_ReadBackByValue() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceiptBidirectional604);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var issued = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/issue", new StringContent("""{"Note":"paid"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)issued.StatusCode).IsEqualTo(200);
+
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={oracle.DatabasePath};Mode=ReadOnly");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT r.note, o.code FROM Receipts r JOIN Orders o ON o.Id = r.OrderId";
+        using var reader = command.ExecuteReader();
+        var rows = new List<(string Note, string Code)>();
+        while (reader.Read())
+            rows.Add((reader.GetString(0), reader.GetString(1)));
+        await Assert.That(rows).IsEquivalentTo(new[] { ("paid", "ORD1") });
     }
 
     [Test]
     [Category("OracleFull")]
-    public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_BootFails_Issue791() {
-        await Assert.That(PackOracleDomains.PublicOrderInternalReceiptTwoWay604.Boots).IsFalse();
-        await Assert.That(PackOracleDomains.PublicOrderInternalReceiptTwoWay604.NotBootingReason).Contains("#791");
+    public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_Boots_Issue791() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceiptTwoWay604);
 
-        var ex = await Assert.ThrowsAsync<PackOracleBootException>(async () => {
-            await using var oracle = await PackOracle.BootAsync(
-                PackOracleDomains.PublicOrderInternalReceiptTwoWay604 with { Boots = true });
-        });
-
-        await Assert.That(ex!.Message).Contains("dependent side");
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
     [Test]
@@ -247,6 +257,165 @@ public class PackOracleTests {
         using var after = JsonDocument.Parse(await second.Client.GetStringAsync("/api/tallies"));
         await Assert.That(NamesOf(after)).DoesNotContain("t1");
         await Assert.That(second.DatabasePath).IsNotEqualTo(firstDb);
+    }
+
+    private const string CounterTally = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+        }
+        """;
+
+    private const string StagedCounterTally = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+          Open: stage { Close: action { transition to Done } }
+          Done: stage { }
+        }
+        """;
+
+    private static PackOracleDomain Counter(string name, string body) =>
+        new(name, "domain Counter\nuses http\nuses sqlite\n" + body, "/api/tallies");
+
+    private static async Task<string> WithRunDirectory(Func<string, Task> body) {
+        var directory = Path.Combine(Path.GetTempPath(), "poly-schema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try {
+            await body(directory);
+        }
+        finally {
+            Directory.Delete(directory, recursive: true);
+        }
+        return directory;
+    }
+
+    private static int ReadUserVersion(string database) {
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA user_version";
+        return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task PostTally(PackOracle oracle, string json) {
+        using var post = await oracle.Client.PostAsync("/api/tallies", new StringContent(json, Encoding.UTF8, "application/json"));
+        await Assert.That((int)post.StatusCode).IsEqualTo(201);
+    }
+
+    private static async Task AssertRefusedAtStartup(string directory, PackOracleDomain model, params string[] expected) {
+        PackOracleBootException? failure = null;
+        try {
+            await using var unexpected = await PackOracle.BootAsync(model, options: new PackOracleBootOptions { RunDirectory = directory });
+        }
+        catch (PackOracleBootException refused) {
+            failure = refused;
+        }
+        await Assert.That(failure).IsNotNull().Because("the app must exit at startup, not listen");
+        await Assert.That(failure!.ExitCode).IsNotNull();
+        await Assert.That(failure.ExitCode).IsNotEqualTo(0);
+        foreach (var text in expected)
+            await Assert.That(failure.ErrorTail).Contains(text);
+        await Assert.That(failure.ErrorTail.Split('\n').Count(l => l.Contains("counter.db", StringComparison.Ordinal))).IsEqualTo(1);
+    }
+
+    /// <summary>S-decl: a database made by a different schema fails at startup, not on the first request.
+    /// Each change here makes the old file unusable (a column, a rename, a table).</summary>
+    [Test]
+    [Timeout(300_000)]
+    [Arguments("required property added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Label: Text length(1, 10)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("property renamed", "Tally: entity {\n  Name: Text unique length(1, 20)\n  Count: Number default(0) range(0, 1000000)\n  Bump: action { assign Count to Count + 1 }\n}")]
+    [Arguments("entity added", CounterTally + "\nOther: entity {\n  Code: Text length(1, 5)\n}")]
+    [Arguments("stage added", StagedCounterTally)]
+    public async Task Boot_OldSchemaDatabase_ExitsWithClearMessage(string change, string changedBody, CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            await using (var first = await PackOracle.BootAsync(
+                Counter("SchemaA", CounterTally), options: new PackOracleBootOptions { RunDirectory = directory })) {
+                await PostTally(first, """{"Name":"t1"}""");
+            }
+            var database = Path.Combine(directory, "counter.db");
+            var before = ReadUserVersion(database);
+
+            await AssertRefusedAtStartup(
+                directory, Counter("SchemaB", changedBody),
+                "different version of the model", "counter.db");
+
+            await Assert.That(before).IsNotEqualTo(0);
+            await Assert.That(ReadUserVersion(database)).IsEqualTo(before);
+            _ = change;
+        });
+    }
+
+    /// <summary>A stage is a column EF maps by convention (nothing prints it), so the id carries a line for it: without one,
+    /// the document with a stage boots on the old file and every request for the entity answers 500.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_StageAdded_ExitsWithClearMessage(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        const string plain = "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n}";
+        const string staged = "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}";
+        await WithRunDirectory(async directory => {
+            await using (var first = await PackOracle.BootAsync(
+                Counter("SchemaA", plain), options: new PackOracleBootOptions { RunDirectory = directory }))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            await AssertRefusedAtStartup(directory, Counter("SchemaB", staged), "different version of the model", "counter.db");
+        });
+    }
+
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_SameSchema_Twice_Serves(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var options = new PackOracleBootOptions { RunDirectory = directory };
+            await using (var first = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            await using var second = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options);
+            using var seen = JsonDocument.Parse(await second.Client.GetStringAsync("/api/tallies"));
+            await Assert.That(NamesOf(seen)).Contains("t1");
+            await PostTally(second, """{"Name":"t2"}""");
+        });
+    }
+
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_ActionBodyChanged_SameSchema_Serves(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var options = new PackOracleBootOptions { RunDirectory = directory };
+            await using (var first = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            var edited = CounterTally.Replace("N + 1", "N + 2", StringComparison.Ordinal);
+            await using var second = await PackOracle.BootAsync(Counter("SchemaB", edited), options: options);
+            using var seen = JsonDocument.Parse(await second.Client.GetStringAsync("/api/tallies"));
+            await Assert.That(NamesOf(seen)).Contains("t1");
+            await PostTally(second, """{"Name":"t2"}""");
+        });
+    }
+
+    /// <summary>A file with tables and <c>user_version = 0</c> (made before this slice, or by another tool) cannot be
+    /// vouched for, so it is a different schema: fail closed.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_DatabaseWithTablesAndNoSchemaId_IsRefused(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var database = Path.Combine(directory, "counter.db");
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False")) {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "CREATE TABLE Tallies (Id INTEGER PRIMARY KEY, name TEXT, n INTEGER)";
+                command.ExecuteNonQuery();
+            }
+
+            await AssertRefusedAtStartup(directory, Counter("SchemaA", CounterTally), "no schema id", "different version of the model", "counter.db");
+        });
     }
 
     private static List<string> NamesOf(JsonDocument array) =>
@@ -652,6 +821,167 @@ public class PackOracleTests {
         return pid;
     }
 
+    /// <summary>P-14a: a failure's status comes from its typed kind and every failure body is ProblemDetails.
+    /// Every case parses the body and checks status, title (the kind), detail, and the path and guard the kind carries.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Failure_KindDrivesStatus_AndBodyIsProblemDetails(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Failures687);
+
+        static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+        static async Task ExpectProblem(HttpResponseMessage response, int status, string title,
+            string? detail, string? elementPath, string? guard) {
+            await Assert.That((int)response.StatusCode).IsEqualTo(status);
+            await Assert.That(response.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var root = json.RootElement;
+            string? Text(string name) => root.TryGetProperty(name, out var v) ? v.GetString() : null;
+            await Assert.That(root.GetProperty("status").GetInt32()).IsEqualTo(status);
+            await Assert.That(root.GetProperty("title").GetString()).IsEqualTo(title);
+            await Assert.That(Text("detail")).IsEqualTo(detail);
+            await Assert.That(Text("elementPath")).IsEqualTo(elementPath);
+            await Assert.That(Text("guard")).IsEqualTo(guard);
+            await Assert.That(root.TryGetProperty("kind", out _)).IsFalse();
+        }
+
+        // Range: 400.
+        using var range = await oracle.Client.PostAsync("/api/children", Json("""{"Code":"A1","Qty":500}"""));
+        await ExpectProblem(range, 400, "Range", "'Qty' must be <= 100.", "Child.Qty", null);
+
+        // Unique: 409.
+        using var first = await oracle.Client.PostAsync("/api/children", Json("""{"Code":"A1","Qty":5}"""));
+        await Assert.That((int)first.StatusCode).IsEqualTo(201);
+        using var duplicate = await oracle.Client.PostAsync("/api/children", Json("""{"Code":"A1","Qty":5}"""));
+        await ExpectProblem(duplicate, 409, "Unique",
+            "Unique constraint violated: 'Code' value is already used on another 'Child'.", "Child.Code", null);
+
+        // Link: the action's second create into the now-occupied to-one is 409. Node has no natural
+        // key, so its seed row is routed by the shadow id.
+        using var relinked = await oracle.Client.PostAsync("/api/nodes/1/extend", Json("{}"));
+        await ExpectProblem(relinked, 409, "Link",
+            "Cannot add a second link on 'next': the source already has a target.", "Node.next", null);
+
+        // Stage: an action the current stage does not offer is 409 and names the stage.
+        using var ticket = await oracle.Client.PostAsync("/api/tickets", Json("""{"Code":"T1","Ok":false}"""));
+        await Assert.That((int)ticket.StatusCode).IsEqualTo(201);
+        using var cancelled = await oracle.Client.PostAsync("/api/tickets/T1/cancel", Json("{}"));
+        await Assert.That((int)cancelled.StatusCode).IsEqualTo(200);
+        using var cancelledAgain = await oracle.Client.PostAsync("/api/tickets/T1/cancel", Json("{}"));
+        await ExpectProblem(cancelledAgain, 409, "Stage",
+            "'Cancel' requires stage 'Draft' on entity 'Ticket'.", "Ticket.Cancel", "Draft");
+
+        // Policy: a require guard that does not hold is 422 and names the policy.
+        using var open = await oracle.Client.PostAsync("/api/tickets", Json("""{"Code":"T2","Ok":false}"""));
+        await Assert.That((int)open.StatusCode).IsEqualTo(201);
+        using var blocked = await oracle.Client.PostAsync("/api/tickets/T2/go", Json("{}"));
+        await ExpectProblem(blocked, 422, "Policy", "'Go' blocked by policy 'IsOk'.", "Ticket.Go", "IsOk");
+
+        // Unknown id: 404, no detail.
+        using var missing = await oracle.Client.GetAsync("/api/children/ZZZ");
+        await ExpectProblem(missing, 404, "Not Found", null, null, null);
+    }
+
+    /// <summary>P-13a (#912): the host hands the module the stored link. The first create into an empty <c>next</c>
+    /// lands; every later one is the module's own 409 Link and creates no second row. <c>/api/nodes/1</c> is the
+    /// seed row (#595, #589), so the count is measured against the count before the first call.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_CreateIntoOccupiedToOne_IsLinkConflict_AndCreatesNoSecondRow_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.NodeLink912);
+
+        async Task<int> CountAsync() {
+            using var list = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/nodes"));
+            return list.RootElement.GetArrayLength();
+        }
+
+        async Task<HttpResponseMessage> ExtendAsync() =>
+            await oracle.Client.PostAsync("/api/nodes/1/extend", new StringContent("{}", Encoding.UTF8, "application/json"));
+
+        var seed = await CountAsync();
+
+        using var first = await ExtendAsync();
+        await Assert.That((int)first.StatusCode).IsEqualTo(200);
+        await Assert.That(await CountAsync()).IsEqualTo(seed + 1);
+
+        foreach (var attempt in new[] { "second", "third" }) {
+            using var again = await ExtendAsync();
+            await Assert.That((int)again.StatusCode).IsEqualTo(409).Because(attempt);
+            await Assert.That(again.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+            using var problem = JsonDocument.Parse(await again.Content.ReadAsStringAsync());
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Link");
+            await Assert.That(await CountAsync()).IsEqualTo(seed + 1).Because(attempt);
+        }
+    }
+
+    /// <summary>P-13a (#658, action half): <c>Triage</c> requires <c>Assigned</c> (<c>assignee exists</c>). The task is
+    /// filed in one request and triaged in the next, so the assignee is only known from the stored link.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_GuardOverStoredToOne_SeesTheAssignee_Issue658(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Desk658);
+
+        static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+        using var user = await oracle.Client.PostAsync("/api/users", Json("""{"Email":"a@x.io"}"""));
+        await Assert.That((int)user.StatusCode).IsEqualTo(201);
+        using var project = await oracle.Client.PostAsync("/api/projects", Json("""{"Key":"P1"}"""));
+        await Assert.That((int)project.StatusCode).IsEqualTo(201);
+
+        using var filed = await oracle.Client.PostAsync("/api/projects/P1/filetask", Json("""{"WhoId":"a@x.io"}"""));
+        await Assert.That((int)filed.StatusCode).IsEqualTo(200);
+
+        using var triaged = await oracle.Client.PostAsync("/api/projects/P1/tasks/1/triage", Json("{}"));
+        await Assert.That((int)triaged.StatusCode).IsEqualTo(200).Because(await triaged.Content.ReadAsStringAsync());
+
+        using var tasks = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/projects/P1/tasks"));
+        await Assert.That(tasks.RootElement.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(tasks.RootElement[0].GetProperty("currentStage").GetString()).IsEqualTo("Done");
+    }
+
+    /// <summary>P-13a (#658): a guard through a to-one of a ROOT entity (the shape of crm's Lead.Convert; the guard
+    /// reads <c>account</c>, which is not the route parent) answers as the simulator does for the same document
+    /// and steps: the status says what the simulator's <c>Invoke</c> outcome says, and a refusal names the same
+    /// guard as <c>PolySurfaceHarness.Invoke(...).Result.FailedGuards</c>.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_GuardThroughToOneOfRoot_AnswersAsTheSimulatorDoes_Issue658(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var fixture = PackOracleDomains.LeadConvert658;
+
+        var harness = PolySurfaceHarness.New();
+        var workspace = harness.Open("leads");
+        await Assert.That(harness.Define(workspace, fixture.Poly).Success).IsTrue();
+        var lead = harness.Create(workspace, "Lead", """{"Name":"L1"}""").InstanceId;
+        var steps = new[] { "Convert", "Attach", "Convert" };
+        var simulated = steps.Select(action => harness.Invoke(workspace, lead, action).Result).ToArray();
+        await Assert.That(simulated.Select(r => r.Succeeded).ToArray()).IsEquivalentTo(new[] { false, true, true });
+        await Assert.That(simulated[0].FailedGuards.Single()).IsEqualTo("HasAccount");
+
+        await using var oracle = await PackOracle.BootAsync(fixture);
+        using var created = await oracle.Client.PostAsync(
+            "/api/leads", new StringContent("""{"Name":"L1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        for (var i = 0; i < steps.Length; i++) {
+            using var response = await oracle.Client.PostAsync(
+                $"/api/leads/L1/{steps[i].ToLowerInvariant()}", new StringContent("{}", Encoding.UTF8, "application/json"));
+            var body = await response.Content.ReadAsStringAsync();
+            await Assert.That(response.IsSuccessStatusCode).IsEqualTo(simulated[i].Succeeded).Because($"step {i} {steps[i]}: {body}");
+            if (!simulated[i].Succeeded) {
+                using var problem = JsonDocument.Parse(body);
+                await Assert.That(problem.RootElement.GetProperty("guard").GetString()).IsEqualTo(simulated[i].FailedGuards.Single());
+            }
+        }
+    }
+
     /// <summary>#620 (slice P-03): an action that applies an effect and then fails must persist nothing.
     /// The rejected request has already bumped Capacity in memory; a save on the failure branch commits it.
     /// The second call is A3's pin on D2: a failed request must leave no pending change for the next
@@ -686,6 +1016,48 @@ public class PackOracleTests {
         using var after = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/warehouses/WH2"));
         await Assert.That(after.RootElement.GetProperty("capacity").GetInt64()).IsEqualTo(101);
         await Assert.That(after.RootElement.GetProperty("used").GetInt64()).IsEqualTo(100000);
+    }
+
+    /// <summary>L-24b: a value type's properties are init-only; an action's value-typed parameter still binds from the
+    /// JSON body over HTTP (System.Text.Json writes an init accessor), so the action sees a non-null value.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ValueTypePayload_BindsOverHttp_WithInitOnlyProperties(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var fixture = new PackOracleDomain(
+            "ValueBinding24b",
+            """
+            domain Billing24b
+            uses http
+            uses sqlite
+
+            Cost24b: value {
+              Amount: Number
+              Currency: Text
+            }
+
+            Invoice24b: entity {
+              Code: Text unique length(3, 8)
+              Hits: Number default(0)
+              Charge: action (cost: Cost24b) { if (cost != null) { assign Hits to 7 } }
+            }
+            """,
+            "/api/invoice24bs");
+        await using var oracle = await PackOracle.BootAsync(fixture);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/invoice24bs",
+            new StringContent("""{"Code":"INV1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var charged = await oracle.Client.PostAsync(
+            "/api/invoice24bs/INV1/charge",
+            new StringContent("""{"Cost":{"Amount":5,"Currency":"USD"}}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)charged.StatusCode).IsEqualTo(200);
+
+        using var after = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/invoice24bs/INV1"));
+        await Assert.That(after.RootElement.GetProperty("hits").GetInt64()).IsEqualTo(7);
     }
 
     /// <summary>#653 (slice P-03) success-path pin: the save must still run when the action succeeds.
@@ -732,5 +1104,813 @@ public class PackOracleTests {
         await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
         using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
         await Assert.That(row.RootElement.GetProperty("currentStage").GetString()).IsEqualTo("Open");
+    }
+
+    /// <summary>L-08b half 2 (#683 row L-08): an omitted required value over HTTP is the module's own 400 Required, not
+    /// an invented zero. The row's own name: Product.Price is a required Number.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostProduct_OmittedRequiredPrice_Returns400Required(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Inventory588);
+
+        using var omitted = await oracle.Client.PostAsync(
+            "/api/products", new StringContent("""{"Sku":"AB1","Name":"Hammer"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)omitted.StatusCode).IsEqualTo(400);
+        await Assert.That(omitted.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+        using var problem = JsonDocument.Parse(await omitted.Content.ReadAsStringAsync());
+        await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Required");
+        await Assert.That(problem.RootElement.GetProperty("elementPath").GetString()).IsEqualTo("Product.Price");
+
+        using var absentTwin = await oracle.Client.PostAsync(
+            "/api/products", new StringContent("""{"Sku":"AB1","Name":"Hammer","Price":null}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)absentTwin.StatusCode).IsEqualTo(400);
+
+        using var supplied = await oracle.Client.PostAsync(
+            "/api/products", new StringContent("""{"Sku":"AB1","Name":"Hammer","Price":0}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)supplied.StatusCode).IsEqualTo(201);
+    }
+
+    private static DepthStep Row(string entity, string key, string path, string http, string? sim = null) =>
+        new(entity, key, null, path, http, sim ?? http);
+
+    /// <summary>P-11b (#687; owner ruling 2026-11-14, "the create request carries the link"): a section created over HTTP
+    /// carries its course as the course's key. The university flow (course, section, student, enroll, close) answers what
+    /// the simulator answers, step by step and by value, and the policy that reads through the link agrees on both sides.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostSection_CarryingItsCourseKey_RunsTheUniversityFlowLikeTheSimulator(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.CreateLink11b, [
+            Row("Course", "CS101", "/api/courses", """{"Code":"CS101","Credits":4}"""),
+            Row("Course", "CS102", "/api/courses", """{"Code":"CS102","Credits":1}"""),
+            Row("Section", "S1", "/api/sections", """{"Code":"S1","Cap":10,"CourseId":"@Course:CS101"}""", """{"Code":"S1","Cap":10,"course":"@Course:CS101"}"""),
+            Row("Section", "S2", "/api/sections", """{"Code":"S2","Cap":10,"CourseId":"@Course:CS102"}""", """{"Code":"S2","Cap":10,"course":"@Course:CS102"}"""),
+            Row("Student", "ann", "/api/students", """{"Email":"ann@x.io"}"""),
+            Act("Student", "ann", "Enroll", "/api/students/ann@x.io/enroll", http: """{"OfferingId":"@Section:S1"}""", sim: """{"offering":"@Section:S1"}"""),
+            Act("Section", "S1", "Close", "/api/sections/S1/close"),
+            Act("Section", "S2", "Close", "/api/sections/S2/close"),
+        ], [
+            new DepthRead("Student", "ann", "/api/students/ann@x.io", "OpenCredits", "3"),
+            new DepthRead("Section", "S1", "/api/sections/S1", "Cap", "10"),
+        ]);
+    }
+
+    /// <summary>P-11b: two required links to targets of one type are two DTO members and two locals. A swapped pair would
+    /// be a different answer to a policy that reads through each link, on the simulator and over HTTP alike.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostRoute_TwoLinksToOneEntityType_AreNotSwapped(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.TwoLinks11b, [
+            Row("Airport", "SFO", "/api/airports", """{"Code":"SFO","Capacity":200}"""),
+            Row("Airport", "JFK", "/api/airports", """{"Code":"JFK","Capacity":50}"""),
+            Row("Route", "R1", "/api/routes", """{"Code":"R1","OriginId":"@Airport:SFO","DestinationId":"@Airport:JFK"}""", """{"Code":"R1","origin":"@Airport:SFO","destination":"@Airport:JFK"}"""),
+            Row("Route", "R2", "/api/routes", """{"Code":"R2","OriginId":"@Airport:JFK","DestinationId":"@Airport:SFO"}""", """{"Code":"R2","origin":"@Airport:JFK","destination":"@Airport:SFO"}"""),
+            Act("Route", "R1", "FromBig", "/api/routes/R1/frombig"),
+            Act("Route", "R1", "ToBig", "/api/routes/R1/tobig"),
+            Act("Route", "R2", "FromBig", "/api/routes/R2/frombig"),
+            Act("Route", "R2", "ToBig", "/api/routes/R2/tobig"),
+        ], [
+            new DepthRead("Route", "R1", "/api/routes/R1", "Hits", "1"),
+            new DepthRead("Route", "R2", "/api/routes/R2", "Hits", "1"),
+        ]);
+    }
+
+    /// <summary>P-11b: the create route loads what the lowered create reads through the link (the section's initial entry reads
+    /// <c>course region Name</c>), from the same read tree an action route loads: the label is the region's name, the same
+    /// on the simulator and over HTTP, and persisted. A course with no region leaves it unset on both.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostSection_WhoseEntryReadsThroughTheCourse_LoadsTheRegionFirst(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.CreateLinkReads11b, [
+            Row("Course", "C1", "/api/courses", """{"Code":"C1"}"""),
+            Act("Course", "C1", "MakeRegion", "/api/courses/C1/makeregion", makes: "Region:r1"),
+            Row("Section", "S1", "/api/sections", """{"Code":"S1","CourseId":"@Course:C1"}""", """{"Code":"S1","course":"@Course:C1"}"""),
+        ], [
+            new DepthRead("Section", "S1", "/api/sections/S1", "Label", "North"),
+        ]);
+    }
+
+    /// <summary>P-11b: a key that names no course is the same 404 an action's entity argument gets, naming the course, and
+    /// creates nothing; the same body with the course made is a 201 with the section's own <c>Location</c>.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostSection_UnknownCourseKey_Returns404NamingTheCourse(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.CreateLink11b);
+
+        using var unknown = await oracle.Client.PostAsync(
+            "/api/sections", new StringContent("""{"Code":"S9","Cap":5,"CourseId":"NOPE"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)unknown.StatusCode).IsEqualTo(404);
+        await Assert.That(unknown.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+        using var problem = JsonDocument.Parse(await unknown.Content.ReadAsStringAsync());
+        await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Not Found");
+        await Assert.That(problem.RootElement.GetProperty("detail").GetString()).IsEqualTo("Course not found");
+        using var absent = await oracle.Client.GetAsync("/api/sections/S9");
+        await Assert.That((int)absent.StatusCode).IsEqualTo(404);
+
+        using var course = await oracle.Client.PostAsync(
+            "/api/courses", new StringContent("""{"Code":"NOPE","Credits":3}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)course.StatusCode).IsEqualTo(201);
+        using var created = await oracle.Client.PostAsync(
+            "/api/sections", new StringContent("""{"Code":"S9","Cap":5,"CourseId":"NOPE"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(await created.Content.ReadAsStringAsync());
+        await Assert.That(created.Headers.Location?.ToString()).IsEqualTo("/api/sections/S9");
+        using var got = await oracle.Client.GetAsync("/api/sections/S9");
+        await Assert.That((int)got.StatusCode).IsEqualTo(200);
+    }
+
+    /// <summary>P-11b: a link left out of the body, or sent as JSON <c>null</c>, reaches the module as a null link and
+    /// answers what the simulator answers for the same create: Required at <c>Section.course</c>, the same message. The host
+    /// adds no check of its own.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostSection_OmittedOrNullCourse_AnswersWhatTheSimulatorAnswers(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var harness = PolySurfaceHarness.New();
+        var workspace = harness.Open();
+        var defined = harness.Define(workspace, PackOracleDomains.WithoutHostLibraries(PackOracleDomains.CreateLink11b));
+        await Assert.That(defined.Success).IsTrue().Because(defined.Summary);
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.CreateLink11b);
+
+        foreach (var (name, http, sim) in new[] {
+            ("omitted", """{"Code":"S9","Cap":5}""", """{"Code":"S9","Cap":5}"""),
+            ("null", """{"Code":"S9","Cap":5,"CourseId":null}""", """{"Code":"S9","Cap":5,"course":null}"""),
+        }) {
+            var expected = harness.Create(workspace, "Section", sim);
+            await Assert.That(expected.Ok).IsFalse().Because($"{name}: the simulator's answer");
+            var kind = expected.Data?["failure"]?["kind"]?.GetValue<string>();
+            var elementPath = expected.Data?["failure"]?["elementPath"]?.GetValue<string>();
+            var message = expected.Data?["failure"]?["message"]?.GetValue<string>();
+            await Assert.That(kind).IsEqualTo("Required").Because(name);
+            await Assert.That(elementPath).IsEqualTo("Section.course").Because(name);
+
+            using var response = await oracle.Client.PostAsync("/api/sections", new StringContent(http, Encoding.UTF8, "application/json"));
+            await Assert.That((int)response.StatusCode).IsEqualTo(400).Because(name);
+            await Assert.That(response.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json").Because(name);
+            using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo(kind).Because(name);
+            await Assert.That(problem.RootElement.GetProperty("elementPath").GetString()).IsEqualTo(elementPath).Because(name);
+            await Assert.That(problem.RootElement.GetProperty("detail").GetString()).IsEqualTo(message).Because(name);
+        }
+    }
+
+    /// <summary>L-15a (#683), P-11b: a root whose required link has a target with no natural key has no POST route (the path
+    /// answers 405, as for any method the route does not map), not a route whose every request answers 400 Required: there is
+    /// no value a body could carry for the link.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostOrder_RootWithARequiredLink_HasNoPostRoute(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RequiredLink683);
+
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That((int)list.StatusCode).IsEqualTo(200);
+        using var customer = await oracle.Client.PostAsync(
+            "/api/customers", new StringContent("""{"Name":"Ada"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)customer.StatusCode).IsEqualTo(200);
+        using var order = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Number":"A1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)order.StatusCode).IsEqualTo(405).Because(await order.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>E-10a (#923): the generated <c>.http</c> sample for an entity with a required DateTime, Time and Duration
+    /// is a body the host binds: sent as it stands, it creates the row.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostThing_TemporalHttpSampleBody_Returns201(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var compiled = new Poly.Compile.PolyCompiler(
+                Poly.Packs.Product.ProductCatalog.Catalog,
+                new Poly.DomainModeling.Compile.SessionOptions(
+                    Poly.Packs.Product.ProductCatalog.Catalog, Poly.DomainModeling.Compile.ExtensionCatalog.ProductAuthoring))
+            .Compile(PackOracleDomains.Temporal923.Poly, "Temporal923.poly", CancellationToken.None);
+        await Assert.That(compiled.Succeeded).IsTrue();
+        var http = compiled.Files.Single(f => f.FileName == "demo.http").Source;
+        var match = System.Text.RegularExpressions.Regex.Match(
+            http, @"POST [^\r\n]*/api/things\r?\nContent-Type: application/json\r?\n\r?\n(\{.*?\r?\n\})", System.Text.RegularExpressions.RegexOptions.Singleline);
+        await Assert.That(match.Success).IsTrue().Because(http);
+
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Temporal923);
+        using var created = await oracle.Client.PostAsync(
+            "/api/things", new StringContent(match.Groups[1].Value, Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(match.Groups[1].Value + " -> " + await created.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>E-10a (#924): an enum and an entity named like C# keywords boot, answer a POST with 201 and list the row.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task KeywordNamedEntityAndEnum_PostCreatesAndGetReturnsTheRow(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.KeywordNames924);
+
+        using var thing = await oracle.Client.PostAsync(
+            "/api/things", new StringContent("""{"Name":"a","Kind":"A"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)thing.StatusCode).IsEqualTo(201).Because(await thing.Content.ReadAsStringAsync());
+        using var klass = await oracle.Client.PostAsync(
+            "/api/classes", new StringContent("""{"Name":"b"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)klass.StatusCode).IsEqualTo(201).Because(await klass.Content.ReadAsStringAsync());
+
+        using var list = await oracle.Client.GetAsync("/api/classes");
+        await Assert.That(await list.Content.ReadAsStringAsync()).Contains("\"b\"");
+        using var things = await oracle.Client.GetAsync("/api/things");
+        await Assert.That(await things.Content.ReadAsStringAsync()).Contains("\"a\"");
+    }
+
+    /// <summary>L-08b half 2: for a required Number, Text, Boolean, Date, DateTime, Time, Duration and enum, an absent member and a JSON
+    /// <c>null</c> answer exactly what the simulator answers for the same create (Required, the same path and
+    /// message); an empty string for the Text is a value on both.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostGizmo_OmittedOrNullRequiredValue_AnswersWhatTheSimulatorAnswers(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RequiredOmitted683);
+        var scenario = ParityScenario.FromDsl(PackOracleDomains.RequiredOmittedSimulatorDsl, "PostGizmoSimulatorSide");
+
+        var json = new Dictionary<string, JsonNode?> {
+            ["Label"] = "a",
+            ["Qty"] = 5,
+            ["Active"] = true,
+            ["Born"] = "2026-01-01",
+            ["Tier"] = "Low",
+            ["Price"] = 1.5,
+            ["Stamp"] = "2026-01-01T10:00:00Z",
+            ["Clock"] = "10:30:00",
+            ["Span"] = "01:30:00",
+        };
+        var sim = new Dictionary<string, object?> {
+            ["Label"] = "a",
+            ["Qty"] = 5L,
+            ["Active"] = true,
+            ["Born"] = new DateOnly(2026, 1, 1),
+            ["Tier"] = "Low",
+            ["Price"] = 1.5m,
+            ["Stamp"] = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc),
+            ["Clock"] = new TimeOnly(10, 30),
+            ["Span"] = new TimeSpan(1, 30, 0),
+        };
+
+        async Task CompareAsync(string name, Func<Dictionary<string, JsonNode?>, Dictionary<string, JsonNode?>> shapeJson,
+            Func<Dictionary<string, object?>, Dictionary<string, object?>> shapeSim, bool succeeds) {
+            var body = new JsonObject(shapeJson(new(json)).Select(kv => KeyValuePair.Create(kv.Key, kv.Value?.DeepClone())));
+            using var response = await oracle.Client.PostAsync(
+                "/api/gizmos", new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"));
+            var (simulated, _) = scenario.Run(side => side.Create("Gizmo", [.. shapeSim(new(sim)).Select(kv => (kv.Key, kv.Value))]));
+            var expected = simulated[0];
+
+            await Assert.That(expected.Success).IsEqualTo(succeeds).Because($"{name}: the simulator's answer");
+            if (succeeds) {
+                await Assert.That(response.IsSuccessStatusCode).IsTrue().Because($"{name}: {response.StatusCode}");
+                return;
+            }
+            await Assert.That((int)response.StatusCode).IsEqualTo(400).Because(name);
+            await Assert.That(response.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json").Because(name);
+            using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo(expected.FailureKind).Because(name);
+            await Assert.That(problem.RootElement.GetProperty("elementPath").GetString()).IsEqualTo(expected.FailurePath).Because(name);
+            await Assert.That(problem.RootElement.GetProperty("detail").GetString()).IsEqualTo(expected.Message).Because(name);
+        }
+
+        foreach (var member in json.Keys) {
+            await CompareAsync($"{member} absent",
+                j => { j.Remove(member); return j; }, s => { s.Remove(member); return s; }, succeeds: false);
+            await CompareAsync($"{member} null",
+                j => { j[member] = null; return j; }, s => { s[member] = null; return s; }, succeeds: false);
+        }
+
+        await CompareAsync("Label empty",
+            j => { j["Label"] = ""; return j; }, s => { s["Label"] = ""; return s; }, succeeds: true);
+    }
+
+    // ── P-13b (ii) (#912): the host loads what an action reads, at any depth ──
+
+    /// <summary>One step of a row, run on the simulator and over HTTP. <c>@Entity:key</c> in either argument string is the
+    /// instance id (simulator) or the key (HTTP) of an entity an earlier step made.</summary>
+    private sealed record DepthStep(string Entity, string Key, string? Action, string Path, string HttpBody, string? SimArgs, string? Makes = null, string? MakesKey = null);
+
+    private static DepthStep Make(string entity, string key, string path, string properties = "") =>
+        new(entity, key, null, path, $$"""{"Code":"{{key}}"{{properties}}}""", $$"""{"Code":"{{key}}"{{properties}}}""");
+
+    /// <summary>An action on a stored instance. <paramref name="makes"/> is the <c>Entity:key</c> of the instance it returns.</summary>
+    private static DepthStep Act(string entity, string key, string action, string path, string? makes = null, string http = "{}", string sim = "{}") =>
+        new(entity, key, action, path, http, sim, makes?.Split(':')[0], makes?.Split(':')[1]);
+
+    private sealed record DepthRead(string Entity, string Key, string Path, string Property, string? Expected);
+
+    /// <summary>Runs <paramref name="steps"/> on the simulator, then over HTTP, and compares each step's outcome (success, and the
+    /// failed guard) and every read back by value. The simulator is the authority; <c>Expected</c> pins it, so a row cannot pass
+    /// by both sides being wrong in the same way.</summary>
+    private static async Task RunDepthRowAsync(PackOracleDomain fixture, IReadOnlyList<DepthStep> steps, IReadOnlyList<DepthRead> reads) {
+        var harness = PolySurfaceHarness.New();
+        var workspace = harness.Open("depth");
+        var defined = harness.Define(workspace, fixture.Poly);
+        await Assert.That(defined.Success).IsTrue().Because(defined.Summary + string.Join("; ", defined.Findings.Select(f => f.ToString())));
+        var ids = new Dictionary<string, string>(StringComparer.Ordinal);
+        string Sim(string text) => System.Text.RegularExpressions.Regex.Replace(text, "@(\\w+:\\w+)", m => ids[m.Groups[1].Value]);
+        string Http(string text) => System.Text.RegularExpressions.Regex.Replace(text, "@\\w+:(\\w+)", "$1");
+
+        var simulated = new List<InvokeOutcome?>();
+        foreach (var step in steps) {
+            if (step.Action is null) {
+                var made = harness.Create(workspace, step.Entity, Sim(step.SimArgs!));
+                await Assert.That(made.Ok).IsTrue().Because($"simulator create {step.Entity}:{step.Key}: {made.Summary}");
+                ids[$"{step.Entity}:{step.Key}"] = made.InstanceId;
+                simulated.Add(null);
+                continue;
+            }
+            var outcome = harness.Invoke(workspace, ids[$"{step.Entity}:{step.Key}"], step.Action, Sim(step.SimArgs!)).Result;
+            simulated.Add(outcome);
+            if (step.Makes is not null && outcome.Succeeded)
+                ids[$"{step.Makes}:{step.MakesKey}"] = outcome.ReturnInstanceId!;
+        }
+
+        var simulatedReads = new List<string?>();
+        foreach (var read in reads) {
+            if (!ids.ContainsKey($"{read.Entity}:{read.Key}")) {
+                var listed = harness.List(workspace, read.Entity).Data;
+                var candidates = (listed?["instances"] as System.Text.Json.Nodes.JsonArray)?.Select(i => i?["instanceId"]?.GetValue<string>()).OfType<string>() ?? [];
+                ids[$"{read.Entity}:{read.Key}"] = candidates.FirstOrDefault(id =>
+                        (harness.Get(workspace, id).Data?["instance"]?["properties"] as System.Text.Json.Nodes.JsonArray)?
+                            .Any(p => p?["name"]?.GetValue<string>() == "Code" && p["value"]?.GetValue<string>() == read.Key) == true)
+                    ?? throw new InvalidOperationException($"No simulated {read.Entity} with Code {read.Key}: {listed?.ToJsonString()}");
+            }
+            var snapshot = harness.Get(workspace, ids[$"{read.Entity}:{read.Key}"]);
+            var value = (snapshot.Data?["instance"]?["properties"] as System.Text.Json.Nodes.JsonArray)?
+                .FirstOrDefault(p => p?["name"]?.GetValue<string>() == read.Property)?["value"]?.GetValue<string>();
+            if (value == "(null)")
+                value = null;
+            simulatedReads.Add(value);
+            await Assert.That(value?.ToLowerInvariant()).IsEqualTo(read.Expected?.ToLowerInvariant())
+                .Because($"simulator {read.Entity}:{read.Key}.{read.Property}");
+        }
+
+        await using var oracle = await PackOracle.BootAsync(fixture);
+        for (var i = 0; i < steps.Count; i++) {
+            var step = steps[i];
+            using var response = await oracle.Client.PostAsync(step.Path, new StringContent(Http(step.HttpBody), Encoding.UTF8, "application/json"));
+            var body = await response.Content.ReadAsStringAsync();
+            var label = $"step {i} {step.Entity}:{step.Key} {step.Action ?? "create"} -> {(int)response.StatusCode} {body}";
+            if (step.Action is null) {
+                await Assert.That((int)response.StatusCode).IsEqualTo(201).Because(label);
+                continue;
+            }
+            await Assert.That(response.IsSuccessStatusCode).IsEqualTo(simulated[i]!.Succeeded).Because(label);
+            if (!simulated[i]!.Succeeded && simulated[i]!.FailedGuards.Count > 0) {
+                using var problem = JsonDocument.Parse(body);
+                await Assert.That(problem.RootElement.TryGetProperty("guard", out var guard) ? guard.GetString() : null).IsEqualTo(simulated[i]!.FailedGuards.Single()).Because(label);
+            }
+        }
+
+        for (var i = 0; i < reads.Count; i++) {
+            var read = reads[i];
+            using var row = JsonDocument.Parse(await oracle.Client.GetStringAsync(read.Path));
+            var property = char.ToLowerInvariant(read.Property[0]) + read.Property[1..];
+            var value = row.RootElement.TryGetProperty(property, out var element) && element.ValueKind != JsonValueKind.Null ? element.ToString() : null;
+            await Assert.That(value?.ToLowerInvariant()).IsEqualTo(simulatedReads[i]?.ToLowerInvariant())
+                .Because($"HTTP {read.Entity}:{read.Key}.{read.Property}");
+        }
+    }
+
+    private static readonly DepthStep[] DepthSetup = [
+        Make("Order", "o1", "/api/orders"),
+        Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+        Act("Customer", "c1", "MakeRegion", "/api/orders/o1/customer/makeregion", makes: "Region:r1"),
+    ];
+
+    private static readonly DepthStep[] DepthSetupWithZone = [.. DepthSetup,
+        Act("Region", "r1", "MakeZone", "/api/customers/c1/region/makezone", makes: "Zone:z1"),
+    ];
+
+    private static IEnumerable<DepthStep> Then(DepthStep[] setup, params DepthStep[] steps) => setup.Concat(steps);
+
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_GuardAndReadThroughTwoLinks_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [.. Then(DepthSetup, Act("Order", "o1", "TwoHop", "/api/orders/o1/twohop"))],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", "n0")]);
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_ReadThroughThreeLinks_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [.. Then(DepthSetupWithZone, Act("Order", "o1", "ThreeHop", "/api/orders/o1/threehop"))],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", "zl")]);
+    }
+
+    /// <summary>The region is linked and its zone is not: an unlinked link in the middle of a three-link path. Whatever the simulator
+    /// answers (success or a failed guard), and whatever it leaves in <c>Note</c>, the host answers by value; no exception escapes.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_ReadThroughAnUnlinkedLinkMidPath_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [.. Then(DepthSetup, Act("Order", "o1", "ThreeHop", "/api/orders/o1/threehop"))],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", null)]);
+    }
+
+    /// <summary>L-15a (#683): the customer is linked and its OPTIONAL region is not, so the three-link read stops at a non-leaf link
+    /// two hops before the leaf. The host answers by value as the simulator does; no exception escapes.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_ReadThroughAnUnlinkedOptionalNonLeafLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"),
+                Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+                Act("Order", "o1", "ThreeHop", "/api/orders/o1/threehop")],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", null)]);
+    }
+
+    private static DepthStep Product(string key, string name) =>
+        Make("Product", key, "/api/products", $",\"Name\":\"{name}\"");
+
+    private static DepthStep AddLine(string line, string product) =>
+        Act("Order", "o1", "AddLine", "/api/orders/o1/addline", makes: $"Line:{line}",
+            http: $$"""{"C":"{{line}}","PId":"@Product:{{product}}"}""", sim: $$"""{"c":"{{line}}","p":"@Product:{{product}}"}""");
+
+    /// <summary>Two items, the matching product on the SECOND: a loader that loads only the first item's link answers wrong (or 500).
+    /// <c>all</c> is the negative direction: the first item does not match, so it is false.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_QuantifierBodyReadingEachItemsLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p2"), AddLine("l2", "p1"),
+             Act("Order", "o1", "AnyNamed", "/api/orders/o1/anynamed"),
+             Act("Order", "o1", "AllNamed", "/api/orders/o1/allnamed")],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Flag", "true"),
+             new DepthRead("Order", "o1", "/api/orders/o1", "Every", "false")]);
+    }
+
+    /// <summary>Two items, each linked to its own product: each item's own value, not the first item's.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_FanOutIntoItemsThatReadTheirOwnLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p1"), AddLine("l2", "p2"),
+             Act("Order", "o1", "FanOut", "/api/orders/o1/fanout")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "pn"),
+             new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Seen", "pm")]);
+    }
+
+    /// <summary>A nested route (<c>/orders/{code}/lines/{lineCode}/showcustomer</c>) whose body reads through the PARENT:
+    /// <c>order customer region Name</c>. The subtree below the parent's own link loads on the route parent.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_NestedRouteReadingThroughItsParentsLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "MakeRegion", "/api/orders/o1/customer/makeregion", makes: "Region:r1"),
+             AddLine("l1", "p1"),
+             Act("Line", "l1", "ShowCustomer", "/api/orders/o1/lines/l1/showcustomer")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "n0")]);
+    }
+
+    /// <summary>A collection UNDER a to-one (<c>invoke customer.NoteNamed</c>, which iterates the customer's notes), the matching product on the second note.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_CollectionUnderAToOne_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "AddNote", "/api/orders/o1/customer/addnote", makes: "Note:n1",
+                 http: """{"C":"n1","PId":"@Product:p2"}""", sim: """{"c":"n1","p":"@Product:p2"}"""),
+             Act("Customer", "c1", "AddNote", "/api/orders/o1/customer/addnote", makes: "Note:n2",
+                 http: """{"C":"n2","PId":"@Product:p1"}""", sim: """{"c":"n2","p":"@Product:p1"}"""),
+             Act("Order", "o1", "NoteNamed", "/api/orders/o1/notenamed")],
+            [new DepthRead("Customer", "c1", "/api/orders/o1/customer", "Flag", "true")]);
+    }
+
+    /// <summary>Two different navigation paths whose concatenated local names are equal (<c>Customer</c> + <c>Region</c> and
+    /// <c>CustomerRegion</c>): the generated host must compile, and the action answers as the simulator does.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_NavigationPathsWhoseLocalNamesCollide_CompileAndAnswerAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.Names912,
+            [Make("Order", "o1", "/api/orders"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "MakeRegion", "/api/orders/o1/customer/makeregion", makes: "Region:r1"),
+             Act("Region", "r1", "MakeZone", "/api/customers/c1/region/makezone", makes: "Zone:z1"),
+             Act("Order", "o1", "MakeOther", "/api/orders/o1/makeother", makes: "Other:x1"),
+             Act("Other", "x1", "MakeZone", "/api/orders/o1/customerregion/makezone", makes: "Zone:z2"),
+             Act("Order", "o1", "Both", "/api/orders/o1/both")],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", "first"),
+             new DepthRead("Order", "o1", "/api/orders/o1", "Second", "second")]);
+    }
+
+    private static DepthStep AddTag(string line, string tag, string product) =>
+        Act("Line", line, "AddTag", $"/api/orders/o1/lines/{line}/addtag", makes: $"Tag:{tag}",
+            http: $$"""{"C":"{{tag}}","PId":"@Product:{{product}}"}""", sim: $$"""{"c":"{{tag}}","p":"@Product:{{product}}"}""");
+
+    /// <summary>A collection IN a collection: two lines, two tags each. Line 1 has a matching tag only second, line 2 has none.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_CollectionInACollection_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p1"), AddLine("l2", "p1"),
+             AddTag("l1", "t1", "p2"), AddTag("l1", "t2", "p1"), AddTag("l2", "t3", "p2"), AddTag("l2", "t4", "p2"),
+             Act("Order", "o1", "FanTags", "/api/orders/o1/fantags")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Flag", "true"),
+             new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Flag", "false")]);
+    }
+
+    /// <summary>The handler of a subscriber registered in the same request reads through a link: the add answered 500.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_WhenHandlerRegisteredInTheSameRequest_ReadsThroughALink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.Watch912,
+            [Make("Watcher", "w1", "/api/watchers"),
+             Act("Watcher", "w1", "MakeRegion", "/api/watchers/w1/makeregion", makes: "Region:r1"),
+             Act("Region", "r1", "MakeZone", "/api/watchers/w1/region/makezone", makes: "Zone:z1"),
+             Act("Watcher", "w1", "AddItem", "/api/watchers/w1/additem")],
+            [new DepthRead("Region", "r1", "/api/watchers/w1/region", "Name", "zl")]);
+    }
+
+    /// <summary>Fix round 2's case: the client passes the order's own product as <c>p</c>, so the line's handler (registered on
+    /// <c>p</c>, fired through <c>this.Product</c>) reads one row through two paths.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_ParameterThatIsTheSameRowAsALink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.SameRow912,
+            [Make("Order", "o1", "/api/orders"),
+             Act("Order", "o1", "MakeProduct", "/api/orders/o1/makeproduct", makes: "Product:p1"),
+             Act("Product", "p1", "MakeZone", "/api/orders/o1/product/makezone", makes: "Zone:z1", http: """{"Code":"zl"}""", sim: """{"code":"zl"}"""),
+             Act("Order", "o1", "Go", "/api/orders/o1/go", http: """{"PId":"@Product:p1"}""", sim: """{"p":"@Product:p1"}""")],
+            [new DepthRead("Product", "p1", "/api/orders/o1/product", "Name", "zl")]);
+    }
+
+    /// <summary>Two parameters of one entity type: each is looked up and loaded under its own name.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_TwoParametersOfOneEntityType_AnswerAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.TwoParams912,
+            [Make("Order", "o1", "/api/orders"),
+             Make("Product", "p1", "/api/products", ",\"Name\":\"n1\""),
+             Make("Product", "p2", "/api/products", ",\"Name\":\"n2\""),
+             Act("Order", "o1", "Both", "/api/orders/o1/both",
+                 http: """{"AId":"@Product:p1","BId":"@Product:p2"}""", sim: """{"a":"@Product:p1","b":"@Product:p2"}""")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "n1"),
+             new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Seen", "n2")]);
+    }
+
+    private static async Task<HttpResponseMessage> PostJsonAsync(PackOracle oracle, string path, string member, JsonNode? value) {
+        var body = new JsonObject { [member] = value }.ToJsonString();
+        return await oracle.Client.PostAsync(path, new StringContent(body, Encoding.UTF8, "application/json"));
+    }
+
+    /// <summary>P-12a (#687 row P-12): a created row's <c>Location</c> carries its natural key as one escaped path
+    /// segment, so a key with a space, a non-ASCII letter, <c>?</c>, <c>#</c>, <c>%</c> or a newline answers 201 and its
+    /// Location reads the same row back. A key with a <c>/</c> gets the escaped Location too; ASP.NET does not turn
+    /// <c>%2F</c> back into <c>/</c> in a route value, so that route cannot be read back (recorded in the PR, no fix
+    /// here: the escaped text is still the right Location).</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task NaturalKey_NeedingEscape_LocationIsEscapedAndRoundTrips(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+
+        foreach (var key in new[] { "a b", "a b@d", "ä", "a?b#c", "a%2Fb", "a\nb", "a/b", "a b/c@d" }) {
+            using var created = await PostJsonAsync(oracle, "/api/customers", "Email", key);
+            await Assert.That((int)created.StatusCode).IsEqualTo(201).Because($"POST {JsonSerializer.Serialize(key)}");
+            var location = created.Headers.Location?.OriginalString;
+            await Assert.That(location).IsEqualTo("/api/customers/" + Uri.EscapeDataString(key)).Because(JsonSerializer.Serialize(key));
+            if (key.Contains('/'))
+                continue;
+            using var read = await oracle.Client.GetAsync(new Uri(location!, UriKind.Relative));
+            await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK).Because($"GET {location}");
+            using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+            await Assert.That(row.RootElement.GetProperty("email").GetString()).IsEqualTo(key);
+        }
+    }
+
+    /// <summary>P-12a regression guard: a key that needs no escaping gets the same <c>Location</c> as before, a Number
+    /// key included, and a shadow-key entity's POST is still a 200 with no <c>Location</c>.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task NaturalKey_NeedingNoEscape_LocationIsUnchanged(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+
+        using var text = await PostJsonAsync(oracle, "/api/customers", "Email", "plain-key_1.x~");
+        await Assert.That((int)text.StatusCode).IsEqualTo(201);
+        await Assert.That(text.Headers.Location?.OriginalString).IsEqualTo("/api/customers/plain-key_1.x~");
+
+        using var number = await PostJsonAsync(oracle, "/api/tickets", "Seq", 42);
+        await Assert.That((int)number.StatusCode).IsEqualTo(201);
+        await Assert.That(number.Headers.Location?.OriginalString).IsEqualTo("/api/tickets/42");
+        using var readNumber = await oracle.Client.GetAsync("/api/tickets/42");
+        await Assert.That(readNumber.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        using var shadow = await PostJsonAsync(oracle, "/api/notes", "Body", "hello");
+        await Assert.That((int)shadow.StatusCode).IsEqualTo(200);
+        await Assert.That(shadow.Headers.Location).IsNull();
+    }
+
+    /// <summary>P-12a: a Date key's Location is culture-invariant ISO text that the route binds back. Before, it was the
+    /// host's culture short date (<c>1/5/2026</c>), whose slashes made it a different route.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task DateKey_LocationIsInvariantAndRoundTrips(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+
+        using var created = await PostJsonAsync(oracle, "/api/events", "Day", "2026-01-05");
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+        await Assert.That(created.Headers.Location?.OriginalString).IsEqualTo("/api/events/2026-01-05");
+        using var read = await oracle.Client.GetAsync(created.Headers.Location);
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        await Assert.That(row.RootElement.GetProperty("day").GetString()).IsEqualTo("2026-01-05");
+    }
+
+    /// <summary>P-12a fix round: an optional unique Date key is a <c>DateOnly?</c>, and the generated host compiles with it
+    /// (it did not, CS1501, with the unguarded ISO format) and serves. The create path is not exercised: on this host every
+    /// create of such an entity answers 409 Unique (and an optional unique Text key kills the host at boot, a
+    /// <c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task OptionalUniqueDateKey_HostCompilesAndServes(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.OptionalKeys687);
+
+        using var list = await oracle.Client.GetAsync("/api/slots");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+    }
+
+    /// <summary>P-12a: the GET body of a keyed entity carries every declared scalar and the stage, under the member
+    /// names and JSON kinds the declaration implies. Names come from the parsed domain through the BCL's
+    /// <see cref="JsonNamingPolicy.CamelCase"/>, not from the generator. A subset-and-required check, deliberately not a
+    /// single golden body: it does not say whether <c>id</c> or a navigation is present (the missing <c>id</c> is
+    /// P-12's, navigations are unstable), so it pins neither.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task GetBody_MembersFollowTheDeclaredContract(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        // The same entities without the host libraries (persistence stands in for sqlite), so the plain parser reads them.
+        var declaration = PackOracleDomains.RouteKeys687.Poly.Replace("uses http\n", "").Replace("uses sqlite", "uses persistence");
+        var domain = EvolvedDomain.FromDsl(declaration).Domain;
+        var profile = domain.Types.OfType<Poly.DomainModeling.Ontology.Entity>().Single(e => e.Name == "Profile");
+        var expected = profile.Properties.ToDictionary(
+            p => JsonNamingPolicy.CamelCase.ConvertName(p.Name),
+            p => p.Type.TypeName switch {
+                "Number" or "Decimal" => JsonValueKind.Number,
+                "Boolean" => JsonValueKind.True,
+                _ => JsonValueKind.String,
+            });
+        var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
+        var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
+        var stageName = new Poly.DomainModeling.Analysis.StorageAnalyzer(domain).Analyze(aggregate, topology)
+            .Entities.Single(e => e.Name == "Profile").StagePropertyName;
+        expected[JsonNamingPolicy.CamelCase.ConvertName(stageName!)] = JsonValueKind.String;
+
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+        var post = new JsonObject {
+            ["Handle"] = "h1",
+            ["Age"] = 3,
+            ["Active"] = true,
+            ["Born"] = "2026-01-01",
+            ["Tier"] = "High",
+            ["Price"] = 1.5,
+        };
+        using var created = await oracle.Client.PostAsync(
+            "/api/profiles", new StringContent(post.ToJsonString(), Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var read = await oracle.Client.GetAsync("/api/profiles/h1");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        using var listRead = await oracle.Client.GetAsync("/api/profiles");
+        await Assert.That(listRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var list = JsonDocument.Parse(await listRead.Content.ReadAsStringAsync());
+        await Assert.That(list.RootElement.GetArrayLength()).IsGreaterThan(0);
+        // A Boolean is True or False by value, one JSON kind.
+        static JsonValueKind Kind(JsonElement e) => e.ValueKind == JsonValueKind.False ? JsonValueKind.True : e.ValueKind;
+        foreach (var (name, kind) in expected) {
+            await Assert.That(body.RootElement.TryGetProperty(name, out var member)).IsTrue().Because($"member {name}");
+            await Assert.That(Kind(member)).IsEqualTo(kind).Because($"member {name}");
+            foreach (var item in list.RootElement.EnumerateArray()) {
+                await Assert.That(item.TryGetProperty(name, out var listed)).IsTrue().Because($"list member {name}");
+                await Assert.That(Kind(listed)).IsEqualTo(kind).Because($"list member {name}");
+            }
+        }
+    }
+
+    /// <summary>The schema id's input must account for every column, foreign key and index the database really has: the
+    /// app is booted, the file it created is read back (EF's own output, not a second reading of the model), and each
+    /// table, column and key is looked up in the hashed input. A stage column (EF maps it by convention) or a foreign key
+    /// (derived from a navigation) that no line of the input names fails here.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task SchemaId_Input_AccountsForEveryColumnForeignKeyAndIndexOfTheCreatedDatabase(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        const string body = """
+            Level: enum { Low, High }
+            Tally: entity {
+              Name: Text unique length(1, 20)
+              N: Number default(0) range(0, 1000000)
+              Price: Decimal optional
+              Born: DateTime optional
+              Kind: Level optional
+              Open: stage { Close: action { transition to Done } }
+              Done: stage { }
+            }
+            Owner: entity {
+              Code: Text unique
+              tallies: many Tally
+              spare: Spare optional
+            }
+            Spare: entity {
+              Label: Text unique
+            }
+            """;
+        var model = Counter("SchemaCover", body);
+        var input = Poly.Tests.DomainModeling.Lowering.MinimalApiGeneratorTests.GeneratorFor(model.Poly).SchemaIdInput();
+        var flat = new string(input.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        var navigationNames = input.Split('\n').Where(l => l.StartsWith("navigation ", StringComparison.Ordinal))
+            .SelectMany(l => new[] { l.Split(' ')[1].Split('.')[0], l.Split(' ')[1].Split('.')[1], l.Split(' ')[3] }).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unaccounted = new List<string>();
+
+        await WithRunDirectory(async directory => {
+            await using (await PackOracle.BootAsync(model, options: new PackOracleBootOptions { RunDirectory = directory })) { }
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(directory, "counter.db")};Pooling=False");
+            connection.Open();
+            List<string> Query(string sql, Func<Microsoft.Data.Sqlite.SqliteDataReader, string> read) {
+                using var command = connection.CreateCommand();
+                command.CommandText = sql;
+                using var reader = command.ExecuteReader();
+                var rows = new List<string>();
+                while (reader.Read())
+                    rows.Add(read(reader));
+                return rows;
+            }
+            var tables = Query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", r => r.GetString(0));
+            await Assert.That(tables.Count).IsEqualTo(3);
+            foreach (var table in tables) {
+                var foreignKeys = Query($"SELECT \"from\" FROM pragma_foreign_key_list('{table}')", r => r.GetString(0)).ToHashSet();
+                foreach (var column in Query($"SELECT name FROM pragma_table_info('{table}')", r => r.GetString(0))) {
+                    var accounted =
+                        Regex.IsMatch(input, $@"^column \w+\.{Regex.Escape(column)} ", RegexOptions.Multiline)
+                        || (column == "CurrentStage" && Regex.IsMatch(input, @"^stage \w+\.CurrentStage ", RegexOptions.Multiline))
+                        || ((column == "Id" || column == "PolyId") && flat.Contains($"Property<int>(\"{column}\")", StringComparison.Ordinal))
+                        || (foreignKeys.Contains(column) && navigationNames.Contains(column.EndsWith("Id", StringComparison.Ordinal) ? column[..^2] : column));
+                    if (!accounted)
+                        unaccounted.Add($"{table}.{column}");
+                }
+                foreach (var index in Query($"SELECT name FROM pragma_index_list('{table}') WHERE origin = 'c'", r => r.GetString(0))) {
+                    foreach (var column in Query($"SELECT name FROM pragma_index_info('{index}')", r => r.GetString(0))) {
+                        if (!foreignKeys.Contains(column) && !flat.Contains($"HasIndex(x=>x.", StringComparison.Ordinal))
+                            unaccounted.Add($"{table} index on {column}");
+                    }
+                }
+            }
+        });
+
+        await Assert.That(unaccounted).IsEmpty();
     }
 }

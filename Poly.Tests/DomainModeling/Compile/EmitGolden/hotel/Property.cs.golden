@@ -18,7 +18,7 @@ internal class Property : Poly.Runtime.IActionScoped
     private List<Hall> _halls = new List<Hall>();
     private List<Room> _rooms = new List<Room>();
     private Property() { }
-    private Property(string name, string city, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
+    private Property(string name, string city, IEnumerable<Hall>? halls, IEnumerable<Room>? rooms)
     {
         this.Name = name;
         this.City = city;
@@ -37,7 +37,7 @@ internal class Property : Poly.Runtime.IActionScoped
         get => this._rooms;
     }
     public PropertyStage CurrentStage { get; private set; }
-    internal DomainResult<Hall> CreateHalls(string name, long capacity, decimal dayRate, bool occupied = false, bool offline = false, long busySections = 0L)
+    internal DomainResult<Hall> CreateHalls(string? name = default, long? capacity = default, decimal? dayRate = default, bool? occupied = default, bool? offline = default, long? busySections = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -61,9 +61,9 @@ internal class Property : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Hall> __BodyOfCreateHalls(string name, long capacity, decimal dayRate, bool occupied, bool offline, long busySections)
+    private DomainResult<Hall> __BodyOfCreateHalls(string? name, long? capacity, decimal? dayRate, bool? occupied, bool? offline, long? busySections)
     {
-        var hallResult = Hall.Create(name, capacity, dayRate, this, new List<Section>(), occupied, offline, busySections);
+        var hallResult = Hall.Create(name, capacity, dayRate, occupied, offline, busySections, this, new List<Section>());
         if (!hallResult.IsSuccess)
         {
             return DomainResult<Hall>.Failure(hallResult.Error!);
@@ -186,7 +186,7 @@ internal class Property : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public bool HasHalls() => this.Halls.Count > 0;
-    internal static DomainResult<Property> Create(string name, string city, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
+    internal static DomainResult<Property> Create(string? name = default, string? city = default, IEnumerable<Hall>? halls = default, IEnumerable<Room>? rooms = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -209,33 +209,35 @@ internal class Property : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Property> __BodyOfCreate(string name, string city, IEnumerable<Hall>? halls, IEnumerable<Room>? rooms)
+    private static DomainResult<Property> __BodyOfCreate(string? name, string? city, IEnumerable<Hall>? halls, IEnumerable<Room>? rooms)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Property.Name"));
         }
-        if (name.Length < 1L)
+        var __name = name;
+        if (__name.Length < 1L)
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 1 characters.", "Property.Name"));
         }
-        if (name.Length > 80L)
+        if (__name.Length > 80L)
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 80 characters.", "Property.Name"));
         }
-        if (string.IsNullOrEmpty(city))
+        if (city == null)
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Required("'City' is required.", "Property.City"));
         }
-        if (city.Length < 1L)
+        var __city = city;
+        if (__city.Length < 1L)
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'City' must be at least 1 characters.", "Property.City"));
         }
-        if (city.Length > 60L)
+        if (__city.Length > 60L)
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'City' must be at most 60 characters.", "Property.City"));
         }
-        var created = new Property(name, city, halls, rooms);
+        var created = new Property(__name, __city, halls, rooms);
         Poly.Runtime.ActionScope.Create(created, "Property");
         return DomainResult<Property>.Success(created);
     }

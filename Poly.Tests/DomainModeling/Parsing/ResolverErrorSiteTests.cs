@@ -5,7 +5,7 @@ using Poly.Grammar;
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>
-/// G-26b's diagnostics oracle for the hand-written resolver (the 91 <c>Expect</c>, 55 <c>ExpectIdentifier</c> and 81 <c>throw</c> sites
+/// G-26b's diagnostics oracle for the hand-written resolver (the 91 <c>Expect</c>, 55 <c>ExpectIdentifier</c> and 83 <c>throw</c> sites (81 before L-15a)
 /// that G-29 to G-33 delete; G-28 deleted the `public entity|value` head's) and, for a form the table reports, its row elements
 /// (label reach: every labelled element and refusal in a rule the resolver matches through <c>MatchOrThrow</c> is named by a failure). Sites come from a Roslyn scan of <c>DomainResolver*.cs</c> and are named
 /// <c>partial:method#ordinal</c>, never by line. REACH is proved by a stack walk on the thrown exception (the first frame above
@@ -24,7 +24,7 @@ public sealed class ResolverErrorSiteTests {
         ("Core", 2, 3, 5),
         ("Effects", 18, 12, 12),
         ("Entities", 21, 12, 26),
-        ("Relationships", 0, 1, 8),
+        ("Relationships", 0, 1, 10),
         ("Stages", 13, 10, 6),
         ("TopLevel", 19, 15, 16),
         ("Types", 0, 1, 2),
@@ -44,7 +44,7 @@ public sealed class ResolverErrorSiteTests {
     // ── the scan ─────────────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Scanner_PinsTheTotalsPerPartial_91_55_81() {
+    public async Task Scanner_PinsTheTotalsPerPartial_91_55_83() {
         var sites = ResolverErrorSiteScanner.Sites;
         foreach (var (partial, expect, identifier, @throw) in PinnedTotals) {
             var mine = sites.Where(s => s.Partial == partial).ToList();
@@ -55,7 +55,7 @@ public sealed class ResolverErrorSiteTests {
 
         await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.Expect)).IsEqualTo(91);
         await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.ExpectIdentifier)).IsEqualTo(55);
-        await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.Throw)).IsEqualTo(81);
+        await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.Throw)).IsEqualTo(83);
         await Assert.That(sites.Select(s => s.Id).Distinct().Count()).IsEqualTo(sites.Count);
         await Assert.That(sites.Where(s => s.ExemptReason is not null).Select(s => s.Id)).IsEquivalentTo(ExemptFromLiteralCheck);
     }
@@ -203,11 +203,11 @@ public sealed class ResolverErrorSiteTests {
         // Pinned so a change in what the oracle reaches is a reviewed change, not a silent one. G-28 moved the `public entity|value`
         // head onto the marked-top row: its three sites went (reach moved to the row's 4 labels), TryTakeVisibility#1 became
         // VisibilityOf#1 and FoldMarkedTop#1 is new (both DefaultArm).
-        await Assert.That(all.Count).IsEqualTo(227);
+        await Assert.That(all.Count).IsEqualTo(229);
         await Assert.That(bySite.Count).IsEqualTo(72);
         await Assert.That(byN.Count).IsEqualTo(99);
         await Assert.That(existing.Count).IsEqualTo(124);
-        await Assert.That(byE.Count(s => !existing.Contains(s))).IsEqualTo(33);
+        await Assert.That(byE.Count(s => !existing.Contains(s))).IsEqualTo(35);
         await Assert.That(unreachable).IsEqualTo(70);
         await Assert.That(ResolverErrorSiteScanner.TableLabels.Count).IsEqualTo(4);
         await Assert.That(existing.Union(byE).Count() + unreachable).IsEqualTo(all.Count);

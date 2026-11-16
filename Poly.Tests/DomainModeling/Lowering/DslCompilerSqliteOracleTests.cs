@@ -44,7 +44,7 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(item).Contains("public string Name { get; private set; }");
         await Assert.That(item).Contains("public string? Note { get; private set; }");
         await Assert.That(item).Contains("public long? Qty { get; private set; }");
-        await Assert.That(item).Contains("string? note = null");
+        await Assert.That(item).Contains("string? note = default");
 
         // Requiredness is one fact: the bare Name column is required, the optional
         // Note/Qty columns are not.
@@ -54,7 +54,7 @@ public class DslCompilerSqliteOracleTests {
 
         // Every create-DTO member is a required ctor slot; optional members are absent.
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("[Required]\n    public string Name { get; init; }");
+        await Assert.That(prog).Contains("[Required]\n    public string? Name { get; init; }");
         await Assert.That(prog).DoesNotContain("string? Note");
         await Assert.That(prog).DoesNotContain("long? Qty");
     }
@@ -249,9 +249,9 @@ public class DslCompilerSqliteOracleTests {
 
     [Test]
     public async Task DslCompiler_AllMode_EntityWithCollections_EmitsEmptyCollectionArgs() {
-        // The POST endpoint + seed code construct root entities via Entity.Create(...)
-        // — collection navs are ctor params (IEnumerable<T>) but omitted from ESM;
-        // the generators must append Enumerable.Empty<T>() or the call is CS7036.
+        // The POST endpoint + seed code construct root entities via Entity.Create(...),
+        // one positional argument per create slot (L-08b): the collection slot is passed
+        // null, which the constructor turns into an empty list. A missing slot is CS7036.
         var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
@@ -264,13 +264,13 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("Box.Create(");
-        await Assert.That(prog).Contains("Enumerable.Empty<Demo.Token>()");
+        await Assert.That(prog).Contains("Box.Create(dto.Name, null)");
+        await Assert.That(prog).Contains("Box.Create(\"Sample\", null)");
     }
 
     [Test]
     public async Task DslCompiler_Dto_IncludesEnumTypedScalarFromConstructorMetadata() {
-        // The DTO mirrors the entity's CREATE signature (from ESM.ConstructorParameters).
+        // The DTO carries the entity's Required scalar create slots (ESM.CreateSlots).
         // A scalar enum-typed prop (Genre) is part of that signature — the old
         // `_entities.Any(...)` filter would have EXCLUDED it (Genre is not an entity).
         var compiler = CompilerWithHttpHost();
@@ -287,12 +287,12 @@ public class DslCompilerSqliteOracleTests {
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Enum type maps to its own CLR name (Genre) with the allowed-value union declared
         // via [EnumDataType] — not excluded by entity-ness.
-        await Assert.That(prog).Contains("public Demo.Genre Genre { get; init; }");
-        await Assert.That(prog).Contains("public string Title { get; init; } = default!;");
+        await Assert.That(prog).Contains("public Demo.Genre? Genre { get; init; }");
+        await Assert.That(prog).Contains("public string? Title { get; init; }");
         // L-07 (#558): the DTO and the POST endpoint read one fact, in DECLARATION
         // order — Title was declared before Genre. The expected order changed here
         // deliberately; ordinal order (Genre, Title) was the old, swap-prone shape.
-        var titleAt = prog.IndexOf("public string Title { get; init; }", StringComparison.Ordinal);
+        var titleAt = prog.IndexOf("public string? Title { get; init; }", StringComparison.Ordinal);
         var genreAt = prog.IndexOf("[EnumDataType(typeof(Demo.Genre))]", StringComparison.Ordinal);
         await Assert.That(titleAt).IsGreaterThanOrEqualTo(0);
         await Assert.That(genreAt).IsGreaterThanOrEqualTo(0);
@@ -369,9 +369,9 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Entity DTO: declared + length.
-        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string Title { get; init; }");
+        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string? Title { get; init; }");
         // Entity DTO: declared pattern.
-        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string Code { get; init; }");
+        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string? Code { get; init; }");
         // Action DTO: required + length inherited from `assign Title to value`.
         await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string Value { get; init; }");
         // Action DTO: pattern inherited from `assign Code to value`.

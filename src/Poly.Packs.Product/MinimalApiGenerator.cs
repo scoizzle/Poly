@@ -21,6 +21,7 @@ public sealed partial class MinimalApiGenerator {
     private readonly Domain _domain;
     private readonly List<Entity> _entities;
     private readonly string _domainName;
+    private readonly StorageModel _storageModel;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
     private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
@@ -32,6 +33,11 @@ public sealed partial class MinimalApiGenerator {
     private readonly IStorageSyntaxEmitter? _emitter;
     private readonly string? _vendor;
 
+    /// <param name="catalog">
+    /// The lowered module the host reads. Without one (shape-only generation, a few tests) there is nothing to read, so an action
+    /// route preloads the one-hop floor only; production always passes one (<c>MinimalApiHostArtifactContributor</c>), and a test
+    /// pins that it does.
+    /// </param>
     public MinimalApiGenerator(Domain domain,
         AnalysisResult analysis,
         StorageModel storageModel,
@@ -46,6 +52,7 @@ public sealed partial class MinimalApiGenerator {
         _vendor = vendor;
         _catalog = catalog;
         _domain = domain;
+        _storageModel = storageModel;
         _entities = domain.Types.OfType<Entity>().ToList();
         _domainName = domain.Name;
         _storageLookup = storageModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
@@ -74,44 +81,51 @@ public sealed partial class MinimalApiGenerator {
 
     private AggregateEntity GetAggregateEntity(Entity entity) => _aggregateLookup[entity.Name];
 
-    private IReadOnlyList<ConstructorParameterOrder> GetConstructorOrder(Entity entity) {
+    private IReadOnlyList<CreateSlot> GetCreateSlots(Entity entity) {
         if (!_entityStructureLookup.TryGetValue(entity.Name, out var metadata)) {
             throw new InvalidOperationException(
-                $"EntityStructureMetadata is required for constructor ordering on entity '{entity.Name}'.");
+                $"EntityStructureMetadata is required for the create slots of entity '{entity.Name}'.");
         }
 
-        return metadata.ConstructorParameters;
+        return metadata.CreateSlots;
     }
 
+    /// <summary>The Required scalar create slots: the values a host must supply (the create DTO's members).</summary>
+    private IReadOnlyList<CreateSlot> GetRequiredScalarSlots(Entity entity) =>
+        [.. GetCreateSlots(entity).Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })];
+
+    /// <summary>A Required link: a Required singular-navigation create slot, which the POST body carries as the target's key.</summary>
+    internal static bool IsRequiredLink(CreateSlot slot) =>
+        slot is { Shape: CreateSlotShape.Reference, Kind: CreateSlotKind.Required };
+
+    private IReadOnlyList<CreateSlot> GetRequiredLinkSlots(Entity entity) =>
+        [.. GetCreateSlots(entity).Where(IsRequiredLink)];
+
+    /// <summary>The create DTO member that carries a Required link: named as an action DTO names an entity ref.</summary>
+    internal static string CreateLinkMemberName(string slotName) => Pascalize(slotName) + "Id";
+
     /// <summary>
-    /// One argument per constructor parameter, in ESM order: a collection nav is empty, a
-    /// singular nav (including an auto-wired back-reference) is <c>null</c>, and a scalar comes
-    /// from <paramref name="scalar"/>. Emitting an argument for <em>every</em> parameter is what
-    /// keeps this positional call aligned with the printed <c>Create</c> signature — skipping a
-    /// back-reference (or filling a singular nav with an empty enumerable) shifts every later
-    /// argument and the emitted host fails to compile.
+    /// One argument per create slot, in slot order: a Required scalar slot comes from
+    /// <paramref name="scalar"/>, a Required link from <paramref name="link"/> when given, and every other slot is
+    /// <c>null</c>, which the lowered <c>Create</c> reads as "not supplied" (its default applies, or it stays unset,
+    /// or a Required link answers Required).
     /// </summary>
-    private List<Node> BuildCreateArgs(
-        Entity entity,
-        IReadOnlyList<ConstructorParameterOrder> order,
-        Func<Property, Node> scalar) {
-        var args = new List<Node>(order.Count);
-        foreach (var parameter in order) {
-            if (parameter.IsCollection) {
-                args.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                    TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
-                });
+    private Dictionary<string, Node> BuildCreateArgs(Entity entity, Func<Property, Node> scalar, Func<CreateSlot, Node>? link = null) {
+        var args = new Dictionary<string, Node>(StringComparer.Ordinal);
+        foreach (var slot in GetCreateSlots(entity)) {
+            if (link is not null && IsRequiredLink(slot)) {
+                args[ToCamelCase(slot.Name)] = link(slot);
                 continue;
             }
-            if (parameter.IsNavigation) {
-                args.Add(new Constant(null!));
+            if (slot is not { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required }) {
+                args[ToCamelCase(slot.Name)] = new Constant(null!);
                 continue;
             }
             var prop = entity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, parameter.Name, StringComparison.Ordinal))
+                string.Equals(p.Name, slot.Name, StringComparison.Ordinal))
                 ?? throw new InvalidOperationException(
-                    $"Constructor parameter '{parameter.Name}' on entity '{entity.Name}' does not match a property.");
-            args.Add(scalar(prop));
+                    $"Create slot '{slot.Name}' on entity '{entity.Name}' does not match a property.");
+            args[ToCamelCase(slot.Name)] = scalar(prop);
         }
         return args;
     }
@@ -245,12 +259,13 @@ public sealed partial class MinimalApiGenerator {
                     TypeArguments = [new TypeReference(dbContextName)]
                 })
         };
+        var scopeVariables = new List<Variable> { dbVar };
         if (string.Equals(_vendor, "sqlite", StringComparison.Ordinal)) {
-            scopeBody.Add(new Await(
-                new Invoke(
-                    new Member(
-                        new Member(new Variable("db"), "Database"),
-                        "EnsureCreatedAsync"))));
+            var schemaId = SchemaId();
+            var createdVar = new Variable("created");
+            topLevelStatements.Add(Init("schemaId", new Constant(schemaId)));
+            scopeBody.AddRange(BuildSqliteSchemaCheck(dbVar, createdVar, schemaId));
+            scopeVariables.Add(createdVar);
         }
         scopeBody.Add(new Await(new Invoke(new Variable("SeedAsync"), new Variable("db"))));
         topLevelStatements.Add(new UsingStatement(
@@ -258,7 +273,7 @@ public sealed partial class MinimalApiGenerator {
                 new Invoke(new Member(
                     new Member(new TypeReference(AppVar), "Services"),
                     "CreateScope"))),
-            new Block(scopeBody, [dbVar])));
+            new Block(scopeBody, [.. scopeVariables])));
 
         // ── Endpoints ──
         foreach (var entity in _entities.Where(e => GetStorageEntity(e).IsRoot))
@@ -277,6 +292,7 @@ public sealed partial class MinimalApiGenerator {
             AppendActionEndpointStatements(topLevelStatements, entity, dbContextName);
 
         // ── SeedAsync local function followed by DTOs ──
+        AppendProblemMethodStatements(topLevelStatements);
         AppendSeedMethodStatements(topLevelStatements, dbContextName);
 
         // ── DTOs ──
@@ -308,25 +324,17 @@ public sealed partial class MinimalApiGenerator {
     }
 
     /// <summary>
-    /// Builds the positional arguments for a static <c>Create</c> call. A
-    /// contributed dependency sits where the lowered signature puts it (before
-    /// the first optional parameter), so it is woven into the constructor
-    /// arguments rather than appended.
+    /// Builds the positional arguments for a static <c>Create</c> call, one per create
+    /// slot in slot order. A contributed dependency sits where the lowered signature
+    /// puts it, so it is woven into the slot arguments rather than appended.
     /// </summary>
-    private List<Node> BuildCreateCallArgs(
-        Entity entity,
-        IReadOnlyList<ConstructorParameterOrder> order,
-        Func<Property, Node> scalar) {
-        var args = BuildCreateArgs(entity, order, scalar);
-        if (RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0)
-            return args;
-        var method = ModuleMethod(entity, "Create");
+    private List<Node> BuildCreateCallArgs(Entity entity, Func<Property, Node> scalar, Func<CreateSlot, Node>? link = null) {
+        var declared = BuildCreateArgs(entity, scalar, link);
+        var method = RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0
+            ? null
+            : ModuleMethod(entity, "Create");
         if (method?.Parameters is not { Count: > 0 } parameters)
-            return args;
-
-        var declared = new Dictionary<string, Node>(StringComparer.Ordinal);
-        for (var i = 0; i < order.Count && i < args.Count; i++)
-            declared[ToCamelCase(order[i].Name)] = args[i];
+            return [.. declared.Values];
 
         var result = new List<Node>(parameters.Count);
         foreach (var parameter in parameters) {
@@ -334,8 +342,6 @@ public sealed partial class MinimalApiGenerator {
                 result.Add(argument);
                 continue;
             }
-            if (IsTrailingOmittable(entity, parameter.Name))
-                continue;
             if (!string.Equals(parameter.Name, "db", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"Create on '{entity.Name}' requires contributed parameter '{parameter.Name}', "
@@ -343,19 +349,6 @@ public sealed partial class MinimalApiGenerator {
             result.Add(new Variable("db"));
         }
         return result;
-    }
-
-    private bool IsTrailingOmittable(Entity entity, string parameterName) {
-        if (!_entityStructureLookup.TryGetValue(entity.Name, out var structure))
-            return false;
-        foreach (var property in entity.Properties) {
-            if (!string.Equals(ToCamelCase(property.Name), parameterName, StringComparison.Ordinal))
-                continue;
-            return !structure.EntryAssignedPropertyNames.Contains(property.Name)
-                && (!structure.RequiredPropertyNames.Contains(property.Name)
-                    || property.Constraints.OfType<DefaultValueConstraint>().Any());
-        }
-        return false;
     }
 
     private MethodDefinitionNode? ModuleMethod(Entity entity, string methodName) {
@@ -366,9 +359,15 @@ public sealed partial class MinimalApiGenerator {
         return _catalog.Method(entity.Name, methodName);
     }
 
-    /// <summary>400 unless the message is a unique or link conflict, which is 409.</summary>
-    private static Return DomainFailureReturn(Node errorMessage) =>
-        new(new Invoke(new Variable("FailureStatus"), errorMessage));
+    /// <summary>The failure's typed kind picks the status; the body is ProblemDetails.</summary>
+    private static Return DomainFailureReturn(Node result) =>
+        new(new Invoke(new Variable("Problem"), new NullForgiving(new Member(result, "Error"))));
+
+    /// <summary>A ProblemDetails response with no domain failure behind it.</summary>
+    private static Node ProblemResponse(int status, string title, string? detail = null) =>
+        detail is null
+            ? new Invoke(new Variable("StatusProblem"), new Constant(status), new Constant(title))
+            : new Invoke(new Variable("StatusProblem"), new Constant(status), new Constant(title), new Constant(detail));
 
     /// <summary>
     /// A shadow key is the primary key, so <c>FindAsync</c> matches it. A natural
@@ -377,13 +376,16 @@ public sealed partial class MinimalApiGenerator {
     /// </summary>
     private static Node LoadByRouteKey(string setName, StorageEntity store, Node keyExpr) {
         var set = new Member(new TypeReference("db"), setName);
-        if (store.KeyProperty is null)
+        if (RouteKeyFor(store).Property is not { } keyProperty)
             return new Await(new Invoke(new Member(set, "FindAsync"), keyExpr));
         var row = new Parameter("e");
         return new Await(new Invoke(
             new Member(set, "FirstOrDefaultAsync"),
-            new Lambda([row], new Equal(new Member(row, store.KeyProperty.Name), keyExpr))));
+            new Lambda([row], new Equal(new Member(row, keyProperty.Name), keyExpr))));
     }
+
+    /// <summary><see cref="ClrTypeNode"/> with the nullable annotation (<c>T?</c>).</summary>
+    private static Node NullableClrTypeNode(string clrType) => new OptionalTypeReference(ClrTypeNode(clrType));
 
     /// <summary>CLR keyword names stay <see cref="PrimitiveTypeReference"/> so a
     /// domain type of the same name can print with <c>@</c> in type position.</summary>

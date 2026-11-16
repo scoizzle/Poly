@@ -108,15 +108,15 @@ public class LoweringContextBoundaryTests {
     }
 
     /// <summary>
-    /// #467: the trailing create-parameter order is the published structure fact. A direct
-    /// call with the bag hidden refuses by name instead of recomputing or returning a list.
+    /// #467: the create-slot order is the published structure fact. A direct call with
+    /// the bag hidden refuses by name instead of recomputing or returning a list.
     /// </summary>
     [Test]
-    public async Task TrailingOmittableProperties_WhenStructureBagMissing_FailsClosedInsteadOfRecomputing() {
+    public async Task CreateSlotsOf_WhenStructureBagMissing_FailsClosedInsteadOfRecomputing() {
         var entity = RequiredNameWidget();
         var (_, analysis) = LoweringFixtures.Analyze(entity);
 
-        var thrown = await Assert.That(() => DomainToCSharpExporter.TrailingOmittableProperties(
+        var thrown = await Assert.That(() => DomainToCSharpExporter.CreateSlotsOf(
                 entity, new BagOmittedProvider(analysis, typeof(EntityStructureMetadata))))
             .Throws<InvalidOperationException>();
         await Assert.That(thrown!.Message).Contains("EntityStructureMetadata");

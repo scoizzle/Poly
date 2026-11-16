@@ -187,7 +187,7 @@ public sealed class DomainDslPrinterTests {
             Alpha: entity {
               Zed1: Text
               mgr: Zed
-              buddy: Alpha
+              buddy: Alpha optional
               Age: Number
             }
             """;
@@ -197,10 +197,10 @@ public sealed class DomainDslPrinterTests {
         await Assert.That(string.Join(",", MemberNames(text, "Alpha"))).IsEqualTo("Zed1,mgr,buddy,Age");
 
         var alpha = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Alpha");
-        var before = result.Analysis.GetStructure(alpha)!.ConstructorParameters.Select(p => p.Name).ToList();
+        var before = result.Analysis.GetStructure(alpha)!.CreateSlots.Select(s => s.Name).ToList();
         var (reparsed, _) = Generate(text);
         var alpha2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Alpha");
-        var after = reparsed.Analysis.GetStructure(alpha2)!.ConstructorParameters.Select(p => p.Name).ToList();
+        var after = reparsed.Analysis.GetStructure(alpha2)!.CreateSlots.Select(s => s.Name).ToList();
 
         await Assert.That(string.Join(",", after)).IsEqualTo(string.Join(",", before));
     }

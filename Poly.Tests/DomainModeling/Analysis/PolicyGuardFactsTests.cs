@@ -206,13 +206,13 @@ public class PolicyGuardFactsTests {
         Item: entity { Qty: Number range(0, 10) }
         Order: entity {
           Qty: Number range(0, 100)
-          line: one Line
+          line: one Line optional
           Small: policy { Qty <= 10 }
           Go: action require Small { invoke line.Poke  create Item { Qty: Qty } }
           Bump: action { assign Qty to 50 }
         }
         Line: entity {
-          order: one Order
+          order: one Order optional
           Poke: action { invoke order.Bump }
         }
         """;
@@ -487,13 +487,13 @@ public class PolicyGuardFactsTests {
         Order: entity {
           Qty: Number range(0, 100)
           Seen: Number range(11, 100) optional
-          line: one Line
+          line: one Line optional
           Small: policy { Qty <= 10 }
           Go: action require not Small { invoke line.Poke  assign Seen to Qty }
           Bump: action { assign Qty to 5 }
         }
         Line: entity {
-          order: one Order
+          order: one Order optional
           Poke: action { invoke order.Bump }
         }
         """;

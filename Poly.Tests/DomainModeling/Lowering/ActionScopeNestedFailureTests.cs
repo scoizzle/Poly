@@ -236,7 +236,7 @@ public class ActionScopeNestedFailureTests {
               when kids Open { invoke Y }
             }
             Job: entity {
-              s: S via jobs
+              s: S via jobs optional
               Open: stage { Finish: action { transition to Done } }
               Done: stage { }
             }
@@ -268,13 +268,13 @@ public class ActionScopeNestedFailureTests {
         }
         Owner: entity {
           items: many Item
-          boss: Boss via owners
+          boss: Boss via owners optional
           Idle: stage { }
           Busy: stage { }
           when items Done { transition to Busy }
         }
         Item: entity {
-          owner: Owner via items
+          owner: Owner via items optional
           Open: stage { Finish: action { transition to Done } }
           Done: stage { }
         }
@@ -344,7 +344,7 @@ public class ActionScopeNestedFailureTests {
               when kids Open { invoke Y }
             }
             Job: entity {
-              s: S via jobs
+              s: S via jobs optional
               Open: stage { Finish: action { transition to Done } }
               Done: stage { }
             }
@@ -384,7 +384,7 @@ public class ActionScopeNestedFailureTests {
             }
             Job: entity {
               Weight: Number default(50)
-              s: S via jobs
+              s: S via jobs optional
               Open: stage { Finish: action { transition to Done } }
               Done: stage { }
             }

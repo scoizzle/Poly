@@ -43,10 +43,10 @@ public sealed class ExplicitInversePinsTests {
 
     [Test]
     public async Task ExplicitViaPair_ChangesNoLoweredOutputOrSimResult() {
-        var implicitPair = Pair("borrower: Patron", "loans: many Loan");
-        var viaOnPatron = Pair("borrower: Patron", "loans: many Loan via borrower");
-        var viaOnLoan = Pair("borrower: Patron via loans", "loans: many Loan");
-        var viaBoth = Pair("borrower: Patron via loans", "loans: many Loan via borrower");
+        var implicitPair = Pair("borrower: Patron optional", "loans: many Loan");
+        var viaOnPatron = Pair("borrower: Patron optional", "loans: many Loan via borrower");
+        var viaOnLoan = Pair("borrower: Patron via loans optional", "loans: many Loan");
+        var viaBoth = Pair("borrower: Patron via loans optional", "loans: many Loan via borrower");
 
         var baseline = PrintedAndSimulated(implicitPair);
         await Assert.That(baseline.Printed).IsNotEmpty();
@@ -59,13 +59,32 @@ public sealed class ExplicitInversePinsTests {
     }
 
     [Test]
+    public async Task ExplicitViaPair_WithARequiredBorrower_ChangesNoLoweredOutputOrSimResult() {
+        // L-15a: the same pair with `borrower` required (legal under DMREL006: the reverse edge is a
+        // collection). The loan is created with its patron; `via` still changes nothing.
+        var implicitPair = Pair("borrower: Patron", "loans: many Loan");
+        var viaOnPatron = Pair("borrower: Patron", "loans: many Loan via borrower");
+        var viaOnLoan = Pair("borrower: Patron via loans", "loans: many Loan");
+        var viaBoth = Pair("borrower: Patron via loans", "loans: many Loan via borrower");
+
+        var baseline = PrintedAndSimulated(implicitPair, borrowerAtCreate: true);
+        await Assert.That(baseline.Printed).Contains("'borrower' is required.");
+        await Assert.That(baseline.Simulated).IsEqualTo("Flag=FIRED;LoanStage=Overdue");
+        foreach (var stated in new[] { viaOnPatron, viaOnLoan, viaBoth }) {
+            var run = PrintedAndSimulated(stated, borrowerAtCreate: true);
+            await Assert.That(run.Printed).IsEqualTo(baseline.Printed);
+            await Assert.That(run.Simulated).IsEqualTo(baseline.Simulated);
+        }
+    }
+
+    [Test]
     public async Task MigratedPair_SecondOwnerLink_OutcomeIsPinned() {
         // A loan linked to a second patron through the collection side. Pinned for the shape before
         // and after the back-navigation exists (both with and without via): the observed outcome is
         // the same, and nothing here enforces single ownership (L-13 / OQ-14).
         foreach (var dsl in new[] {
-            Pair("borrower: Patron", "loans: many Loan"),
-            Pair("borrower: Patron via loans", "loans: many Loan via borrower"),
+            Pair("borrower: Patron optional", "loans: many Loan"),
+            Pair("borrower: Patron via loans optional", "loans: many Loan via borrower"),
         }) {
             var (domain, _, _) = Evolve(dsl);
             var exec = ModuleExec.For(domain);
@@ -102,7 +121,7 @@ public sealed class ExplicitInversePinsTests {
             """;
         var withBack = Shipped
             .Replace("sources: many owned Source", "sources: many owned Source via query")
-            .Replace("Path: Text", "Path: Text\n  query: Query via sources");
+            .Replace("Path: Text", "Path: Text\n  query: Query via sources optional");
         var outcomes = new List<string>();
         foreach (var dsl in new[] { Shipped, withBack }) {
             var (domain, _, _) = Evolve(dsl);
@@ -119,7 +138,8 @@ public sealed class ExplicitInversePinsTests {
     }
 
     [Test]
-    public async Task Create_WithNullSingularNavigation_OutcomeIsPinnedOnBothHosts() {
+    public async Task Create_WithNullRequiredNavigation_FailsRequiredOnBothHosts() {
+        // L-15a: a bare to-one is required, so a null borrower fails Required from the module.
         const string Dsl = """
             domain Watch
             Patron: entity {
@@ -136,14 +156,58 @@ public sealed class ExplicitInversePinsTests {
         // Simulated host: creating a Loan without its borrower.
         var exec = ModuleExec.For(domain);
         var simulated = exec.Create("Loan", new Dictionary<string, object?> { ["Code"] = "L1" });
-        await Assert.That(simulated.Succeeded).IsTrue();
+        await Assert.That(simulated.Succeeded).IsFalse();
+        await Assert.That(simulated.Failure?.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Required);
+        await Assert.That(simulated.Failure?.ElementPath).IsEqualTo("Loan.borrower");
+        await Assert.That(simulated.Failure?.Message).IsEqualTo("'borrower' is required.");
 
-        // Printed host: the reflective helper passes null for the reference parameter.
+        // Printed host: the generated Create with a null borrower.
         var cs = new CSharpGenerator().Generate(session.Lower(domain, analysis));
         var asm = WhenAnySimulatePrintAgreeTests.CompileGenerated(cs, "NullNavPin");
-        var created = WhenAnySimulatePrintAgreeTests.CreateEntity(asm, "Loan", ("code", "L1"));
-        await Assert.That(created).IsNotNull();
-        await Assert.That(created.GetType().GetProperty("Borrower", PrintedMembers.Any)!.GetValue(created)).IsNull();
+        var printed = PrintedCreateFailure(asm, "Loan", ("code", "L1"));
+        await Assert.That(printed?.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Required);
+        await Assert.That(printed?.ElementPath).IsEqualTo("Loan.borrower");
+        await Assert.That(printed?.Message).IsEqualTo("'borrower' is required.");
+    }
+
+    [Test]
+    public async Task Create_ActionBindingNullNav_FailsRequiredOnBothHosts() {
+        // The binding is legal at analysis (it binds the navigation), but its value is null at run
+        // time: the module's own Create fails it Required on both hosts.
+        const string Dsl = """
+            domain NullBind
+            NullBindBook: entity { Title: Text }
+            NullBindPatron: entity {
+              Name: Text
+              favorite: NullBindBook optional
+              loans: many NullBindLoan
+              Borrow: action { create in loans { book: favorite } }
+            }
+            NullBindLoan: entity {
+              book: NullBindBook
+              patron: NullBindPatron
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(Dsl, "NullBindPin").AssertAgree(side => {
+            side.Create("NullBindPatron", ("Name", "p"));
+            side.Invoke("Borrow");
+        });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[1].FailurePath).IsEqualTo("NullBindPatron.Borrow.NullBindLoan.book");
+    }
+
+    /// <summary>Runs the printed <c>Create</c> by name and returns its failure, or null when it succeeded.</summary>
+    private static Poly.Runtime.DomainFailure? PrintedCreateFailure(
+        System.Reflection.Assembly asm, string typeName, params (string Name, object? Value)[] named) {
+        var create = asm.GetType(typeName)!.GetMethods(PrintedMembers.Any)
+            .Where(m => m.Name == "Create").OrderByDescending(m => m.GetParameters().Length).First();
+        var args = create.GetParameters().Select(p =>
+            named.FirstOrDefault(n => string.Equals(n.Name, p.Name, StringComparison.OrdinalIgnoreCase)) is { Name: not null } hit
+                ? hit.Value
+                : p.HasDefaultValue ? p.DefaultValue : null).ToArray();
+        var result = create.Invoke(null, args)!;
+        return result.GetType().GetProperty("Error", PrintedMembers.Any)!.GetValue(result) as Poly.Runtime.DomainFailure;
     }
 
     // A child created holding its singular navigation is in the parent's inverse collection on both hosts:
@@ -179,14 +243,17 @@ public sealed class ExplicitInversePinsTests {
         await Assert.That(outcomes[2].State["trs"]).IsEqualTo("1");
     }
 
-    private static (string Printed, string Simulated) PrintedAndSimulated(string dsl) {
+    private static (string Printed, string Simulated) PrintedAndSimulated(string dsl, bool borrowerAtCreate = false) {
         var (domain, analysis, session) = Evolve(dsl);
         var files = session.Emit(domain, analysis);
         var printed = string.Join("\n// ----\n", files.OrderBy(f => f.FileName, StringComparer.Ordinal)
             .Select(f => $"// {f.FileName}\n{f.Source}"));
         var exec = ModuleExec.For(domain);
-        var loan = exec.Create("Loan", new Dictionary<string, object?> { ["Code"] = "L1" }).Instance!;
         var patron = exec.Create("Patron", new Dictionary<string, object?> { ["Flag"] = "NONE" }).Instance!;
+        var loanValues = new Dictionary<string, object?> { ["Code"] = "L1" };
+        if (borrowerAtCreate)
+            loanValues["borrower"] = patron;
+        var loan = exec.Create("Loan", loanValues).Instance!;
         _ = exec.Link("loans", patron, loan);
         _ = exec.Invoke(loan, "Overdue");
         return (printed, $"Flag={patron.Bag["Flag"]};LoanStage={ModuleReads.Stage(loan)}");

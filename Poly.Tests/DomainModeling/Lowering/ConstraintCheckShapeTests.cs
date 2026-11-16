@@ -13,7 +13,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// </summary>
 public class ConstraintCheckShapeTests {
     [Test]
-    public async Task Assign_RequiredText_UsesReflectionStatic() {
+    public async Task Assign_RequiredText_ChecksNull() {
         var (domain, _) = EvolvedDomain.FromDsl("""
             domain Lab
             Person: entity {
@@ -23,12 +23,14 @@ public class ConstraintCheckShapeTests {
             """);
         var cs = PrintAssign(domain, "Person", "Name", "name");
 
-        await Assert.That(cs).Contains("if (System.String.IsNullOrEmpty(assignValue0))");
+        // L-08b (owner ruling): required means non-null for every type; "" is a value.
+        await Assert.That(cs).Contains("if (assignValue0 == null)");
+        await Assert.That(cs).DoesNotContain("IsNullOrEmpty");
         await Assert.That(cs).Contains("\"'Name' is required.\"");
     }
 
     [Test]
-    public async Task Create_RequiredText_UsesKeywordStatic() {
+    public async Task Create_RequiredText_ChecksNull() {
         var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Lab
             Person: entity {
@@ -37,7 +39,9 @@ public class ConstraintCheckShapeTests {
             """);
         var create = PrintCreate(domain, analysis, "Person");
 
-        await Assert.That(create).Contains("if (string.IsNullOrEmpty(name))");
+        // L-08b: the Required guard is `x == null` for every type, Text included.
+        await Assert.That(create).Contains("if (name == null)");
+        await Assert.That(create).DoesNotContain("IsNullOrEmpty");
         await Assert.That(create).Contains("\"'Name' is required.\"");
     }
 
@@ -57,7 +61,7 @@ public class ConstraintCheckShapeTests {
     }
 
     [Test]
-    public async Task Assign_OptionalLength_KeepsOuterIsNullOrEmptyGroup() {
+    public async Task Assign_OptionalLength_KeepsOuterNullGroup() {
         var (domain, _) = EvolvedDomain.FromDsl("""
             domain Lab
             Note: entity {
@@ -67,7 +71,8 @@ public class ConstraintCheckShapeTests {
             """);
         var cs = PrintAssign(domain, "Note", "Body", "body");
 
-        await Assert.That(cs).Contains("if (!System.String.IsNullOrEmpty(assignValue0))");
+        // L-08b: an empty string is a value, so the group is guarded by `!= null` only.
+        await Assert.That(cs).Contains("if (assignValue0 != null)");
         await Assert.That(cs).Contains("assignValue0.Length < 7L");
         await Assert.That(cs).Contains("assignValue0.Length > 20L");
     }

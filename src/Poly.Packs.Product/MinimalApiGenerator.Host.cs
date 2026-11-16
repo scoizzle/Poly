@@ -31,32 +31,63 @@ public sealed partial class MinimalApiGenerator {
         }
     }
 
-    private static MethodDefinitionNode FailureStatusMethod() {
-        var message = new Parameter("message",
-            new OptionalTypeReference(new PrimitiveTypeReference(ClrPrimitive.String)));
-        var messageVar = new Variable("message");
-        Node Contains(string text) => new Invoke(new Member(messageVar, "Contains"), new Constant(text));
-        var conflict = new Ast.Nodes.And(
-            new Ast.Nodes.NotEqual(messageVar, new Constant(null!)),
-            new Ast.Nodes.Or(
-                Contains("Unique constraint"),
-                Contains("already has a target")));
-        return new MethodDefinitionNode(
-            "FailureStatus",
+    /// <summary>
+    /// The two functions every failure response goes through. <c>Problem(DomainFailure)</c> takes the status
+    /// from the typed kind and carries the path and guard as extensions when present;
+    /// <c>StatusProblem(int, string, string?)</c> is the same body for a response with no domain failure behind it
+    /// (404, 400, 500). Neither reads failure text.
+    /// </summary>
+    private static void AppendProblemMethodStatements(List<Node> statements) {
+        var failure = new Variable("failure");
+        var extensions = new Variable("extensions");
+        const string runtime = "Poly.Runtime";
+        Node Extension(string name, string member) => new IfStatement(
+            new NotEqual(new Member(failure, member), new Constant(null!)),
+            new Block(new Assignment(new IndexAccess(extensions, new Constant(name)), new Member(failure, member))));
+
+        statements.Add(new MethodDefinitionNode(
+            "Problem",
             new TypeReference("IResult"),
-            Parameters: [message],
+            Parameters: [new Parameter("failure", new TypeReference($"{runtime}.DomainFailure"))],
             Body: new Block(
-                new Return(new Ast.Nodes.Conditional(
-                    conflict,
-                    new Invoke(new Member(new TypeReference("Results"), "Conflict"), messageVar),
-                    new Invoke(new Member(new TypeReference("Results"), "BadRequest"), messageVar)))),
-            IsStatic: true);
+                Init("extensions", new New(new TypeReference("Dictionary<string, object?>"))),
+                Extension("elementPath", "ElementPath"),
+                Extension("guard", "Guard"),
+                new Return(new Invoke(
+                    new Member(new TypeReference("Results"), "Problem"),
+                    new Member(failure, "Message"),
+                    new Constant(null!),
+                    new Invoke(new Member(new TypeReference($"{runtime}.DomainFailureStatus"), "Http"), new Member(failure, "Kind")),
+                    new Invoke(new Member(new Member(failure, "Kind"), "ToString")),
+                    new Constant(null!),
+                    extensions))),
+            IsStatic: true));
+
+        statements.Add(new MethodDefinitionNode(
+            "StatusProblem",
+            new TypeReference("IResult"),
+            Parameters: [
+                new Parameter("status", new PrimitiveTypeReference(ClrPrimitive.Int32)),
+                new Parameter("title", new PrimitiveTypeReference(ClrPrimitive.String)),
+                new Parameter("detail", new OptionalTypeReference(new PrimitiveTypeReference(ClrPrimitive.String)), new Constant(null!)),
+            ],
+            Body: new Block(
+                new Return(new Invoke(
+                    new Member(new TypeReference("Results"), "Problem"),
+                    new Variable("detail"),
+                    new Constant(null!),
+                    new Variable("status"),
+                    new Variable("title")))),
+            IsStatic: true));
     }
 
     /// <summary>Appends the SeedAsync local function (Issue 11b).</summary>
     private void AppendSeedMethodStatements(List<Node> statements, string dbContextName) {
-        statements.Add(FailureStatusMethod());
-        var seedableEntities = _entities.Where(e => GetStorageEntity(e).IsRoot).ToList();
+        // A root whose Create needs a link is not seeded, whether or not it has a POST route: the seed passes no link, so
+        // its create would always fail and be skipped.
+        var seedableEntities = _entities
+            .Where(e => GetStorageEntity(e).IsRoot && CreatesDirectly(_entities, e, GetCreateSlots(e), _storageLookup)
+                && GetRequiredLinkSlots(e).Count == 0).ToList();
         var bodyNodes = new List<Node>();
 
         // if (db is null) return;
@@ -77,7 +108,7 @@ public sealed partial class MinimalApiGenerator {
                 new Block(new Return(null))));
 
             foreach (var entity in seedableEntities) {
-                var createArgs = BuildCreateCallArgs(entity, GetConstructorOrder(entity), MakeSampleValue);
+                var createArgs = BuildCreateCallArgs(entity, MakeSampleValue);
 
                 var dtoVar = ToCamelCase(entity.Name);
                 bodyNodes.Add(Init($"{dtoVar}Result",
@@ -138,6 +169,8 @@ public sealed partial class MinimalApiGenerator {
             "DateOnly" => new Invoke(
                 new Member(new TypeReference("DateOnly"), "FromDateTime"),
                 new Member(new TypeReference("DateTime"), "UtcNow")),
+            "TimeOnly" => new Member(new TypeReference("TimeOnly"), "MinValue"),
+            "TimeSpan" => new Member(new TypeReference("TimeSpan"), "Zero"),
             "decimal" => new Constant(1m),
             "double" or "float" => new Constant(1.0),
             "Guid" => new Invoke(new Member(new TypeReference("Guid"), "NewGuid")),

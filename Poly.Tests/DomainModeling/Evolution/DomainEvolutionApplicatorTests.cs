@@ -1464,10 +1464,11 @@ public class DomainEvolutionApplicatorTests {
             RelationshipCardinality.ManyToMany, []);
         var start = DomainTestFactory.Create("Test", [entity], [rel]);
         var result = new DomainEvolution(start).ApplyAndAnalyze([new SetRelationshipShapeChange("Person", "Friends",
-            NewCardinality: RelationshipCardinality.OneToOne)]);
+            NewCardinality: RelationshipCardinality.OneToOne, NewIsOptional: true)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Relationships().Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
+        await Assert.That(updatedRel.IsOptional).IsTrue();
     }
 
     [Test]

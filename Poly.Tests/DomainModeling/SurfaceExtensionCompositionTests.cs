@@ -44,7 +44,7 @@ public class SurfaceExtensionCompositionTests {
             }
             Order: entity {
               Code: Text
-              customer: Customer via orders
+              customer: Customer via orders optional
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -75,7 +75,7 @@ public class SurfaceExtensionCompositionTests {
             domain UnlinkPeer
             Tracker: entity {
               Status: Text
-              Tracks: Order
+              Tracks: Order optional
               HasOrder: policy { Tracks exists }
               Idle: stage {}
               when Tracks Active as order {
@@ -127,7 +127,7 @@ public class SurfaceExtensionCompositionTests {
             domain TwoSubs
             Tracker: entity {
               LastCode: Text
-              Tracks: Order
+              Tracks: Order optional
               Idle: stage {}
               when Tracks Active as order {
                 assign LastCode to order Code
@@ -166,7 +166,7 @@ public class SurfaceExtensionCompositionTests {
             domain MultiStageWhen
             Tracker: entity {
               Status: Text
-              Tracks: Order
+              Tracks: Order optional
               Idle: stage {}
               when Tracks Active, Completed as order {
                 assign Status to order Code
@@ -215,7 +215,7 @@ public class SurfaceExtensionCompositionTests {
               Status: Text
               StageNote: Text
               LastCode: Text
-              Tracks: Order
+              Tracks: Order optional
               Watching: stage {
                 when Tracks Active as order {
                   assign StageNote to order Code

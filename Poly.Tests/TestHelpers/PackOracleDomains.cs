@@ -218,7 +218,7 @@ public static class PackOracleDomains {
 
         public entity Order {
           Code: Text unique length(3, 8)
-          receipt: one Receipt
+          receipt: one Receipt optional
           public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
@@ -247,7 +247,7 @@ public static class PackOracleDomains {
         "/api/orders");
 
     /// <summary>L-22b F4: a BIDIRECTIONAL owned one-to-one from a public entity to an internal one. It was an analysis
-    /// error before L-22b and is now the same boot failure as every all-public bidirectional one-to-one (#791).</summary>
+    /// error before L-22b and boots since L-15b declared the dependent side of a one-to-one pair (#791).</summary>
     public static PackOracleDomain PublicOrderInternalReceiptBidirectional604 { get; } = new(
         "PublicOrderInternalReceiptBidirectional604",
         """
@@ -262,15 +262,13 @@ public static class PackOracleDomains {
 
         public entity Order {
           Code: Text unique length(3, 8)
-          receipt: one owned Receipt
+          receipt: one owned Receipt optional
           public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
-        "/api/orders",
-        Boots: false,
-        NotBootingReason: "#791: EF cannot determine the dependent side of a bidirectional one-to-one");
+        "/api/orders");
 
-    /// <summary>L-22b closing round: the same two-way one-to-one without `owned` also fails to boot (#791).</summary>
+    /// <summary>L-22b closing round: the same two-way one-to-one without `owned` boots too (#791, L-15b).</summary>
     public static PackOracleDomain PublicOrderInternalReceiptTwoWay604 { get; } = new(
         "PublicOrderInternalReceiptTwoWay604",
         """
@@ -285,13 +283,11 @@ public static class PackOracleDomains {
 
         public entity Order {
           Code: Text unique length(3, 8)
-          receipt: one Receipt
+          receipt: one Receipt optional
           public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
-        "/api/orders",
-        Boots: false,
-        NotBootingReason: "#791: EF cannot determine the dependent side of a two-way one-to-one");
+        "/api/orders");
 
     /// <summary>L-22 (#604): the same domain with the target marked public. It boots and serves the list route.</summary>
     public static PackOracleDomain PublicOrderPublicLine604 { get; } = new(
@@ -313,6 +309,606 @@ public static class PackOracleDomains {
         }
         """,
         "/api/orders");
+
+    /// <summary>P-14a (row P-14). One host with every failure the HTTP contract maps: a Range, a unique,
+    /// an occupied to-one link, a Stage and a Policy failure.</summary>
+    public static PackOracleDomain Failures687 { get; } = new(
+        "Failures687",
+        """
+        domain Failures
+        uses http
+        uses sqlite
+
+        Child: entity {
+          Code: Text unique length(1, 8)
+          Qty: Number range(1, 100)
+        }
+
+        Node: entity {
+          Code: Text length(1, 8)
+          next: Node optional
+          Extend: action { create in next { Code: "A" } create in next { Code: "B" } }
+        }
+
+        Ticket: entity {
+          Code: Text unique length(1, 8)
+          Ok: Boolean
+          IsOk: policy { Ok is true }
+          Draft: stage {
+            Go: action require IsOk { transition to Done }
+            Cancel: action { transition to Closed }
+          }
+          Done: stage { }
+          Closed: stage { }
+        }
+        """,
+        "/api/children");
+
+    /// <summary>P-13a (#912). A single-create action into a to-one: the module's own 409 Link only fires when the host
+    /// has loaded the stored link, so the second request is the oracle. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain NodeLink912 { get; } = new(
+        "NodeLink912",
+        """
+        domain Links
+        uses http
+        uses sqlite
+
+        Node: entity {
+          Code: Text length(1, 8)
+          next: Node optional
+          Extend: action { create in next { Code: "A" } }
+        }
+        """,
+        "/api/nodes");
+
+    /// <summary>P-13a (#658). A guard through a to-one on a root entity (the shape of crm's Lead.Convert): the guard reads
+    /// <c>account</c>, which is not a route parent. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain LeadConvert658 { get; } = new(
+        "LeadConvert658",
+        """
+        domain Leads
+        uses http
+        uses sqlite
+
+        Account: entity {
+          Name: Text unique length(1, 20)
+        }
+
+        Lead: entity {
+          Name: Text unique length(1, 20)
+          account: Account optional
+          HasAccount: policy { account exists }
+          New: stage {
+            Attach: action { create in account { Name: "Acme" } }
+            Convert: action require HasAccount { transition to Converted }
+          }
+          Converted: stage { }
+        }
+        """,
+        "/api/leads");
+
+    /// <summary>P-13b (ii) (#912): reads at depth. <c>Order</c> reaches <c>Customer.Region.Zone</c> through three links, a line's
+    /// product through a quantifier body and a fan-out, and <c>Both</c> takes two products. Each link is made over HTTP by the
+    /// module's own <c>create in</c> actions. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain ReadDepth912 { get; } = new(
+        "ReadDepth912",
+        """
+        domain Depth
+        uses http
+        uses sqlite
+
+        Zone: entity {
+          Code: Text unique length(1, 8)
+          Label: Text
+        }
+
+        Region: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+          zone: owned Zone optional
+          MakeZone: action -> Zone { create in zone { Code: "z1"  Label: "zl" } }
+        }
+
+        Product: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+        }
+
+        Customer: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+          region: owned Region optional
+          Flag: Boolean default(false)
+          notes: many Note
+          NoteNamed: action { assign Flag to any notes where product Name is "pn" }
+          MakeRegion: action -> Region { create in region { Code: "r1"  Name: "n0" } }
+          AddNote: action (c: Text, p: Product) -> Note { create in notes { Code: c  product: p } }
+        }
+
+        Note: entity {
+          Code: Text unique length(1, 8)
+          product: Product
+        }
+
+        Order: entity {
+          Code: Text unique length(1, 8)
+          Note: Text optional
+          Flag: Boolean default(false)
+          Every: Boolean default(false)
+          customer: owned Customer optional
+          lines: many Line via order
+          MakeCustomer: action -> Customer { create in customer { Code: "c1"  Name: "cn" } }
+          InRegion: policy { customer region Name is "n0" }
+          TwoHop: action require InRegion { assign Note to customer region Name }
+          ThreeHop: action { assign Note to customer region zone Label }
+          AddLine: action (c: Text, p: Product) -> Line { create in lines { Code: c  product: p } }
+          AnyNamed: action { assign Flag to any lines where product Name is "pn" }
+          AllNamed: action { assign Every to all lines where product Name is "pn" }
+          NoteNamed: action { invoke customer.NoteNamed }
+          FanOut: action { for lines as l invoke l.Look }
+          FanTags: action { for lines as l invoke l.AnyTag }
+        }
+
+        Line: entity {
+          Code: Text unique length(1, 8)
+          Seen: Text optional
+          Flag: Boolean default(false)
+          order: Order
+          product: Product
+          tags: many Tag
+          Look: action { assign Seen to product Name }
+          ShowCustomer: action { assign Seen to order customer region Name }
+          AddTag: action (c: Text, p: Product) -> Tag { create in tags { Code: c  product: p } }
+          AnyTag: action { assign Flag to any tags where product Name is "pn" }
+        }
+
+        Tag: entity {
+          Code: Text unique length(1, 8)
+          product: Product
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>P-13b (ii) (#912): a <c>when</c> handler whose subscriber is registered in the same request. The new item starts in
+    /// <c>Open</c>, the watcher's handler runs <c>invoke region.Copy</c>, and that reads the region's zone. It stays out of
+    /// <see cref="All"/>.</summary>
+    public static PackOracleDomain Watch912 { get; } = new(
+        "Watch912",
+        """
+        domain Watch
+        uses http
+        uses sqlite
+
+        Zone: entity {
+          Code: Text unique length(1, 8)
+          Label: Text
+        }
+
+        Region: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+          zone: owned Zone optional
+          MakeZone: action -> Zone { create in zone { Code: "z1"  Label: "zl" } }
+          Copy: action { assign Name to zone Label }
+        }
+
+        Watcher: entity {
+          Code: Text unique length(1, 8)
+          region: owned Region optional
+          items: many Item
+          MakeRegion: action -> Region { create in region { Code: "r1"  Name: "n0" } }
+          when items Open { invoke region.Copy }
+          AddItem: action -> Item { create in items { Code: "i1" } }
+        }
+
+        Item: entity {
+          Code: Text unique length(1, 8)
+          watcher: Watcher via items
+          Open: stage { Finish: action { transition to Done } }
+          Done: stage { }
+        }
+        """,
+        "/api/watchers");
+
+    /// <summary>P-13b (ii) (#912): one row reached through two paths. <c>Go(p)</c> adds a line that watches <c>p</c> and closes the
+    /// order's own product; when <c>p</c> is that product the handler reads <c>p.Zone</c>. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain SameRow912 { get; } = new(
+        "SameRow912",
+        """
+        domain Alias
+        uses http
+        uses sqlite
+
+        Zone: entity {
+          Code: Text unique length(1, 8)
+          Label: Text
+        }
+
+        Product: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+          zone: owned Zone optional
+          MakeZone: action (code: Text) -> Zone { create in zone { Code: code  Label: code } }
+          Copy: action { assign Name to zone Label }
+          Open: stage { Close: action { transition to Closed } }
+          Closed: stage { }
+        }
+
+        Order: entity {
+          Code: Text unique length(1, 8)
+          product: owned Product optional
+          lines: many Line via order
+          MakeProduct: action -> Product { create in product { Code: "p1"  Name: "n0" } }
+          Go: action (p: Product) { create in lines { Code: "l1"  product: p }  invoke product.Close }
+        }
+
+        Line: entity {
+          Code: Text unique length(1, 8)
+          order: Order
+          product: Product
+          when product Closed { invoke product.Copy }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>P-13b (ii) (#912): two parameters of one entity type. <c>Both</c> adds a line for each product; a new line's
+    /// entry effect copies its own product's name, so a host that bound both parameters to one local answers the same name twice.
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain TwoParams912 { get; } = new(
+        "TwoParams912",
+        """
+        domain Pair
+        uses http
+        uses sqlite
+
+        Product: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+        }
+
+        Order: entity {
+          Code: Text unique length(1, 8)
+          lines: many Line via order
+          Both: action (a: Product, b: Product) {
+            create in lines { Code: "l1"  product: a }
+            create in lines { Code: "l2"  product: b }
+          }
+        }
+
+        Line: entity {
+          Code: Text unique length(1, 8)
+          Seen: Text optional
+          order: Order
+          product: Product
+          Fresh: stage { entry { assign Seen to product Name } }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>P-13b (ii) (#912): generated locals are unique by construction. <c>Customer</c> then its <c>Region</c> and the
+    /// navigation <c>CustomerRegion</c> would both name a local <c>entityCustomerRegion</c> if locals were just path
+    /// concatenations; one action reads through both. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain Names912 { get; } = new(
+        "Names912",
+        """
+        domain Names
+        uses http
+        uses sqlite
+
+        Zone: entity {
+          Code: Text unique length(1, 8)
+          Label: Text
+        }
+
+        Region: entity {
+          Code: Text unique length(1, 8)
+          zone: owned Zone optional
+          MakeZone: action -> Zone { create in zone { Code: "z1"  Label: "first" } }
+        }
+
+        Customer: entity {
+          Code: Text unique length(1, 8)
+          region: owned Region optional
+          MakeRegion: action -> Region { create in region { Code: "r1" } }
+        }
+
+        Other: entity {
+          Code: Text unique length(1, 8)
+          zone: Zone optional
+          MakeZone: action -> Zone { create in zone { Code: "z2"  Label: "second" } }
+        }
+
+        Order: entity {
+          Code: Text unique length(1, 8)
+          Note: Text optional
+          Second: Text optional
+          customer: owned Customer optional
+          customerRegion: owned Other optional
+          MakeCustomer: action -> Customer { create in customer { Code: "c1" } }
+          MakeOther: action -> Other { create in customerRegion { Code: "x1" } }
+          Both: action {
+            assign Note to customer region zone Label
+            assign Second to customerRegion zone Label
+          }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>L-08b half 2 (#683, #687): a root with one required value of each type a POST can omit. Its DSL carries no
+    /// <c>uses</c> line of its own, so <see cref="RequiredOmittedSimulatorDsl"/> (the same entity without the host
+    /// libraries) runs on the simulator unchanged. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain RequiredOmitted683 { get; } = new(
+        "RequiredOmitted683",
+        """
+        domain Required
+        uses http
+        uses sqlite
+        uses temporal
+
+        Grade: enum { Low, High }
+
+        Gizmo: entity {
+          Label: Text
+          Qty: Number
+          Active: Boolean
+          Born: Date
+          Tier: Grade
+          Price: Decimal
+          Stamp: DateTime
+          Clock: Time
+          Span: Duration
+        }
+        """,
+        "/api/gizmos");
+
+    /// <summary>L-15a (#683), P-11b (#687): <c>Order</c> has a required link and no parent, so it is an aggregate root whose
+    /// <c>Create</c> answers Required unless the link is supplied. <c>Customer</c> has no natural key (a shadow key), so
+    /// there is no value a POST body could carry for the link and <c>Order</c> keeps no POST route. It stays out of
+    /// <see cref="All"/>.</summary>
+    public static PackOracleDomain RequiredLink683 { get; } = new(
+        "RequiredLink683",
+        """
+        domain Shop
+        uses http
+        uses sqlite
+
+        Customer: entity {
+          Name: Text
+        }
+
+        Order: entity {
+          Number: Text
+          customer: Customer
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>P-11b (#687): university-shaped, with natural keys so the whole flow is reachable over HTTP. <c>Section</c>
+    /// has a required <c>course</c> (a root: <c>Course</c> has no collection of sections), so its POST body carries the
+    /// course's key. Course, section, student and enroll, then <c>Close</c> (a policy that reads through the link). It stays
+    /// out of <see cref="All"/>; <see cref="WithoutHostLibraries"/> is its simulator side.</summary>
+    public static PackOracleDomain CreateLink11b { get; } = new(
+        "CreateLink11b",
+        """
+        domain Campus
+        uses http
+        uses sqlite
+
+        Course: entity {
+          Code: Text unique
+          Credits: Number
+        }
+
+        Student: entity {
+          Email: Text unique
+          OpenCredits: Number default(0)
+          enrollments: many Enrollment via student
+          Enroll: action (offering: Section) -> Enrollment {
+            assign OpenCredits to OpenCredits + 3
+            create in enrollments { section: offering }
+          }
+        }
+
+        Section: entity {
+          Code: Text unique
+          Cap: Number
+          course: Course
+          enrollments: many Enrollment via section
+          BigCourse: policy { course Credits >= 3 }
+          Open: stage {
+            Close: action require BigCourse { transition to Closed }
+          }
+          Closed: stage { }
+        }
+
+        Enrollment: entity {
+          section: Section
+          student: Student
+        }
+        """,
+        "/api/courses");
+
+    /// <summary>P-11b (#687): two required links to targets of the SAME type, with a policy per link that reads through it,
+    /// so a swapped pair is a different answer. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain TwoLinks11b { get; } = new(
+        "TwoLinks11b",
+        """
+        domain Flights
+        uses http
+        uses sqlite
+
+        Airport: entity {
+          Code: Text unique
+          Capacity: Number
+        }
+
+        Route: entity {
+          Code: Text unique
+          Hits: Number default(0)
+          origin: Airport
+          destination: Airport
+          BigOrigin: policy { origin Capacity >= 100 }
+          BigDestination: policy { destination Capacity >= 100 }
+          FromBig: action require BigOrigin { assign Hits to Hits + 1 }
+          ToBig: action require BigDestination { assign Hits to Hits + 1 }
+        }
+        """,
+        "/api/airports");
+
+    /// <summary>P-11b (#687): the section's initial entry reads through the link and one hop further (<c>course region Name</c>),
+    /// so the create route must load the course's <c>Region</c> before it calls <c>Create</c>, from the same read tree an
+    /// action route loads. The region is made by a course action (an owned part). It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain CreateLinkReads11b { get; } = new(
+        "CreateLinkReads11b",
+        """
+        domain Chain
+        uses http
+        uses sqlite
+
+        Region: entity {
+          Code: Text unique
+          Name: Text
+        }
+
+        Course: entity {
+          Code: Text unique
+          region: owned Region optional
+          MakeRegion: action -> Region { create in region { Code: "r1"  Name: "North" } }
+        }
+
+        Section: entity {
+          Code: Text unique
+          Label: Text optional
+          course: Course
+          Open: stage { entry { assign Label to course region Name } }
+        }
+        """,
+        "/api/courses");
+
+    /// <summary>A fixture's document without its host libraries: the simulator's side of the same model.</summary>
+    public static string WithoutHostLibraries(PackOracleDomain fixture) =>
+        fixture.Poly.Replace("uses http\n", "", StringComparison.Ordinal).Replace("uses sqlite\n", "", StringComparison.Ordinal);
+
+    /// <summary>The simulator's side of <see cref="RequiredOmitted683"/>: the same entity, no host libraries.</summary>
+    public const string RequiredOmittedSimulatorDsl = """
+        domain Required
+        uses temporal
+
+        Grade: enum { Low, High }
+
+        Gizmo: entity {
+          Label: Text
+          Qty: Number
+          Active: Boolean
+          Born: Date
+          Tier: Grade
+          Price: Decimal
+          Stamp: DateTime
+          Clock: Time
+          Span: Duration
+        }
+        """;
+
+    /// <summary>E-10a (#923): a required DateTime, Time and Duration on a creatable root. Stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain Temporal923 { get; } = new(
+        "Temporal923",
+        """
+        domain Shop
+        uses temporal
+        uses sqlite
+        uses http
+
+        Thing: entity {
+          Name: Text unique
+          Dt: DateTime
+          Tm: Time
+          Du: Duration
+        }
+        """,
+        "/api/things");
+
+    /// <summary>E-10a (#924): an enum and an entity named like C# keywords. Stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain KeywordNames924 { get; } = new(
+        "KeywordNames924",
+        """
+        domain Kw
+        uses sqlite
+        uses http
+
+        event: enum { A, B }
+
+        Thing: entity {
+          Name: Text unique
+          Kind: event
+        }
+
+        class: entity {
+          Name: Text unique
+        }
+        """,
+        "/api/things");
+
+    /// <summary>P-12a (#687 row P-12): natural keys of each route-key type (Text, Number, Date), a shadow-key
+    /// entity, and a keyed entity with a scalar of several types plus a stage for the body-member contract.
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain RouteKeys687 { get; } = new(
+        "RouteKeys687",
+        """
+        domain Keys
+        uses http
+        uses sqlite
+        uses temporal
+
+        Grade: enum { Low, High }
+
+        Customer: entity {
+          Email: Text unique
+        }
+
+        Ticket: entity {
+          Seq: Number unique
+        }
+
+        Event: entity {
+          Day: Date unique
+        }
+
+        Note: entity {
+          Body: Text
+        }
+
+        Profile: entity {
+          Handle: Text unique
+          Age: Number
+          Active: Boolean
+          Born: Date
+          Tier: Grade
+          Price: Decimal
+          Draft: stage { Publish: action { transition to Live } }
+          Live: stage {}
+        }
+        """,
+        "/api/customers");
+
+    /// <summary>P-12a fix round: an OPTIONAL unique key is still the route key. <c>Day</c> (Date) is a <c>DateOnly?</c> key, so the
+    /// host must compile with it (a create of it answers 409 Unique, which this slice does not touch, so only the compile is tested). An optional unique Text key cannot be a fixture: the generated host dies at boot
+    /// (<c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.
+    /// Date, not DateTime or Time: a required DateTime/Time/Duration host member does not compile yet (#923).
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain OptionalKeys687 { get; } = new(
+        "OptionalKeys687",
+        """
+        domain Optional
+        uses http
+        uses sqlite
+        uses temporal
+
+        Slot: entity {
+          Name: Text
+          Day: Date unique optional
+        }
+        """,
+        "/api/slots");
 
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];

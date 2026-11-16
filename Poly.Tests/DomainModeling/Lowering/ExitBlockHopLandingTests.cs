@@ -67,7 +67,7 @@ public class ExitBlockHopLandingTests {
         const string dsl = """
             domain H3
             Z: entity {
-              board: Board via items
+              board: Board via items optional
               A: stage {
                 exit { transition to B }
                 Go: action { transition to B }

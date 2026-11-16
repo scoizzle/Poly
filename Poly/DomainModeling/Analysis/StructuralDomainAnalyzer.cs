@@ -104,6 +104,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         // S-12 (#585): an owned target has exactly one owner navigation.
         ReportOwnedTargetOwners(context, domain);
 
+        // L-15a: a required to-one to itself, or a cycle of them, admits no first instance.
+        ReportRequiredToOneCycles(context, domain);
+
         ReportStoredValueTypeProperties(context, domain);
 
         ReportKeyDesignations(context, domain);
@@ -163,14 +166,11 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                         $"Entity '{entity.Name}' key member '{member}' is a collection navigation; a key navigation must be singular.");
                     continue;
                 }
-                if (!entities.TryGetValue(nav.Target.TypeName, out var target)) {
-                    ReportInvalidKey(context, entity,
-                        $"Entity '{entity.Name}' key navigation '{member}' targets '{nav.Target.TypeName}', which is not an entity.");
-                    continue;
-                }
-                if (KeyOf(target).Count == 0)
-                    ReportInvalidKey(context, entity,
-                        $"Entity '{entity.Name}' key navigation '{member}' targets '{target.Name}', which has no key.");
+                // #677 ruling D: a key over a navigation is accepted and unenforced (its foreign-key
+                // shape is not decided), so it is refused until it is.
+                ReportInvalidKey(context, entity,
+                    $"Entity '{entity.Name}' key member '{member}' is a navigation; a key over a navigation is not supported yet. "
+                    + "Key the entity on its own properties.");
             }
 
             if (ReachesViaKeyNavigation(entity, entity, entities, new HashSet<string>(StringComparer.Ordinal))) {
@@ -180,6 +180,64 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.StructuralCycle);
             }
         }
+    }
+
+    /// <summary>
+    /// L-15a: <c>DMREL006</c>. A required to-one (<see cref="Relationship.IsRequiredToOne"/>) must
+    /// be bound when its entity is created, so a required to-one to the entity itself, or a cycle of
+    /// required to-ones across entities, means no instance could ever be created first. One report
+    /// per self-navigation, and one per cycle the walk closes (entities in declaration order), on the
+    /// navigation that closes it. <c>owned</c> and <c>optional</c> navigations are not edges.
+    /// </summary>
+    private static void ReportRequiredToOneCycles(AnalysisContext context, Domain domain) {
+        var entities = domain.Types.OfType<Entity>()
+            .GroupBy(static e => e.Name, StringComparer.Ordinal)
+            .Where(static g => g.Count() == 1)
+            .ToDictionary(static g => g.Key, static g => g.First(), StringComparer.Ordinal);
+
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            foreach (var nav in entity.Navigations) {
+                if (nav.IsRequiredToOne() && string.Equals(nav.Target.TypeName, entity.Name, StringComparison.Ordinal))
+                    context.ReportError(
+                        nav,
+                        $"Navigation '{entity.Name}.{nav.Name}' is a required to-one to its own entity: no " +
+                        $"'{entity.Name}' could ever be created first. Declare it optional: " +
+                        $"'{nav.Name}: {entity.Name} optional'.",
+                        DomainModelDiagnosticCodes.RequiredToOneCycle);
+            }
+        }
+
+        var state = new Dictionary<string, bool>(StringComparer.Ordinal); // false: on the path; true: done
+        var path = new List<string>();
+        void Walk(Entity entity) {
+            state[entity.Name] = false;
+            path.Add(entity.Name);
+            foreach (var nav in entity.Navigations) {
+                if (!nav.IsRequiredToOne()
+                    || string.Equals(nav.Target.TypeName, entity.Name, StringComparison.Ordinal)
+                    || !entities.TryGetValue(nav.Target.TypeName, out var target))
+                    continue;
+                if (!state.TryGetValue(target.Name, out var done)) {
+                    Walk(target);
+                    continue;
+                }
+                if (done)
+                    continue;
+                var cycle = path.Skip(path.IndexOf(target.Name)).Append(target.Name);
+                context.ReportError(
+                    nav,
+                    $"Required to-one navigations form a cycle ({string.Join(" -> ", cycle)}): no instance " +
+                    $"of any of them could ever be created first. Mark one side optional, e.g. " +
+                    $"'{nav.Name}: {target.Name} optional'.",
+                    DomainModelDiagnosticCodes.RequiredToOneCycle);
+            }
+            path.RemoveAt(path.Count - 1);
+            state[entity.Name] = true;
+        }
+        foreach (var entity in domain.Types.OfType<Entity>())
+            if (entities.TryGetValue(entity.Name, out var unique) && ReferenceEquals(unique, entity)
+                && !state.ContainsKey(entity.Name))
+                Walk(entity);
     }
 
     /// <summary>Null-tolerant read of the key designation, matching <see cref="EntityStructureMetadata.Id"/>.</summary>
@@ -315,7 +373,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     /// <summary>
     /// Cardinality classes (singular versus collection) with two or more navigations, in
     /// declaration order. Class is the lowering's own classing
-    /// (<c>FindAutoWireBackReference</c>, <c>FindInverseCollectionInfo</c>).
+    /// (<c>CreateInWiring.FilledNavigation</c>, <c>FindInverseCollectionInfo</c>).
     /// </summary>
     private static List<List<Relationship>> SharedCardinalityClasses(IReadOnlyList<Relationship> navs) {
         var classes = new List<(bool IsCollection, List<Relationship> Navs)>();

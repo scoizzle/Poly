@@ -28,7 +28,7 @@ Customer: entity {
   Name: Text
   Email: Text unique pattern("^[^@]+@[^@]+$")
   Status: Text default("open")
-  address: owned Address
+  address: owned Address optional
   orders: many Order via customer
   Active: stage {
     Place: action (total: Number) -> Order {

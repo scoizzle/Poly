@@ -138,10 +138,6 @@ public static class ExportedCSharp {
                 callArgs[i] = match.Value;
             else if (parameters[i].HasDefaultValue)
                 callArgs[i] = parameters[i].DefaultValue;
-            else if (parameters[i].ParameterType == typeof(string))
-                callArgs[i] = "";
-            else if (parameters[i].ParameterType == typeof(bool))
-                callArgs[i] = false;
             else
                 callArgs[i] = null;
         }

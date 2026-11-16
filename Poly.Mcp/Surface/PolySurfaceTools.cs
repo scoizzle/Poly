@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using ModelContextProtocol.Server;
 
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Sessions;
@@ -242,7 +243,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 4. check ────────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. Returns proven, violated, or unknown. Findings carry the element path and the analyzer's message. Does not change the model. Use poly_define to fix a violation.")]
+    [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. Returns proven, violated, or unknown: proven only when every write was verified against its range, length, pattern or equals constraints (unique, required and enum membership are checked elsewhere), unknown (with the count of unverified findings) while any write could not be: bound the source, widen the target, or guard a non-parameter write; a Text or Number action parameter written into a bounded property stays unknown until parameter constraints exist. Findings carry the element path and the analyzer's message. Does not change the model. Use poly_define to fix a violation.")]
     public PolyResponse Check(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("Optional element path to focus, e.g. \"Product\" or \"Product.Submit\".")] string? select = null,
@@ -288,9 +289,11 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
         var allFindings = AllFindings(analysis);
         var selectMatched = true;
+        string? scopePath = null;
         IReadOnlyList<ActionInvariantFact>? witness = null;
         if (!string.IsNullOrWhiteSpace(select)) {
             var normalized = NormalizeSelect(select, workspaceState.Domain.Name);
+            scopePath = normalized;
             var selectParts = normalized.Split('/');
             if (selectParts.Length == 2 && analysis.Data is AnalysisData { ActionInvariants: { } invariants }) {
                 var contexts = invariants
@@ -310,17 +313,22 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             .ToList();
         var errorCount = reportable.Count(f => string.Equals(f.Severity, "Error", StringComparison.OrdinalIgnoreCase));
         var warningCount = reportable.Count(f => string.Equals(f.Severity, "Warning", StringComparison.OrdinalIgnoreCase));
+        // "proven" is V-04's verdict, never "no errors": a write analysis could not verify is unknown.
+        var verification = workspaceState.LatestAnalysis?.GetVerification(workspaceState.Domain, scopePath);
+        var unverified = verification?.UnverifiedWrites.Count ?? 0;
         var verdict = !selectMatched
             ? "unknown"
             : !string.IsNullOrWhiteSpace(args)
                 ? "unknown"
-                : errorCount > 0 ? "violated" : "proven";
+                : errorCount > 0 ? "violated"
+                : verification?.Verdict == CheckVerdict.Proven ? "proven" : "unknown";
 
         var summary = verdict switch {
             "violated" => $"Violated: {errorCount} error(s), {warningCount} warning(s), {hintCount} hint(s).",
             "unknown" when !selectMatched => $"Unknown: no element or finding matches '{select}'.",
-            "unknown" => "Unknown: argument-specific proofs are not implemented yet; use poly_simulate to execute the action.",
-            _ => $"Proven: no errors, {warningCount} warning(s), {hintCount} hint(s).",
+            "unknown" when !string.IsNullOrWhiteSpace(args) => "Unknown: argument-specific proofs are not implemented yet; use poly_simulate to execute the action.",
+            "unknown" => $"Unknown: {unverified} finding(s) could not be verified (writes analysis could not prove inside their constraints, or a default() beside a range or length), {warningCount} warning(s), {hintCount} hint(s). Bound the source, widen the target or guard a non-parameter write; poly_simulate executes the action.",
+            _ => $"Proven: no errors, every write verified, {warningCount} warning(s), {hintCount} hint(s).",
         };
 
         return new PolyResponse(
@@ -333,6 +341,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 errorCount,
                 warningCount,
                 hintCount,
+                unverifiedFindings = unverified,
                 findingsTotal = reportable.Count,
                 truncated = reportable.Count > FindingCap,
                 witness,
@@ -432,7 +441,9 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. Steps are a JSON array of {op: create|link|unlink|invoke|evaluate|get|list, ...}. A guard-blocked step is a failed step, not a failed call; earlier steps stay committed. reset=true starts from a clean instance state.")]
     public PolyResponse Simulate(
         [Description("Workspace handle from poly_workspace.")] string workspace,
-        [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42}}]")] string steps,
+        [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42},\"as\":\"p\"}]. " +
+            "A create's properties may name a singular navigation whose value is an instance id or an earlier step's alias, " +
+            "e.g. {\"Name\":\"Grace\",\"account\":\"acme\"}; a required navigation must be given at create.")] string steps,
         [Description("Clear existing instances before running (default false).")] bool reset = false,
         [Description("Stop at the first failed step (default true).")] bool stopOnError = true) {
         if (!TryWorkspace(workspace, out var state))
@@ -471,7 +482,8 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                     "create" => _runtime.CreateInstance(
                         workspace,
                         Required(step, "entity"),
-                        OptionalJson(step, "properties")),
+                        OptionalJson(step, "properties"),
+                        aliases),
                     "link" => _runtime.LinkInstances(
                         workspace,
                         Resolve(Required(step, "sourceInstanceId"), aliases),

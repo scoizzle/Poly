@@ -108,7 +108,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             }
 
             foreach (var targetConstraint in target.Value.Property.Constraints) {
-                if (targetConstraint is not (LengthConstraint or RangeConstraint))
+                if (ConstraintKinds.Of(targetConstraint) is not { WriteRelevant: true })
                     continue;
                 var sourceConstraint = source.Value.Property.Constraints
                     .FirstOrDefault(c => c.GetType() == targetConstraint.GetType());
@@ -143,6 +143,22 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     WriteRecorder.Record(
                         context, domain, target.Value.Property, target.Value.Property.Name, constraint,
                         WriteVerdict.Satisfied);
+                    continue;
+                }
+
+                // A pattern or equals that differs proves nothing about a value being outside: an
+                // unverified warning plus its fact, never an error (only Range and Length can err).
+                if (targetConstraint is PatternConstraint or EqualityConstraint) {
+                    context.ReportWarning(
+                        target.Value.Property,
+                        $"Observed flow '{flow.SourcePath}' -> '{flow.TargetPath}': " +
+                        $"{ConstraintValidation.Describe(sourceConstraint)} differs from " +
+                        $"{ConstraintValidation.Describe(targetConstraint)}, so the copy cannot be verified.",
+                        DomainModelDiagnosticCodes.ConstraintUndecided);
+                    WriteRecorder.Record(
+                        context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                        WriteVerdict.Unverified(
+                            UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.ConstraintUndecided));
                     continue;
                 }
 
@@ -615,7 +631,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
 
             // D: every required property must be provided (auto-wire only in create-in).
             ValidateRequiredInitializerCoverage(context, cei, targetEntity,
-                autoWireSourceEntity: null, cei.Initializers);
+                autoWireSourceEntity: null, createInRelationship: null, cei.Initializers);
 
             // P2′.3 / P2′′.2: When RelationshipName is set, validate relationship exists,
             // that the action entity is the relationship source, and that the created
@@ -799,6 +815,18 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
+        // L-15a: a required to-one is set when the source is created and cannot be unset or re-pointed, so a
+        // `create in` into it always fails at run time with a second link.
+        if (relationship.IsRequiredToOne()) {
+            context.ReportError(
+                createIn,
+                $"CreateIn into '{createIn.RelationshipName}' can never succeed: '{createIn.RelationshipName}' is a required to-one of " +
+                $"'{entity.Name}', so it is already set when the action runs. Declare it optional " +
+                $"('{createIn.RelationshipName}: {relationship.Target.TypeName}{(relationship.Inverse is { } via ? $" via {via}" : "")} optional') to fill it here.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
         // Validate target entity exists
         if (!lookup.Types.TryGetValue(relationship.Target.TypeName, out var targetType) || targetType is not Entity targetEntity) {
             context.ReportError(
@@ -838,7 +866,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         // D: every required property must be provided — the back-reference nav
         // (typed as the source entity) is auto-wired and may be omitted.
         ValidateRequiredInitializerCoverage(context, createIn, targetEntity,
-            autoWireSourceEntity: entity, createIn.Initializers);
+            autoWireSourceEntity: entity, createInRelationship: relationship, createIn.Initializers);
     }
 
     /// <summary>
@@ -861,13 +889,17 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     /// entry effects, or is the auto-wired back-reference navigation (the target's nav
     /// typed as the create-in source entity). Without this, the generated <c>Create</c>
     /// factory would fail at runtime on a missing required value — analysis catches the
-    /// bad authoring shape before the export/runtime path.
+    /// bad authoring shape before the export/runtime path. A required to-one navigation
+    /// (L-15a) must be bound the same way, unless it is the navigation <c>create in</c>
+    /// fills with the source (<see cref="CreateInWiring.FilledNavigation"/>, the rule
+    /// lowering reads).
     /// </summary>
     private static void ValidateRequiredInitializerCoverage(
         AnalysisContext context,
         Effect effect,
         Entity targetEntity,
         Entity? autoWireSourceEntity,
+        Relationship? createInRelationship,
         IReadOnlyList<PropertyBinding> initializers) {
         var provided = new HashSet<string>(
             initializers.Select(i => i.PropertyName), StringComparer.Ordinal);
@@ -888,6 +920,21 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 effect,
                 $"Create effect on '{targetEntity.Name}' does not provide required property '{prop.Name}'. " +
                 $"Every property without 'optional' must be set in the create / create in initializers (or have a default).",
+                DomainModelDiagnosticCodes.CreateMissingRequiredProperty);
+        }
+
+        var filled = autoWireSourceEntity is not null && createInRelationship is not null
+            ? CreateInWiring.FilledNavigation(autoWireSourceEntity, createInRelationship, targetEntity)
+            : null;
+        foreach (var nav in targetEntity.Navigations) {
+            if (!nav.IsRequiredToOne()) continue;
+            if (ReferenceEquals(nav, filled)) continue; // `create in` fills it with the source
+            if (provided.Contains(nav.Name)) continue;
+
+            context.ReportError(
+                effect,
+                $"Create effect on '{targetEntity.Name}' does not bind '{nav.Name}': " +
+                $"navigation '{nav.Name}' is required: bind it, or declare it `optional`.",
                 DomainModelDiagnosticCodes.CreateMissingRequiredProperty);
         }
     }
@@ -1392,6 +1439,13 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
         if (inner is LengthConstraint il && outer is LengthConstraint ol) {
             return il.MinLength >= ol.MinLength && il.MaxLength <= ol.MaxLength;
+        }
+        // A pattern or an equality is subsumed only by the identical constraint.
+        if (inner is PatternConstraint ip && outer is PatternConstraint op) {
+            return string.Equals(ip.Pattern, op.Pattern, StringComparison.Ordinal);
+        }
+        if (inner is EqualityConstraint ie && outer is EqualityConstraint oe) {
+            return Equals(ie.ExpectedValue, oe.ExpectedValue);
         }
         // For other constraint types, assume compatible (exact match on type was already checked)
         return true;

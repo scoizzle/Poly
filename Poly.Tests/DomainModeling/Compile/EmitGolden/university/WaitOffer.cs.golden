@@ -20,7 +20,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
     private List<Section>? _sectionWaitlistCancelledSubscribers;
     private int _notifyDepth;
     private WaitOffer() { }
-    private WaitOffer(Student? student = null, Section? section = null)
+    private WaitOffer(Student? student, Section? section)
     {
         this.Student = student;
         this.Section = section;
@@ -184,7 +184,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<WaitOffer> Create(Student? student = null, Section? section = null)
+    internal static DomainResult<WaitOffer> Create(Student? student = default, Section? section = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -209,7 +209,17 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
     }
     private static DomainResult<WaitOffer> __BodyOfCreate(Student? student, Section? section)
     {
-        var created = new WaitOffer(student, section);
+        if (student == null)
+        {
+            return DomainResult<WaitOffer>.Failure(Poly.Runtime.DomainFailure.Required("'student' is required.", "WaitOffer.student"));
+        }
+        var __student = student;
+        if (section == null)
+        {
+            return DomainResult<WaitOffer>.Failure(Poly.Runtime.DomainFailure.Required("'section' is required.", "WaitOffer.section"));
+        }
+        var __section = section;
+        var created = new WaitOffer(__student, __section);
         Poly.Runtime.ActionScope.Create(created, "WaitOffer");
         if (section != null)
         {

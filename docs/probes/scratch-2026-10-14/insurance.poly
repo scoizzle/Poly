@@ -53,8 +53,8 @@ Claim: entity {
   Amount: Number range(0, 1000000)
   Reviewed: Number default(0)
   holder: Policyholder
-  cover: Policy
-  adjuster: Adjuster
+  cover: Policy optional
+  adjuster: Adjuster optional
   documents: many Document via claim
   WithinCoverage: policy { Amount <= cover Coverage }
   HasDocuments: policy { count documents > 0 }

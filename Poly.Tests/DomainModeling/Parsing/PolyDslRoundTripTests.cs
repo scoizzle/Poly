@@ -1195,7 +1195,7 @@ public class PolyDslRoundTripTests {
             domain Test
 
             Customer: entity {
-              passport: owned Passport
+              passport: owned Passport optional
             }
             Passport: entity {
               Number: Text
@@ -1223,7 +1223,7 @@ public class PolyDslRoundTripTests {
               Role: Text
               Score: Number
               Badge: Text
-              passport: owned Passport
+              passport: owned Passport optional
 
               Draft: stage {
                 Promote: action (level: Text) {

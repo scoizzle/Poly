@@ -1,5 +1,4 @@
 using System.Reflection;
-using Poly.Tests.TestHelpers;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
@@ -11,6 +10,7 @@ using Poly.Grammar;
 using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 using Poly.Tests.DomainModeling.Compile;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Language;
 
@@ -490,10 +490,6 @@ public class RangeBoundExactnessTests {
                 args[i] = value;
             else if (parameter.HasDefaultValue)
                 args[i] = parameter.DefaultValue;
-            else if (parameter.ParameterType == typeof(string))
-                args[i] = "";
-            else if (parameter.ParameterType == typeof(long))
-                args[i] = 0L;
             else
                 args[i] = null;
         }

@@ -26,7 +26,7 @@ public class SurfaceExtensionDogfoodTests {
           Name: Text
           Status: Text
           LastOrderCode: Text
-          profile: owned Profile
+          profile: owned Profile optional
           orders: many Order
           IsUrban: policy { profile City is "Metropolis" }
           HasProfile: policy { profile exists }
@@ -50,7 +50,7 @@ public class SurfaceExtensionDogfoodTests {
 
         Order: entity {
           Code: Text
-          customer: Customer via orders
+          customer: Customer via orders optional
           Draft: stage {
             Activate: action {
               transition to Active
@@ -155,7 +155,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
-              customer: Customer via orders
+              customer: Customer via orders optional
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -188,7 +188,7 @@ public class SurfaceExtensionDogfoodTests {
             domain StageScopedPeerBinding
             Tracker: entity {
               Status: Text
-              Tracks: Order
+              Tracks: Order optional
               Watching: stage {
                 when Tracks Active as order {
                   assign Status to order Code
@@ -502,7 +502,7 @@ public class SurfaceExtensionDogfoodTests {
             domain UnlinkStopsPeer
             Tracker: entity {
               Status: Text
-              Tracks: Order
+              Tracks: Order optional
               HasOrder: policy { Tracks exists }
               Idle: stage {}
               when Tracks Active as order {
@@ -562,7 +562,7 @@ public class SurfaceExtensionDogfoodTests {
             domain TwoSubscribersOneOrder
             Tracker: entity {
               LastCode: Text
-              Tracks: Order
+              Tracks: Order optional
               Idle: stage {}
               when Tracks Active as order {
                 assign LastCode to order Code
@@ -602,7 +602,7 @@ public class SurfaceExtensionDogfoodTests {
             domain RelationshipNotExists
             Customer: entity {
               Name: Text
-              profile: owned Profile
+              profile: owned Profile optional
               NoProfile: policy { not profile exists }
             }
             Profile: entity {
@@ -796,7 +796,7 @@ public class SurfaceExtensionDogfoodTests {
             domain MultiStagePeerWhen
             Tracker: entity {
               Status: Text
-              Tracks: Order
+              Tracks: Order optional
               Idle: stage {}
               when Tracks Active, Completed as order {
                 assign Status to order Code

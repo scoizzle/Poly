@@ -308,6 +308,13 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string InverseAmbiguous = "DMREL005";
 
+    /// <summary>
+    /// A required to-one navigation to the entity itself, or a cycle of required to-ones across
+    /// entities (L-15a): no instance could ever be created first. Mark one side <c>optional</c>;
+    /// an <c>owned</c> navigation breaks the cycle.
+    /// </summary>
+    public const string RequiredToOneCycle = "DMREL006";
+
     // Retired: nested invoke/create/transition now lower (session.Lower). Kept so
     // historical messages remain identifiable; analysis no longer reports it.
 

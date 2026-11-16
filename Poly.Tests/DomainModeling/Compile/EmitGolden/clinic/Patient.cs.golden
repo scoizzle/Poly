@@ -11,7 +11,7 @@ internal class Patient : Poly.Runtime.IActionScoped
 {
     private List<Visit> _visits = new List<Visit>();
     private Patient() { }
-    private Patient(string name, IEnumerable<Visit>? visits = null)
+    private Patient(string name, IEnumerable<Visit>? visits)
     {
         this.Name = name;
         this._visits = new List<Visit>(visits ?? new List<Visit>());
@@ -66,7 +66,7 @@ internal class Patient : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<Patient> Create(string name, IEnumerable<Visit>? visits = null)
+    internal static DomainResult<Patient> Create(string? name = default, IEnumerable<Visit>? visits = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -89,13 +89,14 @@ internal class Patient : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Patient> __BodyOfCreate(string name, IEnumerable<Visit>? visits)
+    private static DomainResult<Patient> __BodyOfCreate(string? name, IEnumerable<Visit>? visits)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patient.Name"));
         }
-        var created = new Patient(name, visits);
+        var __name = name;
+        var created = new Patient(__name, visits);
         Poly.Runtime.ActionScope.Create(created, "Patient");
         return DomainResult<Patient>.Success(created);
     }

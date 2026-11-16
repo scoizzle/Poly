@@ -21,7 +21,7 @@ public class PathPrefixRequireFailureTests {
               Occupied: Boolean
             }
             Reservation: entity {
-              room: Room
+              room: Room optional
               RoomFree: policy { room Occupied is false }
               Booked: stage {
                 CheckIn: action require RoomFree {
@@ -58,7 +58,7 @@ public class PathPrefixRequireFailureTests {
               Occupied: Boolean
             }
             Reservation: entity {
-              room: Room
+              room: Room optional
               RoomFree: policy { room Occupied is false }
               Booked: stage {
                 CheckIn: action require RoomFree {
@@ -88,7 +88,7 @@ public class PathPrefixRequireFailureTests {
               SeatsTaken: Number default(0)
             }
             Enrollment: entity {
-              section: Section
+              section: Section optional
               SectionFull: policy { section SeatsTaken >= 1 }
               Pending: stage {
                 Confirm: action require not SectionFull {
@@ -125,7 +125,7 @@ public class PathPrefixRequireFailureTests {
             Engineer: entity { team: Team }
             Team: entity { TeamName: Text }
             Issue: entity {
-              reporter: Engineer
+              reporter: Engineer optional
               FromBlueTeam: policy { reporter team TeamName is "Blue" }
               Open: stage {
                 Escalate: action require FromBlueTeam { transition to Closed }
@@ -171,7 +171,7 @@ public class PathPrefixRequireFailureTests {
               SeatsTaken: Number default(0)
             }
             Enrollment: entity {
-              section: Section
+              section: Section optional
               SectionFull: policy { section SeatsTaken >= 1 }
               Confirm: action require not SectionFull { }
             }

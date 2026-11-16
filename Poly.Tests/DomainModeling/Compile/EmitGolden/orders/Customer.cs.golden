@@ -11,7 +11,7 @@ internal class Customer : Poly.Runtime.IActionScoped
 {
     private List<Order> _orders = new List<Order>();
     private Customer() { }
-    private Customer(string email, string name, IEnumerable<Order>? orders = null, string tier = "standard")
+    private Customer(string email, string name, string tier, IEnumerable<Order>? orders)
     {
         this.Email = email;
         this.Name = name;
@@ -110,13 +110,13 @@ internal class Customer : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<Customer> Create(string email, string name, Poly.Runtime.IStoragePort db, IEnumerable<Order>? orders = null, string tier = "standard")
+    internal static DomainResult<Customer> Create(Poly.Runtime.IStoragePort db, string? email = default, string? name = default, string? tier = default, IEnumerable<Order>? orders = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Customer.__BodyOfCreate(email, name, orders, tier, db);
+            var __result = Customer.__BodyOfCreate(email, name, tier, orders, db);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -133,31 +133,34 @@ internal class Customer : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Customer> __BodyOfCreate(string email, string name, IEnumerable<Order>? orders, string tier, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Customer> __BodyOfCreate(string? email, string? name, string? tier, IEnumerable<Order>? orders, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(email))
+        if (email == null)
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Customer.Email"));
         }
-        if (string.IsNullOrEmpty(name))
+        var __email = email;
+        if (name == null)
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Customer.Name"));
         }
-        if (name.Length < 2L)
+        var __name = name;
+        if (__name.Length < 2L)
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 2 characters.", "Customer.Name"));
         }
-        if (name.Length > 100L)
+        if (__name.Length > 100L)
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 100 characters.", "Customer.Name"));
         }
-        if (Customer.ExistsWithEmail(db, email))
+        var __tier = (tier == null ? "standard" : tier);
+        if (Customer.ExistsWithEmail(db, __email))
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Customer'.", "Customer.Email"));
         }
-        var created = new Customer(email, name, orders, tier);
+        var created = new Customer(__email, __name, __tier, orders);
         Poly.Runtime.ActionScope.Create(created, "Customer");
-        db.Record("Customer", "Email", email);
+        db.Record("Customer", "Email", __email);
         return DomainResult<Customer>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

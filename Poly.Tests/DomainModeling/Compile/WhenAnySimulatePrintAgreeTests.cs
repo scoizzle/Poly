@@ -29,7 +29,7 @@ public class WhenAnySimulatePrintAgreeTests {
             domain Watch
             Loan: entity {
               Code: Text
-              patron: Patron via loans
+              patron: Patron via loans optional
               Draft: stage {
                 Overdue: action { transition to Overdue }
               }
@@ -99,7 +99,7 @@ public class WhenAnySimulatePrintAgreeTests {
             domain Watch
             Loan: entity {
               Code: Text
-              patron: Patron via loans
+              patron: Patron via loans optional
               Draft: stage {
                 Overdue: action { transition to Overdue }
                 Lose: action { transition to Lost }
@@ -222,10 +222,6 @@ public class WhenAnySimulatePrintAgreeTests {
                 callArgs[i] = value;
             else if (parameters[i].HasDefaultValue)
                 callArgs[i] = parameters[i].DefaultValue;
-            else if (parameters[i].ParameterType == typeof(string))
-                callArgs[i] = "";
-            else if (parameters[i].ParameterType == typeof(long))
-                callArgs[i] = 0L;
             else
                 callArgs[i] = null;
         }

@@ -183,7 +183,7 @@ public class AtomicityParityTests {
         Transfer: entity {
           Amount: Decimal
           source: Account
-          target: Account
+          target: Account optional
           Pending: stage {
             Settle: action {
               invoke source.Withdraw(amount: Amount)
@@ -288,7 +288,7 @@ public class AtomicityParityTests {
             var second = side.Create("Kid");
             side.Use(second);
             side.Invoke("Finish");
-            side.Create("Holder", ("kids", new[] { first!, second! }));
+            side.Create("Holder", ("child", first), ("kids", new[] { first!, second! }));
             fail("FinishAll", []);
         });
     }
@@ -489,7 +489,7 @@ public class AtomicityParityTests {
         Book: entity {
           Code: Text
           shelf: Shelf
-          owner: Owner
+          owner: Owner optional
         }
         Owner: entity {
           Count: Number range(0, 5) default(0)

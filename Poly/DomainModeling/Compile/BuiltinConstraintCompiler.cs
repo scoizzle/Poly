@@ -30,8 +30,8 @@ public sealed class BuiltinConstraintCompiler : IConstraintCompiler {
 
     /// <summary>
     /// True for a check kind some claimed constraint record emits. Derived from
-    /// <see cref="ConstraintCheckWriter.CoverageByConstraint"/>; enum slot and member
-    /// kinds are in no row, so they stay unclaimed.
+    /// <see cref="ConstraintCheckWriter.CoverageByConstraint"/>; the enum member
+    /// kind is in no row, so it stays unclaimed.
     /// </summary>
     internal static bool Claims(ConstraintCheckWriter.Kind kind) => ClaimedKinds.Contains(kind);
 
@@ -39,9 +39,9 @@ public sealed class BuiltinConstraintCompiler : IConstraintCompiler {
         [.. ConstraintCheckWriter.CoverageByConstraint.Values.SelectMany(coverage => coverage.Kinds)];
 
     /// <summary>
-    /// The writer's checks for one property, in writer order. Enum slot and
-    /// member checks are in the list so the call site can place them; this
-    /// compiler does not claim those kinds.
+    /// The writer's checks for one property, in writer order. Enum member
+    /// checks are in the list so the call site can place them; this
+    /// compiler does not claim that kind.
     /// </summary>
     internal static IReadOnlyList<ConstraintCheckWriter.Check> Checks(
         Entity entity,
@@ -51,11 +51,10 @@ public sealed class BuiltinConstraintCompiler : IConstraintCompiler {
         ConstraintCheckWriter.ConstraintCheckStyle style,
         Node value,
         bool nullableValue,
-        bool valueHasDefault,
         bool includeRequired) =>
         ConstraintCheckWriter.ChecksFor(
             entity, prop, domain, analysis, style, value,
-            nullableValue, valueHasDefault, includeRequired);
+            nullableValue, includeRequired);
 
     /// <summary>
     /// Create's flat guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure(...)</c>.

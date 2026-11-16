@@ -39,6 +39,7 @@ internal static class PrintBaselineBuiltCases {
         ("public-action-in-stage", "Actions.cs: `public action` inside a stage"),
         ("composite-effect", "Effects.cs: Composite effect prints its parts in order"),
         ("create-in-via-instance", "Effects.cs: CreateEntityInstance with a relationship name prints `create in`"),
+        ("create-in-empty", "Effects.cs: `create in R {}` with no initializers (the demo library's CheckOut until L-15a bound its book)"),
         ("link-and-unlink", "Effects.cs: `link R to e` and `unlink R from e`"),
         ("for-each", "Effects.cs: `for b in R { … }` without and with `where`"),
         ("stage-require-not", "Stages.cs: `require not` on a stage, and the negated StageRequire lookup"),
@@ -129,6 +130,7 @@ internal static class PrintBaselineBuiltCases {
         var host = (Effect[] effects) => Dom(Ent("B", [Prop("Name")]), Ent("A", [Prop("Name")], [Act("Go", effects)]) with { Navigations = [Nav("A", "bs", "B", RelationshipCardinality.OneToMany)] });
         cases.Add(Printed("composite-effect", bare, () => host([new CompositeEffect([Assign("Name", DomainExpression.Literal("x")), Assign("Name", DomainExpression.Literal("y"))])])));
         cases.Add(Printed("create-in-via-instance", bare, () => host([new CreateEntityInstance(Ref("B"), [new PropertyBinding("Name", DomainExpression.Literal("x"))], "bs")])));
+        cases.Add(Printed("create-in-empty", bare, () => host([new CreateEntityInRelationshipEffect("bs", [])])));
         cases.Add(Printed("link-and-unlink", bare, () => host([new LinkEffect("bs", Prp("Name")), new UnlinkEffect("bs", Prp("Name"))])));
         cases.Add(Printed("for-each", bare, () => host([
             new ForEachEffect("b", "bs", null, [Assign("Name", DomainExpression.Literal("y"))]),

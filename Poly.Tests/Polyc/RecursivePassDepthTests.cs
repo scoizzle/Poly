@@ -130,7 +130,7 @@ public class RecursivePassDepthTests {
 
     /// <summary>A path of <paramref name="words"/> words over a self-referential navigation, so every hop resolves.</summary>
     internal static string PathDocument(int words) =>
-        "domain D\nE: entity {\n  Flag: Boolean\n  next: one E\n  Ok: policy { " + string.Concat(Enumerable.Repeat("next ", words - 1)) + "Flag }\n}\n";
+        "domain D\nE: entity {\n  Flag: Boolean\n  next: one E optional\n  Ok: policy { " + string.Concat(Enumerable.Repeat("next ", words - 1)) + "Flag }\n}\n";
 
     private static string ExpressionDocument(string shape, int n) {
         const string head = "domain D\nL: entity { N: Text }\nE: entity {\n  Flag: Boolean\n  Note: Text\n  Lines: many L\n";

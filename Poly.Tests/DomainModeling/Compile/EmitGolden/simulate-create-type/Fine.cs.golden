@@ -8,7 +8,7 @@ namespace SimulateCreateType;
 
 internal class Fine : Poly.Runtime.IActionScoped
 {
-    private Fine(long amount, string reason, Patron? patron = null)
+    private Fine(long amount, string reason, Patron? patron)
     {
         this.Amount = amount;
         this.Reason = reason;
@@ -17,7 +17,7 @@ internal class Fine : Poly.Runtime.IActionScoped
     public long Amount { get; private set; }
     public string Reason { get; private set; } = default!;
     public Patron? Patron { get; private set; }
-    internal static DomainResult<Fine> Create(long amount, string reason, Patron? patron = null)
+    internal static DomainResult<Fine> Create(long? amount = default, string? reason = default, Patron? patron = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -40,21 +40,27 @@ internal class Fine : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Fine> __BodyOfCreate(long amount, string reason, Patron? patron)
+    private static DomainResult<Fine> __BodyOfCreate(long? amount, string? reason, Patron? patron)
     {
-        if (amount < 0L)
+        if (amount == null)
+        {
+            return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Amount' is required.", "Fine.Amount"));
+        }
+        var __amount = (long)amount;
+        if (__amount < 0L)
         {
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Fine.Amount"));
         }
-        if (amount > 500L)
+        if (__amount > 500L)
         {
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 500.", "Fine.Amount"));
         }
-        if (string.IsNullOrEmpty(reason))
+        if (reason == null)
         {
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Fine.Reason"));
         }
-        var created = new Fine(amount, reason, patron);
+        var __reason = reason;
+        var created = new Fine(__amount, __reason, patron);
         Poly.Runtime.ActionScope.Create(created, "Fine");
         if (patron != null)
         {

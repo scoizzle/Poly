@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
+using Poly.Compile;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -17,7 +18,7 @@ using DbmsPack = Poly.DslCompiler.DbmsPack;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
-public class MinimalApiGeneratorTests {
+public partial class MinimalApiGeneratorTests {
     private static string WithPersistence(string poly) {
         if (poly.Contains("uses persistence", StringComparison.Ordinal))
             return poly;
@@ -107,14 +108,6 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task Detail_UsesTernary() {
-        var d = ParseDomain("domain T\nItem: entity { Sku: Text unique }");
-        var rendered = Render(d);
-        await Assert.That(rendered.Contains("Results.Ok")).IsTrue();
-        await Assert.That(rendered.Contains("Results.NotFound")).IsTrue();
-    }
-
-    [Test]
     public async Task List_UsesToListAsync() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("ToListAsync")).IsTrue();
@@ -178,12 +171,6 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task Post_HasConflict() {
-        var d = ParseDomain("domain T\nItem: entity { Name: Text }");
-        await Assert.That(Render(d).Contains("Conflict")).IsTrue();
-    }
-
-    [Test]
     public async Task Setup_HasUsingScope() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("using (var scope")).IsTrue();
@@ -199,13 +186,6 @@ public class MinimalApiGeneratorTests {
     public async Task Dto_RecordPresent() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("ItemDto")).IsTrue();
-    }
-
-    [Test]
-    public async Task BadRequest_Present() {
-        var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
-        var rendered = Render(d);
-        await Assert.That(rendered.Contains("Conflict")).IsTrue();
     }
 
     [Test]
@@ -225,19 +205,15 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task ActionEndpoint_HasStatusCode() {
+    public async Task ActionEndpoint_CatchAllLogsTheExceptionAndAnswersProblem500() {
+        // Text oracle: no fixture action can be made to throw at run time (the module reports every domain
+        // failure as a result, and the unique registry already catches a duplicate key), so the catch-all
+        // is pinned on the generated text. The 500 body carries no exception text; the log does.
         var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
         var rendered = Render(d);
-        await Assert.That(rendered.Contains("StatusCode")).IsTrue();
-        await Assert.That(rendered.Contains("500")).IsTrue();
-    }
-
-    [Test]
-    public async Task ActionEndpoint_HasIsSuccessBranch() {
-        var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
-        var rendered = Render(d);
-        await Assert.That(rendered.Contains("IsSuccess")).IsTrue();
-        await Assert.That(rendered.Contains("Conflict")).IsTrue();
+        await Assert.That(rendered).Contains("catch (Exception ex)");
+        await Assert.That(rendered).Contains("app.Logger.LogError(ex, \"Action {Action} failed\", \"Item.Freeze\");");
+        await Assert.That(rendered).Contains("StatusProblem(500, \"Internal Server Error\")");
     }
 
     /// <summary>P-03 (A4): every action handler saves inside its <c>if (result.IsSuccess)</c> true-branch
@@ -358,7 +334,7 @@ public class MinimalApiGeneratorTests {
         var types = d.Types.Select(t => ReferenceEquals(t, d.Types.OfType<Entity>().First()) ? item : t).ToList();
         var rendered = Render(d with { Types = types });
 
-        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
+        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string? Status { get; init; }");
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Value { get; init; }");
     }
 
@@ -410,7 +386,7 @@ public class MinimalApiGeneratorTests {
             domain T
             Doctor: entity {
               Name: Text unique
-              schedule: one Schedule
+              schedule: one Schedule optional
             }
             Schedule: entity {
               Day: Text
@@ -730,15 +706,190 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task DomainFailure_BadRequestUnlessUniqueOrConflict() {
+    public async Task EnumNamedLikeAKeyword_NullableDtoMemberKeepsItsEscapeAndCompiles() {
+        // L-08b half 2 fix round: the nullable DTO member must print Kw.@event?, not Kw.event?.
+        const string poly = """
+            domain Kw
+            event: enum { A, B }
+            Thing: entity {
+              Name: Text unique
+              Kind: event
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("Kw.@event? Kind");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    /// <summary>E-10a (#924): the hosts' own names reach C# through the expression position too.</summary>
+    [Test]
+    [Arguments("event: enum { A, B }\n            Thing: entity {\n              Name: Text unique\n              Kind: event\n            }")]
+    [Arguments("class: entity {\n              Name: Text unique\n            }")]
+    [Arguments("class: entity {\n              Name: Text unique\n              things: many Thing\n            }\n            Thing: entity {\n              Name: Text unique\n              owner: class\n            }")]
+    public async Task KeywordNamedTypes_HostAndPlainExportCompile(string body) {
+        var poly = "domain Kw\n            uses sqlite\n            " + body;
+
+        var db = new Compiler().Compile(poly, CompileMode.Db, DbmsPack.Sqlite);
+        await Assert.That(db.Success).IsTrue();
+        await Assert.That(CompileHost(db.Files!).Where(e => !e.Contains("CS5001", StringComparison.Ordinal))).IsEmpty();
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    [Test]
+    public async Task KeywordNamedEnum_SimulatorAndGeneratedCSharpAgreeOnACreateAndAnAction() {
+        var scenario = ParityScenario.FromDsl("""
+            domain Kw
+            uses persistence
+            event: enum { A, B }
+            Thing: entity {
+              Name: Text unique
+              Kind: event
+              Flip: action { assign Kind to "B" }
+            }
+            """, "KeywordEnumParity");
+
+        var outcomes = await scenario.AssertAgree(side => {
+            side.Create("Thing", ("Name", "a"), ("Kind", "A"));
+            side.Invoke("Flip");
+        });
+
+        await Assert.That(outcomes.Select(o => o.Success)).IsEquivalentTo([true, true]);
+        await Assert.That(outcomes[1].State["Kind"]).IsEqualTo("B");
+    }
+
+    [Test]
+    public async Task KeywordNamedEntity_SimulatorAndGeneratedCSharpAgreeOnACreateAndAnAction() {
+        var scenario = ParityScenario.FromDsl("""
+            domain Kw
+            uses persistence
+            class: entity {
+              Name: Text unique
+              Done: Boolean default(false)
+              Finish: action { assign Done to true }
+            }
+            """, "KeywordEntityParity");
+
+        var outcomes = await scenario.AssertAgree(side => {
+            side.Create("class", ("Name", "a"));
+            side.Invoke("Finish");
+        });
+
+        await Assert.That(outcomes.Select(o => o.Success)).IsEquivalentTo([true, true]);
+        await Assert.That(outcomes[1].State["Done"]).IsEqualTo("True");
+    }
+
+    /// <summary>E-10a (#923): a primitive type of a library (the temporal <c>DateTime</c>) is not a generated
+    /// domain type, so the host never namespace-qualifies it.</summary>
+    [Test]
+    public async Task RequiredTemporalMembers_HostCompiles() {
+        const string poly = """
+            domain Shop
+            uses temporal
+            uses sqlite
+            uses http
+            Thing: entity {
+              Name: Text unique
+              Dt: DateTime
+              Tm: Time
+              Du: Duration
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(http.Files!.Single(f => f.FileName == "Program.cs").Source).DoesNotContain("Shop.DateTime");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    [Test]
+    public async Task ActionParameterOfDateTime_HostCompiles() {
+        const string poly = """
+            domain Shop
+            uses temporal
+            uses sqlite
+            uses http
+            Thing: entity {
+              Name: Text unique
+              Book: action (at: DateTime) { }
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    /// <summary>An entity whose create takes an entity-typed property gets no POST route and no DTO, not a route
+    /// that always answers 400. The DSL cannot declare that property (a defaulted or optional one), so an
+    /// API-built model is the only oracle there is; there is no running-app test for it.</summary>
+    [Test]
+    public async Task EntityWithEntityTypedProperty_HasNoPostRoute() {
+        var domain = new Domain("T", [
+            new Entity("Other", [new Property("Name", new DomainTypeReference("Text"), [])], [], [], []),
+            new Entity("Item", [
+                new Property("Sku", new DomainTypeReference("Text"), []),
+                new Property("Peer", new DomainTypeReference("Other"), [new DefaultValueConstraint(new Literal(1))]),
+            ], [], [], []),
+        ]) { Extensions = ["persistence"] };
+
+        var rendered = Render(domain);
+
+        // Controls: the entity next to it has its POST route and DTO, and the entity itself is listed.
+        await Assert.That(rendered).Contains("MapPost(\"/api/others\"");
+        await Assert.That(rendered).Contains("OtherDto");
+        await Assert.That(rendered).Contains("MapGet(\"/api/items\"");
+        await Assert.That(rendered).DoesNotContain("MapPost(\"/api/items\"");
+        await Assert.That(rendered).DoesNotContain("ItemDto");
+    }
+
+    /// <summary>L-15a (#683): an entity with a required link and no parent is an aggregate root, but its
+    /// <c>Create</c> answers Required whenever the link is absent, and a POST body cannot carry one. So it gets
+    /// no POST route, no create DTO and no seed row; the entity next to it keeps all three.</summary>
+    [Test]
+    public async Task EntityWithRequiredLink_HasNoPostRouteAndNoSeedRow() {
+        var rendered = Render(ParseDomain("""
+            domain Shop
+            Customer: entity { Name: Text }
+            Order: entity {
+              Number: Text
+              customer: Customer
+            }
+            """));
+
+        await Assert.That(rendered).Contains("MapPost(\"/api/customers\"");
+        await Assert.That(rendered).Contains("MapGet(\"/api/orders\"");
+        await Assert.That(rendered).DoesNotContain("MapPost(\"/api/orders\"");
+        await Assert.That(rendered).DoesNotContain("OrderDto");
+        await Assert.That(rendered).Contains("Shop.Customer.Create(\"Sample\")");
+        await Assert.That(rendered).DoesNotContain("Shop.Order.Create(");
+    }
+
+    [Test]
+    public async Task GeneratedHost_ParsesNoFailureText() {
         var rendered = Render(ParseDomain("""
             domain T
             Item: entity { Name: Text }
             """));
-        await Assert.That(rendered).Contains("Results.BadRequest");
-        await Assert.That(rendered).Contains("Results.Conflict");
-        await Assert.That(rendered).Contains("Unique constraint");
-        await Assert.That(rendered).Contains("already has a target");
+        // Positive control: the typed path is present.
+        await Assert.That(rendered).Contains("DomainFailureStatus.Http");
+        await Assert.That(rendered).Contains("Results.Problem");
+        // No failure text is read: not the old matching strings, not the old status function, not the shim.
+        await Assert.That(rendered).DoesNotContain("Unique constraint");
+        await Assert.That(rendered).DoesNotContain("already has a target");
+        await Assert.That(rendered).DoesNotContain("FailureStatus(");
+        await Assert.That(rendered).DoesNotContain("ErrorMessage");
+        await Assert.That(rendered).DoesNotContain("Results.BadRequest");
+        await Assert.That(rendered).DoesNotContain("Results.NotFound");
+        await Assert.That(rendered).DoesNotContain("Results.Conflict");
     }
 
     [Test]
@@ -772,12 +923,13 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task CreatedUri_KeepsToStringOnNonStringKey() {
+    public async Task CreatedUri_FormatsNonStringKeyInvariantlyAndEscaped() {
         var rendered = Render(ParseDomain("""
             domain T
             Item: entity { Code: Number unique }
             """));
-        await Assert.That(rendered).Contains("Code.ToString()");
+        await Assert.That(rendered).Contains(
+            "System.Uri.EscapeDataString(System.Convert.ToString(itemResult.Value.Code, System.Globalization.CultureInfo.InvariantCulture))");
     }
 
     private static int CountOf(string text, string value) {
@@ -848,5 +1000,157 @@ public class MinimalApiGeneratorTests {
         foreach (var p in Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
             AddFrom(p);
         return byName.Values.ToList();
+    }
+
+    // ── S-decl: the schema id in the generated host ─────────────────
+
+    private const string CounterHeader = "domain Counter\nuses http\nuses sqlite\n";
+
+    private const string CounterBody = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+        }
+        """;
+
+    private static string HostProgram(string poly) {
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", result.Diagnostics.Where(d => d.IsError).Select(d => d.Message)));
+        return result.Files.Single(f => f.FileName == "Program.cs").Source;
+    }
+
+    private static int? SchemaIdOf(string poly) {
+        var match = System.Text.RegularExpressions.Regex.Match(HostProgram(poly), @"var schemaId = (\d+);");
+        return match.Success ? int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
+    }
+
+    [Test]
+    public async Task SchemaId_TwoGenerations_AreIdentical_AndPositive() {
+        var first = SchemaIdOf(CounterHeader + CounterBody);
+        var second = SchemaIdOf(CounterHeader + CounterBody);
+
+        await Assert.That(first).IsNotNull();
+        await Assert.That(first).IsEqualTo(second);
+        await Assert.That(first!.Value).IsGreaterThan(0);
+    }
+
+    [Test]
+    [Arguments("a required property is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Label: Text length(1, 10)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a property is renamed", "Tally: entity {\n  Name: Text unique length(1, 20)\n  Count: Number default(0) range(0, 1000000)\n  Bump: action { assign Count to Count + 1 }\n}")]
+    [Arguments("an entity is added", CounterBody + "\nOther: entity {\n  Code: Text length(1, 5)\n}")]
+    [Arguments("a Number becomes optional", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number optional range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a unique index is dropped", "Tally: entity {\n  Name: Text length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a length bound changes", "Tally: entity {\n  Name: Text unique length(1, 30)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a link is added", CounterBody + "\nOwner: entity {\n  Code: Text length(1, 5)\n  tallies: many Tally\n}")]
+    [Arguments("a stage is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}")]
+    [Arguments("a column is removed", "Tally: entity {\n  Name: Text unique length(1, 20)\n}")]
+    [Arguments("a Number becomes a Decimal", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Decimal default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("an entity is renamed", "Count: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a table name is set", "Tally: entity table(\"TALLY_ROWS\") {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    public async Task SchemaId_SchemaChange_Differs(string change, string body) {
+        var baseline = SchemaIdOf(CounterHeader + CounterBody);
+        var changed = SchemaIdOf(CounterHeader + body);
+
+        await Assert.That(changed).IsNotNull().Because(change);
+        await Assert.That(changed).IsNotEqualTo(baseline).Because(change);
+    }
+
+    private const string Tally1 = "Tally: entity {\n  Name: Text unique length(1, 20)\n";
+
+    [Test]
+    [Arguments("Date becomes DateTime", Tally1 + "  When: Date optional\n}", Tally1 + "  When: DateTime optional\n}")]
+    [Arguments("Text becomes an enum", Tally1 + "  Kind: Text optional\n}", "Level: enum { Low, High }\n" + Tally1 + "  Kind: Level optional\n}")]
+    // The CHECK constraint is emitted only for a range the analysis proves; an action that writes N from a free parameter
+    // removes the proof, so the CHECK goes: a real schema difference (the guide says so).
+    [Arguments("an action changes whether a range is proven", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 10)\n}", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 10)\n  Set: action (v: Number) { assign N to v }\n}")]
+    [Arguments("a stage is removed", Tally1 + "  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}", Tally1 + "}")]
+    [Arguments("a navigation is removed", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n}")]
+    [Arguments("a link becomes owned", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many owned Tally\n}")]
+    [Arguments("an entity is removed", Tally1 + "}\nOther: entity {\n  Code: Text unique\n}", Tally1 + "}")]
+    public async Task SchemaId_BetweenTwoDocuments_Differs(string change, string a, string b) {
+        await Assert.That(SchemaIdOf(CounterHeader + b)).IsNotEqualTo(SchemaIdOf(CounterHeader + a)).Because(change);
+    }
+
+    /// <summary>A <c>key(...)</c> designation changes routes, not a table or an index (the key index is never printed).</summary>
+    [Test]
+    public async Task SchemaId_KeyDesignationChange_HasNoDatabaseEffect_SoTheIdStays() {
+        var a = CounterHeader + "Tally: entity key(Name) {\n  Name: Text unique length(1, 20)\n  Code: Text unique length(1, 20)\n}";
+        var b = CounterHeader + "Tally: entity key(Code) {\n  Name: Text unique length(1, 20)\n  Code: Text unique length(1, 20)\n}";
+
+        await Assert.That(SchemaIdOf(b)).IsEqualTo(SchemaIdOf(a));
+    }
+
+    [Test]
+    public async Task SchemaId_LineEndings_AreNormalisedBeforeHashing() {
+        var unix = "poly-schema-id/1\nb.Property<int>(\"Id\");\nb.HasKey(\"Id\");\n";
+        var windows = unix.Replace("\n", "\r\n", StringComparison.Ordinal);
+
+        await Assert.That(MinimalApiGenerator.FoldSchemaId(MinimalApiGenerator.NormalizeSchemaIdInput(windows)))
+            .IsEqualTo(MinimalApiGenerator.FoldSchemaId(MinimalApiGenerator.NormalizeSchemaIdInput(unix)));
+        await Assert.That(MinimalApiGenerator.NormalizeSchemaIdInput(windows)).IsEqualTo(unix);
+    }
+
+    [Test]
+    [Arguments("an action body", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 2 }\n}")]
+    [Arguments("an action is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n  Reset: action { assign N to 0 }\n}")]
+    [Arguments("a policy is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Positive: policy { N > 0 }\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a comment", "// a note\nTally: entity {\n  // another\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    public async Task SchemaId_NonSchemaChange_Unchanged(string change, string body) {
+        var baseline = SchemaIdOf(CounterHeader + CounterBody);
+        var changed = SchemaIdOf(CounterHeader + body);
+
+        await Assert.That(changed).IsEqualTo(baseline).Because(change);
+    }
+
+    [Test]
+    public async Task SchemaId_SqliteHost_CreatedSetsIt_ExistingIsCompared_AndNamesTheFile() {
+        var program = HostProgram(CounterHeader + CounterBody);
+
+        await Assert.That(program).Contains("var created = await db.Database.EnsureCreatedAsync();");
+        await Assert.That(program).Contains("PRAGMA user_version");
+        await Assert.That(program).Contains("different version of the model");
+        await Assert.That(program.IndexOf("different version of the model", StringComparison.Ordinal))
+            .IsLessThan(program.IndexOf("SeedAsync(db)", StringComparison.Ordinal));
+    }
+
+    [Test]
+    [Arguments("uses persistence")]
+    [Arguments("uses sqlserver")]
+    public async Task SchemaId_NonSqliteHost_HasNoCheck(string store) {
+        var program = HostProgram("domain Counter\nuses http\n" + store + "\n" + CounterBody);
+
+        await Assert.That(program).DoesNotContain("user_version");
+        await Assert.That(program).DoesNotContain("schemaId");
+    }
+
+    internal static MinimalApiGenerator GeneratorFor(string poly) {
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None);
+        var domain = result.Domain!;
+        var analysis = result.Analysis!;
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        return new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate);
+    }
+
+    private static string WithoutWhitespace(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+    /// <summary>The id is computed from a second <c>DbContextGenerator</c> run, so a drift from the artifact the app
+    /// actually compiles must fail here: the hashed body is the <c>OnModelCreating</c> text of the emitted file.</summary>
+    [Test]
+    public async Task SchemaId_HashedModelText_IsTheOnModelCreatingOfTheEmittedDbContext() {
+        var poly = CounterHeader + "Level: enum { Low, High }\n" + CounterBody.Replace("Bump:", "Kind: Level optional\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n  Bump:", StringComparison.Ordinal)
+            + "\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}";
+        var emitted = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None).Files.Single(f => f.FileName == "CounterDbContext.cs").Source;
+        var input = GeneratorFor(poly).SchemaIdInput();
+        var body = input.Split('\n').Skip(1).TakeWhile(l => !l.StartsWith("column ", StringComparison.Ordinal)
+            && !l.StartsWith("stage ", StringComparison.Ordinal) && !l.StartsWith("navigation ", StringComparison.Ordinal));
+
+        await Assert.That(WithoutWhitespace(emitted)).Contains(WithoutWhitespace(string.Join("\n", body)));
     }
 }

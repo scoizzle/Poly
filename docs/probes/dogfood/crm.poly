@@ -28,7 +28,7 @@ Lead: entity {
   Name: Text
   Email: Text unique pattern("^[^@]+@[^@]+$")
   Company: Text
-  account: Account
+  account: Account optional
   HasAccount: policy { account exists }
   New: stage {
     Convert: action
@@ -45,10 +45,10 @@ Lead: entity {
 Account: entity {
   Name: Text
   Industry: Industry
-  parent: Account
+  parent: Account optional
   WonCount: Number default(0)
   OpenPipeline: Decimal default(0)
-  hq: owned Site
+  hq: owned Site optional
   contacts: many Contact
   opportunities: many Opportunity via account
   tickets: many Ticket via account
@@ -111,19 +111,14 @@ Opportunity: entity {
   CloseBy: Date default(Today)
   Probability: Number range(0, 100) default(10)
   account: Account
-  contact: Contact
+  contact: Contact optional
   activities: many Activity
   lines: many Line
   quotes: many Quote
-  HasAccount: policy { account exists }
   HasLines: policy { count lines > 0 }
   Qualify: stage {
     entry { assign Probability to 10 }
-    Propose: action
-      require HasAccount
-    {
-      transition to Propose
-    }
+    Propose: action { transition to Propose }
     Lose: action { transition to Lost }
     Log: action (subject: Text) -> Activity {
       create in activities { Subject: subject }

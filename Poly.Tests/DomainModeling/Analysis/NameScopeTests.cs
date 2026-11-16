@@ -389,7 +389,7 @@ public sealed class NameScopeTests {
                   Code: Text unique
                   Label: Text
                   items: many Item
-                  owner: Owner
+                  owner: Owner optional
                   Add: action (code: Text) {
                     create in items { Code: code }
                   }

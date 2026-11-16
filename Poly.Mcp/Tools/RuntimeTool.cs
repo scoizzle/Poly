@@ -185,8 +185,18 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
             "e.g. {\"Name\":\"Alice\",\"Age\":30,\"Status\":\"Active\"}. Values are coerced to the " +
             "declared property types: Date/DateTime/Time/Duration properties accept ISO strings " +
             "(\"2026-01-01\", \"2026-01-01T00:00:00Z\", \"09:00:00\", \"00:30:00\"), Guid accepts " +
-            "guid strings, and wrong-typed values fail the call.")]
-        string? propertiesJson = null) {
+            "guid strings, and wrong-typed values fail the call. A singular navigation takes the id of an " +
+            "existing instance of its target, e.g. {\"Name\":\"Grace\",\"account\":\"<account id>\"}: a " +
+            "required one must be given here, an optional one may be.")]
+        string? propertiesJson = null) =>
+        CreateInstance(sessionId, entityName, propertiesJson, aliases: null);
+
+    /// <summary>
+    /// <see cref="CreateInstance(string, string, string?)"/>, with a scenario's step aliases: a navigation
+    /// value that names an alias is the instance that alias was given to.
+    /// </summary>
+    internal DomainToolResponse CreateInstance(
+        string sessionId, string entityName, string? propertiesJson, IReadOnlyDictionary<string, string>? aliases) {
         if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
         logger.LogDebug("create_instance {SessionId} {Entity}", sessionId, entityName);
@@ -204,9 +214,10 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
 
         // Parse property values
         Dictionary<string, object?>? propertyValues = null;
+        Dictionary<string, JsonElement>? parsed = null;
         if (!string.IsNullOrWhiteSpace(propertiesJson)) {
             try {
-                var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(propertiesJson);
+                parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(propertiesJson);
                 if (parsed is not null) {
                     propertyValues = new Dictionary<string, object?>(StringComparer.Ordinal);
                     foreach (var (key, je) in parsed)
@@ -223,14 +234,46 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
         }
 
         var unknown = propertyValues?.Keys.FirstOrDefault(key =>
-            !entity.Properties.Any(p => string.Equals(p.Name, key, StringComparison.Ordinal)));
+            !entity.Properties.Any(p => string.Equals(p.Name, key, StringComparison.Ordinal))
+            && !entity.Navigations.Any(n => string.Equals(n.Name, key, StringComparison.Ordinal)));
         if (unknown is not null)
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Failed to create instance: Property '{unknown}' does not exist on entity '{entity.Name}'. " +
-                    $"Available: {string.Join(", ", entity.Properties.Select(p => p.Name))}.",
+                    $"Available: {string.Join(", ", entity.Properties.Select(p => p.Name).Concat(entity.Navigations.Where(IsCreateLink).Select(n => n.Name)))}.",
                 SessionId: sessionId,
                 Affordances: ["get_entity_detail"]);
+
+        // A singular navigation's value is the id of an existing instance of its target (L-15a, owner ruling
+        // 2026-11-14), resolved the way invoke_action resolves an entity-typed argument. A bad value fails on
+        // the navigation with the kind a bad action argument gets.
+        foreach (var navigation in entity.Navigations) {
+            if (propertyValues is null || !propertyValues.ContainsKey(navigation.Name))
+                continue;
+            // Null is the absence of a value (owner ruling 2026-11-13): the link is omitted, so the module answers.
+            if (parsed![navigation.Name].ValueKind == JsonValueKind.Null) {
+                propertyValues.Remove(navigation.Name);
+                continue;
+            }
+            var path = $"{entity.Name}.{navigation.Name}";
+            var targetName = navigation.Target.TypeName;
+            if (!IsCreateLink(navigation))
+                return LinkFailure(sessionId, path, navigation.SourceOwnsTarget
+                    ? $"Navigation '{navigation.Name}' is an owned part: its owner's `create in` creates it."
+                    : $"Navigation '{navigation.Name}' is a collection: create takes a singular navigation's instance id; link each item after create with link.");
+            if (parsed![navigation.Name] is not { ValueKind: JsonValueKind.String } idElement)
+                return LinkFailure(sessionId, path,
+                    $"Navigation '{navigation.Name}' takes the id of an existing '{targetName}' instance; got {parsed[navigation.Name].GetRawText()}.");
+            var id = idElement.GetString()!;
+            if (aliases is not null && aliases.TryGetValue(id, out var aliased))
+                id = aliased;
+            if (!state.Executor.TryGet(id, out var linked) || linked is null)
+                return LinkFailure(sessionId, path, $"Navigation '{navigation.Name}': instance '{id}' of '{targetName}' not found.");
+            if (!string.Equals(linked.EntityName, targetName, StringComparison.Ordinal))
+                return LinkFailure(sessionId, path,
+                    $"Navigation '{navigation.Name}': instance '{linked.Id}' is a '{linked.EntityName}', expected '{targetName}'.");
+            propertyValues[navigation.Name] = linked.Id;
+        }
 
         // The executor runs the cached static Create on a dictionary, coerces the
         // JSON-ish values to the declared types, and registers the instance by id.
@@ -251,6 +294,9 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
                 Success: false,
                 Message: $"Failed to create instance: {outcome.Error}",
                 SessionId: sessionId,
+                Data: outcome.Failure is { } failure
+                    ? new { failure = new { kind = failure.Kind.ToString(), elementPath = failure.ElementPath, message = failure.Message } }
+                    : null,
                 Affordances: ["get_entity_detail"]);
 
         var snapshot = BuildSnapshot(state, instance, outcome.CreatedChildren.Count);
@@ -261,6 +307,19 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
             Data: new { instance = snapshot },
             Affordances: ["get_instance", "invoke_action", "evaluate_policy", "link_instances", "list_instances"]);
     }
+
+    /// <summary>A singular navigation that is not an owned part: the links a create may take.</summary>
+    private static bool IsCreateLink(Relationship navigation) =>
+        navigation.Cardinality is RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne
+        && !navigation.SourceOwnsTarget;
+
+    private static DomainToolResponse LinkFailure(string sessionId, string elementPath, string message) =>
+        new(
+            Success: false,
+            Message: $"Failed to create instance: {message}",
+            SessionId: sessionId,
+            Data: new { failure = new { kind = nameof(Poly.Runtime.DomainFailureKind.Constraint), elementPath, message } },
+            Affordances: ["get_entity_detail", "list_instances"]);
 
     // ── RT.2: link_instances ───────────────────────────────────
 
@@ -370,11 +429,8 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     /// <summary>
     /// Removes a link between two runtime instances for a named relationship.
     /// Both instances must already exist and be linked via <c>link_instances</c>.
-    /// Fails if the link does not exist (fail-closed).
-    ///
-    /// Use case — reassign a child entity from one parent to another:
-    ///   1. unlink_instances to remove child from old parent
-    ///   2. link_instances to attach child to new parent
+    /// Fails if the link does not exist (fail-closed). A required to-one cannot be
+    /// unlinked: delete the instance and create a new one to move it.
     /// </summary>
     public DomainToolResponse UnlinkInstances(
         [Description("Session ID")] string sessionId,

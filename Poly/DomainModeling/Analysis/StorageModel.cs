@@ -194,6 +194,19 @@ public sealed class StorageColumn {
     public IReadOnlyList<Constraint> Constraints => Source.Constraints;
 }
 
+/// <summary>What the database does to a dependent row when its principal row is deleted.</summary>
+public enum StorageDeleteBehavior {
+    /// <summary>The optional-link rule, and what every foreign key had before L-15b: the dependent's key is
+    /// nulled by the application (EF's <c>ClientSetNull</c>); the database declares no action.</summary>
+    ClientSetNull,
+
+    /// <summary>An owned part goes with its owner.</summary>
+    Cascade,
+
+    /// <summary>Any other required link: the principal cannot be deleted while a dependent references it.</summary>
+    Restrict,
+}
+
 /// <summary>Storage-level view of a navigation property (relationship).</summary>
 public sealed class StorageNavigation {
     public StorageNavigation(
@@ -201,13 +214,31 @@ public sealed class StorageNavigation {
         string propertyName,
         bool isCollection,
         string? inversePropertyName = null,
-        bool inverseIsCollection = false) {
+        bool inverseIsCollection = false,
+        bool isRequired = false,
+        StorageDeleteBehavior? onDelete = null,
+        bool configuresForeignKey = false) {
         Source = source;
         PropertyName = propertyName;
         IsCollection = isCollection;
         InversePropertyName = inversePropertyName;
         InverseIsCollection = inverseIsCollection;
+        IsRequired = isRequired;
+        OnDelete = onDelete;
+        ConfiguresForeignKey = configuresForeignKey;
     }
+
+    /// <summary>The foreign key of the relationship this navigation belongs to is required. It is the published
+    /// <c>RelationshipContract.IsRequired</c> of the dependent end's navigation: a collection is never required.</summary>
+    public bool IsRequired { get; }
+
+    /// <summary>The delete behaviour of that foreign key, or null when the shape does not decide one
+    /// (a many-to-many): the generator then keeps its old output for the navigation.</summary>
+    public StorageDeleteBehavior? OnDelete { get; }
+
+    /// <summary>True on exactly one navigation of a decided relationship: the one the foreign key is configured from
+    /// (the dependent end's reference navigation, else the collection navigation of a one-to-many with no reference end).</summary>
+    public bool ConfiguresForeignKey { get; }
 
     public Relationship Source { get; }
     public string PropertyName { get; }

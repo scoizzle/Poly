@@ -58,7 +58,7 @@ public sealed partial class ModuleInstanceExecutor {
     /// Removes the link if present. Unlinking an absent link succeeds with
     /// <see cref="LinkChange.NotLinked"/> and changes nothing. Unlinking the last owner
     /// of an owned target is refused: another source entity sharing the relationship
-    /// name is not an owner.
+    /// name is not an owner. Unlinking a required to-one is refused.
     /// </summary>
     public ModuleOutcome Unlink(string relationshipName, ModuleInstance source, ModuleInstance target) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
@@ -74,6 +74,12 @@ public sealed partial class ModuleInstanceExecutor {
                 if (contract.SourceOwnsTarget && OwnerCount(contract, target.Bag) == 1)
                     return ModuleOutcome.Fail(DomainFailure.Link(
                         Relationship.UnlinkViolationMessage(relationshipName),
+                        $"{source.EntityName}.{relationshipName}"));
+                // A required to-one is permanent through the host (L-15a); the generated C# has no
+                // unlink door, and L-13 lowers this check into the module.
+                if (contract.IsRequired)
+                    return ModuleOutcome.Fail(DomainFailure.Link(
+                        Relationship.RequiredUnlinkViolationMessage(relationshipName),
                         $"{source.EntityName}.{relationshipName}"));
 
                 if (IsToMany(contract)) {

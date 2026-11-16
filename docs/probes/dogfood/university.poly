@@ -73,7 +73,7 @@ Section: entity {
   SeatsTaken: Number default(0)
   OfferingTerm: Term
   course: Course
-  instructor: Instructor
+  instructor: Instructor optional
   enrollments: many Enrollment via section
   waitlist: many WaitOffer via section
   OfferedSeats: Number default(0)

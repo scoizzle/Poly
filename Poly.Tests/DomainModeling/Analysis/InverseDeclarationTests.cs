@@ -76,7 +76,7 @@ public sealed class InverseDeclarationTests {
               x2: B
             }
             B: entity {
-              y: A via x2
+              y: A via x2 optional
             }
             """);
 
@@ -117,7 +117,7 @@ public sealed class InverseDeclarationTests {
             domain BothOwned
             Line: entity {
               sku: Text
-              order: owned Order via lines
+              order: owned Order via lines optional
             }
             Order: entity {
               lines: many owned Line via order
@@ -142,7 +142,7 @@ public sealed class InverseDeclarationTests {
             domain SelfInverse
             Account: entity {
               Name: Text
-              parent: Account via parent
+              parent: Account via parent optional
             }
             """);
 
@@ -246,12 +246,12 @@ public sealed class InverseDeclarationTests {
             domain TwoOwnedPairs
             Line: entity {
               sku: Text
-              order: owned Order via lines
-              owner: owned Order via line
+              order: owned Order via lines optional
+              owner: owned Order via line optional
             }
             Order: entity {
               lines: many owned Line via order
-              line: owned Line via owner
+              line: owned Line via owner optional
             }
             """);
 
@@ -280,7 +280,7 @@ public sealed class InverseDeclarationTests {
             domain OneSidedBothOwned
             Line: entity {
               sku: Text
-              order: owned Order
+              order: owned Order optional
             }
             Order: entity {
               lines: many owned Line via order
@@ -304,11 +304,11 @@ public sealed class InverseDeclarationTests {
             domain BothOwnedSecondClaimer
             Line: entity {
               sku: Text
-              order: owned Order
+              order: owned Order optional
             }
             Order: entity {
               lines: many owned Line via order
-              line: owned Line via order
+              line: owned Line via order optional
             }
             """);
 
@@ -328,8 +328,8 @@ public sealed class InverseDeclarationTests {
             A: entity {
               c1: many B via r1
               c2: many B via r2
-              s1: B
-              s2: B
+              s1: B optional
+              s2: B optional
             }
             B: entity {
               r1: A via c1
@@ -386,8 +386,8 @@ public sealed class InverseDeclarationTests {
                 domain VariantSelfRel
                 Account: entity {
                   Name: Text
-                  primary: Account
-                  secondary: Account
+                  primary: Account optional
+                  secondary: Account optional
                   children: many Account via secondary
                 }
                 """),
@@ -441,8 +441,8 @@ public sealed class InverseDeclarationTests {
             domain DeclaredSelfPair
             Account: entity {
               Name: Text
-              mother: Account via father
-              father: Account via mother
+              mother: Account via father optional
+              father: Account via mother optional
             }
             """);
 
@@ -557,7 +557,7 @@ public sealed class InverseDeclarationTests {
         var analysis = Analyze("""
             domain MixedCardinality
             Person: entity {
-              referrer: Person
+              referrer: Person optional
               friends: many Person
             }
             """);

@@ -17,7 +17,7 @@ public class UnlinkedComparisonAgreeTests {
         Customer: entity {
           Age: Number
           Ready: Boolean default(false)
-          advisor: Advisor
+          advisor: Advisor optional
           YoungerThanAdvisor: policy { Age < advisor Age }
           Promote: action require YoungerThanAdvisor {
             assign Ready to true
@@ -36,7 +36,7 @@ public class UnlinkedComparisonAgreeTests {
             Customer: entity {
               Name: Text
               Age: Number
-              advisor: Advisor
+              advisor: Advisor optional
               YoungerThanAdvisor: policy { Age < advisor Age }
               AtMostAdvisor: policy { Age <= advisor Age }
               OlderThanAdvisor: policy { Age > advisor Age }
@@ -106,11 +106,11 @@ public class UnlinkedComparisonAgreeTests {
         }
         Advisor: entity {
           Age: Number
-          mentor: Mentor
+          mentor: Mentor optional
         }
         Customer: entity {
           Age: Number
-          advisor: Advisor
+          advisor: Advisor optional
           YoungerThanMentor: policy { Age < advisor mentor Age }
           MentorPositive: policy { advisor mentor Age > 0 }
           MentorOlder: policy { advisor mentor Age > Age }
@@ -178,11 +178,11 @@ public class UnlinkedComparisonAgreeTests {
             }
             Advisor: entity {
               Age: Number
-              mentor: Mentor
+              mentor: Mentor optional
             }
             Customer: entity {
               Age: Number
-              advisor: Advisor
+              advisor: Advisor optional
               YoungerThanBoth: policy { Age < advisor Age + advisor mentor Age }
             }
             """);
@@ -219,7 +219,7 @@ public class UnlinkedComparisonAgreeTests {
             }
             Customer: entity {
               Ready: Boolean default(true)
-              advisor: Advisor
+              advisor: Advisor optional
               P: policy { {{condition}} }
             }
             """);
@@ -255,11 +255,11 @@ public class UnlinkedComparisonAgreeTests {
             }
             Advisor: entity {
               Age: Number
-              mentor: Mentor
+              mentor: Mentor optional
             }
             Customer: entity {
               Age: Number
-              advisor: Advisor
+              advisor: Advisor optional
               P: policy { {{condition}} }
             }
             """);

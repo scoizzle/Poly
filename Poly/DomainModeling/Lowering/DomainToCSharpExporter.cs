@@ -56,12 +56,6 @@ public sealed partial class DomainToCSharpExporter {
 
     // ── Per-entity builder ──────────────────────────────────────
 
-    private static Node EmptyDefault(DomainTypeReference type) => type.TypeName switch {
-        "Text" or "String" => new Constant(""),
-        "Boolean" => new Constant(false),
-        _ => new Constant(0L),
-    };
-
     internal static IReadOnlyList<TypeDefinitionNode> BuildTypeDefsForEntity(
         Entity entity,
         Domain domain,
@@ -85,11 +79,6 @@ public sealed partial class DomainToCSharpExporter {
         var props = new List<PropertyDefinitionNode>();
         var methods = new List<MethodDefinitionNode>();
         var fields = new List<FieldDefinitionNode>();
-        var ctorParams = new List<Parameter>();
-        var ctorAssignments = new List<Node>();
-        // Defaulted props become TRAILING optional ctor params (C# requires optional
-        // params after all required ones); collected here, appended after nav params.
-        var defaultedCtorParams = new List<Parameter>();
 
         // Stage enum name — the published fact (EntityStructureMetadata.StageEnumTypeName)
         // is the single source; fall back to the derivation only when the bag is absent.
@@ -97,28 +86,12 @@ public sealed partial class DomainToCSharpExporter {
             ? esm.StageEnumTypeName ?? $"{entity.Name}Stage"
             : null;
 
-        // Properties assigned by the initial stage's entry effects are body-initialized
-        // (the ctor already runs those effects after setting CurrentStage) — they must
-        // NOT also be ctor params, or the value is written twice (param then effect)
-        // and the param is dead (e.g. StartedAt: param, then entry `assign StartedAt to now`).
-        // The set is a published analysis fact (EntityStructureMetadata) — shared with
-        // the constructor-signature computation so both stay in lockstep.
-        var entryAssignedProps = esm.EntryAssignedPropertyNames;
-
         // ── Properties ────────────────────────────────────────────
-        AddEntityProperties(entity, domain, metadata, esm, entryAssignedProps,
-            props, ctorParams, ctorAssignments, defaultedCtorParams);
-        OrderScalarCtorSlots(esm, ctorParams, ctorAssignments);
+        AddEntityProperties(entity, domain, metadata, esm, props);
 
         // ── Relationships ─────────────────────────────────────────
         AddNavigationMembers(entity, domain, domainRelationships, metadata, subscriberSubs,
             props, fields, methods);
-        AddNavigationCtorParameters(esm, domain, metadata, ctorParams, ctorAssignments);
-
-        // Defaulted props trail the required scalar + nav params (optional params must
-        // come last). Appended here so the Create/ctor signatures carry them as overridable
-        // defaults — `create in { DefaultedProp: value }` flows through construction.
-        ctorParams.AddRange(defaultedCtorParams);
 
         // Watched stages get Notify{Stage}Subscribers; EffectLoweringPass captures
         // the previous stage only when a when-all handler reads it.
@@ -155,8 +128,7 @@ public sealed partial class DomainToCSharpExporter {
 
         // ── Private constructor + public static Create factory ─────
         var ctors = AddCreateFactory(entity, domain, metadata, esm, stageEnumTypeName,
-            postTransitionNotifyStages, previousStageNotifyStages, subscriberSubs,
-            ctorParams, ctorAssignments, methods);
+            postTransitionNotifyStages, previousStageNotifyStages, subscriberSubs, methods);
 
         // Generated C# fans out via Notify{Stage}Subscribers; do not emit a
         // no-op Notify(string) (Fleet dogfood).

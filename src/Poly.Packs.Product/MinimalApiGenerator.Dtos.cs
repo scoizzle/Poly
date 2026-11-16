@@ -18,8 +18,8 @@ public sealed partial class MinimalApiGenerator {
     private HashSet<string> ComputeActionDtoCollisions() {
         var reserved = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in _entities) {
-            if (!GetStorageEntity(entity).IsRoot) continue;
-            if (GetConstructorOrder(entity).All(p => p.IsNavigation)) continue;
+            if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) continue;
+            if (GetRequiredScalarSlots(entity).Count + GetRequiredLinkSlots(entity).Count == 0) continue;
             reserved.Add($"{entity.Name}Dto");
         }
 
@@ -172,33 +172,30 @@ public sealed partial class MinimalApiGenerator {
 
     /// <summary>Builds Syntax IR for a DTO type definition.</summary>
     private void BuildDtoTypes(List<TypeDefinitionNode> dtoTypes, Entity entity) {
-        // The DTO mirrors the entity's CREATE signature (the POST endpoint passes
-        // the DTO members straight into Entity.Create(...)). Use the complete
-        // constructor metadata — the SAME source the endpoint reads — rather than
-        // re-deriving "scalar non-default props" here (drift = CS7036-class bug).
-        var scalarParams = GetConstructorOrder(entity)
-            .Where(p => !p.IsNavigation)
-            .ToList();
+        // The DTO carries the entity's Required scalar create slots (the POST endpoint
+        // passes them into Entity.Create(...); every other slot is null). The SAME
+        // published slots the endpoint reads, not a re-derived property set.
+        var scalarParams = GetRequiredScalarSlots(entity);
+        var linkSlots = GetRequiredLinkSlots(entity);
 
-        if (scalarParams.Count == 0) return;
-        if (!GetStorageEntity(entity).IsRoot) return;
+        if (scalarParams.Count + linkSlots.Count == 0) return;
+        if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) return;
 
         // Emit as a record with get/init properties so transport validation attributes
-        // attach to properties and are enforced by ASP.NET model binding, and the
-        // contract stays immutable. An init-only accessor is a property with no setter
-        // but an initializer present; non-nullable reference scalars get `= default!;`
-        // for CS8618 hygiene. Declared constraints map to validation attributes: range →
+        // attach to properties and the contract stays immutable. Every member is
+        // nullable: an absent member and a JSON null both bind to null, and the
+        // lowered Create answers Required (400) for it. The attributes below are
+        // transport metadata; presence is the module's to enforce, not the binder's.
+        // Declared constraints map to validation attributes: range →
         // [Range] (using the analysis-VERIFIED envelope when proven, else declared),
         // length → [MinLength]/[MaxLength], pattern → [RegularExpression], required → [Required].
         var props = scalarParams.Select(param => {
             var clrType = GetClrTypeName(param.Type.TypeName);
             var prop = new PropertyDefinitionNode(
                 param.Name,
-                ClrTypeNode(clrType),
+                NullableClrTypeNode(clrType),
                 Getter: new PropertyGetterDefinitionNode(),
-                Initializer: IsPrimitiveValueTypeClr(param.Type.TypeName, clrType)
-                    ? new PropertyInitializerDefinitionNode()
-                    : new PropertyInitializerDefinitionNode(new NullForgiving(new Default())));
+                Initializer: new PropertyInitializerDefinitionNode());
 
             var effective = new List<Constraint>();
             var range = GetPropertyRange(entity, param.Name);
@@ -222,6 +219,14 @@ public sealed partial class MinimalApiGenerator {
             return attrs.Count == 0 ? prop : prop with { Attributes = attrs };
         }).ToList();
 
+        // One member per Required link, after the scalars: the target's route key. Nullable like every member: an absent
+        // member and a JSON null reach the module as a null link, and it answers Required (the host adds no check).
+        props.AddRange(linkSlots.Select(slot => new PropertyDefinitionNode(
+            CreateLinkMemberName(slot.Name),
+            NullableClrTypeNode(RouteKeyFor(_storageLookup[slot.Type.TypeName]).ClrType),
+            Getter: new PropertyGetterDefinitionNode(),
+            Initializer: new PropertyInitializerDefinitionNode())));
+
         dtoTypes.Add(new TypeDefinitionNode(
             $"{entity.Name}Dto",
             Properties: props,
@@ -230,7 +235,7 @@ public sealed partial class MinimalApiGenerator {
                 TypeDefinitionEqualitySemantics.Value
             ),
             AccessModifier: DomainAccess.ForInfrastructure(
-                _domain, [entity.Name, .. scalarParams.Select(p => p.Type.TypeName)])
+                _domain, [entity.Name, .. scalarParams.Select(p => p.Type.TypeName), .. linkSlots.Select(s => s.Type.TypeName)])
         ));
     }
 }

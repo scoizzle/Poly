@@ -63,7 +63,7 @@ public sealed class PrintBaselineTests {
     /// starts to print fails until its entry is deleted and its key re-recorded; a status that changes fails until re-recorded.
     /// </summary>
     internal static readonly (string Key, string Status)[] KnownUnprintable = [
-        ("poly/docs/missions/evolve-2026-10-13/ambig-backref.poly", "Core:analysis-failed:DMREL005 | Product:analysis-failed:DMREL005"),
+        ("poly/docs/missions/evolve-2026-10-13/ambig-backref.poly", "Core:analysis-failed:DMEFF011+DMREL005 | Product:analysis-failed:DMEFF011+DMREL005"),
         ("poly/docs/missions/evolve-2026-10-13/billing.poly", "Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-13/claims.poly", "Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-13/disputes.poly", "Core:analysis-failed:DMSTR006 | Product:analysis-failed:DMSTR006"),
@@ -376,7 +376,7 @@ public sealed class PrintBaselineTests {
     }
 
     /// <summary>
-    /// The printer drops comments: 13 of the 42 shipped files carry <c>//</c> lines, and no printed text does. Frozen as designed;
+    /// The printer drops comments: 12 of the 42 shipped files carry <c>//</c> lines, and no printed text does. Frozen as designed;
     /// a printer that starts to keep comments moves those keys and names them.
     /// </summary>
     [Test]
@@ -385,7 +385,7 @@ public sealed class PrintBaselineTests {
         var withComments = ShippedDocuments()
             .Where(path => File.ReadAllLines(Path.Combine(root, path)).Any(l => l.TrimStart().StartsWith("//", StringComparison.Ordinal)))
             .ToList();
-        await Assert.That(withComments.Count).IsEqualTo(13);
+        await Assert.That(withComments.Count).IsEqualTo(12); // L-15a removed the demo library's stale comment (#677 ruling B)
 
         var frozen = Frozen().ToDictionary(e => e.Key, StringComparer.Ordinal);
         foreach (var path in withComments.Where(p => frozen["poly/" + p].Status == "printed"))

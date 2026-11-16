@@ -20,7 +20,7 @@ public class ForeignRootedHopAgreeTests {
     [Arguments(false)]
     [Arguments(true)]
     public async Task QuantifierBodyHop_IsGuardedOnTheItem(bool outerHasProduct) {
-        var outerProduct = outerHasProduct ? "product: Product" : "";
+        var outerProduct = outerHasProduct ? "product: Product optional" : "";
         var (domain, analysis) = EvolvedDomain.FromDsl($$"""
             domain Shop
             Product: entity {
@@ -28,7 +28,7 @@ public class ForeignRootedHopAgreeTests {
             }
             Item: entity {
               Qty: Number
-              product: Product
+              product: Product optional
             }
             Order: entity {
               items: many Item
@@ -64,12 +64,12 @@ public class ForeignRootedHopAgreeTests {
     [Arguments(false)]
     [Arguments(true)]
     public async Task SubscriptionBinderOperand_IsNotGuardedAsAnOuterHop(bool outerHasOrder) {
-        var outerOrder = outerHasOrder ? "order: Order" : "";
+        var outerOrder = outerHasOrder ? "order: Order optional" : "";
         var (domain, analysis) = EvolvedDomain.FromDsl($$"""
             domain Shop
             Order: entity {
               Total: Number
-              customer: Customer via orders
+              customer: Customer via orders optional
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -108,7 +108,7 @@ public class ForeignRootedHopAgreeTests {
     [Arguments(false)]
     [Arguments(true)]
     public async Task ConditionNavigationOperand_IsGuardedOnItsOwnHop(bool outerHasMentor) {
-        var outerMentor = outerHasMentor ? "mentor: Mentor" : "";
+        var outerMentor = outerHasMentor ? "mentor: Mentor optional" : "";
         var (domain, analysis) = EvolvedDomain.FromDsl($$"""
             domain Shop
             Mentor: entity {
@@ -116,11 +116,11 @@ public class ForeignRootedHopAgreeTests {
             }
             Advisor: entity {
               Age: Number
-              mentor: Mentor
+              mentor: Mentor optional
             }
             Customer: entity {
               Ready: Boolean default(true)
-              advisor: Advisor
+              advisor: Advisor optional
               {{outerMentor}}
               ReadyMatchesAdvisor: policy { Ready is (advisor where Age < mentor Age) }
             }

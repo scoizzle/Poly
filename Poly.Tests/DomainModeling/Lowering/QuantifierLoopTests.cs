@@ -295,7 +295,7 @@ public class QuantifierLoopTests {
         Part: entity { Qty: Number }
         Widget: entity {
           Flag: Boolean default(false)
-          owner: Owner
+          owner: Owner optional
           parts: many Part
           HasOwner: policy { owner exists }
           HasParts: policy { parts exists }
@@ -567,7 +567,7 @@ public class QuantifierLoopTests {
               workers: many Worker
             }
             Dept: entity {
-              team: Team
+              team: Team optional
               P: policy { team Active == any workers where Active }
             }
             """;
@@ -625,7 +625,7 @@ public class QuantifierLoopTests {
               workers: many Worker
             }
             Dept: entity {
-              team: Team
+              team: Team optional
               workers: many Temp
               P: policy { team Active == any workers where State == "Busy" }
             }
@@ -685,11 +685,11 @@ public class QuantifierLoopTests {
               workers: many Worker
             }
             Org: entity {
-              team: Team
+              team: Team optional
               workers: many Temp
             }
             Dept: entity {
-              org: Org
+              org: Org optional
               workers: many Temp
               P: policy { org team Active == any workers where State == "Busy" }
             }
@@ -751,7 +751,7 @@ public class QuantifierLoopTests {
             Team: entity { State: TeamState }
             Dept: entity {
               State: DeptState
-              team: Team
+              team: Team optional
               P: policy { team State == "Done" }
             }
             """;

@@ -1,0 +1,2940 @@
+## FormGrid
+form | position = verdict
+N + M | assign Number = ok
+N + M | assign Decimal = ok
+N + M | assign Text = DMSEM003
+N + M | assign Boolean = DMSEM003
+N + M | assign Date = DMSEM003
+N + M | assign Color = DMSEM003
+N + M | assign Widget = DMSEM003
+N + M | create Number = ok
+N + M | create Decimal = ok
+N + M | create Text = DMSEM003
+N + M | create Boolean = DMSEM003
+N + M | create Date = DMSEM003
+N + M | create Color = DMSEM003
+N + M | create Widget = DMSEM003
+N + M | invoke Number = ok
+N + M | invoke Decimal = ok
+N + M | invoke Text = DMSEM003
+N + M | invoke Boolean = DMSEM003
+N + M | invoke Date = DMSEM003
+N + M | invoke Color = DMSEM003
+N + M | invoke Widget = DMSEM003
+N + M | call Number = ok
+N + M | call Decimal = ok
+N + M | call Text = DMFUN003
+N + M | call Boolean = DMFUN003
+N + M | call Date = DMFUN003
+N + M | call Color = DMFUN003
+N + M | call Widget = DMFUN003
+N + M | return Number = ok
+N + M | return Decimal = ok
+N + M | return Text = DMFUN006
+N + M | return Boolean = DMFUN006
+N + M | return Date = DMFUN006
+N + M | return Color = DMFUN006
+N + M | return Widget = DMFUN006
+N + M | default Number = DMSEM005
+N + M | default Decimal = DMSEM005
+N + M | default Text = DMSEM005
+N + M | default Boolean = DMSEM005
+N + M | default Date = DMSEM005
+N + M | default Color = DMSEM005
+N + M | default Widget = DMSEM005
+N + M | form == Number = ok
+N + M | form == Decimal = ok
+N + M | form == Text = DMSEM003
+N + M | form == Boolean = DMSEM003
+N + M | form == Date = DMSEM003
+N + M | form == Color = DMSEM003
+N + M | form == Widget = DMSEM003
+N + M | form == null = DMSEM003
+N + M | Number == form = ok
+N + M | Decimal == form = ok
+N + M | Text == form = DMSEM003
+N + M | Boolean == form = DMSEM003
+N + M | Date == form = DMSEM003
+N + M | Color == form = DMSEM003
+N + M | Widget == form = DMSEM003
+N + M | null == form = DMSEM003
+N + M | if form = DMSEM003
+N + M | for where form = DMSEM003
+N + M | not form = DMSEM003
+N + M | form and Flag = DMSEM003
+N + M | match { form -> 1 } = DMMAT001
+N + M | form * N = ok
+N + M | N * form = ok
+N + M | form * Name = DMSEM003
+N + M | Name * form = DMSEM003
+N + M | match arm into Number = ok
+N + M | match arm into Decimal = ok
+N + M | match arm into Text = DMMAT002+DMSEM003
+N + M | match arm into Boolean = DMMAT002+DMSEM003
+N + M | match arm into Date = DMMAT002+DMSEM003
+N + M | match arm into Color = DMMAT002+DMSEM003
+N + M | match arm into Widget = DMMAT002+DMSEM003
+C + C | assign Number = ok
+C + C | assign Decimal = ok
+C + C | assign Text = DMSEM003
+C + C | assign Boolean = DMSEM003
+C + C | assign Date = DMSEM003
+C + C | assign Color = DMSEM003
+C + C | assign Widget = DMSEM003
+C + C | create Number = ok
+C + C | create Decimal = ok
+C + C | create Text = DMSEM003
+C + C | create Boolean = DMSEM003
+C + C | create Date = DMSEM003
+C + C | create Color = DMSEM003
+C + C | create Widget = DMSEM003
+C + C | invoke Number = ok
+C + C | invoke Decimal = ok
+C + C | invoke Text = DMSEM003
+C + C | invoke Boolean = DMSEM003
+C + C | invoke Date = DMSEM003
+C + C | invoke Color = DMSEM003
+C + C | invoke Widget = DMSEM003
+C + C | call Number = ok
+C + C | call Decimal = ok
+C + C | call Text = DMFUN003
+C + C | call Boolean = DMFUN003
+C + C | call Date = DMFUN003
+C + C | call Color = DMFUN003
+C + C | call Widget = DMFUN003
+C + C | return Number = ok
+C + C | return Decimal = ok
+C + C | return Text = DMFUN006
+C + C | return Boolean = DMFUN006
+C + C | return Date = DMFUN006
+C + C | return Color = DMFUN006
+C + C | return Widget = DMFUN006
+C + C | default Number = DMSEM005
+C + C | default Decimal = DMSEM005
+C + C | default Text = DMSEM005
+C + C | default Boolean = DMSEM005
+C + C | default Date = DMSEM005
+C + C | default Color = DMSEM005
+C + C | default Widget = DMSEM005
+C + C | form == Number = ok
+C + C | form == Decimal = ok
+C + C | form == Text = DMSEM003
+C + C | form == Boolean = DMSEM003
+C + C | form == Date = DMSEM003
+C + C | form == Color = DMSEM003
+C + C | form == Widget = DMSEM003
+C + C | form == null = DMSEM003
+C + C | Number == form = ok
+C + C | Decimal == form = ok
+C + C | Text == form = DMSEM003
+C + C | Boolean == form = DMSEM003
+C + C | Date == form = DMSEM003
+C + C | Color == form = DMSEM003
+C + C | Widget == form = DMSEM003
+C + C | null == form = DMSEM003
+C + C | if form = DMSEM003
+C + C | for where form = DMSEM003
+C + C | not form = DMSEM003
+C + C | form and Flag = DMSEM003
+C + C | match { form -> 1 } = DMMAT001
+C + C | form * N = ok
+C + C | N * form = ok
+C + C | form * Name = DMSEM003
+C + C | Name * form = DMSEM003
+C + C | match arm into Number = DMSEM003
+C + C | match arm into Decimal = ok
+C + C | match arm into Text = DMMAT002+DMSEM003
+C + C | match arm into Boolean = DMMAT002+DMSEM003
+C + C | match arm into Date = DMMAT002+DMSEM003
+C + C | match arm into Color = DMMAT002+DMSEM003
+C + C | match arm into Widget = DMMAT002+DMSEM003
+Due + N | assign Number = DMSEM003
+Due + N | assign Decimal = DMSEM003
+Due + N | assign Text = DMSEM003
+Due + N | assign Boolean = DMSEM003
+Due + N | assign Date = ok
+Due + N | assign Color = DMSEM003
+Due + N | assign Widget = DMSEM003
+Due + N | create Number = DMSEM003
+Due + N | create Decimal = DMSEM003
+Due + N | create Text = DMSEM003
+Due + N | create Boolean = DMSEM003
+Due + N | create Date = ok
+Due + N | create Color = DMSEM003
+Due + N | create Widget = DMSEM003
+Due + N | invoke Number = DMSEM003
+Due + N | invoke Decimal = DMSEM003
+Due + N | invoke Text = DMSEM003
+Due + N | invoke Boolean = DMSEM003
+Due + N | invoke Date = ok
+Due + N | invoke Color = DMSEM003
+Due + N | invoke Widget = DMSEM003
+Due + N | call Number = DMFUN003
+Due + N | call Decimal = DMFUN003
+Due + N | call Text = DMFUN003
+Due + N | call Boolean = DMFUN003
+Due + N | call Date = ok
+Due + N | call Color = DMFUN003
+Due + N | call Widget = DMFUN003
+Due + N | return Number = DMFUN006+DMSEM003
+Due + N | return Decimal = DMFUN006+DMSEM003
+Due + N | return Text = DMFUN006+DMSEM003
+Due + N | return Boolean = DMFUN006+DMSEM003
+Due + N | return Date = DMSEM003
+Due + N | return Color = DMFUN006+DMSEM003
+Due + N | return Widget = DMFUN006+DMSEM003
+Due + N | default Number = DMSEM005
+Due + N | default Decimal = DMSEM005
+Due + N | default Text = DMSEM005
+Due + N | default Boolean = DMSEM005
+Due + N | default Date = DMSEM005
+Due + N | default Color = DMSEM005
+Due + N | default Widget = DMSEM005
+Due + N | form == Number = DMSEM003
+Due + N | form == Decimal = DMSEM003
+Due + N | form == Text = DMSEM003
+Due + N | form == Boolean = DMSEM003
+Due + N | form == Date = ok
+Due + N | form == Color = DMSEM003
+Due + N | form == Widget = DMSEM003
+Due + N | form == null = DMSEM003
+Due + N | Number == form = DMSEM003
+Due + N | Decimal == form = DMSEM003
+Due + N | Text == form = DMSEM003
+Due + N | Boolean == form = DMSEM003
+Due + N | Date == form = ok
+Due + N | Color == form = DMSEM003
+Due + N | Widget == form = DMSEM003
+Due + N | null == form = DMSEM003
+Due + N | if form = DMSEM003
+Due + N | for where form = DMSEM003
+Due + N | not form = DMSEM003
+Due + N | form and Flag = DMSEM003
+Due + N | match { form -> 1 } = DMMAT001
+Due + N | form * N = DMSEM003
+Due + N | N * form = DMSEM003
+Due + N | form * Name = DMSEM003
+Due + N | Name * form = DMSEM003
+Due + N | match arm into Number = DMMAT002+DMSEM003
+Due + N | match arm into Decimal = DMMAT002+DMSEM003
+Due + N | match arm into Text = DMMAT002+DMSEM003
+Due + N | match arm into Boolean = DMMAT002+DMSEM003
+Due + N | match arm into Date = ok
+Due + N | match arm into Color = DMMAT002+DMSEM003
+Due + N | match arm into Widget = DMMAT002+DMSEM003
+part Qty | assign Number = ok
+part Qty | assign Decimal = ok
+part Qty | assign Text = DMSEM003
+part Qty | assign Boolean = DMSEM003
+part Qty | assign Date = DMSEM003
+part Qty | assign Color = DMSEM003
+part Qty | assign Widget = DMSEM003
+part Qty | create Number = ok
+part Qty | create Decimal = ok
+part Qty | create Text = DMSEM003
+part Qty | create Boolean = DMSEM003
+part Qty | create Date = DMSEM003
+part Qty | create Color = DMSEM003
+part Qty | create Widget = DMSEM003
+part Qty | invoke Number = ok
+part Qty | invoke Decimal = ok
+part Qty | invoke Text = DMSEM003
+part Qty | invoke Boolean = DMSEM003
+part Qty | invoke Date = DMSEM003
+part Qty | invoke Color = DMSEM003
+part Qty | invoke Widget = DMSEM003
+part Qty | call Number = ok
+part Qty | call Decimal = ok
+part Qty | call Text = DMFUN003
+part Qty | call Boolean = DMFUN003
+part Qty | call Date = DMFUN003
+part Qty | call Color = DMFUN003
+part Qty | call Widget = DMFUN003
+part Qty | return Number = n/a
+part Qty | return Decimal = n/a
+part Qty | return Text = n/a
+part Qty | return Boolean = n/a
+part Qty | return Date = n/a
+part Qty | return Color = n/a
+part Qty | return Widget = n/a
+part Qty | default Number = DMSEM006
+part Qty | default Decimal = DMSEM006
+part Qty | default Text = DMSEM006
+part Qty | default Boolean = DMSEM006
+part Qty | default Date = DMSEM006
+part Qty | default Color = DMSEM006
+part Qty | default Widget = DMSEM006
+part Qty | form == Number = ok
+part Qty | form == Decimal = ok
+part Qty | form == Text = DMSEM003
+part Qty | form == Boolean = DMSEM003
+part Qty | form == Date = DMSEM003
+part Qty | form == Color = DMSEM003
+part Qty | form == Widget = DMSEM003
+part Qty | form == null = ok
+part Qty | Number == form = ok
+part Qty | Decimal == form = ok
+part Qty | Text == form = DMSEM003
+part Qty | Boolean == form = DMSEM003
+part Qty | Date == form = DMSEM003
+part Qty | Color == form = DMSEM003
+part Qty | Widget == form = DMSEM003
+part Qty | null == form = ok
+part Qty | if form = DMSEM003
+part Qty | for where form = DMSEM003
+part Qty | not form = DMSEM003
+part Qty | form and Flag = DMSEM003
+part Qty | match { form -> 1 } = DMMAT001
+part Qty | form * N = ok
+part Qty | N * form = ok
+part Qty | form * Name = DMSEM003
+part Qty | Name * form = DMSEM003
+part Qty | match arm into Number = ok
+part Qty | match arm into Decimal = ok
+part Qty | match arm into Text = DMMAT002+DMSEM003
+part Qty | match arm into Boolean = DMMAT002+DMSEM003
+part Qty | match arm into Date = DMMAT002+DMSEM003
+part Qty | match arm into Color = DMMAT002+DMSEM003
+part Qty | match arm into Widget = DMMAT002+DMSEM003
+part Label | assign Number = DMSEM003
+part Label | assign Decimal = DMSEM003
+part Label | assign Text = ok
+part Label | assign Boolean = DMSEM003
+part Label | assign Date = DMSEM003
+part Label | assign Color = ok
+part Label | assign Widget = DMSEM003
+part Label | create Number = DMSEM003
+part Label | create Decimal = DMSEM003
+part Label | create Text = ok
+part Label | create Boolean = DMSEM003
+part Label | create Date = DMSEM003
+part Label | create Color = ok
+part Label | create Widget = DMSEM003
+part Label | invoke Number = DMSEM003
+part Label | invoke Decimal = DMSEM003
+part Label | invoke Text = ok
+part Label | invoke Boolean = DMSEM003
+part Label | invoke Date = DMSEM003
+part Label | invoke Color = ok
+part Label | invoke Widget = DMSEM003
+part Label | call Number = DMFUN003
+part Label | call Decimal = DMFUN003
+part Label | call Text = ok
+part Label | call Boolean = DMFUN003
+part Label | call Date = DMFUN003
+part Label | call Color = ok
+part Label | call Widget = DMFUN003
+part Label | return Number = n/a
+part Label | return Decimal = n/a
+part Label | return Text = n/a
+part Label | return Boolean = n/a
+part Label | return Date = n/a
+part Label | return Color = n/a
+part Label | return Widget = n/a
+part Label | default Number = DMSEM006
+part Label | default Decimal = DMSEM006
+part Label | default Text = DMSEM006
+part Label | default Boolean = DMSEM006
+part Label | default Date = DMSEM006
+part Label | default Color = DMSEM006
+part Label | default Widget = DMSEM006
+part Label | form == Number = DMSEM003
+part Label | form == Decimal = DMSEM003
+part Label | form == Text = ok
+part Label | form == Boolean = DMSEM003
+part Label | form == Date = DMSEM003
+part Label | form == Color = ok
+part Label | form == Widget = DMSEM003
+part Label | form == null = ok
+part Label | Number == form = DMSEM003
+part Label | Decimal == form = DMSEM003
+part Label | Text == form = ok
+part Label | Boolean == form = DMSEM003
+part Label | Date == form = DMSEM003
+part Label | Color == form = ok
+part Label | Widget == form = DMSEM003
+part Label | null == form = ok
+part Label | if form = DMSEM003
+part Label | for where form = DMSEM003
+part Label | not form = DMSEM003
+part Label | form and Flag = DMSEM003
+part Label | match { form -> 1 } = DMMAT001
+part Label | form * N = DMSEM003
+part Label | N * form = DMSEM003
+part Label | form * Name = DMSEM003
+part Label | Name * form = DMSEM003
+part Label | match arm into Number = DMMAT002+DMSEM003
+part Label | match arm into Decimal = DMMAT002+DMSEM003
+part Label | match arm into Text = ok
+part Label | match arm into Boolean = DMMAT002+DMSEM003
+part Label | match arm into Date = DMMAT002+DMSEM003
+part Label | match arm into Color = DMMAT002
+part Label | match arm into Widget = DMMAT002+DMSEM003
+part Due | assign Number = DMSEM003
+part Due | assign Decimal = DMSEM003
+part Due | assign Text = DMSEM003
+part Due | assign Boolean = DMSEM003
+part Due | assign Date = ok
+part Due | assign Color = DMSEM003
+part Due | assign Widget = DMSEM003
+part Due | create Number = DMSEM003
+part Due | create Decimal = DMSEM003
+part Due | create Text = DMSEM003
+part Due | create Boolean = DMSEM003
+part Due | create Date = ok
+part Due | create Color = DMSEM003
+part Due | create Widget = DMSEM003
+part Due | invoke Number = DMSEM003
+part Due | invoke Decimal = DMSEM003
+part Due | invoke Text = DMSEM003
+part Due | invoke Boolean = DMSEM003
+part Due | invoke Date = ok
+part Due | invoke Color = DMSEM003
+part Due | invoke Widget = DMSEM003
+part Due | call Number = DMFUN003
+part Due | call Decimal = DMFUN003
+part Due | call Text = DMFUN003
+part Due | call Boolean = DMFUN003
+part Due | call Date = ok
+part Due | call Color = DMFUN003
+part Due | call Widget = DMFUN003
+part Due | return Number = n/a
+part Due | return Decimal = n/a
+part Due | return Text = n/a
+part Due | return Boolean = n/a
+part Due | return Date = n/a
+part Due | return Color = n/a
+part Due | return Widget = n/a
+part Due | default Number = DMSEM006
+part Due | default Decimal = DMSEM006
+part Due | default Text = DMSEM006
+part Due | default Boolean = DMSEM006
+part Due | default Date = DMSEM006
+part Due | default Color = DMSEM006
+part Due | default Widget = DMSEM006
+part Due | form == Number = DMSEM003
+part Due | form == Decimal = DMSEM003
+part Due | form == Text = DMSEM003
+part Due | form == Boolean = DMSEM003
+part Due | form == Date = ok
+part Due | form == Color = DMSEM003
+part Due | form == Widget = DMSEM003
+part Due | form == null = ok
+part Due | Number == form = DMSEM003
+part Due | Decimal == form = DMSEM003
+part Due | Text == form = DMSEM003
+part Due | Boolean == form = DMSEM003
+part Due | Date == form = ok
+part Due | Color == form = DMSEM003
+part Due | Widget == form = DMSEM003
+part Due | null == form = ok
+part Due | if form = DMSEM003
+part Due | for where form = DMSEM003
+part Due | not form = DMSEM003
+part Due | form and Flag = DMSEM003
+part Due | match { form -> 1 } = DMMAT001
+part Due | form * N = DMSEM003
+part Due | N * form = DMSEM003
+part Due | form * Name = DMSEM003
+part Due | Name * form = DMSEM003
+part Due | match arm into Number = DMMAT002+DMSEM003
+part Due | match arm into Decimal = DMMAT002+DMSEM003
+part Due | match arm into Text = DMMAT002+DMSEM003
+part Due | match arm into Boolean = DMMAT002+DMSEM003
+part Due | match arm into Date = ok
+part Due | match arm into Color = DMMAT002+DMSEM003
+part Due | match arm into Widget = DMMAT002+DMSEM003
+part Tone | assign Number = DMSEM003
+part Tone | assign Decimal = DMSEM003
+part Tone | assign Text = ok
+part Tone | assign Boolean = DMSEM003
+part Tone | assign Date = DMSEM003
+part Tone | assign Color = ok
+part Tone | assign Widget = DMSEM003
+part Tone | create Number = DMSEM003
+part Tone | create Decimal = DMSEM003
+part Tone | create Text = ok
+part Tone | create Boolean = DMSEM003
+part Tone | create Date = DMSEM003
+part Tone | create Color = ok
+part Tone | create Widget = DMSEM003
+part Tone | invoke Number = DMSEM003
+part Tone | invoke Decimal = DMSEM003
+part Tone | invoke Text = ok
+part Tone | invoke Boolean = DMSEM003
+part Tone | invoke Date = DMSEM003
+part Tone | invoke Color = ok
+part Tone | invoke Widget = DMSEM003
+part Tone | call Number = DMFUN003
+part Tone | call Decimal = DMFUN003
+part Tone | call Text = ok
+part Tone | call Boolean = DMFUN003
+part Tone | call Date = DMFUN003
+part Tone | call Color = ok
+part Tone | call Widget = DMFUN003
+part Tone | return Number = n/a
+part Tone | return Decimal = n/a
+part Tone | return Text = n/a
+part Tone | return Boolean = n/a
+part Tone | return Date = n/a
+part Tone | return Color = n/a
+part Tone | return Widget = n/a
+part Tone | default Number = DMSEM006
+part Tone | default Decimal = DMSEM006
+part Tone | default Text = DMSEM006
+part Tone | default Boolean = DMSEM006
+part Tone | default Date = DMSEM006
+part Tone | default Color = DMSEM006
+part Tone | default Widget = DMSEM006
+part Tone | form == Number = DMSEM003
+part Tone | form == Decimal = DMSEM003
+part Tone | form == Text = ok
+part Tone | form == Boolean = DMSEM003
+part Tone | form == Date = DMSEM003
+part Tone | form == Color = ok
+part Tone | form == Widget = DMSEM003
+part Tone | form == null = ok
+part Tone | Number == form = DMSEM003
+part Tone | Decimal == form = DMSEM003
+part Tone | Text == form = ok
+part Tone | Boolean == form = DMSEM003
+part Tone | Date == form = DMSEM003
+part Tone | Color == form = ok
+part Tone | Widget == form = DMSEM003
+part Tone | null == form = ok
+part Tone | if form = DMSEM003
+part Tone | for where form = DMSEM003
+part Tone | not form = DMSEM003
+part Tone | form and Flag = DMSEM003
+part Tone | match { form -> 1 } = DMMAT001
+part Tone | form * N = DMSEM003
+part Tone | N * form = DMSEM003
+part Tone | form * Name = DMSEM003
+part Tone | Name * form = DMSEM003
+part Tone | match arm into Number = DMMAT002+DMSEM003
+part Tone | match arm into Decimal = DMMAT002+DMSEM003
+part Tone | match arm into Text = DMMAT002
+part Tone | match arm into Boolean = DMMAT002+DMSEM003
+part Tone | match arm into Date = DMMAT002+DMSEM003
+part Tone | match arm into Color = ok
+part Tone | match arm into Widget = DMMAT002+DMSEM003
+p Qty | assign Number = ok
+p Qty | assign Decimal = ok
+p Qty | assign Text = DMSEM003
+p Qty | assign Boolean = DMSEM003
+p Qty | assign Date = DMSEM003
+p Qty | assign Color = DMSEM003
+p Qty | assign Widget = DMSEM003
+p Qty | create Number = ok
+p Qty | create Decimal = ok
+p Qty | create Text = DMSEM003
+p Qty | create Boolean = DMSEM003
+p Qty | create Date = DMSEM003
+p Qty | create Color = DMSEM003
+p Qty | create Widget = DMSEM003
+p Qty | invoke Number = ok
+p Qty | invoke Decimal = ok
+p Qty | invoke Text = DMSEM003
+p Qty | invoke Boolean = DMSEM003
+p Qty | invoke Date = DMSEM003
+p Qty | invoke Color = DMSEM003
+p Qty | invoke Widget = DMSEM003
+p Qty | call Number = ok
+p Qty | call Decimal = ok
+p Qty | call Text = DMFUN003
+p Qty | call Boolean = DMFUN003
+p Qty | call Date = DMFUN003
+p Qty | call Color = DMFUN003
+p Qty | call Widget = DMFUN003
+p Qty | return Number = n/a
+p Qty | return Decimal = n/a
+p Qty | return Text = n/a
+p Qty | return Boolean = n/a
+p Qty | return Date = n/a
+p Qty | return Color = n/a
+p Qty | return Widget = n/a
+p Qty | default Number = n/a
+p Qty | default Decimal = n/a
+p Qty | default Text = n/a
+p Qty | default Boolean = n/a
+p Qty | default Date = n/a
+p Qty | default Color = n/a
+p Qty | default Widget = n/a
+p Qty | form == Number = ok
+p Qty | form == Decimal = ok
+p Qty | form == Text = DMSEM003
+p Qty | form == Boolean = DMSEM003
+p Qty | form == Date = DMSEM003
+p Qty | form == Color = DMSEM003
+p Qty | form == Widget = DMSEM003
+p Qty | form == null = ok
+p Qty | Number == form = ok
+p Qty | Decimal == form = ok
+p Qty | Text == form = DMSEM003
+p Qty | Boolean == form = DMSEM003
+p Qty | Date == form = DMSEM003
+p Qty | Color == form = DMSEM003
+p Qty | Widget == form = DMSEM003
+p Qty | null == form = ok
+p Qty | if form = DMSEM003
+p Qty | for where form = DMSEM003
+p Qty | not form = DMSEM003
+p Qty | form and Flag = DMSEM003
+p Qty | match { form -> 1 } = DMMAT001
+p Qty | form * N = ok
+p Qty | N * form = ok
+p Qty | form * Name = DMSEM003
+p Qty | Name * form = DMSEM003
+p Qty | match arm into Number = ok
+p Qty | match arm into Decimal = ok
+p Qty | match arm into Text = DMMAT002+DMSEM003
+p Qty | match arm into Boolean = DMMAT002+DMSEM003
+p Qty | match arm into Date = DMMAT002+DMSEM003
+p Qty | match arm into Color = DMMAT002+DMSEM003
+p Qty | match arm into Widget = DMMAT002+DMSEM003
+p Label | assign Number = DMSEM003
+p Label | assign Decimal = DMSEM003
+p Label | assign Text = ok
+p Label | assign Boolean = DMSEM003
+p Label | assign Date = DMSEM003
+p Label | assign Color = ok
+p Label | assign Widget = DMSEM003
+p Label | create Number = DMSEM003
+p Label | create Decimal = DMSEM003
+p Label | create Text = ok
+p Label | create Boolean = DMSEM003
+p Label | create Date = DMSEM003
+p Label | create Color = ok
+p Label | create Widget = DMSEM003
+p Label | invoke Number = DMSEM003
+p Label | invoke Decimal = DMSEM003
+p Label | invoke Text = ok
+p Label | invoke Boolean = DMSEM003
+p Label | invoke Date = DMSEM003
+p Label | invoke Color = ok
+p Label | invoke Widget = DMSEM003
+p Label | call Number = DMFUN003
+p Label | call Decimal = DMFUN003
+p Label | call Text = ok
+p Label | call Boolean = DMFUN003
+p Label | call Date = DMFUN003
+p Label | call Color = ok
+p Label | call Widget = DMFUN003
+p Label | return Number = n/a
+p Label | return Decimal = n/a
+p Label | return Text = n/a
+p Label | return Boolean = n/a
+p Label | return Date = n/a
+p Label | return Color = n/a
+p Label | return Widget = n/a
+p Label | default Number = n/a
+p Label | default Decimal = n/a
+p Label | default Text = n/a
+p Label | default Boolean = n/a
+p Label | default Date = n/a
+p Label | default Color = n/a
+p Label | default Widget = n/a
+p Label | form == Number = DMSEM003
+p Label | form == Decimal = DMSEM003
+p Label | form == Text = ok
+p Label | form == Boolean = DMSEM003
+p Label | form == Date = DMSEM003
+p Label | form == Color = ok
+p Label | form == Widget = DMSEM003
+p Label | form == null = ok
+p Label | Number == form = DMSEM003
+p Label | Decimal == form = DMSEM003
+p Label | Text == form = ok
+p Label | Boolean == form = DMSEM003
+p Label | Date == form = DMSEM003
+p Label | Color == form = ok
+p Label | Widget == form = DMSEM003
+p Label | null == form = ok
+p Label | if form = DMSEM003
+p Label | for where form = DMSEM003
+p Label | not form = DMSEM003
+p Label | form and Flag = DMSEM003
+p Label | match { form -> 1 } = DMMAT001
+p Label | form * N = DMSEM003
+p Label | N * form = DMSEM003
+p Label | form * Name = DMSEM003
+p Label | Name * form = DMSEM003
+p Label | match arm into Number = DMMAT002+DMSEM003
+p Label | match arm into Decimal = DMMAT002+DMSEM003
+p Label | match arm into Text = ok
+p Label | match arm into Boolean = DMMAT002+DMSEM003
+p Label | match arm into Date = DMMAT002+DMSEM003
+p Label | match arm into Color = DMMAT002
+p Label | match arm into Widget = DMMAT002+DMSEM003
+o Qty | assign Number = ok
+o Qty | assign Decimal = ok
+o Qty | assign Text = DMSEM003
+o Qty | assign Boolean = DMSEM003
+o Qty | assign Date = DMSEM003
+o Qty | assign Color = DMSEM003
+o Qty | assign Widget = DMSEM003
+o Qty | create Number = ok
+o Qty | create Decimal = ok
+o Qty | create Text = DMSEM003
+o Qty | create Boolean = DMSEM003
+o Qty | create Date = DMSEM003
+o Qty | create Color = DMSEM003
+o Qty | create Widget = DMSEM003
+o Qty | invoke Number = ok
+o Qty | invoke Decimal = ok
+o Qty | invoke Text = DMSEM003
+o Qty | invoke Boolean = DMSEM003
+o Qty | invoke Date = DMSEM003
+o Qty | invoke Color = DMSEM003
+o Qty | invoke Widget = DMSEM003
+o Qty | call Number = ok
+o Qty | call Decimal = ok
+o Qty | call Text = DMFUN003
+o Qty | call Boolean = DMFUN003
+o Qty | call Date = DMFUN003
+o Qty | call Color = DMFUN003
+o Qty | call Widget = DMFUN003
+o Qty | return Number = n/a
+o Qty | return Decimal = n/a
+o Qty | return Text = n/a
+o Qty | return Boolean = n/a
+o Qty | return Date = n/a
+o Qty | return Color = n/a
+o Qty | return Widget = n/a
+o Qty | default Number = n/a
+o Qty | default Decimal = n/a
+o Qty | default Text = n/a
+o Qty | default Boolean = n/a
+o Qty | default Date = n/a
+o Qty | default Color = n/a
+o Qty | default Widget = n/a
+o Qty | form == Number = ok
+o Qty | form == Decimal = ok
+o Qty | form == Text = DMSEM003
+o Qty | form == Boolean = DMSEM003
+o Qty | form == Date = DMSEM003
+o Qty | form == Color = DMSEM003
+o Qty | form == Widget = DMSEM003
+o Qty | form == null = ok
+o Qty | Number == form = ok
+o Qty | Decimal == form = ok
+o Qty | Text == form = DMSEM003
+o Qty | Boolean == form = DMSEM003
+o Qty | Date == form = DMSEM003
+o Qty | Color == form = DMSEM003
+o Qty | Widget == form = DMSEM003
+o Qty | null == form = ok
+o Qty | if form = DMSEM003
+o Qty | for where form = DMSEM003
+o Qty | not form = DMSEM003
+o Qty | form and Flag = DMSEM003
+o Qty | match { form -> 1 } = DMMAT001
+o Qty | form * N = ok
+o Qty | N * form = ok
+o Qty | form * Name = DMSEM003
+o Qty | Name * form = DMSEM003
+o Qty | match arm into Number = ok
+o Qty | match arm into Decimal = ok
+o Qty | match arm into Text = DMMAT002+DMSEM003
+o Qty | match arm into Boolean = DMMAT002+DMSEM003
+o Qty | match arm into Date = DMMAT002+DMSEM003
+o Qty | match arm into Color = DMMAT002+DMSEM003
+o Qty | match arm into Widget = DMMAT002+DMSEM003
+o Label | assign Number = DMSEM003
+o Label | assign Decimal = DMSEM003
+o Label | assign Text = ok
+o Label | assign Boolean = DMSEM003
+o Label | assign Date = DMSEM003
+o Label | assign Color = ok
+o Label | assign Widget = DMSEM003
+o Label | create Number = DMSEM003
+o Label | create Decimal = DMSEM003
+o Label | create Text = ok
+o Label | create Boolean = DMSEM003
+o Label | create Date = DMSEM003
+o Label | create Color = ok
+o Label | create Widget = DMSEM003
+o Label | invoke Number = DMSEM003
+o Label | invoke Decimal = DMSEM003
+o Label | invoke Text = ok
+o Label | invoke Boolean = DMSEM003
+o Label | invoke Date = DMSEM003
+o Label | invoke Color = ok
+o Label | invoke Widget = DMSEM003
+o Label | call Number = DMFUN003
+o Label | call Decimal = DMFUN003
+o Label | call Text = ok
+o Label | call Boolean = DMFUN003
+o Label | call Date = DMFUN003
+o Label | call Color = ok
+o Label | call Widget = DMFUN003
+o Label | return Number = n/a
+o Label | return Decimal = n/a
+o Label | return Text = n/a
+o Label | return Boolean = n/a
+o Label | return Date = n/a
+o Label | return Color = n/a
+o Label | return Widget = n/a
+o Label | default Number = n/a
+o Label | default Decimal = n/a
+o Label | default Text = n/a
+o Label | default Boolean = n/a
+o Label | default Date = n/a
+o Label | default Color = n/a
+o Label | default Widget = n/a
+o Label | form == Number = DMSEM003
+o Label | form == Decimal = DMSEM003
+o Label | form == Text = ok
+o Label | form == Boolean = DMSEM003
+o Label | form == Date = DMSEM003
+o Label | form == Color = ok
+o Label | form == Widget = DMSEM003
+o Label | form == null = ok
+o Label | Number == form = DMSEM003
+o Label | Decimal == form = DMSEM003
+o Label | Text == form = ok
+o Label | Boolean == form = DMSEM003
+o Label | Date == form = DMSEM003
+o Label | Color == form = ok
+o Label | Widget == form = DMSEM003
+o Label | null == form = ok
+o Label | if form = DMSEM003
+o Label | for where form = DMSEM003
+o Label | not form = DMSEM003
+o Label | form and Flag = DMSEM003
+o Label | match { form -> 1 } = DMMAT001
+o Label | form * N = DMSEM003
+o Label | N * form = DMSEM003
+o Label | form * Name = DMSEM003
+o Label | Name * form = DMSEM003
+o Label | match arm into Number = DMMAT002+DMSEM003
+o Label | match arm into Decimal = DMMAT002+DMSEM003
+o Label | match arm into Text = ok
+o Label | match arm into Boolean = DMMAT002+DMSEM003
+o Label | match arm into Date = DMMAT002+DMSEM003
+o Label | match arm into Color = DMMAT002
+o Label | match arm into Widget = DMMAT002+DMSEM003
+count parts | assign Number = ok
+count parts | assign Decimal = ok
+count parts | assign Text = DMSEM003
+count parts | assign Boolean = DMSEM003
+count parts | assign Date = DMSEM003
+count parts | assign Color = DMSEM003
+count parts | assign Widget = DMSEM003
+count parts | create Number = ok
+count parts | create Decimal = ok
+count parts | create Text = DMSEM003
+count parts | create Boolean = DMSEM003
+count parts | create Date = DMSEM003
+count parts | create Color = DMSEM003
+count parts | create Widget = DMSEM003
+count parts | invoke Number = ok
+count parts | invoke Decimal = ok
+count parts | invoke Text = DMSEM003
+count parts | invoke Boolean = DMSEM003
+count parts | invoke Date = DMSEM003
+count parts | invoke Color = DMSEM003
+count parts | invoke Widget = DMSEM003
+count parts | call Number = ok
+count parts | call Decimal = ok
+count parts | call Text = DMFUN003
+count parts | call Boolean = DMFUN003
+count parts | call Date = DMFUN003
+count parts | call Color = DMFUN003
+count parts | call Widget = DMFUN003
+count parts | return Number = n/a
+count parts | return Decimal = n/a
+count parts | return Text = n/a
+count parts | return Boolean = n/a
+count parts | return Date = n/a
+count parts | return Color = n/a
+count parts | return Widget = n/a
+count parts | default Number = DMSEM006
+count parts | default Decimal = DMSEM006
+count parts | default Text = DMSEM006
+count parts | default Boolean = DMSEM006
+count parts | default Date = DMSEM006
+count parts | default Color = DMSEM006
+count parts | default Widget = DMSEM006
+count parts | form == Number = ok
+count parts | form == Decimal = ok
+count parts | form == Text = DMSEM003
+count parts | form == Boolean = DMSEM003
+count parts | form == Date = DMSEM003
+count parts | form == Color = DMSEM003
+count parts | form == Widget = DMSEM003
+count parts | form == null = DMSEM003
+count parts | Number == form = ok
+count parts | Decimal == form = ok
+count parts | Text == form = DMSEM003
+count parts | Boolean == form = DMSEM003
+count parts | Date == form = DMSEM003
+count parts | Color == form = DMSEM003
+count parts | Widget == form = DMSEM003
+count parts | null == form = DMSEM003
+count parts | if form = DMSEM003
+count parts | for where form = DMSEM003
+count parts | not form = DMSEM003
+count parts | form and Flag = DMSEM003
+count parts | match { form -> 1 } = DMMAT001
+count parts | form * N = ok
+count parts | N * form = ok
+count parts | form * Name = DMSEM003
+count parts | Name * form = DMSEM003
+count parts | match arm into Number = ok
+count parts | match arm into Decimal = ok
+count parts | match arm into Text = DMMAT002+DMSEM003
+count parts | match arm into Boolean = DMMAT002+DMSEM003
+count parts | match arm into Date = DMMAT002+DMSEM003
+count parts | match arm into Color = DMMAT002+DMSEM003
+count parts | match arm into Widget = DMMAT002+DMSEM003
+sum parts Qty | assign Number = ok
+sum parts Qty | assign Decimal = ok
+sum parts Qty | assign Text = DMSEM003
+sum parts Qty | assign Boolean = DMSEM003
+sum parts Qty | assign Date = DMSEM003
+sum parts Qty | assign Color = DMSEM003
+sum parts Qty | assign Widget = DMSEM003
+sum parts Qty | create Number = ok
+sum parts Qty | create Decimal = ok
+sum parts Qty | create Text = DMSEM003
+sum parts Qty | create Boolean = DMSEM003
+sum parts Qty | create Date = DMSEM003
+sum parts Qty | create Color = DMSEM003
+sum parts Qty | create Widget = DMSEM003
+sum parts Qty | invoke Number = ok
+sum parts Qty | invoke Decimal = ok
+sum parts Qty | invoke Text = DMSEM003
+sum parts Qty | invoke Boolean = DMSEM003
+sum parts Qty | invoke Date = DMSEM003
+sum parts Qty | invoke Color = DMSEM003
+sum parts Qty | invoke Widget = DMSEM003
+sum parts Qty | call Number = ok
+sum parts Qty | call Decimal = ok
+sum parts Qty | call Text = DMFUN003
+sum parts Qty | call Boolean = DMFUN003
+sum parts Qty | call Date = DMFUN003
+sum parts Qty | call Color = DMFUN003
+sum parts Qty | call Widget = DMFUN003
+sum parts Qty | return Number = n/a
+sum parts Qty | return Decimal = n/a
+sum parts Qty | return Text = n/a
+sum parts Qty | return Boolean = n/a
+sum parts Qty | return Date = n/a
+sum parts Qty | return Color = n/a
+sum parts Qty | return Widget = n/a
+sum parts Qty | default Number = DMSEM006
+sum parts Qty | default Decimal = DMSEM006
+sum parts Qty | default Text = DMSEM006
+sum parts Qty | default Boolean = DMSEM006
+sum parts Qty | default Date = DMSEM006
+sum parts Qty | default Color = DMSEM006
+sum parts Qty | default Widget = DMSEM006
+sum parts Qty | form == Number = ok
+sum parts Qty | form == Decimal = ok
+sum parts Qty | form == Text = DMSEM003
+sum parts Qty | form == Boolean = DMSEM003
+sum parts Qty | form == Date = DMSEM003
+sum parts Qty | form == Color = DMSEM003
+sum parts Qty | form == Widget = DMSEM003
+sum parts Qty | form == null = DMSEM003
+sum parts Qty | Number == form = ok
+sum parts Qty | Decimal == form = ok
+sum parts Qty | Text == form = DMSEM003
+sum parts Qty | Boolean == form = DMSEM003
+sum parts Qty | Date == form = DMSEM003
+sum parts Qty | Color == form = DMSEM003
+sum parts Qty | Widget == form = DMSEM003
+sum parts Qty | null == form = DMSEM003
+sum parts Qty | if form = DMSEM003
+sum parts Qty | for where form = DMSEM003
+sum parts Qty | not form = DMSEM003
+sum parts Qty | form and Flag = DMSEM003
+sum parts Qty | match { form -> 1 } = DMMAT001
+sum parts Qty | form * N = ok
+sum parts Qty | N * form = ok
+sum parts Qty | form * Name = DMSEM003
+sum parts Qty | Name * form = DMSEM003
+sum parts Qty | match arm into Number = ok
+sum parts Qty | match arm into Decimal = ok
+sum parts Qty | match arm into Text = DMMAT002+DMSEM003
+sum parts Qty | match arm into Boolean = DMMAT002+DMSEM003
+sum parts Qty | match arm into Date = DMMAT002+DMSEM003
+sum parts Qty | match arm into Color = DMMAT002+DMSEM003
+sum parts Qty | match arm into Widget = DMMAT002+DMSEM003
+sum parts Price | assign Number = ok
+sum parts Price | assign Decimal = ok
+sum parts Price | assign Text = DMSEM003
+sum parts Price | assign Boolean = DMSEM003
+sum parts Price | assign Date = DMSEM003
+sum parts Price | assign Color = DMSEM003
+sum parts Price | assign Widget = DMSEM003
+sum parts Price | create Number = ok
+sum parts Price | create Decimal = ok
+sum parts Price | create Text = DMSEM003
+sum parts Price | create Boolean = DMSEM003
+sum parts Price | create Date = DMSEM003
+sum parts Price | create Color = DMSEM003
+sum parts Price | create Widget = DMSEM003
+sum parts Price | invoke Number = ok
+sum parts Price | invoke Decimal = ok
+sum parts Price | invoke Text = DMSEM003
+sum parts Price | invoke Boolean = DMSEM003
+sum parts Price | invoke Date = DMSEM003
+sum parts Price | invoke Color = DMSEM003
+sum parts Price | invoke Widget = DMSEM003
+sum parts Price | call Number = ok
+sum parts Price | call Decimal = ok
+sum parts Price | call Text = DMFUN003
+sum parts Price | call Boolean = DMFUN003
+sum parts Price | call Date = DMFUN003
+sum parts Price | call Color = DMFUN003
+sum parts Price | call Widget = DMFUN003
+sum parts Price | return Number = n/a
+sum parts Price | return Decimal = n/a
+sum parts Price | return Text = n/a
+sum parts Price | return Boolean = n/a
+sum parts Price | return Date = n/a
+sum parts Price | return Color = n/a
+sum parts Price | return Widget = n/a
+sum parts Price | default Number = DMSEM006
+sum parts Price | default Decimal = DMSEM006
+sum parts Price | default Text = DMSEM006
+sum parts Price | default Boolean = DMSEM006
+sum parts Price | default Date = DMSEM006
+sum parts Price | default Color = DMSEM006
+sum parts Price | default Widget = DMSEM006
+sum parts Price | form == Number = ok
+sum parts Price | form == Decimal = ok
+sum parts Price | form == Text = DMSEM003
+sum parts Price | form == Boolean = DMSEM003
+sum parts Price | form == Date = DMSEM003
+sum parts Price | form == Color = DMSEM003
+sum parts Price | form == Widget = DMSEM003
+sum parts Price | form == null = DMSEM003
+sum parts Price | Number == form = ok
+sum parts Price | Decimal == form = ok
+sum parts Price | Text == form = DMSEM003
+sum parts Price | Boolean == form = DMSEM003
+sum parts Price | Date == form = DMSEM003
+sum parts Price | Color == form = DMSEM003
+sum parts Price | Widget == form = DMSEM003
+sum parts Price | null == form = DMSEM003
+sum parts Price | if form = DMSEM003
+sum parts Price | for where form = DMSEM003
+sum parts Price | not form = DMSEM003
+sum parts Price | form and Flag = DMSEM003
+sum parts Price | match { form -> 1 } = DMMAT001
+sum parts Price | form * N = ok
+sum parts Price | N * form = ok
+sum parts Price | form * Name = DMSEM003
+sum parts Price | Name * form = DMSEM003
+sum parts Price | match arm into Number = DMSEM003
+sum parts Price | match arm into Decimal = ok
+sum parts Price | match arm into Text = DMMAT002+DMSEM003
+sum parts Price | match arm into Boolean = DMMAT002+DMSEM003
+sum parts Price | match arm into Date = DMMAT002+DMSEM003
+sum parts Price | match arm into Color = DMMAT002+DMSEM003
+sum parts Price | match arm into Widget = DMMAT002+DMSEM003
+Cost Amount | assign Number = DMSTR006
+Cost Amount | assign Decimal = DMSTR006
+Cost Amount | assign Text = DMSEM003+DMSTR006
+Cost Amount | assign Boolean = DMSEM003+DMSTR006
+Cost Amount | assign Date = DMSEM003+DMSTR006
+Cost Amount | assign Color = DMSEM003+DMSTR006
+Cost Amount | assign Widget = DMSEM003+DMSTR006
+Cost Amount | create Number = DMSTR006
+Cost Amount | create Decimal = DMSTR006
+Cost Amount | create Text = DMSEM003+DMSTR006
+Cost Amount | create Boolean = DMSEM003+DMSTR006
+Cost Amount | create Date = DMSEM003+DMSTR006
+Cost Amount | create Color = DMSEM003+DMSTR006
+Cost Amount | create Widget = DMSEM003+DMSTR006
+Cost Amount | invoke Number = DMSTR006
+Cost Amount | invoke Decimal = DMSTR006
+Cost Amount | invoke Text = DMSEM003+DMSTR006
+Cost Amount | invoke Boolean = DMSEM003+DMSTR006
+Cost Amount | invoke Date = DMSEM003+DMSTR006
+Cost Amount | invoke Color = DMSEM003+DMSTR006
+Cost Amount | invoke Widget = DMSEM003+DMSTR006
+Cost Amount | call Number = DMSTR006
+Cost Amount | call Decimal = DMSTR006
+Cost Amount | call Text = DMFUN003+DMSTR006
+Cost Amount | call Boolean = DMFUN003+DMSTR006
+Cost Amount | call Date = DMFUN003+DMSTR006
+Cost Amount | call Color = DMFUN003+DMSTR006
+Cost Amount | call Widget = DMFUN003+DMSTR006
+Cost Amount | return Number = n/a
+Cost Amount | return Decimal = n/a
+Cost Amount | return Text = n/a
+Cost Amount | return Boolean = n/a
+Cost Amount | return Date = n/a
+Cost Amount | return Color = n/a
+Cost Amount | return Widget = n/a
+Cost Amount | default Number = DMSEM006+DMSTR006
+Cost Amount | default Decimal = DMSEM006+DMSTR006
+Cost Amount | default Text = DMSEM006+DMSTR006
+Cost Amount | default Boolean = DMSEM006+DMSTR006
+Cost Amount | default Date = DMSEM006+DMSTR006
+Cost Amount | default Color = DMSEM006+DMSTR006
+Cost Amount | default Widget = DMSEM006+DMSTR006
+Cost Amount | form == Number = DMSTR006
+Cost Amount | form == Decimal = DMSTR006
+Cost Amount | form == Text = DMSEM003+DMSTR006
+Cost Amount | form == Boolean = DMSEM003+DMSTR006
+Cost Amount | form == Date = DMSEM003+DMSTR006
+Cost Amount | form == Color = DMSEM003+DMSTR006
+Cost Amount | form == Widget = DMSEM003+DMSTR006
+Cost Amount | form == null = DMSTR006
+Cost Amount | Number == form = DMSTR006
+Cost Amount | Decimal == form = DMSTR006
+Cost Amount | Text == form = DMSEM003+DMSTR006
+Cost Amount | Boolean == form = DMSEM003+DMSTR006
+Cost Amount | Date == form = DMSEM003+DMSTR006
+Cost Amount | Color == form = DMSEM003+DMSTR006
+Cost Amount | Widget == form = DMSEM003+DMSTR006
+Cost Amount | null == form = DMSTR006
+Cost Amount | if form = DMSEM003+DMSTR006
+Cost Amount | for where form = DMSEM003+DMSTR006
+Cost Amount | not form = DMSEM003+DMSTR006
+Cost Amount | form and Flag = DMSEM003+DMSTR006
+Cost Amount | match { form -> 1 } = DMMAT001+DMSTR006
+Cost Amount | form * N = DMSTR006
+Cost Amount | N * form = DMSTR006
+Cost Amount | form * Name = DMSEM003+DMSTR006
+Cost Amount | Name * form = DMSEM003+DMSTR006
+Cost Amount | match arm into Number = DMSTR006
+Cost Amount | match arm into Decimal = DMSTR006
+Cost Amount | match arm into Text = DMMAT002+DMSEM003+DMSTR006
+Cost Amount | match arm into Boolean = DMMAT002+DMSEM003+DMSTR006
+Cost Amount | match arm into Date = DMMAT002+DMSEM003+DMSTR006
+Cost Amount | match arm into Color = DMMAT002+DMSEM003+DMSTR006
+Cost Amount | match arm into Widget = DMMAT002+DMSEM003+DMSTR006
+match { Flag -> N + M, else -> N } | assign Number = ok
+match { Flag -> N + M, else -> N } | assign Decimal = ok
+match { Flag -> N + M, else -> N } | assign Text = DMSEM003
+match { Flag -> N + M, else -> N } | assign Boolean = DMSEM003
+match { Flag -> N + M, else -> N } | assign Date = DMSEM003
+match { Flag -> N + M, else -> N } | assign Color = DMSEM003
+match { Flag -> N + M, else -> N } | assign Widget = DMSEM003
+match { Flag -> N + M, else -> N } | create Number = ok
+match { Flag -> N + M, else -> N } | create Decimal = ok
+match { Flag -> N + M, else -> N } | create Text = DMSEM003
+match { Flag -> N + M, else -> N } | create Boolean = DMSEM003
+match { Flag -> N + M, else -> N } | create Date = DMSEM003
+match { Flag -> N + M, else -> N } | create Color = DMSEM003
+match { Flag -> N + M, else -> N } | create Widget = DMSEM003
+match { Flag -> N + M, else -> N } | invoke Number = ok
+match { Flag -> N + M, else -> N } | invoke Decimal = ok
+match { Flag -> N + M, else -> N } | invoke Text = DMSEM003
+match { Flag -> N + M, else -> N } | invoke Boolean = DMSEM003
+match { Flag -> N + M, else -> N } | invoke Date = DMSEM003
+match { Flag -> N + M, else -> N } | invoke Color = DMSEM003
+match { Flag -> N + M, else -> N } | invoke Widget = DMSEM003
+match { Flag -> N + M, else -> N } | call Number = ok
+match { Flag -> N + M, else -> N } | call Decimal = ok
+match { Flag -> N + M, else -> N } | call Text = DMFUN003
+match { Flag -> N + M, else -> N } | call Boolean = DMFUN003
+match { Flag -> N + M, else -> N } | call Date = DMFUN003
+match { Flag -> N + M, else -> N } | call Color = DMFUN003
+match { Flag -> N + M, else -> N } | call Widget = DMFUN003
+match { Flag -> N + M, else -> N } | return Number = DMFUN005
+match { Flag -> N + M, else -> N } | return Decimal = DMFUN005
+match { Flag -> N + M, else -> N } | return Text = DMFUN005+DMFUN006
+match { Flag -> N + M, else -> N } | return Boolean = DMFUN005+DMFUN006
+match { Flag -> N + M, else -> N } | return Date = DMFUN005+DMFUN006
+match { Flag -> N + M, else -> N } | return Color = DMFUN005+DMFUN006
+match { Flag -> N + M, else -> N } | return Widget = DMFUN005+DMFUN006
+match { Flag -> N + M, else -> N } | default Number = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N + M, else -> N } | default Decimal = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N + M, else -> N } | default Text = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N + M, else -> N } | default Boolean = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N + M, else -> N } | default Date = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N + M, else -> N } | default Color = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N + M, else -> N } | default Widget = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N + M, else -> N } | form == Number = ok
+match { Flag -> N + M, else -> N } | form == Decimal = ok
+match { Flag -> N + M, else -> N } | form == Text = DMSEM003
+match { Flag -> N + M, else -> N } | form == Boolean = DMSEM003
+match { Flag -> N + M, else -> N } | form == Date = DMSEM003
+match { Flag -> N + M, else -> N } | form == Color = DMSEM003
+match { Flag -> N + M, else -> N } | form == Widget = DMSEM003
+match { Flag -> N + M, else -> N } | form == null = DMSEM003
+match { Flag -> N + M, else -> N } | Number == form = ok
+match { Flag -> N + M, else -> N } | Decimal == form = ok
+match { Flag -> N + M, else -> N } | Text == form = DMSEM003
+match { Flag -> N + M, else -> N } | Boolean == form = DMSEM003
+match { Flag -> N + M, else -> N } | Date == form = DMSEM003
+match { Flag -> N + M, else -> N } | Color == form = DMSEM003
+match { Flag -> N + M, else -> N } | Widget == form = DMSEM003
+match { Flag -> N + M, else -> N } | null == form = DMSEM003
+match { Flag -> N + M, else -> N } | if form = DMSEM003
+match { Flag -> N + M, else -> N } | for where form = DMSEM003
+match { Flag -> N + M, else -> N } | not form = DMSEM003
+match { Flag -> N + M, else -> N } | form and Flag = DMSEM003
+match { Flag -> N + M, else -> N } | match { form -> 1 } = DMMAT001
+match { Flag -> N + M, else -> N } | form * N = ok
+match { Flag -> N + M, else -> N } | N * form = ok
+match { Flag -> N + M, else -> N } | form * Name = DMSEM003
+match { Flag -> N + M, else -> N } | Name * form = DMSEM003
+match { Flag -> N + M, else -> N } | match arm into Number = ok
+match { Flag -> N + M, else -> N } | match arm into Decimal = ok
+match { Flag -> N + M, else -> N } | match arm into Text = DMMAT002+DMSEM003
+match { Flag -> N + M, else -> N } | match arm into Boolean = DMMAT002+DMSEM003
+match { Flag -> N + M, else -> N } | match arm into Date = DMMAT002+DMSEM003
+match { Flag -> N + M, else -> N } | match arm into Color = DMMAT002+DMSEM003
+match { Flag -> N + M, else -> N } | match arm into Widget = DMMAT002+DMSEM003
+G(N) | assign Number = ok
+G(N) | assign Decimal = ok
+G(N) | assign Text = DMSEM003
+G(N) | assign Boolean = DMSEM003
+G(N) | assign Date = DMSEM003
+G(N) | assign Color = DMSEM003
+G(N) | assign Widget = DMSEM003
+G(N) | create Number = ok
+G(N) | create Decimal = ok
+G(N) | create Text = DMSEM003
+G(N) | create Boolean = DMSEM003
+G(N) | create Date = DMSEM003
+G(N) | create Color = DMSEM003
+G(N) | create Widget = DMSEM003
+G(N) | invoke Number = ok
+G(N) | invoke Decimal = ok
+G(N) | invoke Text = DMSEM003
+G(N) | invoke Boolean = DMSEM003
+G(N) | invoke Date = DMSEM003
+G(N) | invoke Color = DMSEM003
+G(N) | invoke Widget = DMSEM003
+G(N) | call Number = ok
+G(N) | call Decimal = ok
+G(N) | call Text = DMFUN003
+G(N) | call Boolean = DMFUN003
+G(N) | call Date = DMFUN003
+G(N) | call Color = DMFUN003
+G(N) | call Widget = DMFUN003
+G(N) | return Number = ok
+G(N) | return Decimal = ok
+G(N) | return Text = DMFUN006
+G(N) | return Boolean = DMFUN006
+G(N) | return Date = DMFUN006
+G(N) | return Color = DMFUN006
+G(N) | return Widget = DMFUN006
+G(N) | default Number = DMFUN008+DMSEM005
+G(N) | default Decimal = DMFUN008+DMSEM005
+G(N) | default Text = DMFUN008+DMSEM003
+G(N) | default Boolean = DMFUN008+DMSEM003
+G(N) | default Date = DMFUN008+DMSEM003
+G(N) | default Color = DMFUN008+DMSEM003
+G(N) | default Widget = DMFUN008+DMSEM003
+G(N) | form == Number = ok
+G(N) | form == Decimal = ok
+G(N) | form == Text = DMSEM003
+G(N) | form == Boolean = DMSEM003
+G(N) | form == Date = DMSEM003
+G(N) | form == Color = DMSEM003
+G(N) | form == Widget = DMSEM003
+G(N) | form == null = DMSEM003
+G(N) | Number == form = ok
+G(N) | Decimal == form = ok
+G(N) | Text == form = DMSEM003
+G(N) | Boolean == form = DMSEM003
+G(N) | Date == form = DMSEM003
+G(N) | Color == form = DMSEM003
+G(N) | Widget == form = DMSEM003
+G(N) | null == form = DMSEM003
+G(N) | if form = DMSEM003
+G(N) | for where form = DMSEM003
+G(N) | not form = DMSEM003
+G(N) | form and Flag = DMSEM003
+G(N) | match { form -> 1 } = DMMAT001
+G(N) | form * N = ok
+G(N) | N * form = ok
+G(N) | form * Name = DMSEM003
+G(N) | Name * form = DMSEM003
+G(N) | match arm into Number = ok
+G(N) | match arm into Decimal = ok
+G(N) | match arm into Text = DMMAT002+DMSEM003
+G(N) | match arm into Boolean = DMMAT002+DMSEM003
+G(N) | match arm into Date = DMMAT002+DMSEM003
+G(N) | match arm into Color = DMMAT002+DMSEM003
+G(N) | match arm into Widget = DMMAT002+DMSEM003
+## FormGridF3
+form | position = verdict
+N + M | policy form == Number = ok
+N + M | policy form == Text = DMSEM003
+N + M | policy form == null = DMSEM003
+N + M | policy form != null = DMSEM003
+N + M | require form == Number = ok
+N + M | require form == Text = DMSEM003
+N + M | stage require form == Text = DMSEM003
+N + M | onEntry assign Number = ok
+N + M | onEntry assign Text = DMSEM003
+C + C | policy form == Number = ok
+C + C | policy form == Text = DMSEM003
+C + C | policy form == null = DMSEM003
+C + C | policy form != null = DMSEM003
+C + C | require form == Number = ok
+C + C | require form == Text = DMSEM003
+C + C | stage require form == Text = DMSEM003
+C + C | onEntry assign Number = ok
+C + C | onEntry assign Text = DMSEM003
+Due + N | policy form == Number = DMSEM003
+Due + N | policy form == Text = DMSEM003
+Due + N | policy form == null = DMSEM003
+Due + N | policy form != null = DMSEM003
+Due + N | require form == Number = DMSEM003
+Due + N | require form == Text = DMSEM003
+Due + N | stage require form == Text = DMSEM003
+Due + N | onEntry assign Number = DMSEM003
+Due + N | onEntry assign Text = DMSEM003
+part Qty | policy form == Number = ok
+part Qty | policy form == Text = DMSEM003
+part Qty | policy form == null = ok
+part Qty | policy form != null = ok
+part Qty | require form == Number = ok
+part Qty | require form == Text = DMSEM003
+part Qty | stage require form == Text = DMSEM003
+part Qty | onEntry assign Number = ok
+part Qty | onEntry assign Text = DMSEM003
+part Label | policy form == Number = DMSEM003
+part Label | policy form == Text = ok
+part Label | policy form == null = ok
+part Label | policy form != null = ok
+part Label | require form == Number = DMSEM003
+part Label | require form == Text = ok
+part Label | stage require form == Text = ok
+part Label | onEntry assign Number = DMSEM003
+part Label | onEntry assign Text = ok
+part Due | policy form == Number = DMSEM003
+part Due | policy form == Text = DMSEM003
+part Due | policy form == null = ok
+part Due | policy form != null = ok
+part Due | require form == Number = DMSEM003
+part Due | require form == Text = DMSEM003
+part Due | stage require form == Text = DMSEM003
+part Due | onEntry assign Number = DMSEM003
+part Due | onEntry assign Text = DMSEM003
+part Tone | policy form == Number = DMSEM003
+part Tone | policy form == Text = ok
+part Tone | policy form == null = ok
+part Tone | policy form != null = ok
+part Tone | require form == Number = DMSEM003
+part Tone | require form == Text = ok
+part Tone | stage require form == Text = ok
+part Tone | onEntry assign Number = DMSEM003
+part Tone | onEntry assign Text = ok
+p Qty | policy form == Number = n/a
+p Qty | policy form == Text = n/a
+p Qty | policy form == null = n/a
+p Qty | policy form != null = n/a
+p Qty | require form == Number = n/a
+p Qty | require form == Text = n/a
+p Qty | stage require form == Text = n/a
+p Qty | onEntry assign Number = ok
+p Qty | onEntry assign Text = DMSEM003
+p Label | policy form == Number = n/a
+p Label | policy form == Text = n/a
+p Label | policy form == null = n/a
+p Label | policy form != null = n/a
+p Label | require form == Number = n/a
+p Label | require form == Text = n/a
+p Label | stage require form == Text = n/a
+p Label | onEntry assign Number = DMSEM003
+p Label | onEntry assign Text = ok
+o Qty | policy form == Number = n/a
+o Qty | policy form == Text = n/a
+o Qty | policy form == null = n/a
+o Qty | policy form != null = n/a
+o Qty | require form == Number = n/a
+o Qty | require form == Text = n/a
+o Qty | stage require form == Text = n/a
+o Qty | onEntry assign Number = n/a
+o Qty | onEntry assign Text = n/a
+o Label | policy form == Number = n/a
+o Label | policy form == Text = n/a
+o Label | policy form == null = n/a
+o Label | policy form != null = n/a
+o Label | require form == Number = n/a
+o Label | require form == Text = n/a
+o Label | stage require form == Text = n/a
+o Label | onEntry assign Number = n/a
+o Label | onEntry assign Text = n/a
+count parts | policy form == Number = ok
+count parts | policy form == Text = DMSEM003
+count parts | policy form == null = DMSEM003
+count parts | policy form != null = DMSEM003
+count parts | require form == Number = ok
+count parts | require form == Text = DMSEM003
+count parts | stage require form == Text = DMSEM003
+count parts | onEntry assign Number = ok
+count parts | onEntry assign Text = DMSEM003
+sum parts Qty | policy form == Number = ok
+sum parts Qty | policy form == Text = DMSEM003
+sum parts Qty | policy form == null = DMSEM003
+sum parts Qty | policy form != null = DMSEM003
+sum parts Qty | require form == Number = ok
+sum parts Qty | require form == Text = DMSEM003
+sum parts Qty | stage require form == Text = DMSEM003
+sum parts Qty | onEntry assign Number = ok
+sum parts Qty | onEntry assign Text = DMSEM003
+sum parts Price | policy form == Number = ok
+sum parts Price | policy form == Text = DMSEM003
+sum parts Price | policy form == null = DMSEM003
+sum parts Price | policy form != null = DMSEM003
+sum parts Price | require form == Number = ok
+sum parts Price | require form == Text = DMSEM003
+sum parts Price | stage require form == Text = DMSEM003
+sum parts Price | onEntry assign Number = ok
+sum parts Price | onEntry assign Text = DMSEM003
+Cost Amount | policy form == Number = DMSTR006
+Cost Amount | policy form == Text = DMSEM003+DMSTR006
+Cost Amount | policy form == null = DMSTR006
+Cost Amount | policy form != null = DMSTR006
+Cost Amount | require form == Number = DMSTR006
+Cost Amount | require form == Text = DMSEM003+DMSTR006
+Cost Amount | stage require form == Text = DMSEM003+DMSTR006
+Cost Amount | onEntry assign Number = DMSTR006
+Cost Amount | onEntry assign Text = DMSEM003+DMSTR006
+match { Flag -> N + M, else -> N } | policy form == Number = ok
+match { Flag -> N + M, else -> N } | policy form == Text = DMSEM003
+match { Flag -> N + M, else -> N } | policy form == null = DMSEM003
+match { Flag -> N + M, else -> N } | policy form != null = DMSEM003
+match { Flag -> N + M, else -> N } | require form == Number = ok
+match { Flag -> N + M, else -> N } | require form == Text = DMSEM003
+match { Flag -> N + M, else -> N } | stage require form == Text = DMSEM003
+match { Flag -> N + M, else -> N } | onEntry assign Number = ok
+match { Flag -> N + M, else -> N } | onEntry assign Text = DMSEM003
+G(N) | policy form == Number = ok
+G(N) | policy form == Text = DMSEM003
+G(N) | policy form == null = DMSEM003
+G(N) | policy form != null = DMSEM003
+G(N) | require form == Number = ok
+G(N) | require form == Text = DMSEM003
+G(N) | stage require form == Text = DMSEM003
+G(N) | onEntry assign Number = ok
+G(N) | onEntry assign Text = DMSEM003
+N (control) | assign Number = ok
+N (control) | assign Decimal = ok
+N (control) | assign Text = DMSEM003
+N (control) | assign Boolean = DMSEM003
+N (control) | assign Date = DMSEM003
+N (control) | assign Color = DMSEM003
+N (control) | assign Widget = DMSEM003
+N (control) | create Number = ok
+N (control) | create Decimal = ok
+N (control) | create Text = DMSEM003
+N (control) | create Boolean = DMSEM003
+N (control) | create Date = DMSEM003
+N (control) | create Color = DMSEM003
+N (control) | create Widget = DMSEM003
+N (control) | invoke Number = ok
+N (control) | invoke Decimal = ok
+N (control) | invoke Text = DMSEM003
+N (control) | invoke Boolean = DMSEM003
+N (control) | invoke Date = DMSEM003
+N (control) | invoke Color = DMSEM003
+N (control) | invoke Widget = DMSEM003
+N (control) | call Number = ok
+N (control) | call Decimal = ok
+N (control) | call Text = DMFUN003
+N (control) | call Boolean = DMFUN003
+N (control) | call Date = DMFUN003
+N (control) | call Color = DMFUN003
+N (control) | call Widget = DMFUN003
+N (control) | return Number = ok
+N (control) | return Decimal = ok
+N (control) | return Text = DMFUN006
+N (control) | return Boolean = DMFUN006
+N (control) | return Date = DMFUN006
+N (control) | return Color = DMFUN006
+N (control) | return Widget = DMFUN006
+N (control) | default Number = DMSEM003
+N (control) | default Decimal = DMSEM003
+N (control) | default Text = DMSEM003
+N (control) | default Boolean = DMSEM003
+N (control) | default Date = DMSEM003
+N (control) | default Color = DMSEM003
+N (control) | default Widget = DMSEM003
+N (control) | form == Number = ok
+N (control) | form == Decimal = ok
+N (control) | form == Text = DMSEM003
+N (control) | form == Boolean = DMSEM003
+N (control) | form == Date = DMSEM003
+N (control) | form == Color = DMSEM003
+N (control) | form == Widget = DMSEM003
+N (control) | form == null = DMSEM003
+N (control) | Number == form = ok
+N (control) | Decimal == form = ok
+N (control) | Text == form = DMSEM003
+N (control) | Boolean == form = DMSEM003
+N (control) | Date == form = DMSEM003
+N (control) | Color == form = DMSEM003
+N (control) | Widget == form = DMSEM003
+N (control) | null == form = DMSEM003
+N (control) | if form = DMSEM003
+N (control) | for where form = DMSEM003
+N (control) | not form = DMSEM003
+N (control) | form and Flag = DMSEM003
+N (control) | match { form -> 1 } = DMMAT001
+N (control) | form * N = ok
+N (control) | N * form = ok
+N (control) | form * Name = DMSEM003
+N (control) | Name * form = DMSEM003
+N (control) | match arm into Number = ok
+N (control) | match arm into Decimal = ok
+N (control) | match arm into Text = DMMAT002+DMSEM003
+N (control) | match arm into Boolean = DMMAT002+DMSEM003
+N (control) | match arm into Date = DMMAT002+DMSEM003
+N (control) | match arm into Color = DMMAT002+DMSEM003
+N (control) | match arm into Widget = DMMAT002+DMSEM003
+N (control) | policy form == Number = ok
+N (control) | policy form == Text = DMSEM003
+N (control) | policy form == null = DMSEM003
+N (control) | policy form != null = DMSEM003
+N (control) | require form == Number = ok
+N (control) | require form == Text = DMSEM003
+N (control) | stage require form == Text = DMSEM003
+N (control) | onEntry assign Number = ok
+N (control) | onEntry assign Text = DMSEM003
+part book Qty | assign Number = ok
+part book Qty | assign Decimal = ok
+part book Qty | assign Text = DMSEM003
+part book Qty | assign Boolean = DMSEM003
+part book Qty | assign Date = DMSEM003
+part book Qty | assign Color = DMSEM003
+part book Qty | assign Widget = DMSEM003
+part book Qty | create Number = ok
+part book Qty | create Decimal = ok
+part book Qty | create Text = DMSEM003
+part book Qty | create Boolean = DMSEM003
+part book Qty | create Date = DMSEM003
+part book Qty | create Color = DMSEM003
+part book Qty | create Widget = DMSEM003
+part book Qty | invoke Number = ok
+part book Qty | invoke Decimal = ok
+part book Qty | invoke Text = DMSEM003
+part book Qty | invoke Boolean = DMSEM003
+part book Qty | invoke Date = DMSEM003
+part book Qty | invoke Color = DMSEM003
+part book Qty | invoke Widget = DMSEM003
+part book Qty | call Number = ok
+part book Qty | call Decimal = ok
+part book Qty | call Text = DMFUN003
+part book Qty | call Boolean = DMFUN003
+part book Qty | call Date = DMFUN003
+part book Qty | call Color = DMFUN003
+part book Qty | call Widget = DMFUN003
+part book Qty | return Number = n/a
+part book Qty | return Decimal = n/a
+part book Qty | return Text = n/a
+part book Qty | return Boolean = n/a
+part book Qty | return Date = n/a
+part book Qty | return Color = n/a
+part book Qty | return Widget = n/a
+part book Qty | default Number = DMSEM006
+part book Qty | default Decimal = DMSEM006
+part book Qty | default Text = DMSEM006
+part book Qty | default Boolean = DMSEM006
+part book Qty | default Date = DMSEM006
+part book Qty | default Color = DMSEM006
+part book Qty | default Widget = DMSEM006
+part book Qty | form == Number = ok
+part book Qty | form == Decimal = ok
+part book Qty | form == Text = DMSEM003
+part book Qty | form == Boolean = DMSEM003
+part book Qty | form == Date = DMSEM003
+part book Qty | form == Color = DMSEM003
+part book Qty | form == Widget = DMSEM003
+part book Qty | form == null = ok
+part book Qty | Number == form = ok
+part book Qty | Decimal == form = ok
+part book Qty | Text == form = DMSEM003
+part book Qty | Boolean == form = DMSEM003
+part book Qty | Date == form = DMSEM003
+part book Qty | Color == form = DMSEM003
+part book Qty | Widget == form = DMSEM003
+part book Qty | null == form = ok
+part book Qty | if form = DMSEM003
+part book Qty | for where form = DMSEM003
+part book Qty | not form = DMSEM003
+part book Qty | form and Flag = DMSEM003
+part book Qty | match { form -> 1 } = DMMAT001
+part book Qty | form * N = ok
+part book Qty | N * form = ok
+part book Qty | form * Name = DMSEM003
+part book Qty | Name * form = DMSEM003
+part book Qty | match arm into Number = ok
+part book Qty | match arm into Decimal = ok
+part book Qty | match arm into Text = DMMAT002+DMSEM003
+part book Qty | match arm into Boolean = DMMAT002+DMSEM003
+part book Qty | match arm into Date = DMMAT002+DMSEM003
+part book Qty | match arm into Color = DMMAT002+DMSEM003
+part book Qty | match arm into Widget = DMMAT002+DMSEM003
+part book Qty | policy form == Number = ok
+part book Qty | policy form == Text = DMSEM003
+part book Qty | policy form == null = ok
+part book Qty | policy form != null = ok
+part book Qty | require form == Number = ok
+part book Qty | require form == Text = DMSEM003
+part book Qty | stage require form == Text = DMSEM003
+part book Qty | onEntry assign Number = ok
+part book Qty | onEntry assign Text = DMSEM003
+p book Qty | assign Number = ok
+p book Qty | assign Decimal = ok
+p book Qty | assign Text = DMSEM003
+p book Qty | assign Boolean = DMSEM003
+p book Qty | assign Date = DMSEM003
+p book Qty | assign Color = DMSEM003
+p book Qty | assign Widget = DMSEM003
+p book Qty | create Number = ok
+p book Qty | create Decimal = ok
+p book Qty | create Text = DMSEM003
+p book Qty | create Boolean = DMSEM003
+p book Qty | create Date = DMSEM003
+p book Qty | create Color = DMSEM003
+p book Qty | create Widget = DMSEM003
+p book Qty | invoke Number = ok
+p book Qty | invoke Decimal = ok
+p book Qty | invoke Text = DMSEM003
+p book Qty | invoke Boolean = DMSEM003
+p book Qty | invoke Date = DMSEM003
+p book Qty | invoke Color = DMSEM003
+p book Qty | invoke Widget = DMSEM003
+p book Qty | call Number = ok
+p book Qty | call Decimal = ok
+p book Qty | call Text = DMFUN003
+p book Qty | call Boolean = DMFUN003
+p book Qty | call Date = DMFUN003
+p book Qty | call Color = DMFUN003
+p book Qty | call Widget = DMFUN003
+p book Qty | return Number = n/a
+p book Qty | return Decimal = n/a
+p book Qty | return Text = n/a
+p book Qty | return Boolean = n/a
+p book Qty | return Date = n/a
+p book Qty | return Color = n/a
+p book Qty | return Widget = n/a
+p book Qty | default Number = n/a
+p book Qty | default Decimal = n/a
+p book Qty | default Text = n/a
+p book Qty | default Boolean = n/a
+p book Qty | default Date = n/a
+p book Qty | default Color = n/a
+p book Qty | default Widget = n/a
+p book Qty | form == Number = ok
+p book Qty | form == Decimal = ok
+p book Qty | form == Text = DMSEM003
+p book Qty | form == Boolean = DMSEM003
+p book Qty | form == Date = DMSEM003
+p book Qty | form == Color = DMSEM003
+p book Qty | form == Widget = DMSEM003
+p book Qty | form == null = ok
+p book Qty | Number == form = ok
+p book Qty | Decimal == form = ok
+p book Qty | Text == form = DMSEM003
+p book Qty | Boolean == form = DMSEM003
+p book Qty | Date == form = DMSEM003
+p book Qty | Color == form = DMSEM003
+p book Qty | Widget == form = DMSEM003
+p book Qty | null == form = ok
+p book Qty | if form = DMSEM003
+p book Qty | for where form = DMSEM003
+p book Qty | not form = DMSEM003
+p book Qty | form and Flag = DMSEM003
+p book Qty | match { form -> 1 } = DMMAT001
+p book Qty | form * N = ok
+p book Qty | N * form = ok
+p book Qty | form * Name = DMSEM003
+p book Qty | Name * form = DMSEM003
+p book Qty | match arm into Number = ok
+p book Qty | match arm into Decimal = ok
+p book Qty | match arm into Text = DMMAT002+DMSEM003
+p book Qty | match arm into Boolean = DMMAT002+DMSEM003
+p book Qty | match arm into Date = DMMAT002+DMSEM003
+p book Qty | match arm into Color = DMMAT002+DMSEM003
+p book Qty | match arm into Widget = DMMAT002+DMSEM003
+p book Qty | policy form == Number = n/a
+p book Qty | policy form == Text = n/a
+p book Qty | policy form == null = n/a
+p book Qty | policy form != null = n/a
+p book Qty | require form == Number = n/a
+p book Qty | require form == Text = n/a
+p book Qty | stage require form == Text = n/a
+p book Qty | onEntry assign Number = ok
+p book Qty | onEntry assign Text = DMSEM003
+part Opt | assign Number = ok
+part Opt | assign Decimal = ok
+part Opt | assign Text = DMSEM003
+part Opt | assign Boolean = DMSEM003
+part Opt | assign Date = DMSEM003
+part Opt | assign Color = DMSEM003
+part Opt | assign Widget = DMSEM003
+part Opt | create Number = ok
+part Opt | create Decimal = ok
+part Opt | create Text = DMSEM003
+part Opt | create Boolean = DMSEM003
+part Opt | create Date = DMSEM003
+part Opt | create Color = DMSEM003
+part Opt | create Widget = DMSEM003
+part Opt | invoke Number = ok
+part Opt | invoke Decimal = ok
+part Opt | invoke Text = DMSEM003
+part Opt | invoke Boolean = DMSEM003
+part Opt | invoke Date = DMSEM003
+part Opt | invoke Color = DMSEM003
+part Opt | invoke Widget = DMSEM003
+part Opt | call Number = ok
+part Opt | call Decimal = ok
+part Opt | call Text = DMFUN003
+part Opt | call Boolean = DMFUN003
+part Opt | call Date = DMFUN003
+part Opt | call Color = DMFUN003
+part Opt | call Widget = DMFUN003
+part Opt | return Number = n/a
+part Opt | return Decimal = n/a
+part Opt | return Text = n/a
+part Opt | return Boolean = n/a
+part Opt | return Date = n/a
+part Opt | return Color = n/a
+part Opt | return Widget = n/a
+part Opt | default Number = DMSEM006
+part Opt | default Decimal = DMSEM006
+part Opt | default Text = DMSEM006
+part Opt | default Boolean = DMSEM006
+part Opt | default Date = DMSEM006
+part Opt | default Color = DMSEM006
+part Opt | default Widget = DMSEM006
+part Opt | form == Number = ok
+part Opt | form == Decimal = ok
+part Opt | form == Text = DMSEM003
+part Opt | form == Boolean = DMSEM003
+part Opt | form == Date = DMSEM003
+part Opt | form == Color = DMSEM003
+part Opt | form == Widget = DMSEM003
+part Opt | form == null = ok
+part Opt | Number == form = ok
+part Opt | Decimal == form = ok
+part Opt | Text == form = DMSEM003
+part Opt | Boolean == form = DMSEM003
+part Opt | Date == form = DMSEM003
+part Opt | Color == form = DMSEM003
+part Opt | Widget == form = DMSEM003
+part Opt | null == form = ok
+part Opt | if form = DMSEM003
+part Opt | for where form = DMSEM003
+part Opt | not form = DMSEM003
+part Opt | form and Flag = DMSEM003
+part Opt | match { form -> 1 } = DMMAT001
+part Opt | form * N = ok
+part Opt | N * form = ok
+part Opt | form * Name = DMSEM003
+part Opt | Name * form = DMSEM003
+part Opt | match arm into Number = ok
+part Opt | match arm into Decimal = ok
+part Opt | match arm into Text = DMMAT002+DMSEM003
+part Opt | match arm into Boolean = DMMAT002+DMSEM003
+part Opt | match arm into Date = DMMAT002+DMSEM003
+part Opt | match arm into Color = DMMAT002+DMSEM003
+part Opt | match arm into Widget = DMMAT002+DMSEM003
+part Opt | policy form == Number = ok
+part Opt | policy form == Text = DMSEM003
+part Opt | policy form == null = ok
+part Opt | policy form != null = ok
+part Opt | require form == Number = ok
+part Opt | require form == Text = DMSEM003
+part Opt | stage require form == Text = DMSEM003
+part Opt | onEntry assign Number = ok
+part Opt | onEntry assign Text = DMSEM003
+part Owner | assign Number = DMSEM003
+part Owner | assign Decimal = DMSEM003
+part Owner | assign Text = DMSEM003
+part Owner | assign Boolean = DMSEM003
+part Owner | assign Date = DMSEM003
+part Owner | assign Color = DMSEM003
+part Owner | assign Widget = ok
+part Owner | create Number = DMSEM003
+part Owner | create Decimal = DMSEM003
+part Owner | create Text = DMSEM003
+part Owner | create Boolean = DMSEM003
+part Owner | create Date = DMSEM003
+part Owner | create Color = DMSEM003
+part Owner | create Widget = ok
+part Owner | invoke Number = DMSEM003
+part Owner | invoke Decimal = DMSEM003
+part Owner | invoke Text = DMSEM003
+part Owner | invoke Boolean = DMSEM003
+part Owner | invoke Date = DMSEM003
+part Owner | invoke Color = DMSEM003
+part Owner | invoke Widget = ok
+part Owner | call Number = DMFUN003
+part Owner | call Decimal = DMFUN003
+part Owner | call Text = DMFUN003
+part Owner | call Boolean = DMFUN003
+part Owner | call Date = DMFUN003
+part Owner | call Color = DMFUN003
+part Owner | call Widget = ok
+part Owner | return Number = n/a
+part Owner | return Decimal = n/a
+part Owner | return Text = n/a
+part Owner | return Boolean = n/a
+part Owner | return Date = n/a
+part Owner | return Color = n/a
+part Owner | return Widget = n/a
+part Owner | default Number = DMSEM006
+part Owner | default Decimal = DMSEM006
+part Owner | default Text = DMSEM006
+part Owner | default Boolean = DMSEM006
+part Owner | default Date = DMSEM006
+part Owner | default Color = DMSEM006
+part Owner | default Widget = DMSEM006
+part Owner | form == Number = DMSEM003
+part Owner | form == Decimal = DMSEM003
+part Owner | form == Text = DMSEM003
+part Owner | form == Boolean = DMSEM003
+part Owner | form == Date = DMSEM003
+part Owner | form == Color = DMSEM003
+part Owner | form == Widget = ok
+part Owner | form == null = ok
+part Owner | Number == form = DMSEM003
+part Owner | Decimal == form = DMSEM003
+part Owner | Text == form = DMSEM003
+part Owner | Boolean == form = DMSEM003
+part Owner | Date == form = DMSEM003
+part Owner | Color == form = DMSEM003
+part Owner | Widget == form = ok
+part Owner | null == form = ok
+part Owner | if form = DMSEM003
+part Owner | for where form = DMSEM003
+part Owner | not form = DMSEM003
+part Owner | form and Flag = DMSEM003
+part Owner | match { form -> 1 } = DMMAT001
+part Owner | form * N = DMSEM003
+part Owner | N * form = DMSEM003
+part Owner | form * Name = DMSEM003
+part Owner | Name * form = DMSEM003
+part Owner | match arm into Number = DMMAT002+DMSEM003
+part Owner | match arm into Decimal = DMMAT002+DMSEM003
+part Owner | match arm into Text = DMMAT002+DMSEM003
+part Owner | match arm into Boolean = DMMAT002+DMSEM003
+part Owner | match arm into Date = DMMAT002+DMSEM003
+part Owner | match arm into Color = DMMAT002+DMSEM003
+part Owner | match arm into Widget = ok
+part Owner | policy form == Number = DMSEM003
+part Owner | policy form == Text = DMSEM003
+part Owner | policy form == null = ok
+part Owner | policy form != null = ok
+part Owner | require form == Number = DMSEM003
+part Owner | require form == Text = DMSEM003
+part Owner | stage require form == Text = DMSEM003
+part Owner | onEntry assign Number = DMSEM003
+part Owner | onEntry assign Text = DMSEM003
+part Cash | assign Number = DMSEM003+DMSTR006
+part Cash | assign Decimal = DMSEM003+DMSTR006
+part Cash | assign Text = DMSEM003+DMSTR006
+part Cash | assign Boolean = DMSEM003+DMSTR006
+part Cash | assign Date = DMSEM003+DMSTR006
+part Cash | assign Color = DMSEM003+DMSTR006
+part Cash | assign Widget = DMSEM003+DMSTR006
+part Cash | create Number = DMSEM003+DMSTR006
+part Cash | create Decimal = DMSEM003+DMSTR006
+part Cash | create Text = DMSEM003+DMSTR006
+part Cash | create Boolean = DMSEM003+DMSTR006
+part Cash | create Date = DMSEM003+DMSTR006
+part Cash | create Color = DMSEM003+DMSTR006
+part Cash | create Widget = DMSEM003+DMSTR006
+part Cash | invoke Number = DMSEM003+DMSTR006
+part Cash | invoke Decimal = DMSEM003+DMSTR006
+part Cash | invoke Text = DMSEM003+DMSTR006
+part Cash | invoke Boolean = DMSEM003+DMSTR006
+part Cash | invoke Date = DMSEM003+DMSTR006
+part Cash | invoke Color = DMSEM003+DMSTR006
+part Cash | invoke Widget = DMSEM003+DMSTR006
+part Cash | call Number = DMFUN003+DMSTR006
+part Cash | call Decimal = DMFUN003+DMSTR006
+part Cash | call Text = DMFUN003+DMSTR006
+part Cash | call Boolean = DMFUN003+DMSTR006
+part Cash | call Date = DMFUN003+DMSTR006
+part Cash | call Color = DMFUN003+DMSTR006
+part Cash | call Widget = DMFUN003+DMSTR006
+part Cash | return Number = n/a
+part Cash | return Decimal = n/a
+part Cash | return Text = n/a
+part Cash | return Boolean = n/a
+part Cash | return Date = n/a
+part Cash | return Color = n/a
+part Cash | return Widget = n/a
+part Cash | default Number = DMSEM006+DMSTR006
+part Cash | default Decimal = DMSEM006+DMSTR006
+part Cash | default Text = DMSEM006+DMSTR006
+part Cash | default Boolean = DMSEM006+DMSTR006
+part Cash | default Date = DMSEM006+DMSTR006
+part Cash | default Color = DMSEM006+DMSTR006
+part Cash | default Widget = DMSEM006+DMSTR006
+part Cash | form == Number = DMSEM003+DMSTR006
+part Cash | form == Decimal = DMSEM003+DMSTR006
+part Cash | form == Text = DMSEM003+DMSTR006
+part Cash | form == Boolean = DMSEM003+DMSTR006
+part Cash | form == Date = DMSEM003+DMSTR006
+part Cash | form == Color = DMSEM003+DMSTR006
+part Cash | form == Widget = DMSEM003+DMSTR006
+part Cash | form == null = DMSTR006
+part Cash | Number == form = DMSEM003+DMSTR006
+part Cash | Decimal == form = DMSEM003+DMSTR006
+part Cash | Text == form = DMSEM003+DMSTR006
+part Cash | Boolean == form = DMSEM003+DMSTR006
+part Cash | Date == form = DMSEM003+DMSTR006
+part Cash | Color == form = DMSEM003+DMSTR006
+part Cash | Widget == form = DMSEM003+DMSTR006
+part Cash | null == form = DMSTR006
+part Cash | if form = DMSEM003+DMSTR006
+part Cash | for where form = DMSEM003+DMSTR006
+part Cash | not form = DMSEM003+DMSTR006
+part Cash | form and Flag = DMSEM003+DMSTR006
+part Cash | match { form -> 1 } = DMMAT001+DMSTR006
+part Cash | form * N = DMSEM003+DMSTR006
+part Cash | N * form = DMSEM003+DMSTR006
+part Cash | form * Name = DMSEM003+DMSTR006
+part Cash | Name * form = DMSEM003+DMSTR006
+part Cash | match arm into Number = DMMAT002+DMSEM003+DMSTR006
+part Cash | match arm into Decimal = DMMAT002+DMSEM003+DMSTR006
+part Cash | match arm into Text = DMMAT002+DMSEM003+DMSTR006
+part Cash | match arm into Boolean = DMMAT002+DMSEM003+DMSTR006
+part Cash | match arm into Date = DMMAT002+DMSEM003+DMSTR006
+part Cash | match arm into Color = DMMAT002+DMSEM003+DMSTR006
+part Cash | match arm into Widget = DMMAT002+DMSEM003+DMSTR006
+part Cash | policy form == Number = DMSEM003+DMSTR006
+part Cash | policy form == Text = DMSEM003+DMSTR006
+part Cash | policy form == null = DMSTR006
+part Cash | policy form != null = DMSTR006
+part Cash | require form == Number = DMSEM003+DMSTR006
+part Cash | require form == Text = DMSEM003+DMSTR006
+part Cash | stage require form == Text = DMSEM003+DMSTR006
+part Cash | onEntry assign Number = DMSEM003+DMSTR006
+part Cash | onEntry assign Text = DMSEM003+DMSTR006
+match { Flag -> N, else -> N + M } | assign Number = ok
+match { Flag -> N, else -> N + M } | assign Decimal = ok
+match { Flag -> N, else -> N + M } | assign Text = DMSEM003
+match { Flag -> N, else -> N + M } | assign Boolean = DMSEM003
+match { Flag -> N, else -> N + M } | assign Date = DMSEM003
+match { Flag -> N, else -> N + M } | assign Color = DMSEM003
+match { Flag -> N, else -> N + M } | assign Widget = DMSEM003
+match { Flag -> N, else -> N + M } | create Number = ok
+match { Flag -> N, else -> N + M } | create Decimal = ok
+match { Flag -> N, else -> N + M } | create Text = DMSEM003
+match { Flag -> N, else -> N + M } | create Boolean = DMSEM003
+match { Flag -> N, else -> N + M } | create Date = DMSEM003
+match { Flag -> N, else -> N + M } | create Color = DMSEM003
+match { Flag -> N, else -> N + M } | create Widget = DMSEM003
+match { Flag -> N, else -> N + M } | invoke Number = ok
+match { Flag -> N, else -> N + M } | invoke Decimal = ok
+match { Flag -> N, else -> N + M } | invoke Text = DMSEM003
+match { Flag -> N, else -> N + M } | invoke Boolean = DMSEM003
+match { Flag -> N, else -> N + M } | invoke Date = DMSEM003
+match { Flag -> N, else -> N + M } | invoke Color = DMSEM003
+match { Flag -> N, else -> N + M } | invoke Widget = DMSEM003
+match { Flag -> N, else -> N + M } | call Number = ok
+match { Flag -> N, else -> N + M } | call Decimal = ok
+match { Flag -> N, else -> N + M } | call Text = DMFUN003
+match { Flag -> N, else -> N + M } | call Boolean = DMFUN003
+match { Flag -> N, else -> N + M } | call Date = DMFUN003
+match { Flag -> N, else -> N + M } | call Color = DMFUN003
+match { Flag -> N, else -> N + M } | call Widget = DMFUN003
+match { Flag -> N, else -> N + M } | return Number = DMFUN005
+match { Flag -> N, else -> N + M } | return Decimal = DMFUN005
+match { Flag -> N, else -> N + M } | return Text = DMFUN005+DMFUN006
+match { Flag -> N, else -> N + M } | return Boolean = DMFUN005+DMFUN006
+match { Flag -> N, else -> N + M } | return Date = DMFUN005+DMFUN006
+match { Flag -> N, else -> N + M } | return Color = DMFUN005+DMFUN006
+match { Flag -> N, else -> N + M } | return Widget = DMFUN005+DMFUN006
+match { Flag -> N, else -> N + M } | default Number = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N, else -> N + M } | default Decimal = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N, else -> N + M } | default Text = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N, else -> N + M } | default Boolean = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N, else -> N + M } | default Date = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N, else -> N + M } | default Color = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N, else -> N + M } | default Widget = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> N, else -> N + M } | form == Number = ok
+match { Flag -> N, else -> N + M } | form == Decimal = ok
+match { Flag -> N, else -> N + M } | form == Text = DMSEM003
+match { Flag -> N, else -> N + M } | form == Boolean = DMSEM003
+match { Flag -> N, else -> N + M } | form == Date = DMSEM003
+match { Flag -> N, else -> N + M } | form == Color = DMSEM003
+match { Flag -> N, else -> N + M } | form == Widget = DMSEM003
+match { Flag -> N, else -> N + M } | form == null = DMSEM003
+match { Flag -> N, else -> N + M } | Number == form = ok
+match { Flag -> N, else -> N + M } | Decimal == form = ok
+match { Flag -> N, else -> N + M } | Text == form = DMSEM003
+match { Flag -> N, else -> N + M } | Boolean == form = DMSEM003
+match { Flag -> N, else -> N + M } | Date == form = DMSEM003
+match { Flag -> N, else -> N + M } | Color == form = DMSEM003
+match { Flag -> N, else -> N + M } | Widget == form = DMSEM003
+match { Flag -> N, else -> N + M } | null == form = DMSEM003
+match { Flag -> N, else -> N + M } | if form = DMSEM003
+match { Flag -> N, else -> N + M } | for where form = DMSEM003
+match { Flag -> N, else -> N + M } | not form = DMSEM003
+match { Flag -> N, else -> N + M } | form and Flag = DMSEM003
+match { Flag -> N, else -> N + M } | match { form -> 1 } = DMMAT001
+match { Flag -> N, else -> N + M } | form * N = ok
+match { Flag -> N, else -> N + M } | N * form = ok
+match { Flag -> N, else -> N + M } | form * Name = DMSEM003
+match { Flag -> N, else -> N + M } | Name * form = DMSEM003
+match { Flag -> N, else -> N + M } | match arm into Number = ok
+match { Flag -> N, else -> N + M } | match arm into Decimal = ok
+match { Flag -> N, else -> N + M } | match arm into Text = DMMAT002+DMSEM003
+match { Flag -> N, else -> N + M } | match arm into Boolean = DMMAT002+DMSEM003
+match { Flag -> N, else -> N + M } | match arm into Date = DMMAT002+DMSEM003
+match { Flag -> N, else -> N + M } | match arm into Color = DMMAT002+DMSEM003
+match { Flag -> N, else -> N + M } | match arm into Widget = DMMAT002+DMSEM003
+match { Flag -> N, else -> N + M } | policy form == Number = ok
+match { Flag -> N, else -> N + M } | policy form == Text = DMSEM003
+match { Flag -> N, else -> N + M } | policy form == null = DMSEM003
+match { Flag -> N, else -> N + M } | policy form != null = DMSEM003
+match { Flag -> N, else -> N + M } | require form == Number = ok
+match { Flag -> N, else -> N + M } | require form == Text = DMSEM003
+match { Flag -> N, else -> N + M } | stage require form == Text = DMSEM003
+match { Flag -> N, else -> N + M } | onEntry assign Number = ok
+match { Flag -> N, else -> N + M } | onEntry assign Text = DMSEM003
+match { Flag -> null, else -> N + M } | assign Number = DMSEM003
+match { Flag -> null, else -> N + M } | assign Decimal = DMSEM003
+match { Flag -> null, else -> N + M } | assign Text = DMSEM003
+match { Flag -> null, else -> N + M } | assign Boolean = DMSEM003
+match { Flag -> null, else -> N + M } | assign Date = DMSEM003
+match { Flag -> null, else -> N + M } | assign Color = DMSEM003
+match { Flag -> null, else -> N + M } | assign Widget = DMSEM003
+match { Flag -> null, else -> N + M } | create Number = DMSEM003
+match { Flag -> null, else -> N + M } | create Decimal = DMSEM003
+match { Flag -> null, else -> N + M } | create Text = DMSEM003
+match { Flag -> null, else -> N + M } | create Boolean = DMSEM003
+match { Flag -> null, else -> N + M } | create Date = DMSEM003
+match { Flag -> null, else -> N + M } | create Color = DMSEM003
+match { Flag -> null, else -> N + M } | create Widget = DMSEM003
+match { Flag -> null, else -> N + M } | invoke Number = DMSEM003
+match { Flag -> null, else -> N + M } | invoke Decimal = DMSEM003
+match { Flag -> null, else -> N + M } | invoke Text = DMSEM003
+match { Flag -> null, else -> N + M } | invoke Boolean = DMSEM003
+match { Flag -> null, else -> N + M } | invoke Date = DMSEM003
+match { Flag -> null, else -> N + M } | invoke Color = DMSEM003
+match { Flag -> null, else -> N + M } | invoke Widget = DMSEM003
+match { Flag -> null, else -> N + M } | call Number = DMFUN003
+match { Flag -> null, else -> N + M } | call Decimal = DMFUN003
+match { Flag -> null, else -> N + M } | call Text = DMFUN003
+match { Flag -> null, else -> N + M } | call Boolean = DMFUN003
+match { Flag -> null, else -> N + M } | call Date = DMFUN003
+match { Flag -> null, else -> N + M } | call Color = DMFUN003
+match { Flag -> null, else -> N + M } | call Widget = DMFUN003
+match { Flag -> null, else -> N + M } | return Number = DMFUN005+DMFUN006
+match { Flag -> null, else -> N + M } | return Decimal = DMFUN005+DMFUN006
+match { Flag -> null, else -> N + M } | return Text = DMFUN005+DMFUN006
+match { Flag -> null, else -> N + M } | return Boolean = DMFUN005+DMFUN006
+match { Flag -> null, else -> N + M } | return Date = DMFUN005+DMFUN006
+match { Flag -> null, else -> N + M } | return Color = DMFUN005+DMFUN006
+match { Flag -> null, else -> N + M } | return Widget = DMFUN005+DMFUN006
+match { Flag -> null, else -> N + M } | default Number = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> null, else -> N + M } | default Decimal = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> null, else -> N + M } | default Text = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> null, else -> N + M } | default Boolean = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> null, else -> N + M } | default Date = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> null, else -> N + M } | default Color = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> null, else -> N + M } | default Widget = DMMAT004+DMSEM003+DMSEM005
+match { Flag -> null, else -> N + M } | form == Number = ok
+match { Flag -> null, else -> N + M } | form == Decimal = ok
+match { Flag -> null, else -> N + M } | form == Text = DMSEM003
+match { Flag -> null, else -> N + M } | form == Boolean = DMSEM003
+match { Flag -> null, else -> N + M } | form == Date = DMSEM003
+match { Flag -> null, else -> N + M } | form == Color = DMSEM003
+match { Flag -> null, else -> N + M } | form == Widget = DMSEM003
+match { Flag -> null, else -> N + M } | form == null = ok
+match { Flag -> null, else -> N + M } | Number == form = ok
+match { Flag -> null, else -> N + M } | Decimal == form = ok
+match { Flag -> null, else -> N + M } | Text == form = DMSEM003
+match { Flag -> null, else -> N + M } | Boolean == form = DMSEM003
+match { Flag -> null, else -> N + M } | Date == form = DMSEM003
+match { Flag -> null, else -> N + M } | Color == form = DMSEM003
+match { Flag -> null, else -> N + M } | Widget == form = DMSEM003
+match { Flag -> null, else -> N + M } | null == form = ok
+match { Flag -> null, else -> N + M } | if form = DMSEM003
+match { Flag -> null, else -> N + M } | for where form = DMSEM003
+match { Flag -> null, else -> N + M } | not form = DMSEM003
+match { Flag -> null, else -> N + M } | form and Flag = DMSEM003
+match { Flag -> null, else -> N + M } | match { form -> 1 } = DMMAT001
+match { Flag -> null, else -> N + M } | form * N = DMSEM003
+match { Flag -> null, else -> N + M } | N * form = DMSEM003
+match { Flag -> null, else -> N + M } | form * Name = DMSEM003
+match { Flag -> null, else -> N + M } | Name * form = DMSEM003
+match { Flag -> null, else -> N + M } | match arm into Number = DMSEM003
+match { Flag -> null, else -> N + M } | match arm into Decimal = DMSEM003
+match { Flag -> null, else -> N + M } | match arm into Text = DMMAT002+DMSEM003
+match { Flag -> null, else -> N + M } | match arm into Boolean = DMMAT002+DMSEM003
+match { Flag -> null, else -> N + M } | match arm into Date = DMMAT002+DMSEM003
+match { Flag -> null, else -> N + M } | match arm into Color = DMMAT002+DMSEM003
+match { Flag -> null, else -> N + M } | match arm into Widget = DMMAT002+DMSEM003
+match { Flag -> null, else -> N + M } | policy form == Number = ok
+match { Flag -> null, else -> N + M } | policy form == Text = DMSEM003
+match { Flag -> null, else -> N + M } | policy form == null = ok
+match { Flag -> null, else -> N + M } | policy form != null = ok
+match { Flag -> null, else -> N + M } | require form == Number = ok
+match { Flag -> null, else -> N + M } | require form == Text = DMSEM003
+match { Flag -> null, else -> N + M } | stage require form == Text = DMSEM003
+match { Flag -> null, else -> N + M } | onEntry assign Number = DMSEM003
+match { Flag -> null, else -> N + M } | onEntry assign Text = DMSEM003
+## DateDifference
+case = verdict
+control (Due - Due) == (Due - Due) = ok
+(part Due - Due) == (Due - Due) = DMSEM003
+(Due - part Due) == (Due - Due) = DMSEM003
+(part Due - part Due) == (Due - Due) = DMSEM003
+((Due + A) - Due) == (Due - Due) = DMSEM003
+(Due - (Due + A)) == (Due - Due) = DMSEM003
+control assign Gap to Stamp - Stamp = ok
+assign Gap to part Stamp - Stamp = DMSEM003
+assign Gap to (Stamp + A) - Stamp = DMSEM003
+for p in parts { assign Gap to p Stamp - Stamp } = DMSEM003
+mixed assign Gap to part Stamp - Due = DMSEM003
+mixed control assign Gap to Stamp - Due = DMSEM003
+library assign Gap to Now - Stamp = DMSEM003
+library (Today - Due) == (Due - Due) = DMSEM003
+library assign Gap to (Stamp + 1 Days) - Stamp = DMSEM003
+## OptionalNull
+case = verdict
+Qty is not null = ok
+Qty is null = ok
+Qty == null = ok
+part Qty is not null = ok
+part Qty is null = ok
+part Qty == null = ok
+null == part Qty = ok
+for p in parts where p Qty is not null = ok
+(Qty + 1) == null = ok
+null == (Qty + 1) = ok
+(Qty + A) != null = ok
+required (A + 1) == null = DMSEM003
+## DateOperationOverTypelessDate
+case = verdict
+control assign Due to Due + 5 Days = ok
+assign Due to part Due + 5 Days = DMSEM003
+assign Due to (Due + A) + 5 Days = DMSEM003
+assign Stamp to (Stamp + A) + 5 Hours = DMSEM003
+policy Due < part Due + 5 Days = DMSEM003
+policy part Due + 5 Days < Due = DMSEM003
+policy (Due + A) + 5 Days < Due = DMSEM003
+assign Due to Stamp + 1 = DMSEM003
+assign Stamp to Due + 1 = ok
+assign A to part Due + 5 Days = DMSEM003
+## ImportedContractNameClash
+local Money { Amount: Number } and imported Money { Code: Text } | case = verdict
+assign P:Money := Q:Money = DMCON001+DMSTR006
+assign N := Q Amount (owned) = DMCON001+DMSTR006
+assign N := Q Code (owned) = DMCON001+DMSEM006+DMSTR006
+assign Name := Q Amount (owned) = DMCON001+DMSEM003+DMSTR006
+## SumPropertyKinds
+sum parts X, X: <type> | position = verdict
+Number | policy sum > 0 = ok
+Number | assign Number = ok
+Number | assign Decimal = ok
+Decimal | policy sum > 0 = ok
+Decimal | assign Number = ok
+Decimal | assign Decimal = ok
+Cents | policy sum > 0 = ok
+Cents | assign Number = ok
+Cents | assign Decimal = ok
+Id64 | policy sum > 0 = ok
+Id64 | assign Number = ok
+Id64 | assign Decimal = ok
+Int32 | policy sum > 0 = DMSEM005
+Int32 | assign Number = DMSEM005
+Int32 | assign Decimal = DMSEM005
+Float | policy sum > 0 = DMSEM005
+Float | assign Number = DMSEM005
+Float | assign Decimal = DMSEM005
+long | policy sum > 0 = DMSEM005
+long | assign Number = DMSEM005
+long | assign Decimal = DMSEM005
+decimal | policy sum > 0 = DMSEM005
+decimal | assign Number = DMSEM005
+decimal | assign Decimal = DMSEM005
+Text | policy sum > 0 = DMSEM005
+Text | assign Number = DMSEM005
+Text | assign Decimal = DMSEM005
+Boolean | policy sum > 0 = DMSEM005
+Boolean | assign Number = DMSEM005
+Boolean | assign Decimal = DMSEM005
+Color | policy sum > 0 = DMSEM005
+Color | assign Number = DMSEM005
+Color | assign Decimal = DMSEM005
+Money | policy sum > 0 = DMSEM005+DMSTR006
+Money | assign Number = DMSEM005+DMSTR006
+Money | assign Decimal = DMSEM005+DMSTR006
+Bin | policy sum > 0 = DMSEM005
+Bin | assign Number = DMSEM005
+Bin | assign Decimal = DMSEM005
+Nope | policy sum > 0 = DMSEM005
+Nope | assign Number = DMSEM005
+Nope | assign Decimal = DMSEM005
+## SumPropertyKindsF3
+sum parts X, X: <type> [override] | position = verdict
+Int | policy sum > 0 = DMSEM005
+Int | assign Number = DMSEM005
+Int | assign Decimal = DMSEM005
+Int64 | policy sum > 0 = DMSEM005
+Int64 | assign Number = DMSEM005
+Int64 | assign Decimal = DMSEM005
+Double | policy sum > 0 = DMSEM005
+Double | assign Number = DMSEM005
+Double | assign Decimal = DMSEM005
+Number [Number -> int] | policy sum > 0 = ok
+Number [Number -> int] | assign Number = ok
+Number [Number -> int] | assign Decimal = ok
+Decimal [Decimal -> double] | policy sum > 0 = ok
+Decimal [Decimal -> double] | assign Number = ok
+Decimal [Decimal -> double] | assign Decimal = ok
+Double [Double -> float] | policy sum > 0 = DMSEM005 (not numeric)
+Double [Double -> float] | assign Number = DMSEM005 (not numeric)
+Double [Double -> float] | assign Decimal = DMSEM005 (not numeric)
+Int [Int -> short] | policy sum > 0 = DMSEM005 (not numeric)
+Int [Int -> short] | assign Number = DMSEM005 (not numeric)
+Int [Int -> short] | assign Decimal = DMSEM005 (not numeric)
+## TypelessSources
+typeless source | target = verdict
+Count | Cents = ok
+Count | Int32 = DMSEM005
+Count | Number = ok
+Count | Boolean = DMSEM003
+Count | Text = DMSEM003
+Sum | Cents = ok
+Sum | Int32 = DMSEM005
+Sum | Number = ok
+Sum | Boolean = DMSEM003
+Sum | Text = DMSEM003
+N + M | Cents = ok
+N + M | Int32 = DMSEM005
+N + M | Number = ok
+N + M | Boolean = DMSEM003
+N + M | Text = DMSEM003
+Name + Other | Label = ok
+Name + Other | String = DMSEM005
+Name + Other | Text = ok
+Name + Other | Number = DMSEM003
+Name + Other | Boolean = DMSEM003
+return F(a, b: Number): Cents = a + b = DMFUN005
+return F(a, b: Number): Number = a + b = DMFUN005
+return F(a, b: Number): Text = a + b = DMFUN005+DMFUN006
+return F(a, b: Text): Label = a + b = DMFUN005
+return F(a, b: Text): Number = a + b = DMFUN005+DMFUN006
+## TypelessComparisons
+comparison = verdict
+5 == "x" = DMSEM003
+true == 5 = DMSEM003
+5 < "x" = DMSEM003
+Count == "x" = DMSEM003
+Count == true = DMSEM003
+Count == 5 = ok
+Name == 5 = DMSEM003
+## AllNullMatch
+assign P := match | target = verdict
+match { null, null } | Uuid = DMSEM003
+match { null, null } | Guid = DMSEM003+DMSEM005
+match { null, null } | Text = DMSEM003
+match { null, null } | Number = DMSEM003
+match { null, "x" } | Text = DMSEM003
+match { null, "x" } | Uuid = DMSEM003
+match { null, 5 } | Number = DMSEM003
+match { null, 5 } | Text = DMSEM003
+## SameName
+declaration order | assign P:Color := value = verdict
+entity then enum | "Bogus" = DMSEM003+DMSTR001
+entity then enum | "Red" = DMSTR001
+enum then entity | "Bogus" = DMSEM003+DMSTR001
+enum then entity | "Red" = DMSTR001
+## NameByNameBare
+assign P:<row> := Q:<col>, declared primitives False; cols: Text String Number Int Int64 Int32 Decimal Float Double Boolean Bool Uuid Guid Color Widget Money Cents Bin long int float string bool decimal double Nope
+Text     55SSSSSSSSSSS5SYSSSSSSSSS5
+String   55SSSSSSSSSSS5SYSSSSSSSSS5
+Number   SS555SSSSSSSSSSYSSSSSSSSS5
+Int      SS555SSSSSSSSSSYSSSSSSSSS5
+Int64    SS555SSSSSSSSSSYSSSSSSSSS5
+Int32    SSSSS5SSSSSSSSSYSSSSSSSSS5
+Decimal  SS555S5SSSSSSSSYSSSSSSSSS5
+Float    SSSSSSS5SSSSSSSYSSSSSSSSS5
+Double   SSSSSSSS5SSSSSSYSSSSSSSSS5
+Boolean  SSSSSSSSS55SSSSYSSSSSSSSS5
+Bool     SSSSSSSSS55SSSSYSSSSSSSSS5
+Uuid     SSSSSSSSSSS55SSYSSSSSSSSS5
+Guid     SSSSSSSSSSS55SSYSSSSSSSSS5
+Color    55SSSSSSSSSSS.RXRRSSS5SSS5
+Widget   SSSSSSSSSSSSSR.XRRSSSSSSS5
+Money    YYYYYYYYYYYYYXXVXXYYYYYYYW
+Cents    SSSSSSSSSSSSSRRX.RSSSSSSS5
+Bin      SSSSSSSSSSSSSRRXR.SSSSSSS5
+long     SSSSSSSSSSSSSSSYSS5SSSSSS5
+int      SSSSSSSSSSSSSSSYSSS5SSSSS5
+float    SSSSSSSSSSSSSSSYSSSS5SSSS5
+string   SSSSSSSSSSSSS5SYSSSSS5SSS5
+bool     SSSSSSSSSSSSSSSYSSSSSS5SS5
+decimal  SSSSSSSSSSSSSSSYSSSSSSS5S5
+double   SSSSSSSSSSSSSSSYSSSSSSSS55
+Nope     555555555555555W5555555555
+## NameByNameDeclared
+assign P:<row> := Q:<col>, declared primitives True; cols: Text String Number Int Int64 Int32 Decimal Float Double Boolean Bool Uuid Guid Color Widget Money Cents Bin long int float string bool decimal double Nope
+Text     .5RSSSRSSRSRS.RXRRSSSSSSS5
+String   55SSSSSSSSSSS5SYSSSSSSSSS5
+Number   RS.55SRSSRSRSRRXRRSSSSSSS5
+Int      SS555SSSSSSSSSSYSSSSSSSSS5
+Int64    SS555SSSSSSSSSSYSSSSSSSSS5
+Int32    SSSSS5SSSSSSSSSYSSSSSSSSS5
+Decimal  RS.55S.SSRSRSRRXRRSSSSSSS5
+Float    SSSSSSS5SSSSSSSYSSSSSSSSS5
+Double   SSSSSSSS5SSSSSSYSSSSSSSSS5
+Boolean  RSRSSSRSS.5RSRRXRRSSSSSSS5
+Bool     SSSSSSSSS55SSSSYSSSSSSSSS5
+Uuid     RSRSSSRSSRS.5RRXRRSSSSSSS5
+Guid     SSSSSSSSSSS55SSYSSSSSSSSS5
+Color    .5RSSSRSSRSRS.RXRRSSS5SSS5
+Widget   RSRSSSRSSRSRSR.XRRSSSSSSS5
+Money    XYXYYYXYYXYXYXXVXXYYYYYYYW
+Cents    RSRSSSRSSRSRSRRX.RSSSSSSS5
+Bin      RSRSSSRSSRSRSRRXR.SSSSSSS5
+long     SSSSSSSSSSSSSSSYSS5SSSSSS5
+int      SSSSSSSSSSSSSSSYSSS5SSSSS5
+float    SSSSSSSSSSSSSSSYSSSS5SSSS5
+string   SSSSSSSSSSSSS5SYSSSSS5SSS5
+bool     SSSSSSSSSSSSSSSYSSSSSS5SS5
+decimal  SSSSSSSSSSSSSSSYSSSSSSS5S5
+double   SSSSSSSSSSSSSSSYSSSSSSSS55
+Nope     555555555555555W5555555555
+## NameByLiteralBare
+assign P:<row> := <literal>, declared primitives False; cols: 5 1.5 "x" true null
+Text     SS5SS
+String   SS5SS
+Number   5SSSS
+Int      5SSSS
+Int64    5SSSS
+Int32    5SSSS
+Decimal  55SSS
+Float    5SSSS
+Double   5SSSS
+Boolean  SSS5S
+Bool     SSS5S
+Uuid     SSSSS
+Guid     SSSSS
+Color    RRRRR
+Widget   RRRRR
+Money    XXXXX
+Cents    .RRRR
+Bin      RRRRR
+long     5SSSS
+int      5SSSS
+float    5SSSS
+string   SS5SS
+bool     SSS5S
+decimal  5SSSS
+double   5SSSS
+Nope     55555
+## NameByLiteralDeclared
+assign P:<row> := <literal>, declared primitives True; cols: 5 1.5 "x" true null
+Text     RR.RR
+String   SS5SS
+Number   .RRRR
+Int      5SSSS
+Int64    5SSSS
+Int32    5SSSS
+Decimal  ..RRR
+Float    5SSSS
+Double   5SSSS
+Boolean  RRR.R
+Bool     SSS5S
+Uuid     RRRRR
+Guid     SSSSS
+Color    RRRRR
+Widget   RRRRR
+Money    XXXXX
+Cents    .RRRR
+Bin      RRRRR
+long     5SSSS
+int      5SSSS
+float    5SSSS
+string   SS5SS
+bool     SSS5S
+decimal  5SSSS
+double   5SSSS
+Nope     55555
+## Sites
+site | case = verdict
+declared=False | assign | control Number<-Number = DMSEM005
+declared=False | assign | Decimal into Number = DMSEM003+DMSEM005
+declared=False | assign | Int32 into Number = DMSEM003+DMSEM005
+declared=False | assign | Number into Decimal = DMSEM005
+declared=False | assign | Text into Number = DMSEM003+DMSEM005
+declared=False | assign | literal 5 into Cents = ok
+declared=False | assign | literal 5 into Int32 = DMSEM005
+declared=False | assign | literal 1.5 into Number = DMSEM003+DMSEM005
+declared=False | assign | literal 1.5 into Float = DMSEM003+DMSEM005
+declared=False | create | control Number<-Number = DMSEM005
+declared=False | create | Decimal into Number = DMSEM003+DMSEM005
+declared=False | create | Int32 into Number = DMSEM003+DMSEM005
+declared=False | create | Number into Decimal = DMSEM005
+declared=False | create | Text into Number = DMSEM003+DMSEM005
+declared=False | create | literal 5 into Cents = ok
+declared=False | create | literal 5 into Int32 = DMSEM005
+declared=False | create | literal 1.5 into Number = DMSEM003+DMSEM005
+declared=False | create | literal 1.5 into Float = DMSEM003+DMSEM005
+declared=False | invoke | control Number<-Number = DMSEM005
+declared=False | invoke | Decimal into Number = DMSEM003+DMSEM005
+declared=False | invoke | Int32 into Number = DMSEM003+DMSEM005
+declared=False | invoke | Number into Decimal = DMSEM005
+declared=False | invoke | Text into Number = DMSEM003+DMSEM005
+declared=False | invoke | literal 5 into Cents = ok
+declared=False | invoke | literal 5 into Int32 = DMSEM005
+declared=False | invoke | literal 1.5 into Number = DMSEM003+DMSEM005
+declared=False | invoke | literal 1.5 into Float = DMSEM003+DMSEM005
+declared=False | call | control Number<-Number = DMSEM005
+declared=False | call | Decimal into Number = DMFUN003+DMSEM005
+declared=False | call | Int32 into Number = DMFUN003+DMSEM005
+declared=False | call | Number into Decimal = DMSEM005
+declared=False | call | Text into Number = DMFUN003+DMSEM005
+declared=False | call | literal 5 into Cents = ok
+declared=False | call | literal 5 into Int32 = DMSEM005
+declared=False | call | literal 1.5 into Number = DMFUN003+DMSEM005
+declared=False | call | literal 1.5 into Float = DMFUN003+DMSEM005
+declared=False | return | control Number<-Number = DMFUN005+DMSEM005
+declared=False | return | Decimal into Number = DMFUN005+DMFUN006+DMSEM005
+declared=False | return | Int32 into Number = DMFUN005+DMFUN006+DMSEM005
+declared=False | return | Number into Decimal = DMFUN005+DMSEM005
+declared=False | return | Text into Number = DMFUN005+DMFUN006+DMSEM005
+declared=False | return | literal 5 into Cents = ok
+declared=False | return | literal 5 into Int32 = ok
+declared=False | return | literal 1.5 into Number = DMFUN006
+declared=False | return | literal 1.5 into Float = DMFUN006
+declared=False | default | control Number<-Number = n/a
+declared=False | default | Decimal into Number = n/a
+declared=False | default | Int32 into Number = n/a
+declared=False | default | Number into Decimal = n/a
+declared=False | default | Text into Number = n/a
+declared=False | default | literal 5 into Cents = ok
+declared=False | default | literal 5 into Int32 = DMSEM005
+declared=False | default | literal 1.5 into Number = DMSEM003+DMSEM005
+declared=False | default | literal 1.5 into Float = DMSEM003+DMSEM005
+declared=False | observed flow | control Number<-Number = DMSEM005
+declared=False | observed flow | Decimal into Number = DMSEM003+DMSEM005
+declared=False | observed flow | Int32 into Number = DMSEM003+DMSEM005
+declared=False | observed flow | Number into Decimal = DMSEM005
+declared=False | observed flow | Text into Number = DMSEM003+DMSEM005
+declared=False | observed flow | literal 5 into Cents = n/a
+declared=False | observed flow | literal 5 into Int32 = n/a
+declared=False | observed flow | literal 1.5 into Number = n/a
+declared=False | observed flow | literal 1.5 into Float = n/a
+declared=True | assign | control Number<-Number = ok
+declared=True | assign | Decimal into Number = DMSEM003
+declared=True | assign | Int32 into Number = DMSEM003+DMSEM005
+declared=True | assign | Number into Decimal = ok
+declared=True | assign | Text into Number = DMSEM003
+declared=True | assign | literal 5 into Cents = ok
+declared=True | assign | literal 5 into Int32 = DMSEM005
+declared=True | assign | literal 1.5 into Number = DMSEM003
+declared=True | assign | literal 1.5 into Float = DMSEM003+DMSEM005
+declared=True | create | control Number<-Number = ok
+declared=True | create | Decimal into Number = DMSEM003
+declared=True | create | Int32 into Number = DMSEM003+DMSEM005
+declared=True | create | Number into Decimal = ok
+declared=True | create | Text into Number = DMSEM003
+declared=True | create | literal 5 into Cents = ok
+declared=True | create | literal 5 into Int32 = DMSEM005
+declared=True | create | literal 1.5 into Number = DMSEM003
+declared=True | create | literal 1.5 into Float = DMSEM003+DMSEM005
+declared=True | invoke | control Number<-Number = ok
+declared=True | invoke | Decimal into Number = DMSEM003
+declared=True | invoke | Int32 into Number = DMSEM003+DMSEM005
+declared=True | invoke | Number into Decimal = ok
+declared=True | invoke | Text into Number = DMSEM003
+declared=True | invoke | literal 5 into Cents = ok
+declared=True | invoke | literal 5 into Int32 = DMSEM005
+declared=True | invoke | literal 1.5 into Number = DMSEM003
+declared=True | invoke | literal 1.5 into Float = DMSEM003+DMSEM005
+declared=True | call | control Number<-Number = ok
+declared=True | call | Decimal into Number = DMFUN003
+declared=True | call | Int32 into Number = DMFUN003+DMSEM005
+declared=True | call | Number into Decimal = ok
+declared=True | call | Text into Number = DMFUN003
+declared=True | call | literal 5 into Cents = ok
+declared=True | call | literal 5 into Int32 = DMSEM005
+declared=True | call | literal 1.5 into Number = DMFUN003
+declared=True | call | literal 1.5 into Float = DMFUN003+DMSEM005
+declared=True | return | control Number<-Number = DMFUN005
+declared=True | return | Decimal into Number = DMFUN005+DMFUN006
+declared=True | return | Int32 into Number = DMFUN005+DMFUN006+DMSEM005
+declared=True | return | Number into Decimal = DMFUN005
+declared=True | return | Text into Number = DMFUN005+DMFUN006
+declared=True | return | literal 5 into Cents = ok
+declared=True | return | literal 5 into Int32 = ok
+declared=True | return | literal 1.5 into Number = DMFUN006
+declared=True | return | literal 1.5 into Float = DMFUN006
+declared=True | default | control Number<-Number = n/a
+declared=True | default | Decimal into Number = n/a
+declared=True | default | Int32 into Number = n/a
+declared=True | default | Number into Decimal = n/a
+declared=True | default | Text into Number = n/a
+declared=True | default | literal 5 into Cents = ok
+declared=True | default | literal 5 into Int32 = DMSEM005
+declared=True | default | literal 1.5 into Number = DMSEM003
+declared=True | default | literal 1.5 into Float = DMSEM003+DMSEM005
+declared=True | observed flow | control Number<-Number = ok
+declared=True | observed flow | Decimal into Number = DMSEM003
+declared=True | observed flow | Int32 into Number = DMSEM003+DMSEM005
+declared=True | observed flow | Number into Decimal = ok
+declared=True | observed flow | Text into Number = DMSEM003
+declared=True | observed flow | literal 5 into Cents = n/a
+declared=True | observed flow | literal 5 into Int32 = n/a
+declared=True | observed flow | literal 1.5 into Number = n/a
+declared=True | observed flow | literal 1.5 into Float = n/a
+## InvokeArguments
+invoke arg type | param type = verdict
+Widget | Number = DMSEM003+DMSEM005
+Widget | Widget = ok
+Widget | Gadget = DMSEM003
+Money | Number = DMSEM003+DMSEM005+DMSTR006
+Money | Money = DMSTR006
+Money | Gadget = DMSEM003+DMSTR006
+Bin | Number = DMSEM003+DMSEM005
+Bin | Bin = ok
+Bin | Gadget = DMSEM003
+Nope | Number = DMSEM005
+Nope | Nope = DMSEM005
+Nope | Gadget = DMSEM005
+long | Number = DMSEM003+DMSEM005
+long | long = DMSEM005
+long | Gadget = DMSEM003+DMSEM005
+## TemporalWithoutMap
+hand-built Date/DateTime/Time/Duration, no temporal extension; session variant | case = verdict
+map=False | assign Date := 5 = DMSEM003
+map=False | assign Date := 1.5 = DMSEM003
+map=False | assign Date := "x" = DMSEM003
+map=False | assign Date := true = DMSEM003
+map=False | assign Date := Date property = ok
+map=False | assign Date := DateTime property = DMSEM003
+map=False | assign Date := Time property = DMSEM003
+map=False | assign Date := Duration property = DMSEM003
+map=False | assign DateTime := 5 = DMSEM003
+map=False | assign DateTime := 1.5 = DMSEM003
+map=False | assign DateTime := "x" = DMSEM003
+map=False | assign DateTime := true = DMSEM003
+map=False | assign DateTime := Date property = ok
+map=False | assign DateTime := DateTime property = ok
+map=False | assign DateTime := Time property = DMSEM003
+map=False | assign DateTime := Duration property = DMSEM003
+map=False | assign Time := 5 = DMSEM003
+map=False | assign Time := 1.5 = DMSEM003
+map=False | assign Time := "x" = DMSEM003
+map=False | assign Time := true = DMSEM003
+map=False | assign Time := Date property = DMSEM003
+map=False | assign Time := DateTime property = DMSEM003
+map=False | assign Time := Time property = ok
+map=False | assign Time := Duration property = DMSEM003
+map=False | assign Duration := 5 = DMSEM003
+map=False | assign Duration := 1.5 = DMSEM003
+map=False | assign Duration := "x" = DMSEM003
+map=False | assign Duration := true = DMSEM003
+map=False | assign Duration := Date property = DMSEM003
+map=False | assign Duration := DateTime property = DMSEM003
+map=False | assign Duration := Time property = DMSEM003
+map=False | assign Duration := Duration property = ok
+map=True | assign Date := 5 = DMSEM003
+map=True | assign Date := 1.5 = DMSEM003
+map=True | assign Date := "x" = DMSEM003
+map=True | assign Date := true = DMSEM003
+map=True | assign Date := Date property = ok
+map=True | assign Date := DateTime property = DMSEM003
+map=True | assign Date := Time property = DMSEM003
+map=True | assign Date := Duration property = DMSEM003
+map=True | assign DateTime := 5 = DMSEM003
+map=True | assign DateTime := 1.5 = DMSEM003
+map=True | assign DateTime := "x" = DMSEM003
+map=True | assign DateTime := true = DMSEM003
+map=True | assign DateTime := Date property = ok
+map=True | assign DateTime := DateTime property = ok
+map=True | assign DateTime := Time property = DMSEM003
+map=True | assign DateTime := Duration property = DMSEM003
+map=True | assign Time := 5 = DMSEM003
+map=True | assign Time := 1.5 = DMSEM003
+map=True | assign Time := "x" = DMSEM003
+map=True | assign Time := true = DMSEM003
+map=True | assign Time := Date property = DMSEM003
+map=True | assign Time := DateTime property = DMSEM003
+map=True | assign Time := Time property = ok
+map=True | assign Time := Duration property = DMSEM003
+map=True | assign Duration := 5 = DMSEM003
+map=True | assign Duration := 1.5 = DMSEM003
+map=True | assign Duration := "x" = DMSEM003
+map=True | assign Duration := true = DMSEM003
+map=True | assign Duration := Date property = DMSEM003
+map=True | assign Duration := DateTime property = DMSEM003
+map=True | assign Duration := Time property = DMSEM003
+map=True | assign Duration := Duration property = ok
+## ArithmeticDateOperand
+case = verdict
+control Due + 5 Days assign = ok
+A + B + 5 Days assign = DMSEM003
+(A + B) + 5 Days assign = DMSEM003
+(A + B) + 5 Days policy = DMSEM003
+A + 5 Days policy = DMSEM003
+Due + A policy = ok
+Due + (A + B) policy = ok
+Due + (C + C) policy = DMSEM003
+(C + A) + 5 Days assign = DMSEM003
+C * 2 + 5 Days policy = DMSEM003
+(C + C) + 5 Days assign = DMSEM003
+Stamp + A + 5 Days assign = DMSEM003
+(A + B) * C assign Number = ok
+assigned arithmetic stays unknown = DMSEM003
+## Match
+match { true -> P_<row>, else -> P_<col> }; cols: Number Decimal Date DateTime Time Text Color Guid
+Number   55NNNNNN
+Decimal  55NNNNNN
+Date     NN5NNNNN
+DateTime NNN5NNNN
+Time     NNNN5NNN
+Text     NNNNN5NN
+Color    NNNNNN5N
+Guid     NNNNNNN5
+## Residual
+residual form | position = verdict
+High (bare enum member) | assign = ok
+High (bare enum member) | create = ok
+High (bare enum member) | invoke = ok
+High (bare enum member) | call = ok
+High (bare enum member) | return = DMFUN005
+High (bare enum member) | form == = ok
+High (bare enum member) | == form = ok
+High (bare enum member) | match arm = ok
+High (bare enum member) | entry = ok
+High (bare enum member) | exit = ok
+High (bare enum member) | subscription = ok
+Guid (keyword) | assign = ok
+Guid (keyword) | create = ok
+Guid (keyword) | invoke = ok
+Guid (keyword) | call = ok
+Guid (keyword) | return = n/a
+Guid (keyword) | form == = ok
+Guid (keyword) | == form = ok
+Guid (keyword) | match arm = ok
+Guid (keyword) | entry = ok
+Guid (keyword) | exit = ok
+Guid (keyword) | subscription = ok
+Stamp - Stamp (DateTime) | assign = ok
+Stamp - Stamp (DateTime) | create = ok
+Stamp - Stamp (DateTime) | invoke = ok
+Stamp - Stamp (DateTime) | call = ok
+Stamp - Stamp (DateTime) | return = n/a
+Stamp - Stamp (DateTime) | form == = ok
+Stamp - Stamp (DateTime) | == form = ok
+Stamp - Stamp (DateTime) | match arm = ok
+Stamp - Stamp (DateTime) | entry = ok
+Stamp - Stamp (DateTime) | exit = ok
+Stamp - Stamp (DateTime) | subscription = ok
+Day - Day (Date) | assign = ok
+Day - Day (Date) | create = ok
+Day - Day (Date) | invoke = ok
+Day - Day (Date) | call = ok
+Day - Day (Date) | return = n/a
+Day - Day (Date) | form == = ok
+Day - Day (Date) | == form = ok
+Day - Day (Date) | match arm = ok
+Day - Day (Date) | entry = ok
+Day - Day (Date) | exit = ok
+Day - Day (Date) | subscription = ok
+parts Qty (to-many hop) | assign = DMSEM006
+parts Qty (to-many hop) | create = DMSEM006
+parts Qty (to-many hop) | invoke = DMSEM006
+parts Qty (to-many hop) | call = DMSEM006
+parts Qty (to-many hop) | return = n/a
+parts Qty (to-many hop) | form == = DMSEM006
+parts Qty (to-many hop) | == form = DMSEM006
+parts Qty (to-many hop) | match arm = DMSEM006
+parts Qty (to-many hop) | entry = DMSEM006
+parts Qty (to-many hop) | exit = DMSEM006
+parts Qty (to-many hop) | subscription = DMSEM006
+parts Qty (to-many hop) | form + N = DMSEM006
+part book Qty (to-one hops, control) | assign = ok
+part book Qty (to-one hops, control) | create = ok
+part book Qty (to-one hops, control) | invoke = ok
+part book Qty (to-one hops, control) | call = ok
+part book Qty (to-one hops, control) | return = n/a
+part book Qty (to-one hops, control) | form == = DMSEM005
+part book Qty (to-one hops, control) | == form = ok
+part book Qty (to-one hops, control) | match arm = ok
+part book Qty (to-one hops, control) | entry = ok
+part book Qty (to-one hops, control) | exit = ok
+part book Qty (to-one hops, control) | subscription = DMSS004
+part book Qty (to-one hops, control) | form + N = ok
+p book Qty (binder hops) | assign = ok
+p book Qty (binder hops) | create = ok
+p book Qty (binder hops) | invoke = ok
+p book Qty (binder hops) | call = ok
+p book Qty (binder hops) | return = n/a
+p book Qty (binder hops) | form == = DMSEM005
+p book Qty (binder hops) | == form = ok
+p book Qty (binder hops) | match arm = ok
+p book Qty (binder hops) | entry = n/a
+p book Qty (binder hops) | exit = n/a
+p book Qty (binder hops) | subscription = n/a
+p book Qty (binder hops) | form + N = ok
+Bogus (unknown name) | assign = DMSEM005
+Bogus (unknown name) | create = DMSEM005
+Bogus (unknown name) | invoke = DMSEM005
+Bogus (unknown name) | call = DMSEM005
+Bogus (unknown name) | return = DMFUN005
+Bogus (unknown name) | form == = DMSEM005
+Bogus (unknown name) | == form = DMSEM005
+Bogus (unknown name) | match arm = DMMAT004
+Bogus (unknown name) | entry = DMSEM005
+Bogus (unknown name) | exit = DMSEM005
+Bogus (unknown name) | subscription = DMSEM005
+Bogus (unknown name) | form + N = DMSEM005
+sum parts Label (#846) | assign = DMSEM005
+sum parts Label (#846) | create = DMSEM005
+sum parts Label (#846) | invoke = DMSEM005
+sum parts Label (#846) | call = DMSEM005
+sum parts Label (#846) | return = n/a
+sum parts Label (#846) | form == = DMSEM005
+sum parts Label (#846) | == form = DMSEM005
+sum parts Label (#846) | match arm = DMSEM005
+sum parts Label (#846) | entry = DMSEM005
+sum parts Label (#846) | exit = DMSEM005
+sum parts Label (#846) | subscription = DMSEM005
+sum parts Label (#846) | form + N = DMSEM005
+sum parts Qty (control) | assign = ok
+sum parts Qty (control) | create = ok
+sum parts Qty (control) | invoke = ok
+sum parts Qty (control) | call = ok
+sum parts Qty (control) | return = n/a
+sum parts Qty (control) | form == = ok
+sum parts Qty (control) | == form = ok
+sum parts Qty (control) | match arm = ok
+sum parts Qty (control) | entry = ok
+sum parts Qty (control) | exit = ok
+sum parts Qty (control) | subscription = ok
+sum parts Qty (control) | form + N = ok
+count parts where Label == 1 | assign = DMSEM003
+count parts where Label == 1 | create = DMSEM003
+count parts where Label == 1 | invoke = DMSEM003
+count parts where Label == 1 | call = DMSEM003
+count parts where Label == 1 | return = n/a
+count parts where Label == 1 | form == = DMSEM003
+count parts where Label == 1 | == form = DMSEM003
+count parts where Label == 1 | match arm = DMSEM003
+count parts where Label == 1 | entry = DMSEM003
+count parts where Label == 1 | exit = DMSEM003
+count parts where Label == 1 | subscription = DMSEM003
+count parts where Label == 1 | form + N = DMSEM003
+any parts where Label == 1 | assign = DMSEM003
+any parts where Label == 1 | create = DMSEM003
+any parts where Label == 1 | invoke = DMSEM003
+any parts where Label == 1 | call = DMSEM003
+any parts where Label == 1 | return = n/a
+any parts where Label == 1 | form == = DMSEM003
+any parts where Label == 1 | == form = DMSEM003
+any parts where Label == 1 | match arm = DMSEM003
+any parts where Label == 1 | entry = DMSEM003
+any parts where Label == 1 | exit = DMSEM003
+any parts where Label == 1 | subscription = DMSEM003
+any parts where Label == 1 | if form = DMSEM003
+any parts where Label == 1 | not form = DMSEM003
+any parts where Label == 1 | form and Flag = DMSEM003
+any parts where Label == 1 | for where form = DMSEM003
+any parts where Label == 1 | match { form -> 1 } = DMSEM003
+Nope(N) (undeclared function) | assign = DMFUN001
+Nope(N) (undeclared function) | create = DMFUN001
+Nope(N) (undeclared function) | invoke = DMFUN001
+Nope(N) (undeclared function) | call = DMFUN001
+Nope(N) (undeclared function) | return = DMFUN001
+Nope(N) (undeclared function) | form == = DMFUN001
+Nope(N) (undeclared function) | == form = DMFUN001
+Nope(N) (undeclared function) | match arm = DMFUN001
+Nope(N) (undeclared function) | entry = DMFUN001
+Nope(N) (undeclared function) | exit = DMFUN001
+Nope(N) (undeclared function) | subscription = DMFUN001
+Nope(N) (undeclared function) | form + N = DMFUN001
+match with an untyped arm | assign = DMMAT004
+match with an untyped arm | create = DMMAT004
+match with an untyped arm | invoke = DMMAT004
+match with an untyped arm | call = DMMAT004
+match with an untyped arm | return = DMFUN005+DMMAT004
+match with an untyped arm | form == = DMMAT004
+match with an untyped arm | == form = DMMAT004
+match with an untyped arm | match arm = DMMAT004
+match with an untyped arm | entry = DMMAT004
+match with an untyped arm | exit = DMMAT004
+match with an untyped arm | subscription = DMMAT004
+match with an untyped arm | form + N = DMMAT004
+5 == "x" (typeless pair) | assign = DMSEM003
+5 == "x" (typeless pair) | create = DMSEM003
+5 == "x" (typeless pair) | invoke = DMSEM003
+5 == "x" (typeless pair) | call = DMSEM003
+5 == "x" (typeless pair) | return = DMSEM003
+5 == "x" (typeless pair) | form == = DSL0001
+5 == "x" (typeless pair) | == form = DSL0001
+5 == "x" (typeless pair) | match arm = DMSEM003
+5 == "x" (typeless pair) | entry = DMSEM003
+5 == "x" (typeless pair) | exit = DMSEM003
+5 == "x" (typeless pair) | subscription = DMSEM003
+5 == "x" (typeless pair) | if form = DMSEM003
+5 == "x" (typeless pair) | not form = DMSEM003
+5 == "x" (typeless pair) | form and Flag = DMSEM003
+5 == "x" (typeless pair) | for where form = DMSEM003
+5 == "x" (typeless pair) | match { form -> 1 } = DMSEM003
+count parts (function body) | assign = ok
+count parts (function body) | create = ok
+count parts (function body) | invoke = ok
+count parts (function body) | call = ok
+count parts (function body) | return = DMFUN005
+count parts (function body) | form == = ok
+count parts (function body) | == form = ok
+count parts (function body) | match arm = ok
+count parts (function body) | entry = ok
+count parts (function body) | exit = ok
+count parts (function body) | subscription = ok
+count parts (function body) | form + N = ok
+## Dead
+residual form | dead position = verdict
+High (bare enum member) | pruned assign = ok
+High (bare enum member) | pruned invoke = ok
+High (bare enum member) | dead match arm = ok
+High (bare enum member) | unused policy = ok
+High (bare enum member) | action require = ok
+High (bare enum member) | stage require = ok
+High (bare enum member) | default = ok
+High (bare enum member) | action never invoked = ok
+High (bare enum member) | function called from an uncalled function = DMFUN005
+Guid (keyword) | pruned assign = ok
+Guid (keyword) | pruned invoke = ok
+Guid (keyword) | dead match arm = ok
+Guid (keyword) | unused policy = DMSEM005
+Guid (keyword) | action require = DMSEM005
+Guid (keyword) | stage require = DMSEM005
+Guid (keyword) | default = ok
+Guid (keyword) | action never invoked = ok
+Guid (keyword) | function called from an uncalled function = n/a
+Stamp - Stamp (DateTime) | pruned assign = ok
+Stamp - Stamp (DateTime) | pruned invoke = ok
+Stamp - Stamp (DateTime) | dead match arm = ok
+Stamp - Stamp (DateTime) | unused policy = ok
+Stamp - Stamp (DateTime) | action require = ok
+Stamp - Stamp (DateTime) | stage require = ok
+Stamp - Stamp (DateTime) | default = DMSEM005
+Stamp - Stamp (DateTime) | action never invoked = ok
+Stamp - Stamp (DateTime) | function called from an uncalled function = n/a
+Day - Day (Date) | pruned assign = ok
+Day - Day (Date) | pruned invoke = ok
+Day - Day (Date) | dead match arm = ok
+Day - Day (Date) | unused policy = ok
+Day - Day (Date) | action require = ok
+Day - Day (Date) | stage require = ok
+Day - Day (Date) | default = DMSEM005
+Day - Day (Date) | action never invoked = ok
+Day - Day (Date) | function called from an uncalled function = n/a
+parts Qty (to-many hop) | pruned assign = DMSEM006
+parts Qty (to-many hop) | pruned invoke = DMSEM006
+parts Qty (to-many hop) | dead match arm = DMSEM006
+parts Qty (to-many hop) | unused policy = DMREL001
+parts Qty (to-many hop) | action require = DMREL001
+parts Qty (to-many hop) | stage require = DMREL001
+parts Qty (to-many hop) | default = DMSEM006
+parts Qty (to-many hop) | action never invoked = DMSEM006
+parts Qty (to-many hop) | function called from an uncalled function = n/a
+part book Qty (to-one hops, control) | pruned assign = ok
+part book Qty (to-one hops, control) | pruned invoke = ok
+part book Qty (to-one hops, control) | dead match arm = ok
+part book Qty (to-one hops, control) | unused policy = ok
+part book Qty (to-one hops, control) | action require = ok
+part book Qty (to-one hops, control) | stage require = ok
+part book Qty (to-one hops, control) | default = DMSEM006
+part book Qty (to-one hops, control) | action never invoked = ok
+part book Qty (to-one hops, control) | function called from an uncalled function = n/a
+p book Qty (binder hops) | pruned assign = ok
+p book Qty (binder hops) | pruned invoke = ok
+p book Qty (binder hops) | dead match arm = n/a
+p book Qty (binder hops) | unused policy = n/a
+p book Qty (binder hops) | action require = n/a
+p book Qty (binder hops) | stage require = n/a
+p book Qty (binder hops) | default = n/a
+p book Qty (binder hops) | action never invoked = ok
+p book Qty (binder hops) | function called from an uncalled function = n/a
+Bogus (unknown name) | pruned assign = DMSEM005
+Bogus (unknown name) | pruned invoke = DMSEM005
+Bogus (unknown name) | dead match arm = DMMAT004
+Bogus (unknown name) | unused policy = DMSEM005
+Bogus (unknown name) | action require = DMSEM005
+Bogus (unknown name) | stage require = DMSEM005
+Bogus (unknown name) | default = DMSEM003
+Bogus (unknown name) | action never invoked = DMSEM005
+Bogus (unknown name) | function called from an uncalled function = DMFUN005
+sum parts Label (#846) | pruned assign = DMSEM005
+sum parts Label (#846) | pruned invoke = DMSEM005
+sum parts Label (#846) | dead match arm = DMSEM005
+sum parts Label (#846) | unused policy = DMSEM005
+sum parts Label (#846) | action require = DMSEM005
+sum parts Label (#846) | stage require = DMSEM005
+sum parts Label (#846) | default = DMSEM006
+sum parts Label (#846) | action never invoked = DMSEM005
+sum parts Label (#846) | function called from an uncalled function = n/a
+sum parts Qty (control) | pruned assign = ok
+sum parts Qty (control) | pruned invoke = ok
+sum parts Qty (control) | dead match arm = ok
+sum parts Qty (control) | unused policy = ok
+sum parts Qty (control) | action require = ok
+sum parts Qty (control) | stage require = ok
+sum parts Qty (control) | default = DMSEM006
+sum parts Qty (control) | action never invoked = ok
+sum parts Qty (control) | function called from an uncalled function = n/a
+count parts where Label == 1 | pruned assign = DMSEM003
+count parts where Label == 1 | pruned invoke = DMSEM003
+count parts where Label == 1 | dead match arm = DMSEM003
+count parts where Label == 1 | unused policy = DMSEM003
+count parts where Label == 1 | action require = DMSEM003
+count parts where Label == 1 | stage require = DMSEM003
+count parts where Label == 1 | default = DMSEM006
+count parts where Label == 1 | action never invoked = DMSEM003
+count parts where Label == 1 | function called from an uncalled function = n/a
+any parts where Label == 1 | pruned assign = DMSEM003
+any parts where Label == 1 | pruned invoke = DMSEM003
+any parts where Label == 1 | dead match arm = DMSEM003
+any parts where Label == 1 | unused policy = DMSEM003
+any parts where Label == 1 | action require = DMSEM003
+any parts where Label == 1 | stage require = DMSEM003
+any parts where Label == 1 | default = DMSEM006
+any parts where Label == 1 | action never invoked = DMSEM003
+any parts where Label == 1 | function called from an uncalled function = n/a
+Nope(N) (undeclared function) | pruned assign = DMFUN001
+Nope(N) (undeclared function) | pruned invoke = DMFUN001
+Nope(N) (undeclared function) | dead match arm = DMFUN001
+Nope(N) (undeclared function) | unused policy = DMFUN001
+Nope(N) (undeclared function) | action require = DMFUN001
+Nope(N) (undeclared function) | stage require = DMFUN001
+Nope(N) (undeclared function) | default = DMFUN008
+Nope(N) (undeclared function) | action never invoked = DMFUN001
+Nope(N) (undeclared function) | function called from an uncalled function = DMFUN001
+match with an untyped arm | pruned assign = DMMAT004
+match with an untyped arm | pruned invoke = DMMAT004
+match with an untyped arm | dead match arm = DMMAT004
+match with an untyped arm | unused policy = DMMAT004+DMSEM005
+match with an untyped arm | action require = DMMAT004+DMSEM005
+match with an untyped arm | stage require = DMMAT004+DMSEM005
+match with an untyped arm | default = DMMAT004+DMSEM003
+match with an untyped arm | action never invoked = DMMAT004
+match with an untyped arm | function called from an uncalled function = DMFUN005+DMMAT004
+5 == "x" (typeless pair) | pruned assign = DMSEM003
+5 == "x" (typeless pair) | pruned invoke = DMSEM003
+5 == "x" (typeless pair) | dead match arm = DMSEM003
+5 == "x" (typeless pair) | unused policy = DMSEM003
+5 == "x" (typeless pair) | action require = DMSEM003
+5 == "x" (typeless pair) | stage require = DMSEM003
+5 == "x" (typeless pair) | default = DMSEM003
+5 == "x" (typeless pair) | action never invoked = DMSEM003
+5 == "x" (typeless pair) | function called from an uncalled function = DMSEM003
+count parts (function body) | pruned assign = ok
+count parts (function body) | pruned invoke = ok
+count parts (function body) | dead match arm = ok
+count parts (function body) | unused policy = ok
+count parts (function body) | action require = ok
+count parts (function body) | stage require = ok
+count parts (function body) | default = DMSEM006
+count parts (function body) | action never invoked = ok
+count parts (function body) | function called from an uncalled function = DMFUN005

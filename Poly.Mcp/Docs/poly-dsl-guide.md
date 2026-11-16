@@ -356,7 +356,7 @@ key-clause = "key" "(" member ("," member)* ")"
 
 An exported signature must be closed. A `public` action's parameter and result types, and a `public` value type's field types, must themselves be `public`; primitives and enum payloads are always available, and a used contract's value types are already on that contract's surface. Analysis reports **`DMCON002`** and names the internal type. The fix is to mark the type `public`, not to add an exception.
 
-**Visibility in generated C#.** Only a `public` entity, value type or action prints `public`; every unmarked one prints `internal`, so a domain with no `public` mark has no public surface and a consumer in another assembly needs the mark. Enums carry no mark and stay public, and a stage enum follows its entity. A public entity's properties and policies stay public, and a member that would name an internal type is `internal`; so is its `Create` when the entity has a navigation to an internal entity (a later slice, L-22c, adds a public factory). An internal entity's `Create` is `internal` too. `Create{Nav}` is always `internal`, on a public entity as well: a caller in another assembly creates a child by calling the declaring action, never `Create{Nav}` directly; a to-many with no action that creates into it is populated from another assembly by passing already-built children to the static `Create`, which takes the collection. A stage-dispatched action is one method that is `public` if any stage variant is public; a public stage group is rejected (`DMCON002`, on the offending copy) when any of its copies returns an internal entity. The generated DbContext is `internal` when any entity is internal, and a generated DTO is `internal` when its entity or any domain type it names is. A public entity may navigate to an internal entity: the navigation prints `internal` (the public surface stays closed) and the pack maps it explicitly, so the entity's JSON omits it. A nested route reads it only when the target is an aggregate child (owned, or one with a required back-reference); otherwise the target is a root, listed at its own route. Such an entity is built by its host, EF and actions, not by a caller in another assembly. A two-way one-to-one (owned or not) to an internal entity is not supported yet: the pack cannot determine EF's dependent side, the same boot failure as an all-public one (#791, row P-18). **`DMCON019`** covers two shapes only reachable through the model API: a public entity with an entity-typed property of an internal entity (persistence ignores it) and a public entity with a many-to-many navigation to an internal entity (the pack cannot map it soundly).
+**Visibility in generated C#.** Only a `public` entity, value type or action prints `public`; every unmarked one prints `internal`, so a domain with no `public` mark has no public surface and a consumer in another assembly needs the mark. Enums carry no mark and stay public, and a stage enum follows its entity. A public entity's properties and policies stay public, and a member that would name an internal type is `internal`; so is its `Create` when the entity has a navigation to an internal entity (a later slice, L-22c, adds a public factory). An internal entity's `Create` is `internal` too. `Create{Nav}` is always `internal`, on a public entity as well: a caller in another assembly creates a child by calling the declaring action, never `Create{Nav}` directly; a to-many with no action that creates into it is populated from another assembly by passing already-built children to the static `Create`, which takes the collection. A stage-dispatched action is one method that is `public` if any stage variant is public; a public stage group is rejected (`DMCON002`, on the offending copy) when any of its copies returns an internal entity. The generated DbContext is `internal` when any entity is internal, and a generated DTO is `internal` when its entity or any domain type it names is. A public entity may navigate to an internal entity: the navigation prints `internal` (the public surface stays closed) and the pack maps it explicitly, so the entity's JSON omits it. A nested route reads it only when the target is an aggregate child (owned, or one with a required back-reference); otherwise the target is a root, listed at its own route. Such an entity is built by its host, EF and actions, not by a caller in another assembly. A two-way one-to-one (owned or not) to an internal entity builds and boots (#791, row P-18). **`DMCON019`** covers two shapes only reachable through the model API: a public entity with an entity-typed property of an internal entity (persistence ignores it) and a public entity with a many-to-many navigation to an internal entity (the pack cannot map it soundly).
 
 <!-- poly-verify: valid -->
 ```poly
@@ -2227,7 +2227,7 @@ What the id does not cover, and what that costs:
 
 ### New in this release, where you will meet it
 
-- A bare to-one link is required and permanent; `optional` opts out (section 4, *A to-one navigation is required*).
+- A bare to-one link is required and permanent; `optional` opts out (section 4, *A to-one navigation is required*). Over HTTP the create body carries it as `<Link>Id`.
 - `null` is always the absence of a value, and an empty string is a value (section 3, *`null` and optional values*).
 - A literal written `7.0` is a whole number, so `7.0 / 2` is 3 (section 8, *Integer division*).
 - `==` and `!=` on a value type: see the `==` item under *Known wrong*.
@@ -2278,12 +2278,19 @@ What the id does not cover, and what that costs:
 - **`assign Qty to Dec * 2`** (a Number target, a Decimal operand): analysis accepts it and the generated C# does not
   compile (T-07).
 - **A `Decimal` with a `range`** (SQLite host): it is stored as TEXT with a CHECK, so a valid create can fail: a `POST`
-  of crm `Product` (`ListPrice: Decimal range(0, 100000000)`) and of hotel `RoomType` answers `500` (#559, P-05).
+  of crm `Product` (`ListPrice: Decimal range(0, 100000000)`) and of hotel `RoomType` answers `500` (#559, row P-05).
 - **An entity with no required scalar** (generated app): the host does not compile (`ItemDto` could not be found), for
   an entity of only optional properties and for one of only defaulted properties (P-11; #588, #641).
-- **An entity with a required link** (generated app) has no `POST` route, create DTO, `.http` sample or seed row, so it
-  cannot be created over HTTP (a `POST` answers `405`); saas `Account` cannot be created over HTTP at all, because the
-  target of its required link has no create route. <!-- TODO(orchestrator): P-11b restores the route with the link in the request body; rewrite this item after it lands. -->
+- **An entity whose required link targets an entity with no natural key** (generated app) has no `POST` route, so it
+  cannot be created over HTTP: saas `Account`, whose required `subscription` targets an entity with a shadow `id`, is
+  one. The same holds when a required scalar of the entity is named `<Link>Id`, which clashes with the link's body
+  member (P-11, P-12).
+- **An action whose entity argument has a numeric (shadow) key** answers `500` over HTTP: university `Student.Enroll`,
+  hotel `Guest.BookHall` and `Guest.BookSection`, logistics `Courier.Assign` (#940).
+- **An owned single part with no back-navigation** (`hq: owned Address optional`) is orphaned when its owner is deleted;
+  owned parts reached by a collection or a back-navigation cascade. The behaviour is unchanged in this release (L-15).
+- **Only SQLite** is checked at startup, and only SQLite was probed for delete behaviour (`OnDelete(Restrict)` on a
+  required link, cascade on owned parts).
 - **An action the generator cannot follow**, such as a `when` handler chain that keeps registering subscribers, is
   refused when the app is generated, not served (#560).
 - **`poly_export csharp`** prints one file-scoped `namespace` line per entity and enum for a domain with more than one,
@@ -2291,7 +2298,6 @@ What the id does not cover, and what that costs:
 - **Enum members and stage names** are stored as integers by declaration order: inserting, reordering or removing one
   re-labels stored rows with no error (see *Databases*). No check exists in this release, and no row removes it: there
   are no migrations.
-- **The database accepts a null foreign key** for a required link: only the generated C# checks it. <!-- TODO(orchestrator): L-15a half (b) (EF IsRequired/OnDelete) removes this item; delete it after it lands. --> Removed by L-15a half (b).
 - **MCP `add relationship`** cannot write `optional`, and JSON Schema, SHACL and MCP describe do not show a link's
   requiredness. Removed by L-15.
 - **An optional temporal value compared with a different temporal type** (C# surface only): it is refused although C#

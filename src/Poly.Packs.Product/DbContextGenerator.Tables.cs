@@ -97,6 +97,54 @@ public sealed partial class DbContextGenerator {
         };
     }
 
+    /// <summary>
+    /// One statement per decided relationship, declaring what the language says (L-15b): the foreign key is required when
+    /// the dependent end's navigation is (<see cref="StorageNavigation.IsRequired"/>), and the delete behaviour is
+    /// <see cref="StorageNavigation.OnDelete"/>. Both are explicit either way: EF otherwise infers requiredness from the
+    /// CLR nullability of the navigation (today <c>T?</c>, so optional) and would move the schema the day that changes.
+    /// A shape the analysis does not decide (<see cref="StorageNavigation.OnDelete"/> null) gets no statement.
+    /// </summary>
+    private IEnumerable<Node> BuildRelationshipConfigs() {
+        foreach (var entity in _entities) {
+            var store = GetStorageEntity(entity);
+            foreach (var nav in store.ReferenceNavigations.Concat(store.CollectionNavigations)) {
+                if (nav.ConfiguresForeignKey && nav.OnDelete is { } onDelete)
+                    yield return BuildRelationshipConfig(entity, nav, onDelete);
+            }
+        }
+    }
+
+    private static Node BuildRelationshipConfig(Entity entity, StorageNavigation nav, StorageDeleteBehavior onDelete) {
+        var entityBuilder = new Invoke(new Member(new TypeReference("modelBuilder"), "Entity")) {
+            TypeArguments = [new TypeReference(entity.Name)]
+        };
+        var eParam = new Parameter("e");
+        Node chain = new Invoke(
+            new Member(entityBuilder, nav.IsCollection ? "HasMany" : "HasOne"),
+            new Lambda([eParam], new Member(eParam, nav.PropertyName)));
+
+        var withMany = nav.IsCollection ? nav.InverseIsCollection : nav.InversePropertyName is null || nav.InverseIsCollection;
+        var withArgs = new List<Node>();
+        if (nav.InversePropertyName is { } inversePropertyName) {
+            var iParam = new Parameter("i");
+            withArgs.Add(new Lambda([iParam], new Member(iParam, inversePropertyName)));
+        }
+        chain = new Invoke(new Member(chain, withMany ? "WithMany" : "WithOne"), [.. withArgs]);
+
+        // A one-to-one pair names its dependent end; EF cannot pick one (the model does not build without it).
+        if (!nav.IsCollection && nav.InversePropertyName is not null && !nav.InverseIsCollection) {
+            chain = new Invoke(new Member(chain, "HasForeignKey"), new Constant(nav.PropertyName + "Id")) {
+                TypeArguments = [new TypeReference(entity.Name)]
+            };
+        }
+
+        Node[] requiredArgs = nav.IsRequired ? [] : [new Constant(false)];
+        chain = new Invoke(new Member(chain, "IsRequired"), requiredArgs);
+        return new Invoke(
+            new Member(chain, "OnDelete"),
+            new Member(new TypeReference("DeleteBehavior"), onDelete.ToString()));
+    }
+
     /// <summary>The exporter's own rule (<see cref="DomainAccess.NavigationAccess"/>), not a copy of it.</summary>
     private bool IsPrintedInternal(Entity entity, StorageNavigation nav) =>
         DomainAccess.NavigationAccess(entity, new NamedTypeReference(nav.TargetEntityName), _domain)

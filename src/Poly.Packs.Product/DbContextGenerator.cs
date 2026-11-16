@@ -74,6 +74,9 @@ public sealed partial class DbContextGenerator {
             entityConfigMethods.Add(BuildEntityConfig(entity));
         }
 
+        // Relationships come after every entity block: each one needs both ends' keys, declared above.
+        entityConfigMethods.AddRange(BuildRelationshipConfigs());
+
         // OnModelCreating body
         var modelBuilderParam = new Parameter("modelBuilder", new TypeReference("ModelBuilder"));
         var onModelCreatingBody = new Block(

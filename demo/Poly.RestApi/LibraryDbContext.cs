@@ -94,6 +94,9 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.PriorityAccess).HasColumnName("priorityAccess").HasColumnType("INTEGER");
     b.HasIndex(x => x.Email).IsUnique();
 });
+        modelBuilder.Entity<Loan>().HasOne(e => e.Book).WithMany().IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Loan>().HasOne(e => e.Borrower).WithMany(i => i.Loans).IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Fine>().HasOne(e => e.Patron).WithMany(i => i.Fines).IsRequired().OnDelete(DeleteBehavior.Restrict);
     }
     public bool Exists(string entity, string property, string value)
     {

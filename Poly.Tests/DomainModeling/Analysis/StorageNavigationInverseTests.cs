@@ -132,6 +132,36 @@ public sealed class StorageNavigationInverseTests {
         await Assert.That(InverseOf(order, "Extra")).IsEqualTo("B");
     }
 
+    // crm: Account.opportunities and Account.tickets declare 'via account' into other entities. The same name on
+    // Contact.account is not claimed by them, so Account.contacts and Contact.account pair (L-15b: the foreign key of the
+    // pair is configured once, from one resolved inverse; before, only Contact.account resolved it).
+    [Test]
+    public async Task InversePropertyName_ViaOnAThirdEntitysNavigationWithTheSameName_ClaimsNothing() {
+        const string Dsl = """
+            domain Test
+
+            Contact: entity {
+              Name: Text
+              account: Account
+            }
+
+            Opportunity: entity {
+              Title: Text
+              account: Account
+            }
+
+            Account: entity {
+              Name: Text
+              contacts: many Contact
+              opportunities: many Opportunity via account
+            }
+            """;
+
+        var account = Storage(Dsl, "Account");
+        await Assert.That(InverseOf(account, "Contacts")).IsEqualTo("Account");
+        await Assert.That(InverseOf(Storage(Dsl, "Contact"), "Account")).IsEqualTo("Contacts");
+    }
+
     // Mixed cardinality: the peer has one singular and one collection navigation back. Pinned as of this slice; the
     // exporter's CreateInWiring.FilledNavigation / FindInverseCollectionInfo answer differently (row S-11b unifies them).
     [Test]

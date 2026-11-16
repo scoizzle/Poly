@@ -345,7 +345,9 @@ public sealed class CSharpExportCompileTests {
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
-    // The predicate is exactly "owner public AND target internal": every other pairing prints and maps as before.
+    // The predicate is exactly "owner public AND target internal": every other pairing prints and maps as before. The
+    // explicit mapping is the one inside the entity block (`b.HasMany(`); the relationship statements after the entity
+    // blocks (L-15b: `modelBuilder.Entity<T>().HasMany(`) are declared for every decided relationship.
     [Test]
     [Arguments("public entity", "public entity")]
     [Arguments("", "")]
@@ -370,8 +372,8 @@ public sealed class CSharpExportCompileTests {
 
         await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
         var db = DbContextText(e);
-        await Assert.That(db).DoesNotContain("HasMany(");
-        await Assert.That(db).DoesNotContain("HasOne(");
+        await Assert.That(db).DoesNotContain("b.HasMany(");
+        await Assert.That(db).DoesNotContain("b.HasOne(");
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
@@ -399,8 +401,8 @@ public sealed class CSharpExportCompileTests {
 
         await Assert.That(e.Type("Order").GetMembers("Receipt").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
         var db = DbContextText(e);
-        await Assert.That(db).DoesNotContain("HasMany(");
-        await Assert.That(db).DoesNotContain("HasOne(");
+        await Assert.That(db).DoesNotContain("b.HasMany(");
+        await Assert.That(db).DoesNotContain("b.HasOne(");
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 

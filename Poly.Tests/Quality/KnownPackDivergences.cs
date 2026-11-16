@@ -17,6 +17,8 @@ public static class KnownPackDivergences {
     public static IReadOnlyList<KnownPackDivergence> All { get; } = [
         new(559, "P-05", "sqlite", "crm", "Product.CreateValid", "status=500;location=none"),
         new(559, "P-05", "sqlite", "crm", "Product.ReadCreated", "status=0;location=none"),
+        new(559, "P-05", "sqlite", "hotel", "RoomType.CreateValid", "status=500;location=none"),
+        new(559, "P-05", "sqlite", "hotel", "RoomType.ReadCreated", "status=0;location=none"),
         new(589, "P-12", "sqlite", "clinic", "Patient.ActionSuccess", "status=0;location=none"),
         new(589, "P-12", "sqlite", "clinic", "Patient.CreateValid", "status=200;location=none"),
         new(589, "P-12", "sqlite", "clinic", "Patient.ReadCreated", "status=0;location=none"),

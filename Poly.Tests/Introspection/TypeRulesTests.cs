@@ -100,8 +100,11 @@ public class TypeRulesTests {
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    private static ITypeDefinition[] ParametersOf(DeclaredOperator declared) =>
-        [.. declared.Signature.Parameters.Select(static p => p.ParameterTypeDefinition)];
+    private static ITypeDefinition[] ParametersOf(ITypeOperator declared) =>
+        [.. declared.Parameters.Select(static p => p.ParameterTypeDefinition)];
+
+    private static ITypeOperator[] OperatorsOf(ITypeDefinition definition, OperatorKind kind) =>
+        [.. definition.Operators.Where(o => o.Kind == kind)];
 
     // ---- ResolveConversionFrom: intrinsic conversions are reds on the stub, reflected ones are pins ----
 
@@ -270,33 +273,32 @@ public class TypeRulesTests {
     [Test]
     public async Task GetOperators_Int64Add_YieldsIntrinsicLongLongToLong() {
         var longType = Clr(typeof(long));
-        var operators = longType.GetOperators(OperatorKind.Add).ToArray();
+        var operators = OperatorsOf(longType, OperatorKind.Add).ToArray();
         await Assert.That(operators.Length).IsEqualTo(1);
-        await Assert.That(operators[0].PlatformApplied).IsTrue();
-        await Assert.That(operators[0].Signature.MemberTypeDefinition).IsSameReferenceAs(longType);
+        await Assert.That(operators[0].Method).IsNull();
+        await Assert.That(operators[0].ResultTypeDefinition).IsSameReferenceAs(longType);
         var parameters = ParametersOf(operators[0]);
         await Assert.That(parameters.Length).IsEqualTo(2);
         await Assert.That(parameters[0]).IsSameReferenceAs(longType);
         await Assert.That(parameters[1]).IsSameReferenceAs(longType);
-        await Assert.That(operators[0].Signature.IsStatic).IsTrue();
     }
 
     [Test]
     public async Task GetOperators_Int64Comparison_YieldsIntrinsicBoolean() {
-        var operators = Clr(typeof(long)).GetOperators(OperatorKind.LessThan).ToArray();
+        var operators = OperatorsOf(Clr(typeof(long)), OperatorKind.LessThan).ToArray();
         await Assert.That(operators.Length).IsEqualTo(1);
-        await Assert.That(operators[0].PlatformApplied).IsTrue();
-        await Assert.That(operators[0].Signature.MemberTypeDefinition).IsSameReferenceAs(Clr(typeof(bool)));
+        await Assert.That(operators[0].Method).IsNull();
+        await Assert.That(operators[0].ResultTypeDefinition).IsSameReferenceAs(Clr(typeof(bool)));
     }
 
     [Test]
     public async Task GetOperators_DecimalAdd_YieldsDeclaredDecimalOperator() {
         var decimalType = Clr(typeof(decimal));
-        var operators = decimalType.GetOperators(OperatorKind.Add).ToArray();
+        var operators = OperatorsOf(decimalType, OperatorKind.Add).ToArray();
         await Assert.That(operators.Length).IsEqualTo(1);
-        await Assert.That(operators[0].PlatformApplied).IsFalse();
-        await Assert.That(operators[0].Signature.DeclaringTypeDefinition).IsSameReferenceAs(decimalType);
-        await Assert.That(operators[0].Signature.MemberTypeDefinition).IsSameReferenceAs(decimalType);
+        await Assert.That(operators[0].Method).IsNotNull();
+        await Assert.That(operators[0].Method!.DeclaringTypeDefinition).IsSameReferenceAs(decimalType);
+        await Assert.That(operators[0].ResultTypeDefinition).IsSameReferenceAs(decimalType);
         await Assert.That(ParametersOf(operators[0]).Length).IsEqualTo(2);
     }
 
@@ -306,37 +308,62 @@ public class TypeRulesTests {
         // the intrinsic's exact signature, so the intrinsic is the one answer, as for Double.
         var single = Clr(typeof(float));
         foreach (var kind in new[] { OperatorKind.And, OperatorKind.Or, OperatorKind.Not, OperatorKind.BitwiseAnd, OperatorKind.BitwiseNot, OperatorKind.ShiftLeft })
-            await Assert.That(single.GetOperators(kind)).IsEmpty();
+            await Assert.That(OperatorsOf(single, kind)).IsEmpty();
         foreach (var kind in new[] { OperatorKind.Add, OperatorKind.Subtract, OperatorKind.Multiply, OperatorKind.Divide, OperatorKind.Modulo, OperatorKind.LessThan, OperatorKind.Equal }) {
-            var declared = single.GetOperators(kind).Single();
-            await Assert.That(declared.PlatformApplied).IsTrue();
+            var declared = OperatorsOf(single, kind).Single();
+            await Assert.That(declared.Method).IsNull();
             await Assert.That(ParametersOf(declared).All(p => ReferenceEquals(p, single))).IsTrue();
         }
         // The sibling: Float64 does have intrinsic arithmetic, and its comparison is one intrinsic, not two.
-        await Assert.That(Clr(typeof(double)).GetOperators(OperatorKind.Add).Single().PlatformApplied).IsTrue();
-        await Assert.That(Clr(typeof(double)).GetOperators(OperatorKind.LessThan).Single().PlatformApplied).IsTrue();
+        await Assert.That(OperatorsOf(Clr(typeof(double)), OperatorKind.Add).Single().Method).IsNull();
+        await Assert.That(OperatorsOf(Clr(typeof(double)), OperatorKind.LessThan).Single().Method).IsNull();
     }
 
     [Test]
-    public async Task GetOperators_ModeledValueType_FromDeclaredOpMember() {
+    public async Task Operators_PlatformEvaluatedOperator_NamesNoMethod_ADeclaredOneNamesItsMethod() {
+        var longType = Clr(typeof(long));
+        var intrinsic = OperatorsOf(longType, OperatorKind.Add).Single();
+        await Assert.That(intrinsic.Method).IsNull();
+        await Assert.That(intrinsic.DeclaringTypeDefinition).IsSameReferenceAs(longType);
+        await Assert.That(ParametersOf(intrinsic).All(t => ReferenceEquals(t, longType))).IsTrue();
+        await Assert.That(intrinsic.ResultTypeDefinition).IsSameReferenceAs(longType);
+
+        var decimalType = Clr(typeof(decimal));
+        var declared = OperatorsOf(decimalType, OperatorKind.Add).Single();
+        await Assert.That(declared.Method).IsNotNull();
+        await Assert.That(declared.Method!.DeclaringTypeDefinition).IsSameReferenceAs(decimalType);
+        await Assert.That(ParametersOf(declared).Length).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Operators_ModeledValueType_FromAMethodMarkedAsAnOperator() {
+        var set = new ModeledTypeSet();
+        var vec = set.Add("Vec", ModeledTypeSet.Operator(OperatorKind.Add, "Vec", "Vec", "Vec"));
+        var operators = OperatorsOf(vec, OperatorKind.Add);
+        await Assert.That(operators.Length).IsEqualTo(1);
+        await Assert.That(operators[0].Method).IsNotNull();
+        await Assert.That(operators[0].DeclaringTypeDefinition).IsSameReferenceAs(vec);
+        await Assert.That(OperatorsOf(vec, OperatorKind.Subtract)).IsEmpty();
+    }
+
+    [Test]
+    public async Task Operators_ModeledMethodNamedLikeAClrOperator_WithoutTheMarker_IsNotAnOperator() {
+        // The CLR's op_* names are the CLR's encoding, not a modeled declaration: only the marker declares an operator.
         var set = new ModeledTypeSet();
         var vec = set.Add("Vec", ModeledTypeSet.Static("op_Addition", "Vec", "Vec", "Vec"));
-        var operators = ((ITypeDefinition)vec).GetOperators(OperatorKind.Add).ToArray();
-        await Assert.That(operators.Length).IsEqualTo(1);
-        await Assert.That(operators[0].PlatformApplied).IsFalse();
-        await Assert.That(operators[0].Signature.DeclaringTypeDefinition).IsSameReferenceAs(vec);
-        await Assert.That(((ITypeDefinition)vec).GetOperators(OperatorKind.Subtract)).IsEmpty();
+        await Assert.That(((ITypeDefinition)vec).Operators).IsEmpty();
+        await Assert.That(((ITypeDefinition)vec).GetOperator(OperatorKind.Add, vec)).IsNull();
     }
 
     [Test]
-    public async Task GetOperators_ModeledNonStaticOrWrongArity_IsIgnored() {
+    public async Task Operators_ModeledNonStaticOrWrongArity_IsIgnored() {
         var set = new ModeledTypeSet();
         var vec = set.Add("Vec",
-            new Poly.Ast.Nodes.MethodDefinitionNode("op_Addition", new Poly.Ast.Nodes.NamedTypeReference("Vec"),
-                [new Poly.Ast.Nodes.Parameter("a", new Poly.Ast.Nodes.NamedTypeReference("Vec"))], IsStatic: false),
-            ModeledTypeSet.Static("op_Subtraction", "Vec", "Vec"));
-        await Assert.That(((ITypeDefinition)vec).GetOperators(OperatorKind.Add)).IsEmpty();
-        await Assert.That(((ITypeDefinition)vec).GetOperators(OperatorKind.Subtract)).IsEmpty();
+            new Poly.Ast.Nodes.MethodDefinitionNode("Add", new Poly.Ast.Nodes.NamedTypeReference("Vec"),
+                [new Poly.Ast.Nodes.Parameter("a", new Poly.Ast.Nodes.NamedTypeReference("Vec"))], IsStatic: false) { Operator = OperatorKind.Add },
+            ModeledTypeSet.Operator(OperatorKind.Subtract, "Vec", "Vec"));
+        await Assert.That(OperatorsOf(vec, OperatorKind.Add)).IsEmpty();
+        await Assert.That(OperatorsOf(vec, OperatorKind.Subtract)).IsEmpty();
     }
 
     // ---- GetCommonType (B9) ----
@@ -382,7 +409,8 @@ public class TypeRulesTests {
     public async Task ConversionContract_ContainsNoRepresentationOrReflectionTypes() {
         var members = new List<MethodBase?> {
             typeof(ITypeDefinition).GetMethod(nameof(ITypeDefinition.ResolveConversionFrom), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
-            typeof(ITypeDefinition).GetMethod(nameof(ITypeDefinition.GetOperators), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            typeof(ITypeDefinition).GetMethod(nameof(ITypeDefinition.ResolveOperator), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
+            typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.Operators))?.GetMethod
         };
         members.AddRange(typeof(TypeDefinitionOperatorExtensions)
             .GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
@@ -394,7 +422,7 @@ public class TypeRulesTests {
             if (member is MethodInfo method)
                 signatureTypes.Add(method.ReturnType);
         }
-        foreach (var contract in new[] { typeof(TypeConversion), typeof(DeclaredOperator), typeof(OperatorResolution) }) {
+        foreach (var contract in new[] { typeof(TypeConversion), typeof(ITypeOperator) }) {
             const BindingFlags all = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             signatureTypes.AddRange(contract.GetProperties(all).Select(static p => p.PropertyType));
             signatureTypes.AddRange(contract.GetFields(all).Select(static f => f.FieldType));
@@ -440,15 +468,15 @@ public class TypeRulesTests {
         var set = new ModeledTypeSet();
         var bag = set.Add("Bag", new MethodDefinitionNode("op_Addition", new NamedTypeReference("Bag"),
             [new Parameter("a", new NamedTypeReference("Bag")), new Parameter("b", new CollectionTypeReference(new NamedTypeReference("Bag"), CollectionKind.List))],
-            IsStatic: true));
+            IsStatic: true) { Operator = OperatorKind.Add });
         ITypeDefinition bagType = bag;
         ITypeDefinition freshList = new AstCollectionTypeDefinition(bag, CollectionKind.List);
         var resolution = bagType.GetOperator(OperatorKind.Add, freshList);
         await Assert.That(resolution).IsNotNull();
-        await Assert.That(resolution!.Value.Result).IsSameReferenceAs(bag);
+        await Assert.That(resolution!.ResultTypeDefinition).IsSameReferenceAs(bag);
     }
 
-    // ---- PlatformApplied: true for every simple type but decimal, whose operators the CLR declares ----
+    // ---- No implementation for every simple type but decimal, whose operators the CLR declares ----
 
     [Test]
     public async Task Comparisons_Float32Float64AndInt32_ArePlatformApplied_WithIdenticalResults_DecimalIsDeclared() {
@@ -456,13 +484,13 @@ public class TypeRulesTests {
         var boolean = Clr(typeof(bool));
         foreach (var (type, platform) in new[] { (typeof(float), true), (typeof(double), true), (typeof(int), true), (typeof(decimal), false) }) {
             var definition = Clr(type);
-            var operators = definition.GetOperators(OperatorKind.LessThan).ToArray();
+            var operators = OperatorsOf(definition, OperatorKind.LessThan).ToArray();
             await Assert.That(operators.Length).IsEqualTo(1);
-            await Assert.That(operators[0].PlatformApplied).IsEqualTo(platform);
-            await Assert.That(operators[0].Signature.MemberTypeDefinition).IsSameReferenceAs(boolean);
+            await Assert.That(operators[0].Method is null).IsEqualTo(platform);
+            await Assert.That(operators[0].ResultTypeDefinition).IsSameReferenceAs(boolean);
             var resolution = definition.GetOperator(OperatorKind.LessThan, definition);
-            await Assert.That(resolution!.Value.PlatformApplied).IsEqualTo(platform);
-            await Assert.That(resolution.Value.Result).IsSameReferenceAs(boolean);
+            await Assert.That(resolution!.Method is null).IsEqualTo(platform);
+            await Assert.That(resolution.ResultTypeDefinition).IsSameReferenceAs(boolean);
         }
     }
 

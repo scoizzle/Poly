@@ -31,13 +31,21 @@ Common members include:
 - `Kind`
 - `PrimitiveType`
 - `Members`
+- `Operators` (`ITypeOperator`, see below)
 - `GetMembers(string name)`
 - `IsAssignableFrom` (no conversion, or a declared implicit operator; a conversion the platform applies itself, such as numeric widening, is not assignment)
-- `ResolveConversionFrom` / `IsAssignableWithoutConversion` / `GetOperators` (internal, default-bodied: what the platform defines for conversions, assignability and operators; see below). Conversion operators are not in `Methods`; a declared one is a `TypeConversion` with a method, a built-in one has none.
+- `ResolveConversionFrom` / `IsAssignableWithoutConversion` (internal, default-bodied) and `ResolveOperator` (internal, every platform implements it): what the platform defines for conversions, assignability and operator selection; see below. Conversion operators are not in `Methods`; a declared one is a `TypeConversion` with a method, a built-in one has none.
 
 ### ITypeMember
 
 Represents a field, property, or method.
+
+### ITypeOperator
+
+Represents an operator a type defines: its `OperatorKind`, `DeclaringTypeDefinition`, `Parameters` (the operands)
+and `ResultTypeDefinition`, plus `Method`, the member that computes it, or null when the platform evaluates it itself.
+Like `ITypeMethod`, it is implemented per platform (`ClrTypeOperator`, `AstOperatorDefinition`); nothing in the
+Introspection root says how a platform spells an operator.
 
 - `Name`
 - `MemberTypeDefinition`
@@ -56,18 +64,21 @@ Resolves type definitions:
 
 ## Conversions and operators (T-03b, T-24)
 
-A definition answers what its platform defines, through two internal members of `ITypeDefinition`:
-`ResolveConversionFrom(source)` (a `TypeConversion`: the kind, and the declared method or null when the platform
-applies it itself) and `GetOperators(kind, other)` (`DeclaredOperator`: a signature and whether the platform applies
-it). `other` is the other operand (null: the same type): a platform's answer depends on the pair, since C#'s
-`UInt32 + Int32` is `Int64`, which neither operand owns.
-`GetOperator(kind, right)` (`TypeDefinitionOperatorExtensions`) is the consumer door: candidates are the operators
-either operand declares beside the other; a candidate applies when each operand is identical to its parameter or converts
-implicitly; all-identity wins, otherwise exactly one applicable candidate, otherwise none. `GetCommonType(types)`
-is the unique type the others identically or implicitly convert to. Optionality is the caller's (T-06).
+A definition answers what its platform defines. Conversions answer through the internal `ResolveConversionFrom(source)`
+(a `TypeConversion`: the kind, and the declared method or null when the platform applies it itself). Operators are
+`ITypeDefinition.Operators` (`ITypeOperator`), and the platform selects one through the internal, abstract
+`ResolveOperator(kind, right)` (#942): which operators are candidates and how one is chosen is the platform's rule, not
+the root's. `GetOperator(kind, right)` (`TypeDefinitionOperatorExtensions`) is the consumer door: it checks the arity
+and delegates. `GetCommonType(types)` is the unique type the others identically or implicitly convert to. Optionality is
+the caller's (T-06).
 
-- **.NET rules** live in `CommonLanguageRuntime/`: `ClrTypeDefinition` reflects `op_Implicit`/`op_Explicit` and
-  static special-name `op_*` members, then `ClrBuiltInRules` supplies what C# leaves to the compiler: every
+- **.NET rules** live in `CommonLanguageRuntime/`. `ClrOperatorResolution` is C#'s selection (12.4.4, 12.4.5):
+  candidates are the operators either operand offers beside the other (a CLR definition's are pair-aware,
+  `ClrTypeDefinition.OperatorsBeside`, since C#'s `UInt32 + Int32` is `Int64`, which neither operand declares; any other
+  definition's are its `Operators` of the kind); a candidate applies when each operand is identical to its parameter or
+  converts implicitly; all-identity wins, otherwise exactly one applicable candidate, otherwise none.
+  `ClrOperatorNames` is the CLR's special-name encoding (`op_Addition`, …). `ClrTypeDefinition` reflects
+  `op_Implicit`/`op_Explicit` and static special-name `op_*` members (`ClrTypeOperator` with a `Method`), then `ClrBuiltInRules` supplies what C# leaves to the compiler: every
   conversion and operator C# defines for built-in types (the implicit and explicit numeric conversions,
   conversion into `object` from any other CLR type, numeric promotion through one `Promote` function, arithmetic,
   modulo, comparison, bitwise, shift, unary minus and plus, the Boolean operators, and string concatenation with
@@ -76,11 +87,16 @@ is the unique type the others identically or implicitly convert to. Optionality 
   built-in conversion answers before a declared one for a native pair (`ClrBuiltInRules.IsNativeInteger`), and their
   conversion to and from decimal is built in. Reference and delegate equality are C# 12.12.7's and 12.12.9's (T-22a),
   and a shift count of any built-in integer type is Poly's permanent policy (`IsPolicyShiftCount`). Deliberately none:
-  enum and lifted operators. `PlatformApplied` is true for every operator of the
+  enum and lifted operators. `Method` is null for every operator of the
   simple types except decimal's, and for concatenation. `ClrBuiltInRules` is the only source of the built-in answers. Overload scoring reads the provider since T-16: tier 0 is the same type (`IsSameType`), tier 1 is `IsAssignableFrom`, tier 2 is an implicit `ResolveConversionFrom` (a conversion with no method, which the platform applies itself; since T-21c that includes C# 10.6.1's lifted conversion into a `Nullable<U>` from `S` or `S?`, stated with no method even where `S` to `U` declares one, so it is never assignability); the private numeric rank table and the public `GetConversionFrom` door are gone. `IsAssignableFrom` stays "no conversion, or a declared implicit operator" because assignment, casts, type tests and the emitter also read it; widening it would loosen all of them. `IsAssignableWithoutConversion` is its first half: the same type, a base type or an interface, and for .NET `Type.IsAssignableFrom`, the lift from `T` to `T?` and `object` accepting every definition (the VM boxes a modeled entity). The box into `object` is also `ClrBuiltInRules`' implicit conversion, so it is stated twice; the two agree on every CLR definition (`ObjectAcceptsEveryClrDefinition_IsAssignableFromAndResolveConversionFromAgree`) and differ for a modeled source by design. Still outside the contract, with no removing row yet: the tier sum itself (a private copy of overload resolution that keeps the first of equal candidates; it is not C# 12.6.4 better-conversion), the boxing rule stated twice, and `SyntaxTypeCompatibilityAnalyzer`'s `IsImplicitlyConvertible(Type, Type)` with its nullable lifting, `CoerceTo`, `IsIntegerType`, `ConvertMethodName` and `IsIeeeFloating`. T-23 publishes `IsAssignableWithoutConversion`. `IsCollectionShape` and `GetElementType` also name CLR types in the Introspection root but do not answer a conversion.
-- **Modeled definitions** answer from declared static `op_*` members: Poly's modeled convention, shared with
-  `op_Implicit`, not a platform fact. `And` and `Or` have no declared form.
-- **Introspection-internal today.** The members are `internal` and neutral at signature level only
+- **Modeled definitions** (`AstTypeDefinition`) declare an operator with a static method marked
+  `MethodDefinitionNode.Operator`; the method's name plays no part. The C# reader marks a static member named like a
+  CLR operator, the CLR's own encoding, since the C# surface has no `operator` declaration yet (#406); the domain
+  provider marks the equality it synthesizes on enums, entities and value types. They select with C#'s rule
+  (`ClrOperatorResolution`). Modeled conversions are still declared static `op_Implicit`/`op_Explicit` members
+  (`ModeledConversions`).
+- **Introspection-internal today.** `ITypeOperator` and `Operators` are public, as `ITypeMethod` and `Methods` are;
+  `ResolveConversionFrom`, `IsAssignableWithoutConversion` and `ResolveOperator` are `internal` and neutral at signature level only
   (`ITypeMember.EmitRead` still returns an `Expression`). A platform in another assembly cannot implement them
   yet; they go public, non-breaking, when the first non-CLR platform lands. The long-term goal is a VM and
   Introspection general enough to simulate almost any platform, with .NET the first.

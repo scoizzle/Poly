@@ -429,7 +429,10 @@ public static class CSharpReader {
                 IsAsync: modifiers.Async,
                 IsOverride: modifiers.Override,
                 GenericParameters: MaybeChild(match, "generic-params") is { } generics ? FoldGenericParams(generics) : null,
-                AccessModifier: modifiers.Access);
+                AccessModifier: modifiers.Access) {
+                // The C# surface has no operator declaration form yet; a static op_* member is how C# encodes one.
+                Operator = modifiers.Static ? ClrOperatorNames.KindOf(Capture(match, "name")) : null
+            };
             return MaybeChild(match, "attributes") is { } attrs
                 ? method with { Attributes = FoldAttributes(attrs) }
                 : method;

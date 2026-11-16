@@ -623,14 +623,14 @@ public class NativeIntegerTests {
     public async Task Provider_NintPlusInt_IsTheBuiltInOperator_AndNintIsAPrimitive() {
         var nint = Clr(typeof(nint));
         var resolution = nint.GetOperator(OperatorKind.Add, Clr(typeof(int)));
-        await Assert.That(resolution is { PlatformApplied: true }).IsTrue();
-        await Assert.That(resolution!.Value.Result).IsSameReferenceAs(nint);
-        await Assert.That(resolution.Value.Signature.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, nint))).IsTrue();
+        await Assert.That(resolution is { Method: null }).IsTrue();
+        await Assert.That(resolution!.ResultTypeDefinition).IsSameReferenceAs(nint);
+        await Assert.That(resolution.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, nint))).IsTrue();
         await Assert.That(nint.PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nint");
         await Assert.That(Clr(typeof(nuint)).PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nuint");
         await Assert.That(nint.Kind).IsEqualTo(Poly.Introspection.TypeKind.Primitive);
         foreach (var kind in Enum.GetValues<OperatorKind>())
-            await Assert.That(nint.GetOperators(kind).Any(static o => !o.PlatformApplied)).IsFalse().Because($"IntPtr's reflected {kind} stands down");
+            await Assert.That(nint.Operators.Where(o => o.Kind == kind).Any(static o => o.Method is not null)).IsFalse().Because($"IntPtr's reflected {kind} stands down");
     }
 
     /// <summary>
@@ -687,14 +687,14 @@ public class NativeIntegerTests {
             if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight && right!.GetPrimitiveType() is { } count
                 && ClrBuiltInRules.IsPolicyShiftCount(count) && IntCountShift(kind, left) is { } shifted) {
                 policy++;
-                var typed = Clr(left).GetOperator(kind, Clr(right!))?.Result.GetRuntimeType();
+                var typed = Clr(left).GetOperator(kind, Clr(right!))?.ResultTypeDefinition.GetRuntimeType();
                 if (oracle.Defined || typed != shifted)
                     mismatches.Add($"{CSharpOperatorOracle.Key(kind, left, right)}: policy, C# {(oracle.Defined ? "defines it" : oracle.Errors)}, provider {(typed is null ? "none" : CSharpOperatorOracle.Keyword(typed))}, int count {CSharpOperatorOracle.Keyword(shifted)}");
                 continue;
             }
             defined += oracle.Defined ? 1 : 0;
             var resolution = Clr(left).GetOperator(kind, right is null ? null : Clr(right));
-            var actual = resolution?.Result.GetRuntimeType();
+            var actual = resolution?.ResultTypeDefinition.GetRuntimeType();
             if (actual != oracle.Type)
                 mismatches.Add($"{CSharpOperatorOracle.Key(kind, left, right)}: C# {(oracle.Defined ? CSharpOperatorOracle.Keyword(oracle.Type!) : oracle.Errors)}, provider {(actual is null ? "none" : CSharpOperatorOracle.Keyword(actual))}");
         }

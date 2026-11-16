@@ -127,7 +127,7 @@ internal static class OperatorOracle {
 
         var analyzer = AnalyzerVerdict(left, kind, right);
         if (analyzer is "accepts" or "rejects" && (analyzer == "accepts") != (resolution is not null))
-            divergences.Add(new(OracleKind.AnalyzerDisagrees, $"analyzer {analyzer}, tree {(resolution is { } r ? r.Result.Name : "none")}"));
+            divergences.Add(new(OracleKind.AnalyzerDisagrees, $"analyzer {analyzer}, tree {(resolution is { } r ? r.ResultTypeDefinition.Name : "none")}"));
 
         var lowered = "n/a";
         var abi = "n/a";
@@ -169,20 +169,20 @@ internal static class OperatorOracle {
         _ => throw new ArgumentOutOfRangeException(nameof(count), count, "not a policy shift count")
     };
 
-    private static string DescribeTree(OracleOperand left, OracleOperand? right, OperatorResolution? resolution) {
+    private static string DescribeTree(OracleOperand left, OracleOperand? right, ITypeOperator? resolution) {
         if (resolution is not { } found)
             return "none";
         var operands = right is null ? new[] { left } : new[] { left, right };
-        var parameters = found.Signature.Parameters.ToArray();
+        var parameters = found.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
         var conversions = new List<string>();
         for (var i = 0; i < operands.Length; i++) {
             var operand = Def(operands[i]);
-            var parameter = parameters[i].ParameterTypeDefinition;
+            var parameter = parameters[i];
             conversions.Add(ReferenceEquals(parameter, operand)
                 ? "id"
                 : parameter.ResolveConversionFrom(operand) is { } c ? $"{c.Kind}{(c.Method is null ? "/intrinsic" : "/declared")}" : "?");
         }
-        return $"{found.Result.Name}{(found.PlatformApplied ? " [platform]" : " [declared]")} conv({string.Join(",", conversions)})";
+        return $"{found.ResultTypeDefinition.Name}{(found.Method is null ? " [platform]" : " [declared]")} conv({string.Join(",", conversions)})";
     }
 
     /// <summary>The DSL spelling, or null for a kind the platform defines and the DSL has no syntax for.</summary>
@@ -273,11 +273,11 @@ internal static class OperatorOracle {
     private static string Short(string text) => text.Length <= 70 ? text : text[..70];
 
     private static (string Lowered, string Abi) RunVm(
-        OracleOperand left, OperatorKind kind, OracleOperand? right, OperatorResolution? resolution, List<OracleDivergence> divergences) {
+        OracleOperand left, OperatorKind kind, OracleOperand? right, ITypeOperator? resolution, List<OracleDivergence> divergences) {
         var a = new Parameter("a", new ClrTypeReference(left.Clr!));
         var b = right is null ? null : new Parameter("b", new ClrTypeReference(right.Clr!));
         var node = Build(kind, a, b);
-        var expectedType = resolution is { } found && found.Result.TryGetRuntimeType(out var tree) ? tree : null;
+        var expectedType = resolution is { } found && found.ResultTypeDefinition.TryGetRuntimeType(out var tree) ? tree : null;
 
         // Lowered-tree analysis, read once.
         AnalysisResult analysis;
@@ -302,7 +302,7 @@ internal static class OperatorOracle {
         if (resolution is null)
             divergences.Add(new(OracleKind.LoweredAnalysisDisagrees, $"analysis accepts an undefined cell, typed {lowered}"));
         else if (loweredType != expectedType)
-            divergences.Add(new(OracleKind.LoweredAnalysisDisagrees, $"type: analysis {lowered}, tree {resolution.Value.Result.Name}"));
+            divergences.Add(new(OracleKind.LoweredAnalysisDisagrees, $"type: analysis {lowered}, tree {resolution.ResultTypeDefinition.Name}"));
 
         // The ABI: compile with that analysis, then run.
         VmProgramLike program;
@@ -359,19 +359,19 @@ internal static class OperatorOracle {
                 divergences.Add(new(OracleKind.AbiDivergesFromTree, string.Join("; ", reasons)));
             // The probe tree is the bare operator over two parameters: it states no conversion node, so any
             // operand conversion the interface requires was applied by the ABI on its own (R6).
-            if (UnstatedConversions(left, right, r0: resolution.Value) is { Length: > 0 } unstated)
+            if (UnstatedConversions(left, right, r0: resolution) is { Length: > 0 } unstated)
                 divergences.Add(new(OracleKind.AbiDivergesFromTree, $"unstated conversion: {unstated}"));
         }
         return (lowered, abi);
     }
 
-    private static string UnstatedConversions(OracleOperand left, OracleOperand? right, OperatorResolution r0) {
+    private static string UnstatedConversions(OracleOperand left, OracleOperand? right, ITypeOperator r0) {
         var operands = right is null ? new[] { left } : new[] { left, right };
-        var parameters = r0.Signature.Parameters.ToArray();
+        var parameters = r0.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
         var parts = new List<string>();
         for (var i = 0; i < operands.Length; i++) {
             var operand = Def(operands[i]);
-            var parameter = parameters[i].ParameterTypeDefinition;
+            var parameter = parameters[i];
             if (!ReferenceEquals(parameter, operand))
                 parts.Add($"{operands[i].Name} to {parameter.Name}");
         }
@@ -389,7 +389,7 @@ internal static class OperatorOracle {
     /// The value the tree's statement denotes: each operand converted as the interface says, then the operator applied by C#.
     /// A native-integer cell is answered by Roslyn (T-18b lock amendment 6): the runtime binder has no native-integer rules.
     /// </summary>
-    private static object? Expected(OperatorKind kind, OperatorResolution resolution, Type leftType, Type? rightType, object? leftValue, object? rightValue) {
+    private static object? Expected(OperatorKind kind, ITypeOperator resolution, Type leftType, Type? rightType, object? leftValue, object? rightValue) {
         try {
             // Poly's shift-count policy: C#'s shift by the count converted to int unchecked (Roslyn's int-count cell for a
             // native left operand, the runtime binder otherwise).
@@ -400,7 +400,7 @@ internal static class OperatorOracle {
                     var answer = Poly.Tests.Introspection.CSharpOperatorOracle.Value(kind, leftType, typeof(int), leftValue, count);
                     return answer.Throws is null ? answer.Value : null;
                 }
-                var promoted = resolution.Signature.Parameters.First().ParameterTypeDefinition.GetRuntimeType()!;
+                var promoted = resolution.Parameters.First().ParameterTypeDefinition.GetRuntimeType()!;
                 dynamic shifted = System.Convert.ChangeType(leftValue is char c0 ? (int)c0 : leftValue!, promoted, CultureInfo.InvariantCulture);
                 return kind is OperatorKind.ShiftLeft ? shifted << count : shifted >> count;
             }
@@ -408,7 +408,7 @@ internal static class OperatorOracle {
                 var answer = Poly.Tests.Introspection.CSharpOperatorOracle.Value(kind, leftType, rightType, leftValue, rightValue);
                 return answer.Throws is null ? answer.Value : null;
             }
-            var parameters = resolution.Signature.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
+            var parameters = resolution.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
             // Into Object is boxing. Char goes through Int32: ChangeType has no char to float, double or decimal.
             static object? Convert(object? value, ITypeDefinition target) =>
                 value is null || !target.TryGetRuntimeType(out var type) || value.GetType() == type || type == typeof(object)

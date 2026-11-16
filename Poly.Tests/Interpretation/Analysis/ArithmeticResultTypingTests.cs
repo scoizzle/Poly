@@ -50,7 +50,7 @@ public class ArithmeticResultTypingTests {
             foreach (var left in Operands)
                 foreach (var right in Operands) {
                     cells++;
-                    var expected = Clr(left).GetOperator(kind, Clr(right))?.Result.GetRuntimeType();
+                    var expected = Clr(left).GetOperator(kind, Clr(right))?.ResultTypeDefinition.GetRuntimeType();
                     answered += expected is null ? 0 : 1;
                     var actual = Stamp(kind, Param("a", left), Param("b", right));
                     if (actual != expected)
@@ -185,8 +185,8 @@ public class ArithmeticResultTypingTests {
                         continue;
                     answered++;
                     var stamp = Stamp(kind, Param("a", left), Param("b", right));
-                    if (resolution.Value.Result.GetRuntimeType() != typeof(bool) || stamp != typeof(bool))
-                        mismatches.Add($"{left.Name} {kind} {right.Name}: provider {resolution.Value.Result.GetRuntimeType()?.Name}, stamp {stamp?.Name ?? "none"}");
+                    if (resolution.ResultTypeDefinition.GetRuntimeType() != typeof(bool) || stamp != typeof(bool))
+                        mismatches.Add($"{left.Name} {kind} {right.Name}: provider {resolution.ResultTypeDefinition.GetRuntimeType()?.Name}, stamp {stamp?.Name ?? "none"}");
                 }
         await Assert.That(mismatches).IsEmpty();
         await Assert.That(answered).IsGreaterThan(0);

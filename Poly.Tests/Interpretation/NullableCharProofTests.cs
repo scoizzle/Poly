@@ -74,7 +74,7 @@ internal static class NullableCharGrid {
                             continue;
                         var node = ExtraOperandGrid.Build(kind, new Parameter("a", new ClrTypeReference(left)), new Parameter("b", new ClrTypeReference(right)));
                         var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
-                        cells.Add(new Cell(left, kind, right, Classify(kind, left, right, node, analysis, resolution.Value)));
+                        cells.Add(new Cell(left, kind, right, Classify(kind, left, right, node, analysis, resolution)));
                     }
             return cells;
         }
@@ -85,11 +85,11 @@ internal static class NullableCharGrid {
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    private static string Classify(OperatorKind kind, Type left, Type right, Node node, AnalysisResult analysis, OperatorResolution resolution) {
+    private static string Classify(OperatorKind kind, Type left, Type right, Node node, AnalysisResult analysis, ITypeOperator resolution) {
         var errors = analysis.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message).ToArray();
         if (errors.Length > 0) {
-            var declared = Arithmetic(kind) && !resolution.PlatformApplied
-                && !(resolution.Signature.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
+            var declared = Arithmetic(kind) && resolution.Method is not null
+                && !(resolution.Method!.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
             return declared && errors.SequenceEqual([RuleMessage(kind, left, right)])
                 ? "still rejected without the rule: VmExecutesDeclaredOperator"
                 : $"analysis rejects: {string.Join("; ", errors)}";
@@ -101,7 +101,7 @@ internal static class NullableCharGrid {
         catch (Exception ex) {
             return $"VM refuses: {ex.GetType().Name}";
         }
-        var resultType = resolution.Result.GetRuntimeType()!;
+        var resultType = resolution.ResultTypeDefinition.GetRuntimeType()!;
         var expectedType = Arithmetic(kind) ? typeof(Nullable<>).MakeGenericType(resultType) : typeof(bool);
         var typeNote = program.RootClrType == expectedType
             ? ""

@@ -242,7 +242,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         }
         // Decimal's operators are declared members, invoked by name. Decimal.Add does not lift: rewriting
         // `decimal? + 1m` would turn null into 0, so a nullable operand keeps the operator for the VM to lift.
-        if (!resolution.PlatformApplied
+        if (resolution.Method is not null
             && Nullable.GetUnderlyingType(left!) is null && Nullable.GetUnderlyingType(right!) is null
             && !RewriteDecimalOperator(context, parent, leftNode, rightNode, kind, resolution))
             Report(context, leftNode, $"decimal arithmetic could not be resolved ({kind})");
@@ -268,8 +268,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// (lifted to <c>int?</c> for a nullable count), so the emitter shifts by an <c>int</c> and decides nothing.
     /// </summary>
     private static void StatePolicyShiftCount(
-        AnalysisContext context, Node shift, Node count, ITypeDefinition countDefinition, OperatorResolution resolution) {
-        var parameters = resolution.Signature.Parameters.ToArray();
+        AnalysisContext context, Node shift, Node count, ITypeDefinition countDefinition, ITypeOperator resolution) {
+        var parameters = resolution.Parameters.ToArray();
         if (parameters.Length != 2 || parameters[1].ParameterTypeDefinition.PrimitiveType is not { } countType
             || !ClrBuiltInRules.IsPolicyShiftCount(countType))
             return;
@@ -374,9 +374,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// declared arithmetic (temporal and Duration operators, IntPtr's) is refused. Removed by T-21 (the emitter executes
     /// or refuses declared arithmetic itself).
     /// </summary>
-    private static bool VmExecutesDeclaredOperator(OperatorResolution resolution) =>
-        resolution.PlatformApplied
-        || (resolution.Signature.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
+    private static bool VmExecutesDeclaredOperator(ITypeOperator resolution) =>
+        resolution.Method is null
+        || (resolution.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
 
     /// <summary>True when the type takes part in a cast as a number. <c>char</c> is
     /// <see cref="Cat.Text"/> (string concatenation needs that) but converts as a number, as in C#.
@@ -987,8 +987,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// nothing, a declared conversion inserts its <c>op_Implicit</c> call.
     /// </summary>
     private static bool RewriteDecimalOperator(
-        AnalysisContext context, Node parent, Node left, Node right, OperatorKind kind, OperatorResolution resolution) {
-        var decimalDef = resolution.Signature.DeclaringTypeDefinition;
+        AnalysisContext context, Node parent, Node left, Node right, OperatorKind kind, ITypeOperator resolution) {
+        var decimalDef = resolution.DeclaringTypeDefinition;
         var name = kind switch {
             OperatorKind.Add => "Add",
             OperatorKind.Subtract => "Subtract",
@@ -997,7 +997,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             OperatorKind.Modulo => "Remainder",
             _ => null
         };
-        var parameters = resolution.Signature.Parameters.ToArray();
+        var parameters = resolution.Parameters.ToArray();
         if (name is null || parameters.Length != 2)
             return false;
         var leftArg = ConvertOperand(context, left, parameters[0].ParameterTypeDefinition) ?? left;

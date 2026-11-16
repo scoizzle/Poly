@@ -342,12 +342,16 @@ public sealed class StorageAnalyzer {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
             var isCollection = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
             var inverse = ResolveInverse(rel);
+            var (isRequired, onDelete, configures) = DecideForeignKey(rel, inverse);
             var nav = new StorageNavigation(
                 rel,
                 DomainTypeMapping.ToPascalCase(rel.Name),
                 isCollection,
                 inverse is null ? null : DomainTypeMapping.ToPascalCase(inverse.Name),
-                inverse?.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany);
+                inverse?.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany,
+                isRequired,
+                onDelete,
+                configures);
             if (isCollection) collections.Add(nav);
             else references.Add(nav);
         }
@@ -361,11 +365,7 @@ public sealed class StorageAnalyzer {
     /// back (an undeclared pair that is ambiguous is already an error in <c>StructuralDomainAnalyzer</c>).
     /// </summary>
     private Relationship? ResolveInverse(Relationship rel) {
-        var peers = _relationships
-            .Where(r => !ReferenceEquals(r, rel)
-                && string.Equals(r.Source.TypeName, rel.Target.TypeName, StringComparison.Ordinal)
-                && string.Equals(r.Target.TypeName, rel.Source.TypeName, StringComparison.Ordinal))
-            .ToList();
+        var peers = PeersOf(rel);
 
         if (rel.Inverse is { Length: > 0 } declared)
             return peers.FirstOrDefault(p => string.Equals(p.Name, declared, StringComparison.Ordinal));
@@ -374,11 +374,93 @@ public sealed class StorageAnalyzer {
         if (declaring.Count > 0)
             return declaring[0];
 
+        // Another navigation of this entity claims a peer only when it points at the peer's entity: a `via` name
+        // that merely equals the peer's name, on a navigation to a third entity, claims nothing.
         var unclaimed = peers.Where(p => p.Inverse is not { Length: > 0 }
             && !_relationships.Any(other => !ReferenceEquals(other, rel)
                 && string.Equals(other.Source.TypeName, rel.Source.TypeName, StringComparison.Ordinal)
+                && string.Equals(other.Target.TypeName, p.Source.TypeName, StringComparison.Ordinal)
                 && string.Equals(other.Inverse, p.Name, StringComparison.Ordinal))).ToList();
         return unclaimed.Count == 1 ? unclaimed[0] : null;
+    }
+
+    /// <summary>The navigations of the target that point back at the source entity: the candidates for <paramref name="rel"/>'s inverse.</summary>
+    private List<Relationship> PeersOf(Relationship rel) =>
+        _relationships
+            .Where(r => !ReferenceEquals(r, rel)
+                && string.Equals(r.Source.TypeName, rel.Target.TypeName, StringComparison.Ordinal)
+                && string.Equals(r.Target.TypeName, rel.Source.TypeName, StringComparison.Ordinal))
+            .ToList();
+
+    private static bool IsCollectionEnd(Relationship rel) =>
+        rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
+
+    /// <summary>The published requiredness of the navigation (<see cref="RelationshipContract.IsRequired"/>); the same
+    /// fact computed from the relationship when no contracts were published (standalone use).</summary>
+    private bool IsRequiredLink(Relationship rel) {
+        var contracts = (_context?.GetMetadata<RelationshipContractMetadata>(default)
+            ?? _analysis?.GetMetadata<RelationshipContractMetadata>(default))?.Contracts;
+        return contracts is null
+            ? rel.IsRequiredToOne()
+            : contracts.Any(c => c.IsRequired
+                && string.Equals(c.Name, rel.Name, StringComparison.Ordinal)
+                && string.Equals(c.SourceEntityName, rel.Source.TypeName, StringComparison.Ordinal));
+    }
+
+    private static StorageDeleteBehavior DeleteBehaviorOf(bool principalOwnsDependent, bool required) =>
+        principalOwnsDependent ? StorageDeleteBehavior.Cascade
+        : required ? StorageDeleteBehavior.Restrict
+        : StorageDeleteBehavior.ClientSetNull;
+
+    /// <summary>
+    /// The one dependent end of a one-to-one pair: the required side (DMREL006 allows at most one), else for an
+    /// owned pair the part (the key goes where the cascade does), else the first declared.
+    /// </summary>
+    private Relationship DependentOfPair(Relationship a, Relationship b) {
+        if (IsRequiredLink(a)) return a;
+        if (IsRequiredLink(b)) return b;
+        if (a.SourceOwnsTarget != b.SourceOwnsTarget) return a.SourceOwnsTarget ? b : a;
+        return _relationships.IndexOf(a) <= _relationships.IndexOf(b) ? a : b;
+    }
+
+    /// <summary>
+    /// The foreign key of <paramref name="rel"/>'s relationship, decided once from the published facts (L-15b): required
+    /// when the dependent end's navigation is a required to-one; deleting an owner cascades to its owned parts, any other
+    /// required link restricts, an optional link keeps ClientSetNull. A shape that cannot be decided (a many-to-many, or
+    /// a pair whose two ends do not name each other) returns no behaviour and the generator keeps its old output.
+    /// </summary>
+    private (bool IsRequired, StorageDeleteBehavior? OnDelete, bool Configures) DecideForeignKey(Relationship rel, Relationship? inverse) {
+        if (rel.Cardinality == RelationshipCardinality.ManyToMany)
+            return (false, null, false);
+        // No resolved inverse while the target still navigates back: EF's convention may pair them anyway, and a
+        // second, explicit foreign key would be wrong. The same when the two ends do not name each other.
+        if (inverse is null && PeersOf(rel).Count > 0)
+            return (false, null, false);
+        if (inverse is not null
+            && (inverse.Cardinality == RelationshipCardinality.ManyToMany
+                || (IsCollectionEnd(rel) && IsCollectionEnd(inverse))
+                || !ReferenceEquals(ResolveInverse(inverse), rel)))
+            return (false, null, false);
+
+        if (IsCollectionEnd(rel)) {
+            // The dependents hold the key; a collection end is never required, only the to-one end it pairs with can be.
+            if (inverse is null)
+                return (false, DeleteBehaviorOf(rel.SourceOwnsTarget, required: false), true);
+            var required = IsRequiredLink(inverse);
+            return (required, DeleteBehaviorOf(rel.SourceOwnsTarget, required), false);
+        }
+
+        if (inverse is null || IsCollectionEnd(inverse)) {
+            // An owned single part with no back-navigation keeps its key on the owner, so cascading would delete the
+            // owner with the part: it stays as it was (optional, ClientSetNull).
+            var required = IsRequiredLink(rel);
+            return (required, DeleteBehaviorOf(inverse?.SourceOwnsTarget ?? false, required), true);
+        }
+
+        var dependent = DependentOfPair(rel, inverse);
+        var dependentRequired = IsRequiredLink(dependent);
+        var principal = ReferenceEquals(dependent, rel) ? inverse : rel;
+        return (dependentRequired, DeleteBehaviorOf(principal.SourceOwnsTarget, dependentRequired), ReferenceEquals(dependent, rel));
     }
 
     private Dictionary<string, (ValueRange? Range, bool Verified)> ComputeVerifiedRanges(Entity entity) =>

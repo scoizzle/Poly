@@ -14,8 +14,8 @@ public sealed partial class MinimalApiGenerator {
     /// The stored navigation state <paramref name="action"/> reads at any depth, from the final lowered module: its wrapper,
     /// <c>__BodyOf…</c>, and every policy, helper, invoked action, factory, constructor and getter they call. Pure. Anything
     /// the walk cannot follow or type refuses the action (<see cref="ActionReadsRefusedException"/>); it never under-reports.
-    /// Create routes are not covered: only roots have a POST, and it passes null for every navigation, so a create reads no
-    /// stored navigation state today. The rows that give a create route entity arguments (L-15a, P-11) must add it.
+    /// A create route is covered by <see cref="ReadsOfCreate"/>, the same walk entered at the lowered <c>Create</c>: its roots
+    /// are the Required links the route loads and passes, and every other entity or collection argument is <c>null</c>.
     /// Known limits: a tree-walk recursion (<c>for kid in kids { invoke kid.Close }</c> where <c>Close</c> does the same)
     /// refuses; a write through one tree path is not seen by a read of the same row through another path (not
     /// constructible from the DSL today, since <c>link</c> does not lower); roots are keyed by the module's parameter name
@@ -30,6 +30,16 @@ public sealed partial class MinimalApiGenerator {
     internal ActionReads ReadsOf(string entityName, string actionName, IReadOnlyList<ActionReadsWalker.WhitelistEntry> whitelist) {
         var entity = _entities.Single(e => e.Name == entityName);
         return ReadsOf(entity, GetBehaviorActions(entity).First(a => a.Name == actionName), whitelist);
+    }
+
+    /// <summary>The same walk entered at <paramref name="entity"/>'s lowered <c>Create</c>, with one root per Required link slot
+    /// (the targets the create route loads and passes): the tree it preloads. Every other entity or collection slot is
+    /// passed <c>null</c>, as the host does. A create reads no stored navigation of <c>this</c>.</summary>
+    internal ActionReads ReadsOfCreate(Entity entity, IReadOnlySet<string>? linksOverride = null) {
+        if (_catalog is null)
+            throw new InvalidOperationException($"Entity '{entity.Name}' has no lowered module to read.");
+        var links = linksOverride ?? GetCreateSlots(entity).Where(IsRequiredLink).Select(s => ToCamelCase(s.Name)).ToHashSet(StringComparer.Ordinal);
+        return new ActionReadsWalker(_catalog, _storageLookup, _domain, ActionReadsWalker.Whitelist).Walk(entity.Name, "Create", links);
     }
 
     private ActionReads ReadsOf(Entity entity, BehaviorAction action, IReadOnlyList<ActionReadsWalker.WhitelistEntry> whitelist) {
@@ -192,19 +202,26 @@ internal sealed class ActionReadsWalker {
         _domainTypes = domain.Types.Where(t => t is not Entity).ToDictionary(t => t.Name, StringComparer.Ordinal);
     }
 
-    internal ActionReads Walk(string entityName, string actionName) {
+    /// <param name="createLinks">Null for an action. For a create entry: the parameter names the host loads and passes (the
+    /// Required links); every other entity or collection parameter is passed <c>null</c>, as the host does.</param>
+    internal ActionReads Walk(string entityName, string actionName, IReadOnlySet<string>? createLinks = null) {
         _action = $"{entityName}.{actionName}";
         var wrapper = _catalog.Method(entityName, actionName)
             ?? throw Refused(null, "an action with no lowered method");
         var self = new NodeBuilder("this", false, entityName, null, null);
         var roots = new List<NodeBuilder> { self };
         var arguments = new List<Value>();
+        var unbound = createLinks is null ? null : new HashSet<string>(createLinks, StringComparer.Ordinal);
         foreach (var parameter in wrapper.Parameters ?? []) {
             switch (Classify(parameter.TypeReference)) {
-                case EntityType entity:
+                case EntityType entity when createLinks is null || createLinks.Contains(parameter.Name):
+                    unbound?.Remove(parameter.Name);
                     var root = new NodeBuilder(parameter.Name, false, entity.Name, null, null);
                     roots.Add(root);
                     arguments.Add(new EntityValue(root.Instance));
+                    break;
+                case EntityType or EntityCollectionType when createLinks is not null:
+                    arguments.Add(NullValue.Instance);
                     break;
                 case PortType:
                     arguments.Add(PortValue.Instance);
@@ -216,6 +233,8 @@ internal sealed class ActionReadsWalker {
                     throw Refused(parameter, $"parameter '{parameter.Name}', whose type the walk cannot type");
             }
         }
+        if (unbound is { Count: > 0 })
+            throw Refused(null, $"create links {string.Join(", ", unbound.Order(StringComparer.Ordinal).Select(n => $"'{n}'"))}, which match no entity parameter of the lowered method");
         Call(wrapper, new EntityValue(self.Instance), arguments, wrapper);
         return new ActionReads(entityName, actionName,
             [.. roots.Select(r => new ReadRoot(r.Navigation, r.Entity, r.BuildChildren()))]);

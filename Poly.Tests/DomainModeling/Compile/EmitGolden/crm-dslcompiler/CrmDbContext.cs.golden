@@ -181,6 +181,21 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("INTEGER");
     b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("TEXT");
 });
+        modelBuilder.Entity<Lead>().HasOne(e => e.Account).WithMany().IsRequired(false).OnDelete(DeleteBehavior.ClientSetNull);
+        modelBuilder.Entity<Account>().HasOne(e => e.Parent).WithMany().IsRequired(false).OnDelete(DeleteBehavior.ClientSetNull);
+        modelBuilder.Entity<Account>().HasOne(e => e.Hq).WithMany().IsRequired(false).OnDelete(DeleteBehavior.ClientSetNull);
+        modelBuilder.Entity<Contact>().HasOne(e => e.Account).WithMany(i => i.Contacts).IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Opportunity>().HasOne(e => e.Account).WithMany(i => i.Opportunities).IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Opportunity>().HasOne(e => e.Contact).WithMany().IsRequired(false).OnDelete(DeleteBehavior.ClientSetNull);
+        modelBuilder.Entity<Activity>().HasOne(e => e.Opportunity).WithMany(i => i.Activities).IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Quote>().HasOne(e => e.Opportunity).WithMany(i => i.Quotes).IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CampaignMember>().HasOne(e => e.Contact).WithMany().IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CampaignMember>().HasOne(e => e.Campaign).WithMany(i => i.Members).IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Ticket>().HasOne(e => e.Account).WithMany(i => i.Tickets).IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Line>().HasOne(e => e.Product).WithMany().IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Line>().HasOne(e => e.Opportunity).WithMany(i => i.Lines).IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<QuoteLine>().HasOne(e => e.Product).WithMany().IsRequired().OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<QuoteLine>().HasOne(e => e.Quote).WithMany(i => i.Lines).IsRequired().OnDelete(DeleteBehavior.Restrict);
     }
     public bool Exists(string entity, string property, string value)
     {

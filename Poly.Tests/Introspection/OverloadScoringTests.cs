@@ -927,10 +927,8 @@ public class OverloadScoringTests {
 /// <summary>Roslyn as the oracle for a call's binding: one tiny compilation per question, C# 12.</summary>
 internal static class CSharpCallOracle {
     private static readonly Lazy<Microsoft.CodeAnalysis.MetadataReference[]> References = new(static () => [
-        .. ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!.Split(Path.PathSeparator)
-            .Where(static path => Path.GetFileName(path) is "System.Private.CoreLib.dll" or "System.Runtime.dll")
-            .Select(static path => (Microsoft.CodeAnalysis.MetadataReference)Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path)),
-        Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(typeof(CSharpCallOracle).Assembly.Location),
+        .. RoslynReferences.Core,
+        RoslynReferences.Of(typeof(CSharpCallOracle).Assembly),
     ]);
 
     public static string Spell(Type type) =>

@@ -89,7 +89,7 @@ public sealed class EfModel : IDisposable {
         var compilation = CSharpCompilation.Create(
             assemblyName,
             trees,
-            DslCompilerCompileOracleTests.GatherReferences(),
+            RoslynReferences.Host,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         using var stream = new MemoryStream();
         var emitted = compilation.Emit(stream);

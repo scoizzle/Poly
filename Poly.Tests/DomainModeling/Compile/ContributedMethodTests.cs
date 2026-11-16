@@ -397,14 +397,7 @@ public class ContributedMethodTests {
             .Select(m => m.Name));
 
     private static void CompileGenerated(string source) {
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator)
-            .Concat(Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
-            .Distinct(StringComparer.Ordinal)
-            .Where(File.Exists)
-            .Select(path => (Microsoft.CodeAnalysis.MetadataReference)
-                Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path))
-            .ToList();
+        var references = RoslynReferences.PlatformAndTestOutput;
         var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(
             "#nullable enable\n" + source);
         var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(

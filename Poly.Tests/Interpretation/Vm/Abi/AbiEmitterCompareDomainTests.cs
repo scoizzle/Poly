@@ -643,12 +643,7 @@ internal static class EnumComparisonOracle {
             source.Append($"public static bool M{i}({string.Join(", ", parameters)}) => {text[0]} {Operator(kind)} {text[1]};\n");
         }
         source.Append("}\n");
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Where(static p => Path.GetFileName(p) is "System.Private.CoreLib.dll" or "System.Runtime.dll")
-            .Select(static p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .Append(MetadataReference.CreateFromFile(typeof(ComparisonEnums).Assembly.Location))
-            .ToArray();
+        MetadataReference[] references = [.. RoslynReferences.Core, RoslynReferences.Of(typeof(ComparisonEnums).Assembly)];
         var tree = CSharpSyntaxTree.ParseText(source.ToString(), new CSharpParseOptions(LanguageVersion.CSharp11));
         var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
         var compilation = CSharpCompilation.Create("EnumComparisonOracle", [tree], references, options);

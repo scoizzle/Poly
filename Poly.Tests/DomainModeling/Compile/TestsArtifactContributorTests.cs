@@ -227,9 +227,7 @@ public sealed class TestsArtifactContributorTests {
         foreach (var artifact in session.ArtifactCatalog.Artifacts.Where(a => a.Descriptor.Id.Type == TestFile.Type))
             sources.Add(($"{artifact.Descriptor.Id.Segments[^1]}.Tests.cs", TestFile.Text(artifact)));
         sources.Add(("TUnitStub.cs", TUnitStub));
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             "GeneratedSuite_" + Guid.NewGuid().ToString("N"),
             sources.Select(s => CSharpSyntaxTree.ParseText(s.Source, path: s.FileName)),
@@ -245,19 +243,24 @@ public sealed class TestsArtifactContributorTests {
         var assembly = new AssemblyLoadContext(compilation.AssemblyName, isCollectible: true).LoadFromStream(pe);
         var failed = new List<string>();
         var ran = 0;
-        var testAttribute = assembly.GetType("TestAttribute")!;
-        foreach (var type in assembly.GetTypes().OrderBy(t => t.FullName, StringComparer.Ordinal)) {
-            foreach (var method in type.GetMethods().Where(m => m.GetCustomAttributes(testAttribute, false).Length > 0)
-                .OrderBy(m => m.Name, StringComparer.Ordinal)) {
-                ran++;
-                try {
-                    var instance = Activator.CreateInstance(type);
-                    ((Task)method.Invoke(instance, null)!).GetAwaiter().GetResult();
-                }
-                catch (Exception ex) {
-                    failed.Add($"{method.Name}: {(ex.InnerException ?? ex).Message}");
+        try {
+            var testAttribute = assembly.GetType("TestAttribute")!;
+            foreach (var type in assembly.GetTypes().OrderBy(t => t.FullName, StringComparer.Ordinal)) {
+                foreach (var method in type.GetMethods().Where(m => m.GetCustomAttributes(testAttribute, false).Length > 0)
+                    .OrderBy(m => m.Name, StringComparer.Ordinal)) {
+                    ran++;
+                    try {
+                        var instance = Activator.CreateInstance(type);
+                        ((Task)method.Invoke(instance, null)!).GetAwaiter().GetResult();
+                    }
+                    catch (Exception ex) {
+                        failed.Add($"{method.Name}: {(ex.InnerException ?? ex).Message}");
+                    }
                 }
             }
+        }
+        finally {
+            RoslynReferences.Unload(assembly);
         }
         return (ran, failed);
     }

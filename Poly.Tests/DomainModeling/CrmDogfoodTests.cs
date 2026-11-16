@@ -67,10 +67,7 @@ public class CrmDogfoodTests {
         await Assert.That(cs.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
 
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
+        var references = RoslynReferences.Platform;
         var compilation = CSharpCompilation.Create(
             "CrmExport",
             [tree],

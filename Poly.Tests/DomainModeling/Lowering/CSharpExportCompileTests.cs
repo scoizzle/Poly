@@ -79,9 +79,7 @@ public sealed class CSharpExportCompileTests {
         IReadOnlyList<(string FileName, string Source)> files,
         IReadOnlyList<(string FileName, string Source)>? compiled = null) {
         var trees = (compiled ?? files).Select(f => CSharpSyntaxTree.ParseText(f.Source, path: f.FileName)).ToArray();
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+        var references = RoslynReferences.Platform;
         var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
             .WithGeneralDiagnosticOption(ReportDiagnostic.Error);
         return new Exported(files, CSharpCompilation.Create("L22_" + Guid.NewGuid().ToString("N"), trees, references, options));

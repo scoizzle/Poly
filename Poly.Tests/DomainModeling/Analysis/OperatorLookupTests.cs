@@ -113,7 +113,7 @@ public class OperatorLookupTests {
         await Assert.That(ReferenceEquals(parameters[0], operands[0])).IsTrue();
         var conversion = parameters[1].ResolveConversionFrom(operands[1]);
         await Assert.That(conversion).IsNotNull();
-        await Assert.That(conversion!.Value.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }
 
     [Test]
@@ -416,8 +416,8 @@ public class OperatorLookupTests {
         };
         await Assert.That(expected.Count).IsEqualTo(Enum.GetValues<OperatorKind>().Length);
         foreach (var (kind, name) in expected)
-            await Assert.That(ClrOperatorNames.NameOf(kind)).IsEqualTo(name);
-        await Assert.That(() => ClrOperatorNames.NameOf((OperatorKind)99)).ThrowsExactly<ArgumentOutOfRangeException>();
+            await Assert.That(ClrSpecialNames.OperatorName(kind)).IsEqualTo(name);
+        await Assert.That(() => ClrSpecialNames.OperatorName((OperatorKind)99)).ThrowsExactly<ArgumentOutOfRangeException>();
     }
 
     // ---- T-24: every operator C# defines for the built-in types, with the C# binder as the oracle ----
@@ -627,7 +627,7 @@ public class OperatorLookupTests {
         await AssertParameters(resolution, typeof(string), typeof(object));
         var boxing = OperatorOperands.Clr(typeof(object)).ResolveConversionFrom(OperatorOperands.Clr(typeof(int)));
         await Assert.That(boxing?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(boxing!.Value.Method).IsNull();
+        await Assert.That(boxing!.Method).IsNull();
         // The mirror, and the sibling: Text + Text stays (String, String).
         await AssertParameters(ClrOp(typeof(int), OperatorKind.Add, typeof(string)), typeof(object), typeof(string));
         await AssertParameters(Op("Text", OperatorKind.Add, "Text"), typeof(string), typeof(string));

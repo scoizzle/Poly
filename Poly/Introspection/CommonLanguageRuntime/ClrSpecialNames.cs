@@ -1,13 +1,14 @@
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>
-/// The CLR's special names for operators (ECMA-335 I.10.3): how C# and the CLR encode an operator as a static member.
+/// The CLR's special names (ECMA-335 I.10.3): how C# and the CLR encode an operator or a conversion as a static
+/// member. One table because it is one encoding; the two root vocabularies stay apart at the boundary.
 /// <see cref="OperatorKind.And"/> and <see cref="OperatorKind.Or"/> have no member form: <c>op_BitwiseAnd</c> and
 /// <c>op_BitwiseOr</c> are <see cref="OperatorKind.BitwiseAnd"/> and <see cref="OperatorKind.BitwiseOr"/>.
 /// </summary>
-internal static class ClrOperatorNames {
+internal static class ClrSpecialNames {
     /// <summary>The member name for <paramref name="kind"/>, or null when the kind has no member form.</summary>
-    public static string? NameOf(OperatorKind kind) => kind switch {
+    public static string? OperatorName(OperatorKind kind) => kind switch {
         OperatorKind.Add => "op_Addition",
         OperatorKind.Subtract => "op_Subtraction",
         OperatorKind.Multiply => "op_Multiply",
@@ -32,11 +33,25 @@ internal static class ClrOperatorNames {
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Operator kind has no name.")
     };
 
-    private static readonly Dictionary<string, OperatorKind> KindsByName = Enum.GetValues<OperatorKind>()
-        .Where(static kind => NameOf(kind) is not null)
-        .ToDictionary(static kind => NameOf(kind)!, StringComparer.Ordinal);
+    private static readonly Dictionary<string, OperatorKind> OperatorKindsByName = Enum.GetValues<OperatorKind>()
+        .Where(static kind => OperatorName(kind) is not null)
+        .ToDictionary(static kind => OperatorName(kind)!, StringComparer.Ordinal);
 
     /// <summary>The operator a member named <paramref name="name"/> encodes, or null when the name is no operator's.</summary>
-    public static OperatorKind? KindOf(string name) =>
-        KindsByName.TryGetValue(name, out var kind) ? kind : null;
+    public static OperatorKind? OperatorKindOf(string name) =>
+        OperatorKindsByName.TryGetValue(name, out var kind) ? kind : null;
+
+    /// <summary>The member name for <paramref name="kind"/>.</summary>
+    public static string ConversionName(ConversionOperatorKind kind) => kind switch {
+        ConversionOperatorKind.Implicit => "op_Implicit",
+        ConversionOperatorKind.Explicit => "op_Explicit",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Conversion kind has no name.")
+    };
+
+    private static readonly Dictionary<string, ConversionOperatorKind> ConversionKindsByName =
+        Enum.GetValues<ConversionOperatorKind>().ToDictionary(ConversionName, StringComparer.Ordinal);
+
+    /// <summary>The conversion a member named <paramref name="name"/> encodes, or null when the name is no conversion's.</summary>
+    public static ConversionOperatorKind? ConversionKindOf(string name) =>
+        ConversionKindsByName.TryGetValue(name, out var kind) ? kind : null;
 }

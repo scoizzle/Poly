@@ -600,8 +600,8 @@ public class OverloadScoringTests {
             .IsEqualTo("Overloads.LongVsDecimal(Int32) = Overloads.LongVsDecimal(Decimal)");
         var decimalFromInt = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(int)));
         var longFromInt = Clr(typeof(long)).ResolveConversionFrom(Clr(typeof(int)));
-        await Assert.That(decimalFromInt!.Value.Method).IsNotNull();
-        await Assert.That(longFromInt!.Value.Method).IsNull();
+        await Assert.That(decimalFromInt!.Method).IsNotNull();
+        await Assert.That(longFromInt!.Method).IsNull();
         await Assert.That(Clr(typeof(decimal)).IsAssignableFrom(Clr(typeof(int)))).IsTrue();
         await Assert.That(Clr(typeof(long)).IsAssignableFrom(Clr(typeof(int)))).IsFalse();
     }

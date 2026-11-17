@@ -118,23 +118,23 @@ public class TypeRulesTests {
     public async Task ResolveConversionFrom_ClosedNumericSet_IsIntrinsic(Type from, Type to, ConversionOperatorKind kind) {
         var conversion = Clr(to).ResolveConversionFrom(Clr(from));
         await Assert.That(conversion).IsNotNull();
-        await Assert.That(conversion!.Value.Kind).IsEqualTo(kind);
-        await Assert.That(conversion.Value.Method).IsNull();
+        await Assert.That(conversion!.Kind).IsEqualTo(kind);
+        await Assert.That(conversion.Method).IsNull();
     }
 
     [Test]
     public async Task ResolveConversionFrom_Float64ToDecimal_IsExplicitReflected() {
         var conversion = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(double)));
-        await Assert.That(conversion!.Value.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
-        await Assert.That(conversion.Value.Method).IsNotNull();
-        await Assert.That(conversion.Value.Method!.DeclaringTypeDefinition).IsSameReferenceAs(Clr(typeof(decimal)));
+        await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
+        await Assert.That(conversion.Method).IsNotNull();
+        await Assert.That(conversion.Method!.DeclaringTypeDefinition).IsSameReferenceAs(Clr(typeof(decimal)));
     }
 
     [Test]
     public async Task ResolveConversionFrom_Int64ToDecimal_IsImplicitReflected() {
         var conversion = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(long)));
-        await Assert.That(conversion!.Value.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(conversion.Value.Method).IsNotNull();
+        await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(conversion.Method).IsNotNull();
     }
 
     [Test]
@@ -150,7 +150,7 @@ public class TypeRulesTests {
             (typeof(double), typeof(float), ConversionOperatorKind.Explicit) }) {
             var conversion = Clr(to).ResolveConversionFrom(Clr(from));
             await Assert.That(conversion?.Kind).IsEqualTo(kind);
-            await Assert.That(conversion!.Value.Method).IsNull();
+            await Assert.That(conversion!.Method).IsNull();
         }
         await Assert.That(single.ResolveConversionFrom(single)).IsNull();
     }
@@ -203,7 +203,7 @@ public class TypeRulesTests {
                 var conversion = Clr(to).ResolveConversionFrom(Clr(from));
                 if (from == to) {
                     if (conversion is not null)
-                        mismatches.Add($"{NameOf(from)} -> {NameOf(to)}: identity is not a conversion, provider {conversion.Value.Kind}");
+                        mismatches.Add($"{NameOf(from)} -> {NameOf(to)}: identity is not a conversion, provider {conversion.Kind}");
                     continue;
                 }
                 var expected = BinderConversion(from, to);
@@ -232,7 +232,7 @@ public class TypeRulesTests {
             await Assert.That(character.ResolveConversionFrom(Clr(from))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
         var narrowing = character.ResolveConversionFrom(Clr(typeof(int)));
         await Assert.That(narrowing?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
-        await Assert.That(narrowing!.Value.Method).IsNull();
+        await Assert.That(narrowing!.Method).IsNull();
         // The sibling: Char widens to Int32.
         await Assert.That(Clr(typeof(int)).ResolveConversionFrom(character)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }
@@ -243,7 +243,7 @@ public class TypeRulesTests {
         foreach (var source in new[] { typeof(int), typeof(string), typeof(Guid), typeof(DayOfWeek), typeof(List<int>) }) {
             var conversion = objectType.ResolveConversionFrom(Clr(source));
             await Assert.That(conversion?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-            await Assert.That(conversion!.Value.Method).IsNull();
+            await Assert.That(conversion!.Method).IsNull();
         }
         // Identity is not a conversion, a modeled definition does not box, and nothing leaves Object implicitly.
         await Assert.That(objectType.ResolveConversionFrom(objectType)).IsNull();
@@ -263,29 +263,31 @@ public class TypeRulesTests {
         var money = set.Add("Money", ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "Money", "Cents"));
         var cents = set.Add("Cents");
         var conversion = ((ITypeDefinition)money).ResolveConversionFrom(cents);
-        await Assert.That(conversion!.Value.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(conversion.Value.Method).IsNotNull();
+        await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(conversion.Method).IsNotNull();
         await Assert.That(((ITypeDefinition)cents).ResolveConversionFrom(money)).IsNull();
     }
 
-    // ---- DeclaredConversions: the declaration inventory ----
+    // ---- Conversions: the one member, declared ends and platform built-ins ----
 
     [Test]
-    public async Task DeclaredConversions_ClrType_ListsItsDeclaredConversion_NotThePlatformsBuiltIns() {
+    public async Task Conversions_ClrType_ListsItsDeclaredConversion_AndThePlatformsBuiltIns() {
         var offset = (ITypeDefinition)Clr(typeof(DateTimeOffset));
-        var declared = offset.DeclaredConversions.ToArray();
-        await Assert.That(declared.Length).IsEqualTo(1);
-        await Assert.That(declared[0].Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(declared[0].Method!.Name).IsEqualTo("op_Implicit");
-        await Assert.That(declared[0].ResultTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTimeOffset));
+        var conversions = offset.Conversions.ToArray();
+        var declared = conversions.Single(conversion => conversion.Method is not null);
+        await Assert.That(declared.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(declared.Method!.Name).IsEqualTo("op_Implicit");
+        await Assert.That(declared.SourceTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTime));
+        await Assert.That(declared.ResultTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTimeOffset));
+        // The box is the platform's answer, with no method.
+        var box = conversions.Single(conversion => IsTo(conversion, typeof(object)));
+        await Assert.That(box.Method).IsNull();
+        await Assert.That(box.SourceTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTimeOffset));
         // C# applies the numeric conversions itself; a simple type declares none.
-        await Assert.That(((ITypeDefinition)Clr(typeof(int))).DeclaredConversions).IsEmpty();
-        // A modeled definition lists exactly what it marks.
-        var set = new ModeledTypeSet();
-        var money = (ITypeDefinition)set.Add("Money", ModeledTypeSet.Conversion(ConversionOperatorKind.Explicit, "Money", "Cents"));
-        var modeled = money.DeclaredConversions.ToArray();
-        await Assert.That(modeled.Length).IsEqualTo(1);
-        await Assert.That(modeled[0].Kind).IsEqualTo(ConversionOperatorKind.Explicit);
+        await Assert.That(((ITypeDefinition)Clr(typeof(int))).Conversions.All(conversion => conversion.Method is null)).IsTrue();
+
+        static bool IsTo(ITypeConversion conversion, Type type) =>
+            conversion.ResultTypeDefinition.GetRuntimeTypeOrThrow() == type;
     }
 
     // ---- Conversions: the platform-complete outbound view ----
@@ -301,33 +303,42 @@ public class TypeRulesTests {
         var toObject = conversions.Single(conversion => IsTo(conversion, typeof(object)));
         await Assert.That(toObject.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toObject.Method).IsNull();
-        // An explicit numeric conversion is stated too, and decimal's is the CLR's declared member.
+        // An explicit numeric conversion is stated too.
         var toUInt32 = conversions.Single(conversion => IsTo(conversion, typeof(uint)));
         await Assert.That(toUInt32.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(toUInt32.Method).IsNull();
-        var toDecimal = conversions.Single(conversion => IsTo(conversion, typeof(decimal)));
-        await Assert.That(toDecimal.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        // A conversion the other end declares is the query's, not this member's: decimal owns Int32 -> Decimal.
+        await Assert.That(conversions.Any(conversion => IsTo(conversion, typeof(decimal)))).IsFalse();
+        var toDecimal = ((ITypeDefinition)Clr(typeof(decimal))).ResolveConversionFrom(Clr(typeof(int)));
+        await Assert.That(toDecimal!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toDecimal.Method).IsNotNull();
 
-        static bool IsTo(TypeConversion conversion, Type type) =>
+        static bool IsTo(ITypeConversion conversion, Type type) =>
             conversion.ResultTypeDefinition.GetRuntimeTypeOrThrow() == type;
     }
 
     [Test]
-    public async Task Conversions_Modeled_StatesItsDeclaredOutboundOnesOnly() {
-        // A modeled definition has no platform-applied conversions, so its outbound view is its declarations whose
-        // target is another type: the inbound one (Cents -> Money) is not listed, and neither is the box into object.
+    public async Task Conversions_Modeled_ListsEveryDeclaredEnd_BothDirections() {
+        // S3: one member. A modeled definition states both declarations it owns: the conversion into it
+        // (Cents -> Money) and the one out of it (Money -> Cents), each naming both ends. A modeled type has no
+        // platform-applied conversions, so nothing else is listed.
         var set = new ModeledTypeSet();
         set.Add("Cents");
         var money = (ITypeDefinition)set.Add("Money",
             ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "Cents", "Money"),
             ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "Money", "Cents"));
         var conversions = money.Conversions.ToArray();
-        await Assert.That(conversions.Length).IsEqualTo(1);
-        await Assert.That(conversions[0].Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(conversions[0].ResultTypeDefinition.Name).IsEqualTo("Cents");
-        await Assert.That(conversions[0].Method).IsNotNull();
+        await Assert.That(conversions.Length).IsEqualTo(2);
+        var inbound = conversions.Single(conversion => SourceOf(conversion).Name == "Cents");
+        await Assert.That(inbound.ResultTypeDefinition.Name).IsEqualTo("Money");
+        await Assert.That(inbound.Method).IsNotNull();
+        var outbound = conversions.Single(conversion => SourceOf(conversion).Name == "Money");
+        await Assert.That(outbound.ResultTypeDefinition.Name).IsEqualTo("Cents");
+        // A declaration on the other end is not visible from here: Cents knows nothing of Money's declarations.
         await Assert.That(((ITypeDefinition)set.GetTypeDefinition("Cents")!).Conversions).IsEmpty();
+
+        static ITypeDefinition SourceOf(ITypeConversion conversion) =>
+            conversion.Method!.Parameters.Single().ParameterTypeDefinition;
     }
 
     // ---- GetOperators ----
@@ -474,7 +485,6 @@ public class TypeRulesTests {
             typeof(ITypeDefinition).GetMethod(nameof(ITypeDefinition.ResolveOperator), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
             typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.Operators))?.GetMethod,
             typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.Conversions), BindingFlags.Instance | BindingFlags.NonPublic)?.GetMethod,
-            typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.DeclaredConversions), BindingFlags.Instance | BindingFlags.NonPublic)?.GetMethod
         };
         members.AddRange(typeof(TypeDefinitionOperatorExtensions)
             .GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
@@ -486,7 +496,7 @@ public class TypeRulesTests {
             if (member is MethodInfo method)
                 signatureTypes.Add(method.ReturnType);
         }
-        foreach (var contract in new[] { typeof(TypeConversion), typeof(ITypeOperator) }) {
+        foreach (var contract in new[] { typeof(ITypeConversion), typeof(ITypeOperator) }) {
             const BindingFlags all = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             signatureTypes.AddRange(contract.GetProperties(all).Select(static p => p.PropertyType));
             signatureTypes.AddRange(contract.GetFields(all).Select(static f => f.FieldType));
@@ -576,6 +586,6 @@ public class TypeRulesTests {
         ITypeDefinition fresh = new AstCollectionTypeDefinition(bag, CollectionKind.List);
         var conversion = ((ITypeDefinition)bag).ResolveConversionFrom(fresh);
         await Assert.That(conversion).IsNotNull();
-        await Assert.That(conversion!.Value.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }
 }

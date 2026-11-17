@@ -155,10 +155,9 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
-        IEnumerable<TypeConversion> ITypeDefinition.DeclaredConversions => [];
-        IEnumerable<TypeConversion> ITypeDefinition.Conversions => [];
+        IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
-        TypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
+        ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
     }
 
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {

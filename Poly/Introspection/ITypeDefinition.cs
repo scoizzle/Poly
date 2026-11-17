@@ -82,9 +82,17 @@ public interface ITypeDefinition {
     IEnumerable<ITypeOperator> Operators { get; }
 
     /// <summary>
-    /// Gets the conversions this type declares: the conversion operators a platform encodes as members of this type.
-    /// A conversion the platform applies itself is not listed (a built-in numeric widening answers in
-    /// <see cref="ResolveConversionFrom"/> with no method).
+    /// Gets the conversions this type declares: the conversion operators a platform encodes as members of this type,
+    /// inbound or outbound. A conversion the platform applies itself is not a declaration (see <see cref="Conversions"/>).
+    /// </summary>
+    internal IEnumerable<TypeConversion> DeclaredConversions { get; }
+
+    /// <summary>
+    /// Gets the conversions this type states to another type: the operators it declares and the ones the platform
+    /// applies for it (no method). Outbound only. A conversion into this type is <see cref="ResolveConversionFrom"/>
+    /// with the other type as the source, and what a type defined later may declare is not enumerable. Optionality is
+    /// the caller's (T-06), so the lift into a nullable target is not listed, and reference conversions are
+    /// assignability, not conversion.
     /// </summary>
     internal IEnumerable<TypeConversion> Conversions { get; }
 

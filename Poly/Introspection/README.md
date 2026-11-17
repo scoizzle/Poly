@@ -34,7 +34,7 @@ Common members include:
 - `Operators` (`ITypeOperator`, see below)
 - `GetMembers(string name)`
 - `IsAssignableFrom` (no conversion, or a declared implicit operator; a conversion the platform applies itself, such as numeric widening, is not assignment)
-- `Conversions` (internal: the conversion operators a definition declares) and `ResolveConversionFrom` / `ResolveOperator` (internal, every platform implements them): what a platform declares and defines for conversions and for operator selection; `IsAssignableWithoutConversion` is the internal default-bodied first half of assignability. See below. Conversion operators are not in `Methods`; a declared one is a `TypeConversion` with a method, a built-in one has none.
+- `DeclaredConversions` (internal: the conversion operators a definition declares, inbound or outbound), `Conversions` (internal: the platform-complete outbound view — declared ones plus the ones the platform applies, which name no method) and `ResolveConversionFrom` / `ResolveOperator` (internal, every platform implements them): what a platform declares and defines for conversions and for operator selection; `IsAssignableWithoutConversion` is the internal default-bodied first half of assignability. See below. Conversion operators are not in `Methods`; a declared one is a `TypeConversion` with a method and a result type, a built-in one has none.
 
 ### ITypeMember
 
@@ -96,8 +96,12 @@ the caller's (T-06).
   (`ClrOperatorResolution`). A modeled definition declares a conversion with a static method marked
   `MethodDefinitionNode.Conversion`; the C# reader marks a static `op_Implicit`/`op_Explicit` member
   (`ClrConversionNames`), the CLR's own encoding, until the C# surface reads `implicit operator`. The AST definitions
-  select through `ModeledConversions`; the root names no conversion spelling, and `Conversions` lists what a
-  definition declares (a built-in conversion answers in `ResolveConversionFrom` with no method).
+  select through `ModeledConversions`; the root names no conversion spelling. `Conversions` is the outbound view —
+  what the definition converts to, declared and platform-applied alike (the latter with no method) — and
+  `DeclaredConversions` is the declaration inventory both ends read when one is the other side of a pair. It is
+  outbound only: a conversion into the type is `ResolveConversionFrom`, a later-defined type may add one, and the
+  lift into a nullable target is the caller's (T-06). Reference conversions are assignability, not conversion, so
+  they are in neither.
 - **Introspection-internal today.** `ITypeOperator` and `Operators` are public, as `ITypeMethod` and `Methods` are;
   `ResolveConversionFrom`, `IsAssignableWithoutConversion` and `ResolveOperator` are `internal` and neutral at signature level only
   (`ITypeMember.EmitRead` still returns an `Expression`). A platform in another assembly cannot implement them

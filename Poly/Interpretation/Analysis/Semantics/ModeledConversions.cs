@@ -15,7 +15,7 @@ internal static class ModeledConversions {
 
     private static TypeConversion? Find(ITypeDefinition from, ITypeDefinition to, ConversionOperatorKind kind) {
         foreach (var candidate in new[] { from, to }) {
-            foreach (var conversion in candidate.Conversions) {
+            foreach (var conversion in candidate.DeclaredConversions) {
                 if (conversion.Kind != kind || conversion.Method is not { } method)
                     continue;
                 var parameters = method.Parameters.ToArray();

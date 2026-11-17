@@ -88,6 +88,7 @@ public class PrimitiveVocabularyTests {
         public IEnumerable<ITypeOperator> Operators => [];
         public PrimitiveType? PrimitiveType => primitive;
         public PrimitiveAtom? PlatformAtom => atom;
+        public ITypeDefinition? NullableOf => null;
         public TypeKind Kind => TypeKind.Primitive;
 
         public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);

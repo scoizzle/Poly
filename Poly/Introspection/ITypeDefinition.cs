@@ -118,6 +118,14 @@ public interface ITypeDefinition {
     PrimitiveType? PrimitiveType { get; }
 
     /// <summary>
+    /// Gets the type this definition wraps when it is this platform's nullable form of another type (<c>T?</c> for
+    /// <c>T</c>), or null. Nullability is the platform's relation, not the root's: a host states which definitions are
+    /// its nullable forms, so a conversion into one can be stated (<see cref="ResolveConversionFrom"/>) without the
+    /// root knowing the host's model. Where optionality applies stays the caller's (T-06).
+    /// </summary>
+    internal ITypeDefinition? NullableOf { get; }
+
+    /// <summary>
     /// Gets the platform's own atom when this definition is a primitive the shared <see cref="PrimitiveType"/> vocabulary
     /// does not name, or null. Never set beside <see cref="PrimitiveType"/>: a primitive is named once, by the shared
     /// vocabulary or by the platform that states it. A consumer that knows only the shared vocabulary sees an unnamed

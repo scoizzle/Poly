@@ -303,6 +303,9 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
         _node.PrimitiveTypeId is null && _node.EffectiveKind == TypeKind.Primitive
             ? new PrimitiveAtom(Name)
             : null;
+
+    /// <summary>A modeled definition states no nullable form; optionality is the caller's (T-06).</summary>
+    ITypeDefinition? ITypeDefinition.NullableOf => null;
     TypeKind ITypeDefinition.Kind => _node.EffectiveKind;
 
     private List<AstPropertyDefinition> BuildDeclaredProperties() {
@@ -970,6 +973,7 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     }
     public PrimitiveType? PrimitiveType => null;
     PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
+    ITypeDefinition? ITypeDefinition.NullableOf => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(System.Collections.IList);
 }
@@ -1067,6 +1071,7 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
 
     public PrimitiveType? PrimitiveType => null;
     PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
+    ITypeDefinition? ITypeDefinition.NullableOf => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(object);
 }

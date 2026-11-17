@@ -135,6 +135,12 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
 
     /// <summary>The CLR maps every primitive it has into the shared vocabulary, so it states no atom.</summary>
     PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
+
+    /// <summary>A CLR nullable form is <c>Nullable&lt;T&gt;</c>; every other definition wraps nothing.</summary>
+    ITypeDefinition? ITypeDefinition.NullableOf =>
+        Nullable.GetUnderlyingType(RuntimeType) is { } underlying
+            ? _provider.GetTypeDefinition(underlying)
+            : null;
     public TypeKind Kind => GetTypeKind(RuntimeType);
     public override string ToString() => FullName;
 

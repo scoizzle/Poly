@@ -140,6 +140,7 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<IParameter> GenericParameters => [];
         public PrimitiveType? PrimitiveType => null;
         public PrimitiveAtom? PlatformAtom => null;
+        public ITypeDefinition? NullableOf => null;
         public TypeKind Kind => TypeKind.Class;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();

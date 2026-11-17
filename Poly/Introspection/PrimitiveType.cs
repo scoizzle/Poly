@@ -48,7 +48,15 @@ public enum PrimitiveType {
 
     // Native-sized integers (C# 11 nint and nuint), appended so no earlier member's ordinal moves
     NInt,
-    NUInt
+    NUInt,
+
+    // Language types the CLR has no runtime type for (a protocol host's own primitives: ECMAScript's Undefined, Null,
+    // Symbol and BigInt), appended so no earlier member's ordinal moves. A platform maps only the primitives it has;
+    // ClrPrimitiveTypes answers no CLR type for these.
+    Undefined,
+    Null,
+    Symbol,
+    BigInt
 }
 
 /// <summary>

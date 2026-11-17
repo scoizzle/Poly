@@ -28,8 +28,10 @@ public class TypeKindProviderAgreementTests {
     }
 
     [Test]
-    public async Task ClrProvider_EveryPrimitive_ReportsPrimitiveKindAndItself() {
-        foreach (var primitive in Enum.GetValues<PrimitiveType>()) {
+    public async Task ClrProvider_EveryPrimitiveItMaps_ReportsPrimitiveKindAndItself() {
+        // The vocabulary names what a host may have, so only the primitives the CLR maps are this provider's (I6);
+        // the protocol primitives are pinned as having no CLR type by the sibling test below.
+        foreach (var primitive in Enum.GetValues<PrimitiveType>().Where(static id => id.GetClrType() is not null)) {
             var clrType = primitive.GetClrType();
             await Assert.That(clrType).IsNotNull().Because($"'{primitive}' has no CLR mapping");
             ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(clrType!);
@@ -38,6 +40,15 @@ public class TypeKindProviderAgreementTests {
                 .Because($"'{primitive}' must report Primitive");
             await Assert.That(definition.PrimitiveType).IsEqualTo(primitive)
                 .Because($"'{primitive}' must report its own id");
+        }
+    }
+
+    [Test]
+    public async Task ClrProvider_HasNoTypeForAProtocolPrimitive() {
+        foreach (var primitive in new[] { PrimitiveType.Undefined, PrimitiveType.Null, PrimitiveType.Symbol, PrimitiveType.BigInt }) {
+            await Assert.That(primitive.GetClrType()).IsNull().Because($"'{primitive}' is not a CLR type");
+            await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(primitive)).IsNull()
+                .Because($"the CLR provider must not pretend to have '{primitive}'");
         }
     }
 

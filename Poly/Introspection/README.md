@@ -84,6 +84,11 @@ answers null for a host with no CLR types. The neutral contract therefore asks o
 answer, and `TypeDefinitionRuntimeTypeExtensions` (the `ITypeDefinition -> Type?` view) lives in
 `CommonLanguageRuntime/` with it.
 
+The vocabulary is a list of what a host *may* have, not a CLR list: `Undefined`, `Null`, `Symbol` and `BigInt` name
+primitives no CLR runtime type exists for, and a platform maps only the subset it has. Which platform answers a mixed
+operator/conversion pair is fixed by the door's shape: operators are asked of the left operand, conversions of the
+destination.
+
 Platform encodings of the primitive vocabulary live with the platform, not on the enum: the CLR's `Type` maps are
 `CommonLanguageRuntime/ClrPrimitiveTypes` (`GetClrType`, `GetPrimitiveType`), and C#'s keywords are
 `Poly.Interpretation.CSharp/CSharpKeywords` (`GetCSharpKeyword`). `PrimitiveType` itself keeps only facts every

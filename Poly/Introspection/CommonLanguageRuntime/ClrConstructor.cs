@@ -38,6 +38,8 @@ internal sealed class ClrConstructor : ClrTypeMember, ITypeConstructor {
 
     public override string Name => _declaringType.Name;
 
+    public override MemberKind Kind => MemberKind.Constructor;
+
     /// <summary>
     /// Gets the underlying reflection <see cref="ConstructorInfo"/>.
     /// </summary>

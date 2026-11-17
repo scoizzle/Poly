@@ -38,7 +38,11 @@ Common members include:
 
 ### ITypeMember
 
-Represents a field, property, or method.
+Represents a field, property, indexer, method, or constructor as facts: `Kind` (which shape it declares),
+`Name`, `MemberTypeDefinition`, `DeclaringTypeDefinition`, `Parameters`, `AccessModifier`,
+`LifetimeModifier`, `Mutability`, `IsStatic`. A representation fact belongs to the host that stores the
+member, never to this contract: the ABI owns how a field or property is read and written, and the
+declaration states only what the member is.
 
 ### ITypeOperator
 
@@ -96,8 +100,7 @@ the caller's (T-06).
   (`ClrOperatorResolution`). Modeled conversions are still declared static `op_Implicit`/`op_Explicit` members
   (`ModeledConversions`).
 - **Introspection-internal today.** `ITypeOperator` and `Operators` are public, as `ITypeMethod` and `Methods` are;
-  `ResolveConversionFrom`, `IsAssignableWithoutConversion` and `ResolveOperator` are `internal` and neutral at signature level only
-  (`ITypeMember.EmitRead` still returns an `Expression`). A platform in another assembly cannot implement them
+  `ResolveConversionFrom`, `IsAssignableWithoutConversion` and `ResolveOperator` are `internal`. A platform in another assembly cannot implement them
   yet; they go public, non-breaking, when the first non-CLR platform lands. The long-term goal is a VM and
   Introspection general enough to simulate almost any platform, with .NET the first.
 - **The contract carries no representation fact.** It says what a platform's types do, never how the VM stores

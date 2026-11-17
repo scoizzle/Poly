@@ -5,6 +5,7 @@ internal abstract class ClrTypeMember : ITypeMember {
     public abstract ClrTypeDefinition DeclaringTypeDefinition { get; }
     public abstract IEnumerable<ClrParameter> Parameters { get; }
     public abstract string Name { get; }
+    public abstract MemberKind Kind { get; }
     public abstract AccessModifier AccessModifier { get; }
     public abstract LifetimeModifier LifetimeModifier { get; }
     public bool IsStatic => LifetimeModifier == LifetimeModifier.Static;
@@ -16,12 +17,10 @@ internal abstract class ClrTypeMember : ITypeMember {
     IEnumerable<IParameter> ITypeMember.Parameters => Parameters;
 
     /// <summary>
-    /// Returns <c>true</c> when this member is readable. A member is considered
-    /// readable when <see cref="EmitRead"/> returns a non-null expression for a
-    /// non-null instance (for instance members) or null instance (for static members).
+    /// Returns <c>true</c> when this member is readable. A CLR field is readable;
+    /// a property answers from its getter (<see cref="ClrTypeProperty.CanRead"/>).
     /// </summary>
-    public bool CanRead => ((ITypeMember)this).EmitRead(
-        System.Linq.Expressions.Expression.Default(typeof(object))) is not null;
+    public virtual bool CanRead => Kind == MemberKind.Field;
 
     /// <summary>
     /// Returns <c>true</c> when this member can be written after construction.
@@ -34,18 +33,6 @@ internal abstract class ClrTypeMember : ITypeMember {
     /// (readonly fields, init-only setters, etc.).
     /// </summary>
     public bool CanInitialize => (Mutability & Mutability.ReadOnlyAfterInit) == Mutability.ReadOnlyAfterInit;
-
-    /// <summary>
-    /// Reads this member's value from <paramref name="instance"/> as an expression tree,
-    /// or returns <c>null</c> if not readable. Override in derived types.
-    /// </summary>
-    public virtual Expression? EmitRead(Expression? instance) => null;
-
-    /// <summary>
-    /// Writes <paramref name="value"/> to this member on <paramref name="instance"/>
-    /// as an expression tree, or returns <c>null</c> if not writable. Override in derived types.
-    /// </summary>
-    public virtual Expression? EmitWrite(Expression? instance, Expression value) => null;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using PrimType = Poly.Introspection.PrimitiveType;
@@ -167,7 +168,7 @@ public sealed partial class DomainToCSharpExporter {
                         fieldAcc,
                         new IfStatement(
                             new Invoke(
-                                new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
+                                new Member(ClrTypeReferences.Of(typeof(object)), "ReferenceEquals"),
                                 [existing, subscriber]),
                             new Block([new Return(null)]))),
                     new Invoke(

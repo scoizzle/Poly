@@ -1,4 +1,5 @@
 using Poly.Ast.Nodes;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 namespace Poly.DomainModeling.Lowering;
@@ -21,7 +22,7 @@ internal static class FailureLowering {
 
     /// <summary><c>Poly.Runtime.DomainFailure.&lt;Kind&gt;(message[, path[, guard]])</c>.</summary>
     internal static Node Call(Spec spec) {
-        var factory = new Member(new ClrTypeReference(typeof(DomainFailure)), spec.Kind.ToString());
+        var factory = new Member(ClrTypeReferences.Of(typeof(DomainFailure)), spec.Kind.ToString());
         if (spec.Guard is not null)
             return new Invoke(factory, spec.Message, new Constant(spec.ElementPath), new Constant(spec.Guard));
         if (spec.ElementPath is not null)

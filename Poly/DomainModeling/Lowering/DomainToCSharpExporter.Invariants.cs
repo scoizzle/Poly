@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
@@ -32,7 +33,7 @@ public sealed partial class DomainToCSharpExporter {
                 new Syntactic.And(
                     new Equal(propertyName, new Constant(prop.Name)),
                     new Invoke(
-                        new Member(new ClrTypeReference(typeof(object)), "Equals"),
+                        new Member(ClrTypeReferences.Of(typeof(object)), "Equals"),
                         new Member(new ThisReference(), prop.Name),
                         value)),
                 new Block([DomainResultSuccess()])));

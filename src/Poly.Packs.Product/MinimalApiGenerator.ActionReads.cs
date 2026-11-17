@@ -2,6 +2,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
@@ -467,6 +468,8 @@ internal sealed class ActionReadsWalker {
 
     private static string? TypeNameOf(Node node) => node switch {
         ClrTypeReference clr => clr.RuntimeType.FullName,
+        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
+        TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
         NamedTypeReference named => named.FullName,
         TypeReference reference => reference.TypeName,
         _ => null,

@@ -76,7 +76,7 @@ internal abstract record LocalType(Type Clr) {
         var conversion = ((ITypeDefinition)registry.GetTypeDefinition(target))
             .ResolveConversionFrom(registry.GetTypeDefinition(value.GetType()));
         if (conversion is { Kind: ConversionOperatorKind.Implicit }) {
-            if (conversion.Value.Method is ClrMethod declaredMethod)
+            if (conversion.Method is ClrMethod declaredMethod)
                 return declaredMethod.MethodInfo.Invoke(null, [value])!;
             // A native integer and char to IEEE are not IConvertible pairs: go through the word C# widens them by.
             object source = value switch { nint n => (long)n, nuint n => (ulong)n, char c => (int)c, _ => value };

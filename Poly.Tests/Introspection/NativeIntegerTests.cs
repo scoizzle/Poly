@@ -345,10 +345,10 @@ public class NativeIntegerTests {
     public async Task Provider_NintToLongIsImplicitBuiltIn_IntFromNintKeepsTheDeclaredExplicit() {
         var toLong = Clr(typeof(long)).ResolveConversionFrom(Clr(typeof(nint)));
         await Assert.That(toLong?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(toLong!.Value.Method).IsNull();
+        await Assert.That(toLong!.Method).IsNull();
         var toInt = Clr(typeof(int)).ResolveConversionFrom(Clr(typeof(nint)));
         await Assert.That(toInt?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
-        await Assert.That(toInt!.Value.Method?.Name).IsEqualTo("op_Explicit");
+        await Assert.That(toInt!.Method?.Name).IsEqualTo("op_Explicit");
         var toDecimal = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(nuint)));
         await Assert.That(toDecimal?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }
@@ -367,7 +367,7 @@ public class NativeIntegerTests {
             if (actual?.Kind != expected)
                 mismatches.Add($"{CSharpOperatorOracle.Keyword(from)} -> {CSharpOperatorOracle.Keyword(to)}: C# {expected?.ToString() ?? "none"}, provider {actual?.Kind.ToString() ?? "none"}");
             else if (actual is { Kind: ConversionOperatorKind.Implicit, Method: not null })
-                mismatches.Add($"{CSharpOperatorOracle.Keyword(from)} -> {CSharpOperatorOracle.Keyword(to)}: an implicit native conversion is built in, provider states {actual.Value.Method.Name}");
+                mismatches.Add($"{CSharpOperatorOracle.Keyword(from)} -> {CSharpOperatorOracle.Keyword(to)}: an implicit native conversion is built in, provider states {actual.Method.Name}");
         }
         await Assert.That(mismatches).IsEmpty();
         // The oracle itself: 50 ordered pairs; C# 11 has 18 implicit native conversions, every other pair is explicit.

@@ -7,21 +7,19 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// </summary>
 internal static class ModeledConversions {
     /// <summary>The conversion from <paramref name="source"/> to <paramref name="destination"/> a modeled definition declares, implicit preferred.</summary>
-    public static TypeConversion? Find(ITypeDefinition source, ITypeDefinition destination) {
+    public static ITypeConversion? Find(ITypeDefinition source, ITypeDefinition destination) {
         if (Find(source, destination, ConversionOperatorKind.Implicit) is { } declaredImplicit)
             return declaredImplicit;
         return Find(source, destination, ConversionOperatorKind.Explicit);
     }
 
-    private static TypeConversion? Find(ITypeDefinition from, ITypeDefinition to, ConversionOperatorKind kind) {
+    private static ITypeConversion? Find(ITypeDefinition from, ITypeDefinition to, ConversionOperatorKind kind) {
         foreach (var candidate in new[] { from, to }) {
-            foreach (var conversion in candidate.DeclaredConversions) {
-                if (conversion.Kind != kind || conversion.Method is not { } method)
+            foreach (var conversion in candidate.Conversions) {
+                if (conversion.Kind != kind || conversion.Method is null)
                     continue;
-                var parameters = method.Parameters.ToArray();
-                if (parameters.Length == 1
-                    && TypeDefinitionExtensions.IsSameType(method.MemberTypeDefinition, to)
-                    && TypeDefinitionExtensions.IsSameType(parameters[0].ParameterTypeDefinition, from))
+                if (TypeDefinitionExtensions.IsSameType(conversion.SourceTypeDefinition, from)
+                    && TypeDefinitionExtensions.IsSameType(conversion.ResultTypeDefinition, to))
                     return conversion;
             }
         }

@@ -260,7 +260,7 @@ public class TypeRulesTests {
     [Test]
     public async Task ResolveConversionFrom_Modeled_AnswersThroughThePublicDoor() {
         var set = new ModeledTypeSet();
-        var money = set.Add("Money", ModeledTypeSet.Static("op_Implicit", "Money", "Cents"));
+        var money = set.Add("Money", ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "Money", "Cents"));
         var cents = set.Add("Cents");
         var conversion = ((ITypeDefinition)money).ResolveConversionFrom(cents);
         await Assert.That(conversion!.Value.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
@@ -269,6 +269,23 @@ public class TypeRulesTests {
     }
 
     // ---- GetOperators ----
+
+    [Test]
+    public async Task Conversions_ClrType_ListsItsDeclaredConversion_NotThePlatformsBuiltIns() {
+        var offset = (ITypeDefinition)Clr(typeof(DateTimeOffset));
+        var declared = offset.Conversions.ToArray();
+        await Assert.That(declared.Length).IsEqualTo(1);
+        await Assert.That(declared[0].Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(declared[0].Method!.Name).IsEqualTo("op_Implicit");
+        // C# applies the numeric conversions itself; a simple type declares none.
+        await Assert.That(((ITypeDefinition)Clr(typeof(int))).Conversions).IsEmpty();
+        // A modeled definition lists exactly what it marks.
+        var set = new ModeledTypeSet();
+        var money = (ITypeDefinition)set.Add("Money", ModeledTypeSet.Conversion(ConversionOperatorKind.Explicit, "Money", "Cents"));
+        var modeled = money.Conversions.ToArray();
+        await Assert.That(modeled.Length).IsEqualTo(1);
+        await Assert.That(modeled[0].Kind).IsEqualTo(ConversionOperatorKind.Explicit);
+    }
 
     [Test]
     public async Task GetOperators_Int64Add_YieldsIntrinsicLongLongToLong() {
@@ -410,7 +427,8 @@ public class TypeRulesTests {
         var members = new List<MethodBase?> {
             typeof(ITypeDefinition).GetMethod(nameof(ITypeDefinition.ResolveConversionFrom), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
             typeof(ITypeDefinition).GetMethod(nameof(ITypeDefinition.ResolveOperator), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
-            typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.Operators))?.GetMethod
+            typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.Operators))?.GetMethod,
+            typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.Conversions), BindingFlags.Instance | BindingFlags.NonPublic)?.GetMethod
         };
         members.AddRange(typeof(TypeDefinitionOperatorExtensions)
             .GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
@@ -495,10 +513,20 @@ public class TypeRulesTests {
     }
 
     [Test]
+    public async Task ResolveConversionFrom_Modeled_UnmarkedOpImplicit_IsNotAConversion() {
+        // #942 S2: a modeled conversion is a member marked with its kind, not a member name. The same members
+        // without the marker declare no conversion.
+        var set = new ModeledTypeSet();
+        var money = set.Add("Money", ModeledTypeSet.Static("op_Implicit", "Money", "Cents"));
+        var cents = set.Add("Cents");
+        await Assert.That(((ITypeDefinition)money).ResolveConversionFrom(cents)).IsNull();
+    }
+
+    [Test]
     public async Task ResolveConversionFrom_Modeled_FreshEqualSyntheticCollectionParameter_IsFound() {
         var set = new ModeledTypeSet();
         var bag = set.Add("Bag", new MethodDefinitionNode("op_Implicit", new NamedTypeReference("Bag"),
-            [new Parameter("a", new CollectionTypeReference(new NamedTypeReference("Bag"), CollectionKind.List))], IsStatic: true));
+            [new Parameter("a", new CollectionTypeReference(new NamedTypeReference("Bag"), CollectionKind.List))], IsStatic: true) { Conversion = ConversionOperatorKind.Implicit });
         ITypeDefinition fresh = new AstCollectionTypeDefinition(bag, CollectionKind.List);
         var conversion = ((ITypeDefinition)bag).ResolveConversionFrom(fresh);
         await Assert.That(conversion).IsNotNull();

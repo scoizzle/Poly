@@ -32,6 +32,12 @@ public sealed record MethodDefinitionNode(
     /// </summary>
     public Poly.Introspection.OperatorKind? Operator { get; init; }
 
+    /// <summary>
+    /// The conversion this static method defines on its declaring type, or null for an ordinary method. The name does
+    /// not make a method a conversion: a reader sets this from its language's own conversion form.
+    /// </summary>
+    public Poly.Introspection.ConversionOperatorKind? Conversion { get; init; }
+
     public override IEnumerable<Node?> Children {
         get {
             yield return ReturnType;

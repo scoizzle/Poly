@@ -431,7 +431,9 @@ public static class CSharpReader {
                 GenericParameters: MaybeChild(match, "generic-params") is { } generics ? FoldGenericParams(generics) : null,
                 AccessModifier: modifiers.Access) {
                 // The C# surface has no operator declaration form yet; a static op_* member is how C# encodes one.
-                Operator = modifiers.Static ? ClrOperatorNames.KindOf(Capture(match, "name")) : null
+                Operator = modifiers.Static ? ClrOperatorNames.KindOf(Capture(match, "name")) : null,
+                // Likewise a conversion: a static op_Implicit/op_Explicit member until the surface reads `implicit operator`.
+                Conversion = modifiers.Static ? ClrConversionNames.KindOf(Capture(match, "name")) : null
             };
             return MaybeChild(match, "attributes") is { } attrs
                 ? method with { Attributes = FoldAttributes(attrs) }

@@ -34,7 +34,7 @@ Common members include:
 - `Operators` (`ITypeOperator`, see below)
 - `GetMembers(string name)`
 - `IsAssignableFrom` (no conversion, or a declared implicit operator; a conversion the platform applies itself, such as numeric widening, is not assignment)
-- `ResolveConversionFrom` / `IsAssignableWithoutConversion` (internal, default-bodied) and `ResolveOperator` (internal, every platform implements it): what the platform defines for conversions, assignability and operator selection; see below. Conversion operators are not in `Methods`; a declared one is a `TypeConversion` with a method, a built-in one has none.
+- `Conversions` (internal: the conversion operators a definition declares) and `ResolveConversionFrom` / `ResolveOperator` (internal, every platform implements them): what a platform declares and defines for conversions and for operator selection; `IsAssignableWithoutConversion` is the internal default-bodied first half of assignability. See below. Conversion operators are not in `Methods`; a declared one is a `TypeConversion` with a method, a built-in one has none.
 
 ### ITypeMember
 
@@ -93,8 +93,11 @@ the caller's (T-06).
   `MethodDefinitionNode.Operator`; the method's name plays no part. The C# reader marks a static member named like a
   CLR operator, the CLR's own encoding, since the C# surface has no `operator` declaration yet (#406); the domain
   provider marks the equality it synthesizes on enums, entities and value types. They select with C#'s rule
-  (`ClrOperatorResolution`). Modeled conversions are still declared static `op_Implicit`/`op_Explicit` members
-  (`ModeledConversions`).
+  (`ClrOperatorResolution`). A modeled definition declares a conversion with a static method marked
+  `MethodDefinitionNode.Conversion`; the C# reader marks a static `op_Implicit`/`op_Explicit` member
+  (`ClrConversionNames`), the CLR's own encoding, until the C# surface reads `implicit operator`. The AST definitions
+  select through `ModeledConversions`; the root names no conversion spelling, and `Conversions` lists what a
+  definition declares (a built-in conversion answers in `ResolveConversionFrom` with no method).
 - **Introspection-internal today.** `ITypeOperator` and `Operators` are public, as `ITypeMethod` and `Methods` are;
   `ResolveConversionFrom`, `IsAssignableWithoutConversion` and `ResolveOperator` are `internal` and neutral at signature level only
   (`ITypeMember.EmitRead` still returns an `Expression`). A platform in another assembly cannot implement them

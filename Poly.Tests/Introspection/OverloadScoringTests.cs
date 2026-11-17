@@ -714,7 +714,7 @@ public class OverloadScoringTests {
     public async Task SyntheticCollectionParameter_ScoresAsTheSameType_AndBeatsADeclaredConversionTie() {
         var set = new ModeledTypeSet();
         var list = new CollectionTypeReference(new NamedTypeReference("Bag"), CollectionKind.List);
-        set.Add("Bag", new MethodDefinitionNode("op_Implicit", new NamedTypeReference("Bag"), [new Parameter("a", list)], IsStatic: true));
+        set.Add("Bag", new MethodDefinitionNode("op_Implicit", new NamedTypeReference("Bag"), [new Parameter("a", list)], IsStatic: true) { Conversion = ConversionOperatorKind.Implicit });
         var host = (ITypeDefinition)set.Add("Host",
             new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", list)]),
             new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", new NamedTypeReference("Bag"))]));

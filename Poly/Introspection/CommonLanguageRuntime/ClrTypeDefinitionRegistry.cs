@@ -32,6 +32,12 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
     public ClrTypeDefinition GetTypeDefinition<T>() => GetTypeDefinition(typeof(T));
 
     /// <summary>
+    /// Gets the definition a primitive id names in the CLR, or null when it names no CLR type.
+    /// </summary>
+    public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) =>
+        primitiveTypeId.GetClrType() is { } clrType ? GetTypeDefinition(clrType) : null;
+
+    /// <summary>
     /// Gets or creates a definition for a runtime <see cref="Type"/>.
     /// </summary>
     public ClrTypeDefinition GetTypeDefinition(Type type) {

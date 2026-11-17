@@ -18,13 +18,11 @@ public interface ITypeDefinitionProvider {
     ITypeDefinition? GetTypeDefinition(Type type);
 
     /// <summary>
-    /// Resolves a type definition by <see cref="PrimitiveType"/>.
-    /// Returns null when the primitive type is not supported.
+    /// Resolves a type definition by <see cref="PrimitiveType"/>. Primitive resolution belongs to the provider: a
+    /// platform maps the shared vocabulary to its own, and one with no CLR types must not inherit the CLR's answer.
+    /// Returns null when the provider does not hold that primitive.
     /// </summary>
-    ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) {
-        var clrType = primitiveTypeId.GetClrType();
-        return clrType is not null ? GetTypeDefinition(clrType) : null;
-    }
+    ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId);
 
     /// <summary>
     /// Creates a thread-safe deferred resolver for a named type that throws if not found.

@@ -89,6 +89,19 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     }
 
     /// <summary>
+    /// Resolves a primitive by querying providers from top to bottom. Returns null when none holds it.
+    /// </summary>
+    public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) {
+        foreach (var provider in _providers.AsReadOnly()) {
+            var typeDef = provider.GetTypeDefinition(primitiveTypeId);
+            if (typeDef is not null) {
+                return typeDef;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Resolves by generic type parameter, querying providers from top to bottom. Returns null when not found.
     /// </summary>
     /// <typeparam name="T">The generic type parameter to resolve.</typeparam>

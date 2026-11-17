@@ -70,8 +70,15 @@ Resolves type definitions:
 
 - `GetTypeDefinition(string name)`
 - `GetTypeDefinition(Type type)`
-- `GetTypeDefinition(PrimitiveType primitiveTypeId)`
+- `GetTypeDefinition(PrimitiveType primitiveTypeId)` — the provider answers for its own primitives. There is no
+  default body: a platform with no CLR types must not inherit the CLR's answer, and the shared `PrimitiveType`
+  vocabulary is not a CLR map.
 - `GetDeferredTypeDefinitionResolver(string name)`
+
+Platform encodings of the primitive vocabulary live with the platform, not on the enum: the CLR's `Type` maps are
+`CommonLanguageRuntime/ClrPrimitiveTypes` (`GetClrType`, `GetPrimitiveType`), and C#'s keywords are
+`Poly.Interpretation.CSharp/CSharpKeywords` (`GetCSharpKeyword`). `PrimitiveType` itself keeps only facts every
+platform shares: `IsInteger` and `GetDisplayName`.
 
 ## Conversions and operators (T-03b, T-24)
 

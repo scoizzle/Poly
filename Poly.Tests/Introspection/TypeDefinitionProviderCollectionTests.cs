@@ -160,6 +160,23 @@ public class TypeDefinitionProviderCollectionTests {
         ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
     }
 
+    [Test]
+    public async Task GetTypeDefinition_Primitive_DoesNotAssumeTheProviderHasClrTypes() {
+        // Primitive resolution is the provider's: a platform without CLR types must not inherit the CLR's answer,
+        // and must not be asked for one through a runtime Type it never mentioned.
+        ITypeDefinitionProvider provider = new NoClrTypeProvider();
+        await Assert.That(provider.GetTypeDefinition(PrimitiveType.Decimal)).IsNull();
+    }
+
+    private sealed class NoClrTypeProvider : ITypeDefinitionProvider {
+        public ITypeDefinition? GetTypeDefinition(string name) => null;
+
+        public ITypeDefinition? GetTypeDefinition(Type type) =>
+            throw new NotSupportedException("This platform has no CLR types.");
+
+        public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
+    }
+
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {
         private readonly Dictionary<string, ITypeDefinition> _types = [];
 
@@ -174,5 +191,7 @@ public class TypeDefinitionProviderCollectionTests {
         public ITypeDefinition? GetTypeDefinition(Type type) {
             throw new NotImplementedException();
         }
+
+        public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
     }
 }

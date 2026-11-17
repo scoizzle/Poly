@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Reflection;
 
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.ConstantFolding;

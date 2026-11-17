@@ -202,15 +202,6 @@ public static class TypeDefinitionExtensions {
             return other.IsAssignableFrom(typeDefinition);
         }
 
-        /// <summary>
-        /// Returns true when values of this type are stored directly on an
-        /// evaluation stack slot without heap indirection (numeric types and
-        /// booleans).  Domain entities, strings, and structured types return false.
-        /// </summary>
-        public bool IsStackValue() => typeDefinition.PrimitiveType is { } pt
-            ? pt.IsStackValue()
-            : false;
-
         private static Type? GetGenericEnumerableType(Type type) {
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)) {
                 return type;

@@ -49,6 +49,9 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
 
     public ITypeDefinition? GetTypeDefinition(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
+    public ITypeDefinition? GetTypeDefinition(Poly.Introspection.PrimitiveType primitiveTypeId) =>
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(primitiveTypeId);
+
     private ITypeDefinition? FromClrName(string name) =>
         DomainTypeMapping.TryPrimitiveType(_typeMaps.ToClrTypeName(name), out var primitive)
             ? Clr(primitive.GetClrType()!)

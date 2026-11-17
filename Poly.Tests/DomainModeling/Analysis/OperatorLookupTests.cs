@@ -47,6 +47,8 @@ internal sealed class ModeledTypeSet : ITypeDefinitionProvider {
 
     public ITypeDefinition? GetTypeDefinition(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
+    public ITypeDefinition? GetTypeDefinition(Poly.Introspection.PrimitiveType primitiveTypeId) => null;
+
     /// <summary>A static member: <c>static result name(parameters)</c>.</summary>
     public static MethodDefinitionNode Static(string name, string result, params string[] parameters) =>
         new(name, new NamedTypeReference(result),

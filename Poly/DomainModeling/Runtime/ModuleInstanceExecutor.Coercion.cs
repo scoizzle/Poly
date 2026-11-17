@@ -4,6 +4,7 @@ using Poly.Ast.Nodes;
 using Poly.DomainModeling.Meaning;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using Prim = Poly.Introspection.PrimitiveType;
 

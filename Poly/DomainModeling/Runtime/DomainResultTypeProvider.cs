@@ -34,6 +34,8 @@ internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : 
 
     public ITypeDefinition? GetTypeDefinition(Type type) => inner.GetTypeDefinition(type);
 
+    public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => inner.GetTypeDefinition(primitiveTypeId);
+
     internal static ITypeDefinitionProvider Wrap(ITypeDefinitionProvider inner) =>
         inner is DomainResultTypeProvider wrapped ? wrapped : new DomainResultTypeProvider(inner);
 }

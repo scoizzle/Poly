@@ -108,6 +108,9 @@ internal sealed class AstTypeRegistry : ITypeDefinitionProvider, ITypeDefinition
 
     public ITypeDefinition? GetTypeDefinition(Type type) =>
         ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
+
+    /// <summary>A registry of declarations holds no primitives: a composed provider resolves those.</summary>
+    public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
 }
 
 /// <summary>Metadata associating a <see cref="TypeDefinitionNode"/> with its

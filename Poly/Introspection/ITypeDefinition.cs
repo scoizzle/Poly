@@ -82,6 +82,21 @@ public interface ITypeDefinition {
     IEnumerable<ITypeOperator> Operators { get; }
 
     /// <summary>
+    /// Gets the conversions this type declares: the conversion operators a platform encodes as members of this type,
+    /// inbound or outbound. A conversion the platform applies itself is not a declaration (see <see cref="Conversions"/>).
+    /// </summary>
+    internal IEnumerable<TypeConversion> DeclaredConversions { get; }
+
+    /// <summary>
+    /// Gets the conversions this type states to another type: the operators it declares and the ones the platform
+    /// applies for it (no method). Outbound only. A conversion into this type is <see cref="ResolveConversionFrom"/>
+    /// with the other type as the source, and what a type defined later may declare is not enumerable. Optionality is
+    /// the caller's (T-06), so the lift into a nullable target is not listed, and reference conversions are
+    /// assignability, not conversion.
+    /// </summary>
+    internal IEnumerable<TypeConversion> Conversions { get; }
+
+    /// <summary>
     /// Gets the primitive type identifier if this type is a primitive type, null otherwise.
     /// Primitive types are the atomic building blocks from which all other types are composed.
     /// </summary>
@@ -97,9 +112,10 @@ public interface ITypeDefinition {
     /// <summary>
     /// The conversion from <paramref name="source"/> to this type that the platform defines, or null.
     /// Declared operators and built-in rules both answer here: a conversion that states a method is a declared
-    /// operator, one with no method is applied by the platform itself.
+    /// operator, one with no method is applied by the platform itself. Which conversions are candidates and how one is
+    /// chosen is the platform's rule.
     /// </summary>
-    internal TypeConversion? ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
+    internal TypeConversion? ResolveConversionFrom(ITypeDefinition source);
 
     /// <summary>
     /// True when a value of <paramref name="source"/> is a value of this type with no conversion applied:

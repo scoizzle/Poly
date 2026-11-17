@@ -56,6 +56,10 @@ internal sealed class ModeledTypeSet : ITypeDefinitionProvider {
     /// <summary>A static member marked as the <paramref name="kind"/> operator: <c>static result Kind(parameters)</c>.</summary>
     public static MethodDefinitionNode Operator(OperatorKind kind, string result, params string[] parameters) =>
         Static(kind.ToString(), result, parameters) with { Operator = kind };
+
+    /// <summary>A static member marked as the <paramref name="kind"/> conversion: <c>static result Conversion(parameters)</c>.</summary>
+    public static MethodDefinitionNode Conversion(ConversionOperatorKind kind, string result, params string[] parameters) =>
+        Static(kind.ToString(), result, parameters) with { Conversion = kind };
 }
 
 /// <summary>
@@ -284,8 +288,8 @@ public class OperatorLookupTests {
     [Test]
     public async Task AmbiguousOperators_IsNone() {
         var set = new ModeledTypeSet();
-        var x = set.Add("X", ModeledTypeSet.Static("op_Implicit", "X", "L"));
-        var y = set.Add("Y", ModeledTypeSet.Static("op_Implicit", "Y", "R"));
+        var x = set.Add("X", ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "X", "L"));
+        var y = set.Add("Y", ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "Y", "R"));
         var l = set.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "X", "X", "R"));
         var r = set.Add("R", ModeledTypeSet.Operator(OperatorKind.Add, "Y", "L", "Y"));
         await Assert.That(((ITypeDefinition)x).ResolveConversionFrom(l)).IsNotNull();
@@ -294,7 +298,7 @@ public class OperatorLookupTests {
         await Assert.That(((ITypeDefinition)l).GetOperator(OperatorKind.Add, r)).IsNull();
         // The sibling: with the second candidate gone the first is the only one.
         var set2 = new ModeledTypeSet();
-        set2.Add("X", ModeledTypeSet.Static("op_Implicit", "X", "L"));
+        set2.Add("X", ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "X", "L"));
         var l2 = set2.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "X", "X", "R"));
         var r2 = set2.Add("R");
         await AssertResult(((ITypeDefinition)l2).GetOperator(OperatorKind.Add, r2), set2.GetTypeDefinition("X")!);
@@ -637,7 +641,7 @@ public class OperatorLookupTests {
         // A modeled type that converts implicitly to Int64 relies on that: the operand converts and the operator applies, as in C#.
         var set = new ModeledTypeSet();
         ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", new ClrTypeReference(typeof(long)),
-            [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true));
+            [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true) { Conversion = ConversionOperatorKind.Implicit });
         var number = OperatorOperands.Clr(typeof(long));
         var offered = ((ClrTypeDefinition)number).OperatorsBeside(OperatorKind.Add, cents).Single();
         await Assert.That(offered.Method).IsNull();

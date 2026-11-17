@@ -265,6 +265,27 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
 
+    /// <summary>
+    /// The conversions this type declares: its static methods marked <see cref="MethodDefinitionNode.Conversion"/> with
+    /// one parameter, inbound or outbound. A method's name never makes it a conversion.
+    /// </summary>
+    IEnumerable<TypeConversion> ITypeDefinition.DeclaredConversions => _declaredMethods.Value
+        .Where(static method => method.IsStatic
+            && method.DefinitionNode.Conversion is { } kind
+            && method.Parameters.Count() == 1)
+        .Select(static method => new TypeConversion(
+            method.DefinitionNode.Conversion!.Value, method.MemberTypeDefinition, method));
+
+    /// <summary>
+    /// The conversions this type states to another type: its declared outbound ones. A modeled definition has no
+    /// platform-applied conversions, so there is nothing else to state.
+    /// </summary>
+    IEnumerable<TypeConversion> ITypeDefinition.Conversions =>
+        ((ITypeDefinition)this).DeclaredConversions
+            .Where(conversion => !TypeDefinitionExtensions.IsSameType(conversion.ResultTypeDefinition, this));
+
+    TypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
+
     // AST-based types are dictionary-backed at runtime
     public Type RuntimeType => typeof(IDictionary<string, object>);
 
@@ -907,7 +928,10 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public IEnumerable<ITypeMethod> Methods => [_add];
     public IEnumerable<ITypeConstructor> Constructors => [_ctor, _copy];
     public IEnumerable<ITypeOperator> Operators => [];
+    IEnumerable<TypeConversion> ITypeDefinition.DeclaredConversions => [];
+    IEnumerable<TypeConversion> ITypeDefinition.Conversions => [];
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
+    TypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
     public PrimitiveType? PrimitiveType => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(System.Collections.IList);
@@ -987,7 +1011,10 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     public IEnumerable<ITypeMethod> Methods => [];
     public IEnumerable<ITypeConstructor> Constructors => [];
     public IEnumerable<ITypeOperator> Operators => [];
+    IEnumerable<TypeConversion> ITypeDefinition.DeclaredConversions => [];
+    IEnumerable<TypeConversion> ITypeDefinition.Conversions => [];
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
+    TypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
     public PrimitiveType? PrimitiveType => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(object);

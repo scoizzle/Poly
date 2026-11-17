@@ -44,21 +44,20 @@ internal static class ClrBuiltInRules {
     /// <summary>
     /// The built-in conversion between two CLR primitives (null: not a primitive). Identity is not a conversion.
     /// Any CLR value converts implicitly to object (§10.2.8 reference, §10.2.9 boxing). Int64 to Float64 is implicit, lossy above 2^53.
+    /// Only the kind: the platform applies it, so it names no method, and the caller knows the destination type.
     /// </summary>
-    public static TypeConversion? Conversion(PrimitiveType? from, PrimitiveType? to) {
+    public static ConversionOperatorKind? Conversion(PrimitiveType? from, PrimitiveType? to) {
         if (from == to)
             return null;
         if (from is { } source && to is { } target && ImplicitNumeric.TryGetValue(source, out var implicitTargets) && IsNumeric(target))
-            return Intrinsic(implicitTargets.Contains(target) ? ConversionOperatorKind.Implicit : ConversionOperatorKind.Explicit);
+            return implicitTargets.Contains(target) ? ConversionOperatorKind.Implicit : ConversionOperatorKind.Explicit;
         // A native integer to decimal is implicit and back is explicit; the CLR declares neither.
         if (from is P.NInt or P.NUInt && to is P.Decimal)
-            return Intrinsic(ConversionOperatorKind.Implicit);
+            return ConversionOperatorKind.Implicit;
         if (from is P.Decimal && to is P.NInt or P.NUInt)
-            return Intrinsic(ConversionOperatorKind.Explicit);
-        return to is P.Structure ? Intrinsic(ConversionOperatorKind.Implicit) : null;
+            return ConversionOperatorKind.Explicit;
+        return to is P.Structure ? ConversionOperatorKind.Implicit : null;
     }
-
-    private static TypeConversion Intrinsic(ConversionOperatorKind kind) => new(kind, Method: null);
 
     private static bool IsNumeric(PrimitiveType type) => ImplicitNumeric.ContainsKey(type);
 

@@ -449,4 +449,14 @@ public class CSharpReaderTests {
         await Assert.That(methods[1].Operator).IsNull();
         await Assert.That(methods[2].Operator).IsNull();
     }
+
+    [Test]
+    public async Task Read_StaticOpImplicit_IsMarkedAsItsConversion_AnInstanceOneIsNot() {
+        var unit = CSharpLanguage.Read(
+            "public class Meters { public static Meters op_Implicit(double d) { return null; } public Meters op_Explicit(double d) { return null; } public static Meters Metres(double d) { return null; } }");
+        var methods = unit.Types[0].Methods!;
+        await Assert.That(methods[0].Conversion).IsEqualTo(Poly.Introspection.ConversionOperatorKind.Implicit);
+        await Assert.That(methods[1].Conversion).IsNull();
+        await Assert.That(methods[2].Conversion).IsNull();
+    }
 }

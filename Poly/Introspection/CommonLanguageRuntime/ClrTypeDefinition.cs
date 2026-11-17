@@ -18,6 +18,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private readonly ClrTypeDefinitionRegistry _provider;
     private readonly ConcurrentDictionary<(OperatorKind Kind, PrimitiveType? Other), IReadOnlyList<ClrTypeOperator>> _operatorsBeside = new();
     private readonly Lazy<IReadOnlyList<ClrTypeOperator>> _operators;
+    private readonly Lazy<IReadOnlyList<TypeConversion>> _declaredConversions;
+    private readonly Lazy<IReadOnlyList<TypeConversion>> _conversions;
 
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
@@ -57,6 +59,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         _constructors = new(() => BuildConstructorCollection(type, this, provider));
         _members = new(() => BuildMemberCollection(Fields, Properties, Methods));
         _operators = new(() => [.. Enum.GetValues<OperatorKind>().SelectMany(kind => OperatorsBeside(kind, null))]);
+        _declaredConversions = new(ReadDeclaredConversions);
+        _conversions = new(ReadOutboundConversions);
     }
 
     public string Name => RuntimeType.Name;
@@ -79,6 +83,19 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// </summary>
     public IReadOnlyList<ClrTypeOperator> Operators => _operators.Value;
 
+    /// <summary>
+    /// The conversions this type declares: the reflected static <c>op_Implicit</c>/<c>op_Explicit</c> members, inbound
+    /// or outbound. Built-in conversions are not listed; see <see cref="Conversions"/>.
+    /// </summary>
+    internal IReadOnlyList<TypeConversion> DeclaredConversions => _declaredConversions.Value;
+
+    /// <summary>
+    /// The conversions this type states to another type: the declared outbound ones and the built-in rules, which name
+    /// no method. Reference conversions are assignability, not conversion, and the lift into a nullable target is the
+    /// caller's (T-06), so neither is listed.
+    /// </summary>
+    internal IReadOnlyList<TypeConversion> Conversions => _conversions.Value;
+
     ITypeDefinition? ITypeDefinition.BaseType => BaseType;
     IEnumerable<ITypeDefinition> ITypeDefinition.Interfaces => Interfaces;
     IEnumerable<ITypeField> ITypeDefinition.Fields => Fields;
@@ -87,6 +104,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     IEnumerable<ITypeConstructor> ITypeDefinition.Constructors => Constructors;
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members;
     IEnumerable<ITypeOperator> ITypeDefinition.Operators => Operators;
+    IEnumerable<TypeConversion> ITypeDefinition.DeclaredConversions => DeclaredConversions;
+    IEnumerable<TypeConversion> ITypeDefinition.Conversions => Conversions;
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
     PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
@@ -94,25 +113,47 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     public override string ToString() => FullName;
 
     /// <summary>
-    /// The declared <c>op_Implicit</c> or <c>op_Explicit</c> first (implicit preferred), so a conversion that names a
-    /// method is never replaced by a built-in rule; then the built-in rules, only between two CLR definitions. A
-    /// modeled source is answered by the modeled convention. A native integer's implicit built-in conversion answers
-    /// first: C# 11 makes <c>nint</c> to <c>long</c> implicit where IntPtr declares an explicit <c>op_Explicit</c>; an
-    /// explicit one keeps IntPtr's declared method (<c>(int)nint</c>).
+    /// The declared conversion first (implicit preferred), so a conversion that names a method is never replaced by a
+    /// built-in rule; then the built-in rules, only between two CLR definitions. A native integer's implicit built-in
+    /// conversion answers first: C# 11 makes <c>nint</c> to <c>long</c> implicit where IntPtr declares an explicit
+    /// <c>op_Explicit</c>; an explicit one keeps IntPtr's declared method (<c>(int)nint</c>).
     /// </summary>
     TypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) {
         ArgumentNullException.ThrowIfNull(source);
-        if (source is not ClrTypeDefinition clrSource)
-            return ModeledConversions.Find(source, this);
-        var builtIn = ClrBuiltInRules.Conversion(GetPrimitiveTypeId(clrSource.RuntimeType), GetPrimitiveTypeId(RuntimeType));
-        if (builtIn is { Kind: ConversionOperatorKind.Implicit }
-            && (ClrBuiltInRules.IsNativeInteger(clrSource.RuntimeType) || ClrBuiltInRules.IsNativeInteger(RuntimeType)))
-            return builtIn;
-        if (FindConversionFrom(clrSource, ConversionOperatorKind.Implicit) is { } declaredImplicit)
-            return new TypeConversion(ConversionOperatorKind.Implicit, declaredImplicit);
-        if (FindConversionFrom(clrSource, ConversionOperatorKind.Explicit) is { } declaredExplicit)
-            return new TypeConversion(ConversionOperatorKind.Explicit, declaredExplicit);
-        return builtIn ?? ResolveLiftedImplicitFrom(clrSource);
+        var clrSource = source as ClrTypeDefinition;
+        ConversionOperatorKind? builtInKind = null;
+        if (clrSource is not null) {
+            builtInKind = ClrBuiltInRules.Conversion(GetPrimitiveTypeId(clrSource.RuntimeType), GetPrimitiveTypeId(RuntimeType));
+            if (builtInKind is ConversionOperatorKind.Implicit
+                && (ClrBuiltInRules.IsNativeInteger(clrSource.RuntimeType) || ClrBuiltInRules.IsNativeInteger(RuntimeType)))
+                return new TypeConversion(builtInKind.Value, this, null);
+        }
+        var builtIn = builtInKind is { } kind ? new TypeConversion(kind, this, null) : (TypeConversion?)null;
+        if (FindDeclaredConversion(source, ConversionOperatorKind.Implicit) is { } declaredImplicit)
+            return declaredImplicit;
+        if (FindDeclaredConversion(source, ConversionOperatorKind.Explicit) is { } declaredExplicit)
+            return declaredExplicit;
+        return builtIn ?? (clrSource is null ? null : ResolveLiftedImplicitFrom(clrSource));
+    }
+
+    /// <summary>
+    /// The conversion of <paramref name="kind"/> declared on the source or on this type, in that order, read from each
+    /// definition's <see cref="DeclaredConversions"/>. A modeled source declares its own, so this answers it without
+    /// naming a spelling.
+    /// </summary>
+    private TypeConversion? FindDeclaredConversion(ITypeDefinition source, ConversionOperatorKind kind) {
+        foreach (var candidate in new[] { source, (ITypeDefinition)this }) {
+            foreach (var conversion in candidate.DeclaredConversions) {
+                if (conversion.Kind != kind || conversion.Method is not { } method)
+                    continue;
+                var parameters = method.Parameters.ToArray();
+                if (parameters.Length == 1
+                    && TypeDefinitionExtensions.IsSameType(method.MemberTypeDefinition, this)
+                    && TypeDefinitionExtensions.IsSameType(parameters[0].ParameterTypeDefinition, source))
+                    return conversion;
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -131,7 +172,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         var underlyingConversion = ((ITypeDefinition)_provider.GetTypeDefinition(underlying))
             .ResolveConversionFrom(_provider.GetTypeDefinition(sourceUnderlying));
         return underlyingConversion is { Kind: ConversionOperatorKind.Implicit }
-            ? new TypeConversion(ConversionOperatorKind.Implicit, null)
+            ? new TypeConversion(ConversionOperatorKind.Implicit, this, null)
             : null;
     }
 
@@ -196,25 +237,47 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             .Select(CreateMethod)];
     }
 
-    internal ClrMethod? FindConversionFrom(ClrTypeDefinition source, ConversionOperatorKind kind) {
-        ArgumentNullException.ThrowIfNull(source);
-        var name = kind is ConversionOperatorKind.Implicit ? "op_Implicit" : "op_Explicit";
-        var from = source.RuntimeType;
-        var to = RuntimeType;
+    /// <summary>
+    /// The conversions this type declares, in reflection order: each reflected static special-name
+    /// <c>op_Implicit</c>/<c>op_Explicit</c> member with one parameter, as its kind and its method.
+    /// </summary>
+    private IReadOnlyList<TypeConversion> ReadDeclaredConversions() {
         const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
-        foreach (var declaring in new[] { from, to }) {
-            foreach (var method in declaring.GetMethods(flags)) {
-                if (!method.IsSpecialName || method.Name != name)
-                    continue;
-                var parameters = method.GetParameters();
-                if (parameters.Length != 1
-                    || method.ReturnType != to
-                    || parameters[0].ParameterType != from)
-                    continue;
-                return CreateMethod(method);
-            }
+        var declared = new List<TypeConversion>();
+        foreach (var method in RuntimeType.GetMethods(flags)) {
+            if (!method.IsSpecialName || method.GetParameters().Length != 1)
+                continue;
+            if (ClrConversionNames.KindOf(method.Name) is not { } kind)
+                continue;
+            var conversion = CreateMethod(method);
+            declared.Add(new TypeConversion(kind, conversion.MemberTypeDefinition, conversion));
         }
-        return null;
+        return declared;
+    }
+
+    /// <summary>
+    /// The outbound conversions: each built-in answer for this type as the source, then the declared ones whose target
+    /// is this type or another definition the built-in candidates do not name. <see cref="ResolveConversionFrom"/> is
+    /// the authority for both, asked on the candidate rather than re-derived here.
+    /// </summary>
+    private IReadOnlyList<TypeConversion> ReadOutboundConversions() {
+        var stated = new List<TypeConversion>();
+        foreach (var primitive in Enum.GetValues<PrimitiveType>()) {
+            if (((ITypeDefinitionProvider)_provider).GetTypeDefinition(primitive) is not { } target)
+                continue;
+            Add(target, target.ResolveConversionFrom(this));
+        }
+        foreach (var conversion in DeclaredConversions)
+            Add(conversion.ResultTypeDefinition, conversion);
+        return stated;
+
+        void Add(ITypeDefinition target, TypeConversion? conversion) {
+            if (conversion is not { } value || TypeDefinitionExtensions.IsSameType(target, this))
+                return;
+            if (stated.Any(existing => TypeDefinitionExtensions.IsSameType(existing.ResultTypeDefinition, target)))
+                return;
+            stated.Add(value);
+        }
     }
 
     private ClrMethod CreateMethod(MethodInfo methodInfo) {

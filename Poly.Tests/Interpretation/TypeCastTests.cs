@@ -229,11 +229,13 @@ public class TypeCastTests {
         var operand = Wrap((object)"hello");
 
         // Act
-        var isNode = operand.Is(ClrTypeReferences.To<string>());
-        var asNode = operand.As(ClrTypeReferences.To<string>());
+        var target = ClrTypeReferences.To<string>();
+        var isNode = operand.Is(target);
+        var asNode = operand.As(target);
 
-        // Assert
-        await Assert.That(isNode.TargetTypeReference).IsTypeOf<TypeReference>();
-        await Assert.That(asNode.TargetTypeReference).IsTypeOf<TypeReference>();
+        // Assert: a type position is a type node, so the node that was passed is the node the operator carries.
+        // Asserting a specific node type would pin one platform's choice of type node, which is not the contract.
+        await Assert.That(isNode.TargetTypeReference).IsSameReferenceAs(target);
+        await Assert.That(asNode.TargetTypeReference).IsSameReferenceAs(target);
     }
 }

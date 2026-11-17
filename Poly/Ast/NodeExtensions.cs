@@ -197,7 +197,7 @@ public static class NodeExtensions {
     /// <param name="targetType">The type to cast to.</param>
     /// <param name="isChecked">Whether to use checked conversion.</param>
     /// <returns>A <see cref="TypeCast"/> operator.</returns>
-    public static TypeCast CastTo(this Node operand, TypeReference targetType, bool isChecked = false) => new TypeCast(operand, targetType, isChecked);
+    public static TypeCast CastTo(this Node operand, Node targetType, bool isChecked = false) => new TypeCast(operand, targetType, isChecked);
 
     /// <summary>
     /// Creates a type test operation.
@@ -205,7 +205,7 @@ public static class NodeExtensions {
     /// <param name="operand">The operand.</param>
     /// <param name="targetTypeName">The name of the type to test against.</param>
     /// <returns>A <see cref="TypeIs"/> operator.</returns>
-    public static TypeIs Is(this Node operand, TypeReference targetType) => new TypeIs(operand, targetType);
+    public static TypeIs Is(this Node operand, Node targetType) => new TypeIs(operand, targetType);
 
     /// <summary>
     /// Creates a safe cast operation that returns null on failure.
@@ -213,7 +213,7 @@ public static class NodeExtensions {
     /// <param name="operand">The operand.</param>
     /// <param name="targetTypeName">The name of the type to cast to.</param>
     /// <returns>A <see cref="TypeAs"/> operator.</returns>
-    public static TypeAs As(this Node operand, TypeReference targetType) => new TypeAs(operand, targetType);
+    public static TypeAs As(this Node operand, Node targetType) => new TypeAs(operand, targetType);
 
     #endregion
 

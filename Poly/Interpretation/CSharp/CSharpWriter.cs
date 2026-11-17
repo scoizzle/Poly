@@ -1647,22 +1647,76 @@ public sealed class CSharpWriter {
 
     // ── types / text helpers ─────────────────────────────────────────────────
 
-    private string TypeText(Node type) => type switch {
+    private string TypeText(Node type) => TypeText(type, asArgument: false);
+
+    /// <summary>
+    /// <paramref name="type"/> as C# text. <paramref name="asArgument"/> is the spelling a type gets inside a nullable,
+    /// a collection or a generic's arguments: a keyword or short name there, the full name at the top level. Both are
+    /// what a <see cref="ClrTypeReference"/> prints today, so a neutral reference prints the same.
+    /// </summary>
+    private string TypeText(Node type, bool asArgument) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
         ClrTypeReference c => ClrTypeReferenceText(c.RuntimeType),
         TypeDefinitionReference t when t.TypeDefinition is IClrTypeDefinition { RuntimeType: var clr } => ClrTypeReferenceText(clr),
         TypeDefinitionReference t => EscapeTypeName(t.TypeName),
         TypeReference t => EscapeTypeName(t.TypeName),
-        NamedTypeReference n => EscapeTypeName(n.FullName) + (n.TypeArguments is { Count: > 0 }
-            ? "<" + string.Join(", ", n.TypeArguments.Select(TypeText)) + ">"
-            : ""),
-        OptionalTypeReference o => TypeText(o.InnerType) + "?",
-        CollectionTypeReference { Kind: CollectionKind.Array } c => TypeText(c.ElementType) + "[]",
-        CollectionTypeReference c => (c.Kind == CollectionKind.Set ? "ISet<" : "List<") + TypeText(c.ElementType) + ">",
-        MapTypeReference m => "Dictionary<" + TypeText(m.KeyType) + ", " + TypeText(m.ValueType) + ">",
+        NamedTypeReference n => NamedTypeText(n, asArgument),
+        OptionalTypeReference o => TypeText(o.InnerType, asArgument: true) + "?",
+        CollectionTypeReference { Kind: CollectionKind.Array } c => TypeText(c.ElementType, asArgument: true) + "[]",
+        CollectionTypeReference c => (c.Kind == CollectionKind.Set ? "ISet<" : "List<") + TypeText(c.ElementType, asArgument: true) + ">",
+        MapTypeReference m => "Dictionary<" + TypeText(m.KeyType, asArgument: true) + ", " + TypeText(m.ValueType, asArgument: true) + ">",
         ResolvedTypeReference r => EscapeTypeName(r.TypeDefinition.FullName),
         _ => type.ToString() ?? "object",
     };
+
+    /// <summary>A named reference: a generic prints its short head and its arguments, a plain type its full name at the
+    /// top level and its C# spelling as an argument.</summary>
+    private string NamedTypeText(NamedTypeReference reference, bool asArgument) {
+        if (reference.TypeArguments is { Count: > 0 } arguments) {
+            // A CLR-erased generic name carries a backtick ("Func`2"); its head is the short name. A name already
+            // written as C# ("System.Func") keeps its qualification.
+            var head = reference.FullName.Contains('`', StringComparison.Ordinal)
+                ? ShortTypeHead(reference.FullName)
+                : string.Concat(ArgumentSpelling(reference.FullName));
+            return head + "<"
+                + string.Join(", ", arguments.Select(argument => TypeText(argument, asArgument: true))) + ">";
+        }
+        return asArgument ? ArgumentSpelling(reference.FullName) : EscapeTypeName(reference.FullName.Replace('+', '.'));
+    }
+
+    /// <summary>The unqualified, tick-stripped head of a generic type's full name: <c>List`1</c> is <c>List</c>.</summary>
+    private static string ShortTypeHead(string fullName) {
+        var name = fullName.Replace('+', '.');
+        var dot = name.LastIndexOf('.');
+        var head = dot >= 0 ? name[(dot + 1)..] : name;
+        var tick = head.IndexOf('`');
+        return tick >= 0 ? head[..tick] : head;
+    }
+
+    /// <summary>The C# spelling of a type named in an argument position: a keyword for a primitive, an array's
+    /// element spelling, or the full name.</summary>
+    private static string ArgumentSpelling(string fullName) {
+        if (fullName.EndsWith("[]", StringComparison.Ordinal))
+            return ArgumentSpelling(fullName[..^2]) + "[]";
+        return fullName switch {
+            "System.Boolean" => "bool",
+            "System.Byte" => "byte",
+            "System.SByte" => "sbyte",
+            "System.Int16" => "short",
+            "System.UInt16" => "ushort",
+            "System.Int32" => "int",
+            "System.UInt32" => "uint",
+            "System.Int64" => "long",
+            "System.UInt64" => "ulong",
+            "System.Single" => "float",
+            "System.Double" => "double",
+            "System.Decimal" => "decimal",
+            "System.Char" => "char",
+            "System.String" => "string",
+            "System.Object" => "object",
+            _ => EscapeTypeName(fullName.Replace('+', '.'))
+        };
+    }
 
     private string ParamsText(IReadOnlyList<Parameter>? parameters) =>
         Render("params", "list", ParamListText(parameters));

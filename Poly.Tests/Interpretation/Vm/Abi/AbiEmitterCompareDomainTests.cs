@@ -557,7 +557,7 @@ public class AbiEmitterCompareDomainTests {
         return context.TypeDefinitions;
     }
 
-    private static MethodDefinitionNode Stamp(string name, TypeReference returns, Node value, long mark) =>
+    private static MethodDefinitionNode Stamp(string name, Node returns, Node value, long mark) =>
         new(
             name,
             returns,

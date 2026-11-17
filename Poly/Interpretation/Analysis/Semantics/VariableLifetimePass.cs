@@ -367,7 +367,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
             return false;
         if (!DottedTypeNames.TryResolveType(context, member, out var clr))
             return false;
-        context.SetNodeReplacement(member, new ClrTypeReference(clr.RuntimeType));
+        context.SetNodeReplacement(member, new TypeDefinitionReference(clr));
         context.SetResolvedType(member, clr);
         return true;
     }

@@ -608,6 +608,10 @@ public sealed class CSharpWriter {
 
     /// <summary>A CLR type's own name with the reflection nesting separator written as the dot
     /// C# requires: <c>Outer+Inner</c> is <c>Outer.Inner</c>.</summary>
+    /// <summary>The text a CLR type reference prints as: a C# spelling for a generic or <c>object</c>, a full name otherwise.</summary>
+    private static string ClrTypeReferenceText(Type type) =>
+        type.IsGenericType || type == typeof(object) ? ToCSharpTypeName(type) : EscapeTypeName(ClrTypeName(type));
+
     private static string ClrTypeName(Type type) => (type.FullName ?? type.Name).Replace('+', '.');
 
     private string IfText(IfStatement ifStmt, int indent) {
@@ -1645,8 +1649,8 @@ public sealed class CSharpWriter {
 
     private string TypeText(Node type) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
-        ClrTypeReference c when c.RuntimeType.IsGenericType || c.RuntimeType == typeof(object) => ToCSharpTypeName(c.RuntimeType),
-        ClrTypeReference c => EscapeTypeName(ClrTypeName(c.RuntimeType)),
+        ClrTypeReference c => ClrTypeReferenceText(c.RuntimeType),
+        TypeDefinitionReference t when t.TypeDefinition is IClrTypeDefinition { RuntimeType: var clr } => ClrTypeReferenceText(clr),
         TypeDefinitionReference t => EscapeTypeName(t.TypeName),
         TypeReference t => EscapeTypeName(t.TypeName),
         NamedTypeReference n => EscapeTypeName(n.FullName) + (n.TypeArguments is { Count: > 0 }

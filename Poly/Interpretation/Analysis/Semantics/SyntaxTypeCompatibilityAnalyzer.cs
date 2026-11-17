@@ -654,7 +654,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         // through the word type (a nuint widening to double or decimal is unsigned; a decimal store is a handle).
         if (destDef is not null && srcDef is not null && !destDef.IsAssignableFrom(srcDef)
             && ClrBuiltInRules.NativeIntegerConversionFrom(destDef, srcDef) is ConversionOperatorKind.Implicit) {
-            var cast = new TypeCast(assignment.Value, new ClrTypeReference(priorType));
+            var cast = new TypeCast(assignment.Value, new TypeDefinitionReference(destDef));
             context.SetResolvedType(cast, destDef);
             var stated = assignment with { Value = cast };
             context.SetResolvedType(stated, destDef);
@@ -1122,10 +1122,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return invoke;
     }
 
-    private static Node TypeRef(ITypeDefinition def) =>
-        def is IClrTypeDefinition clr
-            ? new ClrTypeReference(clr.RuntimeType)
-            : new TypeDefinitionReference(def);
+    private static Node TypeRef(ITypeDefinition def) => new TypeDefinitionReference(def);
 
     private static void StampConversion(
         AnalysisContext context,

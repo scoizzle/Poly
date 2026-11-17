@@ -407,7 +407,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             if (DottedTypeNames.TryResolveType(context, memberAccess, out var clr)) {
                 // Rewrite this member node to the type; the access above it becomes a
                 // static member access (the emitter follows the replacement).
-                var typeRef = new ClrTypeReference(clr.RuntimeType);
+                var typeRef = new TypeDefinitionReference(clr);
                 context.SetNodeReplacement(memberAccess, typeRef);
                 context.SetResolvedType(memberAccess, clr);
                 return clr;

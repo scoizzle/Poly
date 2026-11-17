@@ -92,6 +92,20 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     }
 
     /// <summary>
+    /// Every definition the providers hold, each listed once by identity.
+    /// </summary>
+    public IEnumerable<ITypeDefinition> Types =>
+        _providers.SelectMany(static provider => provider.Types)
+            .Distinct(IdenticalDefinition.Instance);
+
+    /// <summary>Identity, so one definition reached through two providers is listed once.</summary>
+    private sealed class IdenticalDefinition : IEqualityComparer<ITypeDefinition> {
+        public static readonly IdenticalDefinition Instance = new();
+        public bool Equals(ITypeDefinition? x, ITypeDefinition? y) => ReferenceEquals(x, y);
+        public int GetHashCode(ITypeDefinition definition) => RuntimeHelpers.GetHashCode(definition);
+    }
+
+    /// <summary>
     /// Resolves a primitive by querying providers from top to bottom. Returns null when none holds it.
     /// </summary>
     public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) {

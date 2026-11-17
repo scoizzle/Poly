@@ -32,6 +32,7 @@ public class AnalyzerBuilderTests {
         public ITypeDefinition? GetTypeDefinition(string name) => null;
         public ITypeDefinition? GetTypeDefinition(Type type) => null;
         public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
+        public IEnumerable<ITypeDefinition> Types => [];
     }
 
     private sealed class TrackingTypeDefinitionProvider(ITypeDefinitionProvider innerProvider) : IClrTypeDefinitionProvider {
@@ -48,5 +49,7 @@ public class AnalyzerBuilderTests {
 
         public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) =>
             innerProvider.GetTypeDefinition(primitiveTypeId);
+
+        public IEnumerable<ITypeDefinition> Types => innerProvider.Types;
     }
 }

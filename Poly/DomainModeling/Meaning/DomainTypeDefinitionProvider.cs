@@ -49,6 +49,9 @@ internal sealed class DomainTypeDefinitionProvider : IClrTypeDefinitionProvider 
 
     public ITypeDefinition? GetTypeDefinition(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
+    /// <summary>The synthetic declarations this provider has built so far.</summary>
+    public IEnumerable<ITypeDefinition> Types => _synthetic.Values;
+
     public ITypeDefinition? GetTypeDefinition(Poly.Introspection.PrimitiveType primitiveTypeId) =>
         ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(primitiveTypeId);
 

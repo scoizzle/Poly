@@ -31,6 +31,10 @@ internal sealed class ClrTypeDefinitionRegistry : IClrTypeDefinitionProvider {
     /// </summary>
     public ClrTypeDefinition GetTypeDefinition<T>() => GetTypeDefinition(typeof(T));
 
+    /// <summary>The definitions this registry has resolved so far. The CLR's universe is open, so this is a cache
+    /// snapshot, never a claim that no other CLR type exists.</summary>
+    public IEnumerable<ITypeDefinition> Types => _types.Values;
+
     /// <summary>
     /// Gets the definition a primitive id names in the CLR, or null when it names no CLR type.
     /// </summary>

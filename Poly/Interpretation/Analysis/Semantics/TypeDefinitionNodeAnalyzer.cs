@@ -63,6 +63,9 @@ internal sealed class AstTypeRegistry : ITypeDefinitionProvider, ITypeDefinition
 
     public IEnumerable<ITypeDefinition> GetTypeDefinitions() => _types.Values;
 
+    /// <summary>The declarations this registry holds.</summary>
+    public IEnumerable<ITypeDefinition> Types => _types.Values;
+
     /// <summary>The declarations this analysis registered, so a compile can put
     /// them and the root in one unit.</summary>
     public IEnumerable<TypeDefinitionNode> GetTypeDefinitionNodes() =>

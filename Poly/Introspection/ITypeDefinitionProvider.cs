@@ -20,6 +20,13 @@ public interface ITypeDefinitionProvider {
     ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId);
 
     /// <summary>
+    /// Gets the definitions this provider holds now. Not a claim of completeness: a platform with an open universe (the
+    /// CLR) lists what it has resolved so far, and a declaration registry lists what it declares. A consumer that needs
+    /// "every type this session knows" enumerates the composed provider instead of supplying candidates itself.
+    /// </summary>
+    IEnumerable<ITypeDefinition> Types { get; }
+
+    /// <summary>
     /// Creates a thread-safe deferred resolver for a named type that throws if not found.
     /// </summary>
     /// <param name="name">Fully-qualified type name to resolve.</param>

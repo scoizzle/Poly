@@ -72,6 +72,10 @@ Resolves type definitions:
 - `GetTypeDefinition(PrimitiveType primitiveTypeId)` — the provider answers for its own primitives. There is no
   default body: a platform with no CLR types must not inherit the CLR's answer, and the shared `PrimitiveType`
   vocabulary is not a CLR map.
+- `Types` — the definitions the provider holds now. Not a claim of completeness: the CLR registry lists what it has
+  resolved so far (its universe is open), a declaration registry lists what it declares, and a composed provider lists
+  each definition once by identity. A consumer that needs "every type this session knows" enumerates the composed
+  provider instead of supplying candidates itself.
 - `GetDeferredTypeDefinitionResolver(string name)`
 
 The runtime-`Type` handle is **not** on this contract. A provider that has CLR types also implements

@@ -185,6 +185,35 @@ public class TypeDefinitionProviderCollectionTests {
         await Assert.That(provider.GetTypeDefinition(PrimitiveType.Decimal)).IsNull();
     }
 
+    [Test]
+    public async Task ComposedProvider_EnumeratesWhatItsPartsHold() {
+        // I2: one enumeration over the stack, each definition once by identity.
+        var modeled = new MockTypeDefinitionProvider();
+        var money = new MockTypeDefinition("Money");
+        modeled.AddType("Money", money);
+        var registry = new ClrTypeDefinitionRegistry();
+        var collection = new TypeDefinitionProviderCollection(modeled, registry);
+        collection.AddFallback(modeled);
+
+        var before = collection.Types.ToArray();
+
+        await Assert.That(before).Contains(money);
+        await Assert.That(before.Count(candidate => ReferenceEquals(candidate, money))).IsEqualTo(1);
+        // A fresh registry holds nothing until it is asked.
+        await Assert.That(before.Any(candidate => candidate.GetRuntimeType() == typeof(int))).IsFalse();
+
+        collection.GetTypeDefinition(typeof(int));
+
+        await Assert.That(collection.Types.Any(candidate => candidate.GetRuntimeType() == typeof(int))).IsTrue();
+    }
+
+    [Test]
+    public async Task NeutralProviderContract_ExposesTheTypesItHolds() {
+        // I2: a consumer can enumerate what a provider holds, so a derived question ("what converts to X", "what
+        // implements Y") stops needing a caller-supplied universe.
+        await Assert.That(typeof(ITypeDefinitionProvider).GetProperty("Types")).IsNotNull();
+    }
+
     private sealed class NoClrTypeProvider : ITypeDefinitionProvider {
         public ITypeDefinition? GetTypeDefinition(string name) => null;
 
@@ -192,6 +221,7 @@ public class TypeDefinitionProviderCollectionTests {
             throw new NotSupportedException("This platform has no CLR types.");
 
         public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
+        public IEnumerable<ITypeDefinition> Types => [];
     }
 
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {
@@ -210,5 +240,6 @@ public class TypeDefinitionProviderCollectionTests {
         }
 
         public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
+        public IEnumerable<ITypeDefinition> Types => _types.Values;
     }
 }

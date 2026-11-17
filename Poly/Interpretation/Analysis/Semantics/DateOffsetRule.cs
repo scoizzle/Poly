@@ -1,5 +1,7 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
+using Poly.Introspection;
+
 /// <summary>
 /// Interim rule (T-10 removes it): <c>Date + number</c> and <c>Date - number</c> add days. The type provider defines no
 /// operator for the pair, so the compatibility analyzer rewrites the node to <c>AddDays</c> (a date of the left type) and
@@ -9,8 +11,8 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// </summary>
 internal static class DateOffsetRule {
     /// <summary>True when <paramref name="kind"/> is Add or Subtract, <paramref name="left"/> is a date type and <paramref name="right"/> a number.</summary>
-    public static bool Applies(OperatorKind kind, Type left, Type right) =>
+    public static bool Applies(OperatorKind kind, ITypeDefinition left, ITypeDefinition right) =>
         kind is OperatorKind.Add or OperatorKind.Subtract
         && SyntaxTypeCompatibilityAnalyzer.IsDateCategory(left) && SyntaxTypeCompatibilityAnalyzer.IsNumberCategory(right)
-        && !(Nullable.GetUnderlyingType(left) is null && right == typeof(decimal));
+        && !(left.NullableOf is null && right.PrimitiveType is PrimitiveType.Decimal);
 }

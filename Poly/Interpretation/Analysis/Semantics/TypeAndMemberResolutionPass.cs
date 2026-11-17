@@ -351,8 +351,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                 || context.GetEffectiveNode(left) is Constant { Value: nuint } || context.GetEffectiveNode(right) is Constant { Value: nuint };
             result = context.TypeDefinitions.GetTypeDefinition(native ? typeof(nuint) : typeof(ulong));
         }
-        else if (leftType.GetRuntimeType() is { } leftRuntime && rightType.GetRuntimeType() is { } rightRuntime
-            && DateOffsetRule.Applies(kind, leftRuntime, rightRuntime))
+        else if (DateOffsetRule.Applies(kind, leftType, rightType))
             result = leftUnderlying;
         else
             result = leftUnderlying.GetOperator(kind, rightUnderlying)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying);

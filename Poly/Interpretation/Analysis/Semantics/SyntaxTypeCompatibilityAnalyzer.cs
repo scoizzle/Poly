@@ -65,8 +65,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             [typeof(TypeAs)] = static (a, c, n) => a.CheckTypeAs(c, (TypeAs)n),
             [typeof(New)] = static (a, c, n) => a.CheckNew(c, (New)n),
             [typeof(Not)] = static (a, c, n) => {
-                var operand = ClrTypeOf(c, ((Not)n).Value);
-                if (operand is not null && operand != typeof(bool) && CategoryOf(operand) is not (Cat.Unknown or Cat.Null))
+                var operand = DefinitionOf(c, ((Not)n).Value);
+                if (operand is not null && operand.PrimitiveType is not PrimitiveType.Boolean
+                    && CategoryOf(operand) is not (Cat.Unknown or Cat.Null))
                     a.Report(c, n, $"'not' requires a Boolean operand (got '{operand.Name}')");
             },
             [typeof(And)] = static (a, c, n) => { var x = (And)n; a.CheckBooleanOperands(c, x.LeftHandValue, x.RightHandValue); },
@@ -156,10 +157,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
 
         // Date-offset fence (T-10): the interim DateOffsetRule, which the resolver reads for the offset's stamp too.
-        if (left is not null && right is not null && DateOffsetRule.Applies(kind, left, right)) {
+        if (DateOffsetRule.Applies(kind, leftDefinition, rightDefinition)) {
             if (!RewriteDateOffset(context, parent, leftNode, rightNode, negate: kind is OperatorKind.Subtract))
                 Report(context, leftNode,
-                    $"temporal offset requires a date type with AddDays (got '{left.Name}')");
+                    $"temporal offset requires a date type with AddDays (got '{leftDefinition.Name}')");
             return;
         }
 
@@ -177,11 +178,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                     Report(context, leftNode, noOperator);
                 return;
             }
-            if (left is not null && right is not null && NullableDateRule(left, right)) {
+            if (NullableDateRule(leftDefinition, rightDefinition)) {
                 Report(context, leftNode, incompatible);
                 return;
             }
-            if (left is not null && right is not null && TextAndBooleanOrderingRule(kind, left, right))
+            if (TextAndBooleanOrderingRule(kind, leftDefinition, rightDefinition))
                 return;
         }
 
@@ -313,22 +314,23 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// (<c>DateOnly?</c> beside <c>DateOnly</c>) is C#'s lifted comparison and runs. Interim: removed with its cells in
     /// <c>KnownInterimRules</c> by row T-21b, when the VM converts in a nullable compare.
     /// </summary>
-    private static bool NullableDateRule(Type left, Type right) =>
+    private static bool NullableDateRule(ITypeDefinition left, ITypeDefinition right) =>
         (IsNullableDate(left) || IsNullableDate(right))
-        && (Nullable.GetUnderlyingType(left) ?? left) != (Nullable.GetUnderlyingType(right) ?? right);
+        && !TypeDefinitionExtensions.IsSameType(left.NullableOf ?? left, right.NullableOf ?? right);
 
-    private static bool IsNullableDate(Type type) =>
-        Nullable.GetUnderlyingType(type) is { } underlying && CategoryOf(underlying) is Cat.Date;
+    private static bool IsNullableDate(ITypeDefinition definition) =>
+        definition.NullableOf is { } underlying && CategoryOf(underlying) is Cat.Date;
 
     /// <summary>
     /// Ordering of two exact <c>string</c> or two exact <c>bool</c> operands: the DSL accepts it and the interpreter
     /// orders Text (the emitter refuses Boolean ordering itself); the provider defines neither. Removed by T-07 (#631).
     /// </summary>
-    private static bool TextAndBooleanOrderingRule(OperatorKind kind, Type left, Type right) {
+    private static bool TextAndBooleanOrderingRule(OperatorKind kind, ITypeDefinition left, ITypeDefinition right) {
         if (kind is not (OperatorKind.LessThan or OperatorKind.LessThanOrEqual or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual))
             return false;
-        var (l, r) = (Nullable.GetUnderlyingType(left) ?? left, Nullable.GetUnderlyingType(right) ?? right);
-        return l == r && (l == typeof(string) || l == typeof(bool));
+        var (l, r) = (left.NullableOf ?? left, right.NullableOf ?? right);
+        return TypeDefinitionExtensions.IsSameType(l, r)
+            && l.PrimitiveType is PrimitiveType.String or PrimitiveType.Boolean;
     }
 
     /// <summary>
@@ -339,11 +341,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static bool VmExecutesDeclaredOperator(ITypeOperator resolution) =>
         resolution.Method is null
         || (resolution.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
-
-    /// <summary>True when the type takes part in a cast as a number. <c>char</c> is
-    /// <see cref="Cat.Text"/> (string concatenation needs that) but converts as a number, as in C#.
-    /// Only <see cref="CheckTypeCast"/> reads it; removed by T-28.</summary>
-    private static bool IsNumericLike(Type t) => t == typeof(char) || CategoryOf(t) is Cat.Number;
 
     private void CheckTypeAs(AnalysisContext context, TypeAs typeAs) {
         var target = ClrTypeOf(context, typeAs)
@@ -373,8 +370,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
     private void CheckBooleanOperands(AnalysisContext context, Node leftNode, Node rightNode) {
-        var left = ClrTypeOf(context, leftNode);
-        var right = ClrTypeOf(context, rightNode);
+        var left = DefinitionOf(context, leftNode);
+        var right = DefinitionOf(context, rightNode);
         if (left is null || right is null) return;
         var lc = CategoryOf(left);
         var rc = CategoryOf(right);
@@ -685,15 +682,16 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (target is null || rhs is null) return;
         var destDef = context.TypeDefinitions.GetTypeDefinition(target);
         var srcDef = context.TypeDefinitions.GetTypeDefinition(rhs);
-        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef)) {
+        if (destDef is null || srcDef is null) return;
+        if (destDef.IsAssignableFrom(srcDef)) {
             RewriteAssignmentConversion(context, assignment, destDef, srcDef);
             return;
         }
-        var tc = CategoryOf(target);
-        var rc = CategoryOf(rhs);
+        var tc = CategoryOf(destDef);
+        var rc = CategoryOf(srcDef);
         if (tc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
         if (tc is Cat.Enum && rc is Cat.Text) return;
-        if (!AssignCategoryRule(tc, target, rc, rhs))
+        if (!AssignCategoryRule(tc, destDef, rc, srcDef))
             Report(context, destination,
                 $"cannot assign '{rhs.Name}' to '{destination.MemberName}' (type '{target.Name}')");
     }
@@ -722,11 +720,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 return;
             if (srcDef.IsAssignableFrom(destDef))
                 return;
-            var srcCat = source is not null ? CategoryOf(source) : Cat.Unknown;
-            var destCat = dest is not null ? CategoryOf(dest)
-                : destDef is IClrTypeDefinition cd ? CategoryOf(cd.RuntimeType) : Cat.Unknown;
-            bool srcNumeric = source is not null && IsNumericLike(source);
-            bool destNumeric = dest is not null && IsNumericLike(dest);
+            var srcCat = CategoryOf(srcDef);
+            var destCat = CategoryOf(destDef);
+            bool srcNumeric = IsNumericLike(srcDef);
+            bool destNumeric = IsNumericLike(destDef);
             if ((srcNumeric && destNumeric)
                 || (srcCat is Cat.Enum && destNumeric)
                 || (srcNumeric && destCat is Cat.Enum)) {
@@ -738,36 +735,36 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                     return;
             }
         }
-        if (source is null || dest is null || source == dest)
+        if (srcDef is null || destDef is null)
+            return;
+        if (TypeDefinitionExtensions.IsSameType(srcDef, destDef))
             return;
 
-        var sc = CategoryOf(source);
-        var dc = CategoryOf(dest);
+        var sc = CategoryOf(srcDef);
+        var dc = CategoryOf(destDef);
         if (sc is Cat.Unknown or Cat.Null || dc is Cat.Unknown or Cat.Null)
             return;
         if (sc is Cat.Number && dc is Cat.Number) {
             if (UncheckedIntegerCast(typeCast, srcDef, destDef))
                 return;
-            if (destDef is not null && srcDef is not null
-                && TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
+            if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                 return;
             Report(context, typeCast,
-                $"cannot convert '{source.Name}' to '{dest.Name}'");
+                $"cannot convert '{srcDef.Name}' to '{destDef.Name}'");
             return;
         }
         if (dc is Cat.Enum && sc is Cat.Number)
             return;
         if (sc is Cat.Enum && dc is Cat.Number) {
-            if (destDef is not null && srcDef is not null
-                && TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
+            if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                 return;
             Report(context, typeCast,
-                $"cannot convert '{source.Name}' to '{dest.Name}'");
+                $"cannot convert '{srcDef.Name}' to '{destDef.Name}'");
             return;
         }
 
         Report(context, typeCast,
-            $"cannot convert '{source.Name}' to '{dest.Name}'");
+            $"cannot convert '{srcDef.Name}' to '{destDef.Name}'");
     }
 
     private void RewriteInvokeArgumentConversions(AnalysisContext context, Invoke invoke) {
@@ -1144,7 +1141,16 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private void Report(AnalysisContext context, Node node, string message) =>
         context.ReportError(node, message, DiagnosticCode);
 
-    private enum Cat { Text, Number, Boolean, Date, Enum, Guid, Null, Unknown }
+    internal enum Cat { Text, Number, Boolean, Date, Enum, Guid, Null, Unknown }
+
+    /// <summary>The definition a node's type resolves to, or null. Constants resolve through their value's type.</summary>
+    private static ITypeDefinition? DefinitionOf(AnalysisContext context, Node node) {
+        var effective = context.GetNodeReplacement(node) ?? node;
+        return context.GetResolvedType(effective)
+            ?? (effective is Constant { Value: not null } constant
+                ? context.TypeDefinitions.GetClrTypeDefinition(constant.Value.GetType())
+                : null);
+    }
 
     private static Type? ClrTypeOf(AnalysisContext context, Node node) {
         var effective = context.GetNodeReplacement(node) ?? node;
@@ -1154,37 +1160,55 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 : null);
     }
 
-    /// <summary>True for a CLR date, time or timestamp type (the Date category), nullable included.</summary>
-    internal static bool IsDateCategory(Type type) => CategoryOf(type) is Cat.Date;
-
-    /// <summary>True for a CLR numeric primitive or decimal (the Number category), nullable included.</summary>
-    internal static bool IsNumberCategory(Type type) => CategoryOf(type) is Cat.Number;
-
-    private static Cat CategoryOf(Type type) {
-        if (type == typeof(bool)) return Cat.Boolean;
-        if (type == typeof(string) || type == typeof(char)) return Cat.Text;
-        if (type == typeof(DateTime) || type == typeof(DateTimeOffset)
-            || type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan))
-            return Cat.Date;
-        if (type.IsEnum) return Cat.Enum;
-        if (type == typeof(Guid)) return Cat.Guid;
-        if (type.IsPrimitive || type == typeof(decimal)) return Cat.Number;
-        if (type.IsValueType && Nullable.GetUnderlyingType(type) is { } underlying)
-            return CategoryOf(underlying);
-        return Cat.Unknown;
+    /// <summary>
+    /// The category a definition belongs to, read from the platform's answers (<see cref="ITypeDefinition.PrimitiveType"/>,
+    /// <see cref="ITypeDefinition.Kind"/> and <see cref="ITypeDefinition.NullableOf"/>) instead of a CLR runtime type.
+    /// A host primitive the shared vocabulary does not name is <see cref="Cat.Unknown"/>: this table classifies, it does
+    /// not decide what a host's type is.
+    /// </summary>
+    internal static Cat CategoryOf(ITypeDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+        var underlying = definition.NullableOf ?? definition;
+        return underlying.PrimitiveType switch {
+            PrimitiveType.Boolean => Cat.Boolean,
+            PrimitiveType.String or PrimitiveType.Char => Cat.Text,
+            PrimitiveType.DateTime or PrimitiveType.DateTimeOffset or PrimitiveType.DateOnly
+                or PrimitiveType.TimeOnly or PrimitiveType.TimeSpan => Cat.Date,
+            PrimitiveType.Guid => Cat.Guid,
+            PrimitiveType.Int8 or PrimitiveType.Int16 or PrimitiveType.Int32 or PrimitiveType.Int64
+                or PrimitiveType.UInt8 or PrimitiveType.UInt16 or PrimitiveType.UInt32 or PrimitiveType.UInt64
+                or PrimitiveType.Float32 or PrimitiveType.Float64 or PrimitiveType.Decimal
+                or PrimitiveType.NInt or PrimitiveType.NUInt => Cat.Number,
+            null when underlying.Kind == TypeKind.Enum => Cat.Enum,
+            _ => Cat.Unknown
+        };
     }
 
+    /// <summary>True for the date, time and timestamp primitives (the Date category), nullable included.</summary>
+    internal static bool IsDateCategory(ITypeDefinition definition) => CategoryOf(definition) is Cat.Date;
+
+    internal static bool IsNumberCategory(ITypeDefinition definition) => CategoryOf(definition) is Cat.Number;
+
+    /// <summary>A timestamp is exactly <c>DateTime</c> or <c>DateTimeOffset</c>; a nullable form is not one, as before.</summary>
+    internal static bool IsTimestamp(ITypeDefinition definition) =>
+        definition.PrimitiveType is PrimitiveType.DateTime or PrimitiveType.DateTimeOffset;
+
+    /// <summary>A number for a cast: <c>char</c> is <see cref="Cat.Text"/> but converts as a number, and so does a number;
+    /// a nullable <c>char</c> is not numeric, as before.</summary>
+    internal static bool IsNumericLike(ITypeDefinition definition) =>
+        definition.PrimitiveType is PrimitiveType.Char || CategoryOf(definition) is Cat.Number;
+
     /// <summary>Member assignment by CLR-type category, as before T-18 (no provider verdict yet). Removed by T-27.</summary>
-    private static bool AssignCategoryRule(Cat lc, Type left, Cat rc, Type right) {
+    private static bool AssignCategoryRule(Cat lc, ITypeDefinition left, Cat rc, ITypeDefinition right) {
         if (lc == rc && lc is not Cat.Date) return true;
         if (lc == rc && lc is Cat.Date)
-            return left == right || (IsClrTimestamp(left) && IsClrTimestamp(right));
+            return TypeDefinitionExtensions.IsSameType(left, right) || (IsTimestamp(left) && IsTimestamp(right));
         if (lc is Cat.Enum && rc is Cat.Text) return true;
         if (rc is Cat.Enum && lc is Cat.Text) return true;
         return false;
     }
 
-    private static bool IsClrTimestamp(Type type) =>
+    internal static bool IsClrTimestamp(Type type) =>
         type == typeof(DateTime) || type == typeof(DateTimeOffset);
 }
 

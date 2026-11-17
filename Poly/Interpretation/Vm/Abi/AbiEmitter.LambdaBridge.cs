@@ -603,7 +603,7 @@ public static partial class AbiEmitter {
             instance = CompilePureNode(member.Value, ctx);
         }
 
-        if (resolved.EmitRead(instance) is { } read)
+        if (EmitMemberRead(resolved, instance) is { } read)
             return read;
         if (resolved is ClrMethod { MethodInfo: { } method }
             && method.GetParameters().Length == 0

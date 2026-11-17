@@ -2,7 +2,7 @@ using System.Globalization;
 
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Meaning;
-using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
 
 using Prim = Poly.Introspection.PrimitiveType;

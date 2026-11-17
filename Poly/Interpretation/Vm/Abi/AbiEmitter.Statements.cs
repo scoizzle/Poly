@@ -99,12 +99,12 @@ public static partial class AbiEmitter {
                     Convert(valueSlot.Read, typeof(int)));
             }
 
-            var writeExpr = resolved.EmitWrite(instanceObj, writeValue);
+            var writeExpr = EmitMemberWrite(resolved, instanceObj, writeValue);
             var outSlot = ctx.Reserve();
             ctx.RingDepth = outSlot.RingSlot + 1;
             return ring.Then(Block(
                 writeExpr ?? throw new NotSupportedException(
-                    $"Member '{member.MemberName}' does not support EmitWrite"),
+                    $"Member '{member.MemberName}' has no write in this VM"),
                 Assign(outSlot.Read, valueSlot.Read)));
         }
 

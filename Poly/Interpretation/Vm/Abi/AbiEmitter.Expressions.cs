@@ -475,9 +475,8 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>Emit the resolved member access expression and store the result
-    /// on the ring.  Uses the member's <see cref="ITypeMember.EmitRead"/> hook so
-    /// the emitter stays provider-agnostic — CLR types, AST-backed types, and
-    /// future provider types each return their own expression trees.</summary>
+    /// on the ring. Read policy is the emitter's (<see cref="EmitMemberRead"/>):
+    /// the member states what it is, the ABI owns how this VM reads it.</summary>
     private static Expression EmitResolvedMember(
         ITypeMember resolved,
         Expression? instanceObj,
@@ -485,10 +484,9 @@ public static partial class AbiEmitter {
         Context ctx,
         Expression instanceExpr) {
 
-        // Polymorphic EmitRead — each ITypeMember implementation provides its
-        // own expression tree. CLR properties use Property(inst, propInfo),
-        // AST properties use Dictionary indexer, fields use Field(inst, fieldInfo).
-        if (resolved.EmitRead(instanceObj) is Expression readExpr) {
+        // The storage policy for the member's kind: a CLR field/property reads the
+        // object, a modeled member reads its keyed bag.
+        if (EmitMemberRead(resolved, instanceObj) is Expression readExpr) {
             return Block(instanceExpr, StoreOnRing(ctx, resultSlot,
                 ConvertMemberResult(readExpr, resolved, ctx)));
         }

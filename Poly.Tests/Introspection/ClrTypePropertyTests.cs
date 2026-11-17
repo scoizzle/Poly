@@ -8,6 +8,10 @@ public class ClrTypePropertyTests {
         public int Value { get; init; }
     }
 
+    private sealed class WriteOnlyPropertyHolder {
+        public int Value { set { } }
+    }
+
     [Test]
     public async Task LengthProperty_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
@@ -68,5 +72,16 @@ public class ClrTypePropertyTests {
         await Assert.That(valueProperty!.CanRead).IsTrue();
         await Assert.That(valueProperty.CanWrite).IsFalse();
         await Assert.That(valueProperty.CanInitialize).IsTrue();
+    }
+
+    [Test]
+    public async Task WriteOnlyProperty_CanReadIsFalse() {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var type = registry.GetTypeDefinition<WriteOnlyPropertyHolder>();
+        var valueProperty = type.Properties.WithName("Value").SingleOrDefault() as ClrTypeProperty;
+
+        await Assert.That(valueProperty).IsNotNull();
+        await Assert.That(valueProperty!.CanRead).IsFalse();
+        await Assert.That(valueProperty.CanWrite).IsTrue();
     }
 }

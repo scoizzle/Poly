@@ -30,6 +30,8 @@ internal sealed class ClrTypeSyntheticProperty : ClrPropertyMember {
     public override IEnumerable<ClrParameter> Parameters => _parameters;
     public override string Name => _name;
 
+    public override MemberKind Kind => _parameters.Length > 0 ? MemberKind.Indexer : MemberKind.Property;
+
 
     public override AccessModifier AccessModifier => AccessModifier.Public;
     public override LifetimeModifier LifetimeModifier => _isStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;

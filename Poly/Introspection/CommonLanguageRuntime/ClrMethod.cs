@@ -40,6 +40,8 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
 
     public override string Name { get; }
 
+    public override MemberKind Kind => MemberKind.Method;
+
     /// <summary>
     /// Gets the underlying reflection <see cref="MethodInfo"/>.
     /// </summary>

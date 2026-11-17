@@ -69,11 +69,16 @@ nothing in the Root-adjacent contract says how a platform spells one.
 Resolves type definitions:
 
 - `GetTypeDefinition(string name)`
-- `GetTypeDefinition(Type type)`
 - `GetTypeDefinition(PrimitiveType primitiveTypeId)` — the provider answers for its own primitives. There is no
   default body: a platform with no CLR types must not inherit the CLR's answer, and the shared `PrimitiveType`
   vocabulary is not a CLR map.
 - `GetDeferredTypeDefinitionResolver(string name)`
+
+The runtime-`Type` handle is **not** on this contract. A provider that has CLR types also implements
+`IClrTypeDefinitionProvider` (`GetTypeDefinition(Type)`); a consumer asks through `GetClrTypeDefinition`, which
+answers null for a host with no CLR types. The neutral contract therefore asks only questions every platform can
+answer, and `TypeDefinitionRuntimeTypeExtensions` (the `ITypeDefinition -> Type?` view) lives in
+`CommonLanguageRuntime/` with it.
 
 Platform encodings of the primitive vocabulary live with the platform, not on the enum: the CLR's `Type` maps are
 `CommonLanguageRuntime/ClrPrimitiveTypes` (`GetClrType`, `GetPrimitiveType`), and C#'s keywords are
@@ -88,7 +93,9 @@ A definition answers what its platform defines. Conversions answer through the i
 `ResolveOperator(kind, right)` (#942): which operators are candidates and how one is chosen is the platform's rule, not
 the root's. `GetOperator(kind, right)` (`TypeDefinitionOperatorExtensions`) is the consumer door: it checks the arity
 and delegates. `GetCommonType(types)` is the unique type the others identically or implicitly convert to. Optionality is
-the caller's (T-06).
+the caller's (T-06). Shapes are platform answers: `ITypeDefinition.IsCollectionShape` and `SequenceElementType` are
+stated by each platform (the CLR's from its representation, a modeled collection's from its definition), and
+`GetElementType` stays neutral — it prefers an indexer, then asks the platform for the sequence element.
 
 - **.NET rules** live in `CommonLanguageRuntime/`. `ClrOperatorResolution` is C#'s selection (12.4.4, 12.4.5):
   candidates are the operators either operand offers beside the other (a CLR definition's are pair-aware,

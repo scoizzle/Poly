@@ -6,6 +6,7 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 

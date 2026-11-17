@@ -34,7 +34,7 @@ public class AnalyzerBuilderTests {
         public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
     }
 
-    private sealed class TrackingTypeDefinitionProvider(ITypeDefinitionProvider innerProvider) : ITypeDefinitionProvider {
+    private sealed class TrackingTypeDefinitionProvider(ITypeDefinitionProvider innerProvider) : IClrTypeDefinitionProvider {
         private readonly List<Type> _requestedTypes = new();
 
         public IReadOnlyList<Type> RequestedTypes => _requestedTypes;
@@ -43,7 +43,7 @@ public class AnalyzerBuilderTests {
 
         public ITypeDefinition? GetTypeDefinition(Type type) {
             _requestedTypes.Add(type);
-            return innerProvider.GetTypeDefinition(type);
+            return innerProvider.GetClrTypeDefinition(type);
         }
 
         public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) =>

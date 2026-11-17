@@ -34,7 +34,7 @@ internal static class OperatorOperands {
 }
 
 /// <summary>Modeled definitions declared by hand, so a test controls every operator and conversion member.</summary>
-internal sealed class ModeledTypeSet : ITypeDefinitionProvider {
+internal sealed class ModeledTypeSet : IClrTypeDefinitionProvider {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
     public AstTypeDefinition Add(string name, params MethodDefinitionNode[] methods) {

@@ -106,9 +106,6 @@ internal sealed class AstTypeRegistry : ITypeDefinitionProvider, ITypeDefinition
         return null;
     }
 
-    public ITypeDefinition? GetTypeDefinition(Type type) =>
-        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
-
     /// <summary>A registry of declarations holds no primitives: a composed provider resolves those.</summary>
     public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
 }
@@ -281,6 +278,9 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
             method.DefinitionNode.Conversion!.Value, method));
 
     ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
+
+    bool ITypeDefinition.IsCollectionShape => false;
+    ITypeDefinition? ITypeDefinition.SequenceElementType => null;
 
     // AST-based types are dictionary-backed at runtime
     public Type RuntimeType => typeof(IDictionary<string, object>);
@@ -596,7 +596,7 @@ internal static class AstTypeReferenceResolver {
             MapTypeReference map => ResolveMap(map, provider, clr, enclosing),
             UnionTypeReference union => ResolveUnion(union, provider, clr, enclosing),
             TypeDefinitionReference tdr => tdr.TypeDefinition,
-            ClrTypeReference clrRef => provider.GetTypeDefinition(clrRef.RuntimeType) ?? clr.GetTypeDefinition<object>(),
+            ClrTypeReference clrRef => provider.GetClrTypeDefinition(clrRef.RuntimeType) ?? clr.GetTypeDefinition<object>(),
             TypeReference tr => ResolveByName(tr.TypeName, provider, clr),
             _ => clr.GetTypeDefinition<object>()
         };
@@ -937,6 +937,8 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
+    bool ITypeDefinition.IsCollectionShape => true;
+    ITypeDefinition? ITypeDefinition.SequenceElementType => _item.MemberTypeDefinition;
     public PrimitiveType? PrimitiveType => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(System.Collections.IList);
@@ -1019,6 +1021,8 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
+    bool ITypeDefinition.IsCollectionShape => false;
+    ITypeDefinition? ITypeDefinition.SequenceElementType => null;
     public PrimitiveType? PrimitiveType => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(object);

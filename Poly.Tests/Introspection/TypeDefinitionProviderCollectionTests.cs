@@ -156,8 +156,24 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
+        bool ITypeDefinition.IsCollectionShape => false;
+        ITypeDefinition? ITypeDefinition.SequenceElementType => null;
         ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
         ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
+    }
+
+    [Test]
+    public async Task NeutralProviderContract_ExposesNoClrHandle() {
+        // A platform with no CLR types must not be asked to implement a member it cannot honour: the Type-based
+        // resolution is the CLR provider's, stated on its own interface.
+        var neutral = typeof(ITypeDefinitionProvider).GetMethods()
+            .Select(static method => $"{method.Name}({string.Join(",", method.GetParameters().Select(static p => p.ParameterType.Name))})")
+            .ToArray();
+        await Assert.That(neutral).DoesNotContain("GetTypeDefinition(Type)");
+        await Assert.That(typeof(IClrTypeDefinitionProvider).GetMethods()
+            .Any(static method => method.Name == "GetTypeDefinition"
+                && method.GetParameters() is [{ ParameterType: var parameterType }]
+                && parameterType == typeof(Type))).IsTrue();
     }
 
     [Test]

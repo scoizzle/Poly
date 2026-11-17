@@ -15,7 +15,7 @@ namespace Poly.DomainModeling.Meaning;
 /// <see cref="TypeMappingRegistry.ToClrTypeName"/> so pack overrides apply.
 /// Bound to one (<see cref="Domain"/>, <see cref="TypeMappingRegistry"/>) pair: a new session needs a new provider.
 /// </summary>
-internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
+internal sealed class DomainTypeDefinitionProvider : IClrTypeDefinitionProvider {
     private readonly Dictionary<string, DomainType> _types = new(StringComparer.Ordinal);
     private readonly TypeMappingRegistry _typeMaps;
     private readonly ConcurrentDictionary<string, ITypeDefinition> _synthetic = new(StringComparer.Ordinal);

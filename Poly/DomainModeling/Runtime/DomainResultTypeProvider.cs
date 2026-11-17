@@ -14,7 +14,7 @@ namespace Poly.DomainModeling.Runtime;
 /// is a real CLR throw. Entity type defs stay on
 /// <see cref="TypeDefinitionNodeAnalyzer"/>.
 /// </summary>
-internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : ITypeDefinitionProvider {
+internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : IClrTypeDefinitionProvider {
     public ITypeDefinition? GetTypeDefinition(string name) {
         if (string.Equals(name, "DomainResult", StringComparison.Ordinal))
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(Poly.Runtime.DomainResult));
@@ -32,7 +32,7 @@ internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : 
         return inner.GetTypeDefinition(name);
     }
 
-    public ITypeDefinition? GetTypeDefinition(Type type) => inner.GetTypeDefinition(type);
+    public ITypeDefinition? GetTypeDefinition(Type type) => inner.GetClrTypeDefinition(type);
 
     public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => inner.GetTypeDefinition(primitiveTypeId);
 

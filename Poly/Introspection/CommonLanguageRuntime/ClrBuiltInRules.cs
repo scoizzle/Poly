@@ -64,6 +64,27 @@ internal static class ClrBuiltInRules {
     private static bool IsIntegral(PrimitiveType type) => type is P.Int32 or P.UInt32 or P.Int64 or P.UInt64 or P.NInt or P.NUInt;
 
     /// <summary>
+    /// The conversion from <paramref name="source"/> to <paramref name="destination"/> when a native integer
+    /// (<c>nint</c> or <c>nuint</c>) meets another numeric primitive, or null when neither side is a native integer, a
+    /// side is not numeric, or the pair has no conversion. C# 11 applies these conversions itself, so a consumer
+    /// converts through the platform and never through a method the platform type declares beside them (IntPtr's
+    /// <c>op_Explicit</c> to <c>int</c> is checked; C#'s native conversion is not). A C# rule, so it lives here.
+    /// </summary>
+    public static ConversionOperatorKind? NativeIntegerConversionFrom(ITypeDefinition destination, ITypeDefinition source) {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(source);
+        if (destination.PrimitiveType is not { } to || source.PrimitiveType is not { } from
+            || !(IsNativeInteger(to) || IsNativeInteger(from)) || !IsNumeric(to) || !IsNumeric(from))
+            return null;
+        return destination.ResolveConversionFrom(source)?.Kind;
+
+        static bool IsNativeInteger(PrimitiveType type) => type is PrimitiveType.NInt or PrimitiveType.NUInt;
+
+        static bool IsNumeric(PrimitiveType type) => type.IsInteger() || IsNativeInteger(type)
+            || type is PrimitiveType.Char or PrimitiveType.Float32 or PrimitiveType.Float64 or PrimitiveType.Decimal;
+    }
+
+    /// <summary>
     /// Poly policy, permanent (owner ruling, #677, 2026-11-13; C# rejects, Poly defines): a shift count may be any built-in
     /// integer type. C# (§12.11) defines a shift only for a count that converts implicitly to <c>int</c>; this names the
     /// others, <c>long</c>, <c>uint</c>, <c>ulong</c>, <c>nint</c> and <c>nuint</c>. Their operator takes the count as its

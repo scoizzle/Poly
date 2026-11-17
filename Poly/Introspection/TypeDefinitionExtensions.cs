@@ -11,22 +11,6 @@ public enum ConversionOperatorKind {
 
 public static class TypeDefinitionExtensions {
     /// <summary>
-    /// True when <paramref name="type"/> exposes a sequence shape: a synthetic AST
-    /// collection, or a CLR type that is an array or closes <c>IEnumerable&lt;&gt;</c>
-    /// and is not itself a primitive (so <c>byte[]</c> stays binary). Used instead of
-    /// a category flag because a shape is structural, not a declaration.
-    /// </summary>
-    internal static bool IsCollectionShape(ITypeDefinition type) {
-        ArgumentNullException.ThrowIfNull(type);
-        return type is AstCollectionTypeDefinition
-            || (type is ClrTypeDefinition clr
-                && ((ITypeDefinition)clr).PrimitiveType is null
-                && (clr.RuntimeType.IsArray
-                    || clr.RuntimeType.GetInterfaces().Any(static i =>
-                        i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))));
-    }
-
-    /// <summary>
     /// The one type-identity notion: reference identity, two synthetic collections of one kind and element, or two
     /// resolutions of one generic parameter. Each resolve of a synthetic collection or a generic parameter builds a fresh
     /// instance, so reference equality alone never matches an omitted collection argument.
@@ -133,7 +117,7 @@ public static class TypeDefinitionExtensions {
                 .Select(static property => new {
                     Property = property,
                     Parameters = property.Parameters.ToArray(),
-                    ReturnsObject = property.MemberTypeDefinition.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(object)
+                    ReturnsObject = property.MemberTypeDefinition.PrimitiveType is PrimitiveType.Structure
                 })
                 .Where(candidate => candidate.Parameters.All(static parameter =>
                     parameter.ParameterTypeDefinition.PrimitiveType is { } primitive && primitive.IsInteger()))
@@ -141,23 +125,11 @@ public static class TypeDefinitionExtensions {
                 .ThenBy(candidate => candidate.ReturnsObject)
                 .FirstOrDefault();
 
-            if (positionalIndexer != null && TypeDefinitionExtensions.IsCollectionShape(typeDefinition)) {
+            if (positionalIndexer != null && typeDefinition.IsCollectionShape) {
                 return positionalIndexer.Property.MemberTypeDefinition;
             }
 
-            if (!typeDefinition.TryGetRuntimeType(out var reflectedType)) {
-                return null;
-            }
-
-            var enumerableType = GetGenericEnumerableType(reflectedType);
-            if (enumerableType != null) {
-                var elementClrType = enumerableType.GetGenericArguments()[0];
-                return CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(elementClrType);
-            }
-
-            return typeof(IEnumerable).IsAssignableFrom(reflectedType)
-                ? CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(object))
-                : null;
+            return typeDefinition.SequenceElementType;
         }
 
         /// <summary>
@@ -173,43 +145,11 @@ public static class TypeDefinitionExtensions {
         }
 
         /// <summary>
-        /// The kind of the conversion from <paramref name="other"/> when a native integer (<c>nint</c> or <c>nuint</c>)
-        /// meets another numeric primitive, or null when neither side is a native integer, a side is not numeric, or the
-        /// pair has no conversion. C# 11 applies these conversions itself, so a consumer converts through the platform and
-        /// never through a method the platform type declares beside them (IntPtr's <c>op_Explicit</c> to <c>int</c> is
-        /// checked; C#'s native conversion is not). The one predicate for casts and assignments of native integers;
-        /// <see cref="IsAssignableFrom"/> keeps its narrower meaning, and answers no native pair (IntPtr and UIntPtr
-        /// declare no implicit operator).
-        /// </summary>
-        public ConversionOperatorKind? NativeIntegerConversionFrom(ITypeDefinition other) {
-            ArgumentNullException.ThrowIfNull(other);
-            if (typeDefinition.PrimitiveType is not { } to || other.PrimitiveType is not { } from
-                || !(IsNativeInteger(to) || IsNativeInteger(from)) || !IsNumeric(to) || !IsNumeric(from))
-                return null;
-            return typeDefinition.ResolveConversionFrom(other)?.Kind;
-
-            static bool IsNativeInteger(PrimitiveType type) => type is PrimitiveType.NInt or PrimitiveType.NUInt;
-
-            static bool IsNumeric(PrimitiveType type) => type.IsInteger() || IsNativeInteger(type)
-                || type is PrimitiveType.Char or PrimitiveType.Float32 or PrimitiveType.Float64 or PrimitiveType.Decimal;
-        }
-
-        /// <summary>
         /// Determines if this type can be assigned to <paramref name="other"/>.
         /// </summary>
         public bool IsAssignableTo(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             return other.IsAssignableFrom(typeDefinition);
-        }
-
-        private static Type? GetGenericEnumerableType(Type type) {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)) {
-                return type;
-            }
-
-            return type
-                .GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
         }
     }
 }

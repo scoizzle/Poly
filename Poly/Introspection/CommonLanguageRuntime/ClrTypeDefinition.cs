@@ -82,6 +82,34 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     public IReadOnlyList<ClrTypeOperator> Operators => _operators.Value;
 
     /// <summary>
+    /// A CLR sequence shape: an array or a closed <c>IEnumerable&lt;&gt;</c>, and not itself a primitive (so
+    /// <c>byte[]</c> stays binary).
+    /// </summary>
+    bool ITypeDefinition.IsCollectionShape =>
+        ((ITypeDefinition)this).PrimitiveType is null
+        && (RuntimeType.IsArray
+            || RuntimeType.GetInterfaces().Any(static i =>
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)));
+
+    /// <summary>The element a CLR sequence yields: the array's element, the closed <c>IEnumerable&lt;&gt;</c>'s argument,
+    /// or <c>object</c> for a non-generic sequence.</summary>
+    ITypeDefinition? ITypeDefinition.SequenceElementType {
+        get {
+            var enumerableType = RuntimeType.IsArray
+                ? null
+                : RuntimeType.GetInterfaces().FirstOrDefault(static i =>
+                    i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+            if (RuntimeType.IsArray)
+                return _provider.GetTypeDefinition(RuntimeType.GetElementType()!);
+            if (enumerableType is not null)
+                return _provider.GetTypeDefinition(enumerableType.GetGenericArguments()[0]);
+            return typeof(IEnumerable).IsAssignableFrom(RuntimeType)
+                ? _provider.GetTypeDefinition(typeof(object))
+                : null;
+        }
+    }
+
+    /// <summary>
     /// The conversions this type states: the reflected static <c>op_Implicit</c>/<c>op_Explicit</c> members it declares
     /// (either end) and the built-in rules with this type as the source, which name no method. Reference conversions
     /// are assignability, not conversion, and the lift into a nullable target is the caller's (T-06), so neither is

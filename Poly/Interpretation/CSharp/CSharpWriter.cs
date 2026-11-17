@@ -3,6 +3,7 @@ using System.Globalization;
 using Poly.Grammar;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.CSharp;
 

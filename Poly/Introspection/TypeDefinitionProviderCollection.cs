@@ -1,12 +1,13 @@
 namespace Poly.Introspection;
 
 using Poly.Ast.Nodes;
+using Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>
 /// A LIFO stack of <see cref="ITypeDefinitionProvider"/> instances that resolves types by
 /// querying the most recently added provider first. Useful for layering overrides above defaults.
 /// </summary>
-public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDefinitionProvider> providers) : ITypeDefinitionProvider, ITypeDefinitionNodeProvider, ICollection<ITypeDefinitionProvider> {
+public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDefinitionProvider> providers) : IClrTypeDefinitionProvider, ITypeDefinitionNodeProvider, ICollection<ITypeDefinitionProvider> {
     private readonly List<ITypeDefinitionProvider> _providers = [.. providers];
 
     /// <summary>
@@ -80,7 +81,9 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// </summary>
     public ITypeDefinition? GetTypeDefinition(Type type) {
         foreach (var provider in _providers.AsReadOnly()) {
-            var typeDef = provider.GetTypeDefinition(type);
+            if (provider is not IClrTypeDefinitionProvider clr)
+                continue;
+            var typeDef = clr.GetTypeDefinition(type);
             if (typeDef is not null) {
                 return typeDef;
             }

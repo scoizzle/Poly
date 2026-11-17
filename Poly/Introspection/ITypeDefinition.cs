@@ -82,6 +82,19 @@ public interface ITypeDefinition {
     IEnumerable<ITypeOperator> Operators { get; }
 
     /// <summary>
+    /// True when this type exposes a sequence shape: a platform's own collection definition, or a type whose
+    /// representation is an array or a closed <c>IEnumerable&lt;&gt;</c>. A shape is structural, so the platform answers,
+    /// and the root names no collection type.
+    /// </summary>
+    internal bool IsCollectionShape { get; }
+
+    /// <summary>
+    /// The element type a sequence-shaped type yields when it exposes no indexer, or null. A representation fact, so
+    /// the platform answers it; <see cref="TypeDefinitionExtensions"/>'s <c>GetElementType</c> prefers an indexer.
+    /// </summary>
+    internal ITypeDefinition? SequenceElementType { get; }
+
+    /// <summary>
     /// Gets the conversions this type states: the operators it declares (either end, which is why an item names both
     /// types) and the ones the platform applies with this type as the source (no method). A conversion into this type
     /// that the other end declares, and what a type defined later may add, are <see cref="ResolveConversionFrom"/>.

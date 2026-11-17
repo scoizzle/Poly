@@ -85,7 +85,11 @@ answer, and `TypeDefinitionRuntimeTypeExtensions` (the `ITypeDefinition -> Type?
 `CommonLanguageRuntime/` with it.
 
 The vocabulary is a list of what a host *may* have, not a CLR list: `Undefined`, `Null`, `Symbol` and `BigInt` name
-primitives no CLR runtime type exists for, and a platform maps only the subset it has. Which platform answers a mixed
+primitives no CLR runtime type exists for, and a platform maps only the subset it has. A primitive the shared
+vocabulary does not name at all is stated by its platform through `ITypeDefinition.PlatformAtom` (a `PrimitiveAtom`),
+never beside `PrimitiveType`: the provider resolves it by name and enumerates it through `Types`. Which platform
+answers a mixed operator/conversion pair is fixed by the door's shape — the left operand for an operator, the
+destination for a conversion — and `MixedPairAuthorityTests` pins both sides rather than relying on the CLR agreeing. Which platform answers a mixed
 operator/conversion pair is fixed by the door's shape: operators are asked of the left operand, conversions of the
 destination.
 

@@ -132,6 +132,9 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
     PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
+
+    /// <summary>The CLR maps every primitive it has into the shared vocabulary, so it states no atom.</summary>
+    PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
     public TypeKind Kind => GetTypeKind(RuntimeType);
     public override string ToString() => FullName;
 

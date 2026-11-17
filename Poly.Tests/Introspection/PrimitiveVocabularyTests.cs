@@ -32,6 +32,32 @@ public class PrimitiveVocabularyTests {
         await Assert.That(ClrTypeDefinitionRegistry.Shared.Types.Any(static type => type.PrimitiveType == PrimitiveType.Undefined)).IsFalse();
     }
 
+    [Test]
+    public async Task NeutralDefinition_CanStateAPlatformPrimitiveAtom() {
+        // I6: a host primitive the shared vocabulary does not name is stated by its platform, beside PrimitiveType.
+        var member = typeof(ITypeDefinition).GetProperty(
+            "PlatformAtom", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        await Assert.That(member).IsNotNull();
+    }
+
+    [Test]
+    public async Task SecondHost_StatesAndResolvesItsOwnPrimitiveAtom() {
+        // A primitive the shared vocabulary does not name: the host states it, its provider resolves and enumerates it,
+        // and it is not confusable with a shared id.
+        var provider = new SecondHostProvider();
+        var atom = new PrimitiveAtom("Decimal128");
+        provider.Add(new HostPrimitive("Decimal128", primitive: null, atom), primitive: null);
+
+        var resolved = provider.GetTypeDefinition("Decimal128");
+
+        await Assert.That(resolved).IsNotNull();
+        await Assert.That(resolved!.PrimitiveType).IsNull();
+        await Assert.That(resolved.PlatformAtom).IsEqualTo(atom);
+        await Assert.That(resolved.Kind).IsEqualTo(TypeKind.Primitive);
+        await Assert.That(provider.GetTypeDefinition(PrimitiveType.Decimal)).IsNull();
+        await Assert.That(provider.Types).Contains(resolved);
+    }
+
     private sealed class SecondHostProvider : ITypeDefinitionProvider {
         private readonly Dictionary<string, ITypeDefinition> _types = new(StringComparer.Ordinal);
         private readonly Dictionary<PrimitiveType, ITypeDefinition> _primitives = new();
@@ -47,7 +73,7 @@ public class PrimitiveVocabularyTests {
         public IEnumerable<ITypeDefinition> Types => _types.Values;
     }
 
-    private sealed class HostPrimitive(string name, PrimitiveType? primitive) : ITypeDefinition {
+    private sealed class HostPrimitive(string name, PrimitiveType? primitive, PrimitiveAtom? atom = null) : ITypeDefinition {
         public string Name => name;
         public string? Namespace => null;
         public AccessModifier AccessModifier => AccessModifier.Public;
@@ -61,6 +87,7 @@ public class PrimitiveVocabularyTests {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         public PrimitiveType? PrimitiveType => primitive;
+        public PrimitiveAtom? PlatformAtom => atom;
         public TypeKind Kind => TypeKind.Primitive;
 
         public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);

@@ -297,6 +297,12 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     public IEnumerable<IParameter> GenericParameters => _genericParameters.Value;
 
     public PrimitiveType? PrimitiveType => _node.PrimitiveTypeId;
+
+    /// <summary>A modeled primitive the shared vocabulary does not name is stated by its declaration's name.</summary>
+    PrimitiveAtom? ITypeDefinition.PlatformAtom =>
+        _node.PrimitiveTypeId is null && _node.EffectiveKind == TypeKind.Primitive
+            ? new PrimitiveAtom(Name)
+            : null;
     TypeKind ITypeDefinition.Kind => _node.EffectiveKind;
 
     private List<AstPropertyDefinition> BuildDeclaredProperties() {
@@ -963,6 +969,7 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
             && string.Equals(ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
     }
     public PrimitiveType? PrimitiveType => null;
+    PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(System.Collections.IList);
 }
@@ -1059,6 +1066,7 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
             && TypeDefinitionExtensions.IsSameType(DeclaringType, right.DeclaringType));
 
     public PrimitiveType? PrimitiveType => null;
+    PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(object);
 }

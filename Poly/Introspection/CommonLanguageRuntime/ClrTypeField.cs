@@ -45,6 +45,8 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     /// </summary>
     public override string Name => FieldInfo.Name;
 
+    public override MemberKind Kind => MemberKind.Field;
+
     /// <summary>
     /// Gets the underlying reflection <see cref="FieldInfo"/>.
     /// </summary>
@@ -73,24 +75,4 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     public override LifetimeModifier LifetimeModifier => FieldInfo.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
-
-    public override Expression? EmitRead(Expression? instance) {
-        if (FieldInfo.IsStatic || instance is not null) {
-            var typedInst = FieldInfo.IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, FieldInfo.DeclaringType!);
-            var access = System.Linq.Expressions.Expression.Field(typedInst, FieldInfo);
-            return FieldInfo.FieldType.IsValueType
-                ? System.Linq.Expressions.Expression.Convert(access, typeof(object))
-                : access;
-        }
-        return null;
-    }
-
-    public override Expression? EmitWrite(Expression? instance, Expression value) {
-        if (FieldInfo.IsInitOnly || FieldInfo.IsLiteral) return null;
-        var typedInst = FieldInfo.IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, FieldInfo.DeclaringType!);
-        var access = System.Linq.Expressions.Expression.Field(typedInst, FieldInfo);
-        var val = System.Linq.Expressions.Expression.Convert(value, FieldInfo.FieldType);
-        var assign = System.Linq.Expressions.Expression.Assign(access, val);
-        return FieldInfo.IsStatic ? assign : System.Linq.Expressions.Expression.Block(assign, instance!);
-    }
 }

@@ -1,7 +1,3 @@
-using System.Linq.Expressions;
-using System.Reflection;
-
-using Poly.Interpretation.Vm;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;
@@ -448,6 +444,7 @@ internal sealed class AstConstructorDefinition : ITypeConstructor {
     public string Name => _declaringType.Name;
     public ITypeDefinition MemberTypeDefinition => _declaringType;
     public ITypeDefinition DeclaringTypeDefinition => _declaringType;
+    public MemberKind Kind => MemberKind.Constructor;
     public IEnumerable<IParameter> Parameters => _parameters.Value;
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
@@ -492,6 +489,10 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     public ITypeDefinition MemberTypeDefinition => _memberType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
 
+    internal PropertyDefinitionNode Definition => _node;
+
+    public MemberKind Kind => _node.IndexParameters is { Count: > 0 } ? MemberKind.Indexer : MemberKind.Property;
+
     internal ITypeDefinition? TryGetCollectionElementType() =>
         _node.MemberType is CollectionTypeReference col
             ? _declaring.ResolveType(col.ElementType)
@@ -504,62 +505,6 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     public bool IsStatic => _node.IsStatic;
 
     public Mutability Mutability => _node.Mutability;
-
-    /// <summary>
-    /// Emits an expression that reads this property from an <c>IDictionary&lt;string, object?&gt;</c>.
-    /// An auto-property indexes by property name. A getter whose body is
-    /// <c>this.&lt;field&gt;</c> reads that field when the property key is absent.
-    /// An answered property key wins: a store-backed dictionary synthesizes the
-    /// property name and exposes the field name as a non-enumerable write view.
-    /// Coerces the stored value to the member's target type.
-    /// Returns the member's <c>DefaultValue</c> when the key is not present.
-    /// A value-type member with no default reads as that type's zero value.
-    /// A reference member with no default reads as <see cref="System.Reflection.Missing.Value"/>.
-    /// </summary>
-    public Expression? EmitRead(Expression? instance) {
-        if (instance is null) return null;
-        var stored = ReadKey(instance, Name, MemberTypeDefinition, _node.DefaultValue);
-        if (GetterField() is not { } field || field.EmitRead(instance) is not Expression fieldRead)
-            return stored;
-        var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
-        var hasProperty = Expression.Call(
-            typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name));
-        return Expression.Condition(hasProperty, stored, fieldRead);
-    }
-
-    /// <summary>The field a <c>get =&gt; this.field</c> body reads, when that field exists.</summary>
-    private AstFieldDefinition? GetterField() {
-        if (_node.Getter?.Body is not Member { Value: ThisReference, MemberName: var name })
-            return null;
-        foreach (var field in _declaring.Fields) {
-            if (field is AstFieldDefinition ast
-                && string.Equals(ast.Name, name, StringComparison.Ordinal))
-                return ast;
-        }
-        return null;
-    }
-
-    private static Expression ReadKey(
-        Expression instance, string key, ITypeDefinition target, Node? defaultValue) {
-        var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
-        var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(key));
-        var fallback = defaultValue is Constant c
-            ? Expression.Convert(Expression.Constant(c.Value), typeof(object))
-            : DictionaryBackedValue.MissingKeyFallback(target);
-        var value = DictionaryBackedValue.CoerceRead(rawValue, target);
-        return Expression.Condition(
-            Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(key)),
-            value,
-            fallback);
-    }
-
-    public Expression? EmitWrite(Expression? instance, Expression value) {
-        if (instance is null) return null;
-        var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
-        return Expression.Block(
-            Expression.Call(typed, DictionaryBackedValue.DictSetItem, Expression.Constant(Name), value),
-            instance);
-    }
 }
 
 /// <summary>
@@ -574,6 +519,7 @@ internal sealed class AstMethodDefinition(MethodDefinitionNode node, AstTypeDefi
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _returnType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
+    public MemberKind Kind => MemberKind.Method;
     public IEnumerable<IParameter> Parameters => _declaring.MapParameters(_node.Parameters);
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => _node.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
@@ -606,197 +552,16 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
     public IEnumerable<IParameter> Parameters => [];
 
+    internal FieldDefinitionNode Definition => _node;
+
+    public MemberKind Kind => MemberKind.Field;
+
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => _node.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
     public bool IsStatic => _node.IsStatic;
 
     public Mutability Mutability => _node.Mutability;
-
-    public Expression? EmitRead(Expression? instance) {
-        if ((_node.IsStatic || _node.IsConst) && _node.DefaultValue is Constant constant)
-            return Expression.Constant(constant.Value, typeof(object));
-        if (instance is null) return null;
-        var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
-        var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(Name));
-        var fallback = _node.DefaultValue is Constant c
-            ? Expression.Convert(Expression.Constant(c.Value), typeof(object))
-            // An unset T? is null. Missing is not null, so `== null` would skip init.
-            : _node.FieldType is OptionalTypeReference
-                ? Expression.Constant(null, typeof(object))
-                : DictionaryBackedValue.MissingKeyFallback(MemberTypeDefinition);
-        var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
-        return Expression.Condition(
-            Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name)),
-            value,
-            fallback);
-    }
-
-    public Expression? EmitWrite(Expression? instance, Expression value) {
-        if (instance is null) return null;
-        var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
-        return Expression.Block(
-            Expression.Call(typed, DictionaryBackedValue.DictSetItem, Expression.Constant(Name), value),
-            instance);
-    }
 }
-
-/// <summary>
-/// Helper for reading/writing values from dictionary-backed AST type instances.
-/// Provides type coercion so stored values (e.g. <c>int</c>) are correctly
-/// converted to the declared member type (e.g. <c>long</c> for Number).
-/// </summary>
-internal static class DictionaryBackedValue {
-    internal static readonly MethodInfo DictContainsKey =
-        Ref<IDictionary<string, object?>>.Method(d => d.ContainsKey(""));
-    private static readonly PropertyInfo DictItem =
-        Ref<IDictionary<string, object?>>.Indexer(d => d[""]);
-    internal static readonly MethodInfo DictGetItem = DictItem.GetGetMethod()!;
-    internal static readonly MethodInfo DictSetItem = DictItem.GetSetMethod()!;
-
-    private static readonly MethodInfo ConvertToInt64 =
-        Ref.Method((Expression<Func<object, long>>)(o => Convert.ToInt64(o)));
-    private static readonly MethodInfo ConvertToInt32 =
-        Ref.Method((Expression<Func<object, int>>)(o => Convert.ToInt32(o)));
-    private static readonly MethodInfo ConvertToInt16 =
-        Ref.Method((Expression<Func<object, short>>)(o => Convert.ToInt16(o)));
-    private static readonly MethodInfo ConvertToSByte =
-        Ref.Method((Expression<Func<object, sbyte>>)(o => Convert.ToSByte(o)));
-    private static readonly MethodInfo ConvertToDouble =
-        Ref.Method((Expression<Func<object, double>>)(o => Convert.ToDouble(o)));
-    private static readonly MethodInfo ConvertToSingle =
-        Ref.Method((Expression<Func<object, float>>)(o => Convert.ToSingle(o)));
-    private static readonly MethodInfo ConvertToDecimal =
-        Ref.Method((Expression<Func<object, decimal>>)(o => Convert.ToDecimal(o)));
-    private static readonly MethodInfo ConvertToBoolean =
-        Ref.Method((Expression<Func<object, bool>>)(o => Convert.ToBoolean(o)));
-    private static readonly MethodInfo ConvertToString =
-        Ref.Method((Expression<Func<object, string?>>)(o => Convert.ToString(o)));
-    private static readonly MethodInfo ConvertToChar =
-        Ref.Method((Expression<Func<object, char>>)(o => Convert.ToChar(o)));
-    private static readonly MethodInfo GuardCompatibleInfo =
-        Ref.Method((Expression<Func<object?, PrimitiveType, object>>)((raw, t) => GuardCompatible(raw, t)));
-
-    /// <summary>
-    /// Value used when a dictionary key is absent and the member has no constant
-    /// default. A converted value type uses that conversion's zero.
-    /// <see cref="System.Reflection.Missing"/> cannot be the other branch of a
-    /// value-type read: unboxing the condition then casts the zero to <c>Missing</c>.
-    /// </summary>
-    internal static Expression MissingKeyFallback(ITypeDefinition targetType) {
-        // An unset optional value is null. Nullable<T> has no primitive, so the
-        // value-type zero below would not apply and Missing cannot convert to T?.
-        if (targetType.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null)
-            return Expression.Constant(null, typeof(object));
-        var convert = ConvertMethod(targetType.PrimitiveType);
-        if (convert is null || !convert.ReturnType.IsValueType)
-            return Expression.Convert(Expression.Constant(System.Reflection.Missing.Value), typeof(object));
-        var zero = Activator.CreateInstance(convert.ReturnType)!;
-        return Expression.Convert(Expression.Constant(zero), typeof(object));
-    }
-
-    private static MethodInfo? ConvertMethod(PrimitiveType? primitive) => primitive switch {
-        PrimitiveType.Int64 => ConvertToInt64,
-        PrimitiveType.Int32 => ConvertToInt32,
-        PrimitiveType.Int16 => ConvertToInt16,
-        PrimitiveType.Int8 => ConvertToSByte,
-        PrimitiveType.Float64 => ConvertToDouble,
-        PrimitiveType.Float32 => ConvertToSingle,
-        PrimitiveType.Decimal => ConvertToDecimal,
-        PrimitiveType.Boolean => ConvertToBoolean,
-        PrimitiveType.String => ConvertToString,
-        PrimitiveType.Char => ConvertToChar,
-        _ => null
-    };
-
-    internal static Expression CoerceRead(Expression dictValue, ITypeDefinition targetType) {
-        var convertMethod = ConvertMethod(targetType.PrimitiveType);
-        if (convertMethod is not null) {
-            // Fail loud on fundamentally wrong-typed raw values instead of silently
-            // coercing (Convert.ToInt64(true) → 1, Convert.ToString(null) → "", etc.):
-            // a property bag holding a bool for a Number prop (or a non-numeric string)
-            // must surface as an error, not a silently-mangled value.
-            var guarded = Expression.Call(
-                GuardCompatibleInfo,
-                Expression.Convert(dictValue, typeof(object)),
-                Expression.Constant(targetType.PrimitiveType!.Value));
-            return Expression.Convert(
-                Expression.Call(null, convertMethod, guarded),
-                typeof(object));
-        }
-
-        return dictValue;
-    }
-
-    private static bool IsIntegralNumber(object raw) => raw switch {
-        double d => d == Math.Truncate(d) && !double.IsNaN(d) && !double.IsInfinity(d),
-        float f => f == Math.Truncate(f) && !float.IsNaN(f) && !float.IsInfinity(f),
-        decimal m => m == decimal.Truncate(m),
-        _ => true
-    };
-
-    /// <summary>
-    /// Validates a raw bag value against the target primitive before coercion. Rejects
-    /// values that Convert.* would silently mangle (bool/object → number, null → default),
-    /// so the runtime fails loud instead of storing a corrupted value.
-    /// </summary>
-    internal static object GuardCompatible(object? raw, PrimitiveType target) {
-        if (raw is null) return null!;
-        switch (target) {
-            case PrimitiveType.Int64 or PrimitiveType.Int32 or PrimitiveType.Int16 or PrimitiveType.Int8
-                or PrimitiveType.Float64 or PrimitiveType.Float32 or PrimitiveType.Decimal:
-                if (raw is bool)
-                    throw new InvalidOperationException(
-                        $"Cannot store a Boolean value in a numeric property (got '{raw}').");
-                if (raw is not (long or int or short or byte or sbyte or ushort or uint or ulong or double or float or decimal))
-                    throw new InvalidOperationException(
-                        $"Cannot store a value of type '{raw.GetType().Name}' in a numeric property.");
-                // Number is long. Convert.ToInt64 would truncate 0.25 to 0.
-                if (target == PrimitiveType.Int64 && raw is double or float or decimal && !IsIntegralNumber(raw))
-                    throw new InvalidOperationException(
-                        $"Number is integral; '{raw}' is not a valid Number. Use Decimal.");
-                return raw;
-            case PrimitiveType.Boolean:
-                if (raw is not bool)
-                    throw new InvalidOperationException(
-                        $"Cannot store a value of type '{raw.GetType().Name}' in a Boolean property.");
-                return raw;
-            case PrimitiveType.String:
-                if (raw is not string)
-                    throw new InvalidOperationException(
-                        $"Cannot store a value of type '{raw.GetType().Name}' in a Text property.");
-                return raw;
-            case PrimitiveType.Char:
-                if (raw is not char and not string)
-                    throw new InvalidOperationException(
-                        $"Cannot store a value of type '{raw.GetType().Name}' in a character property.");
-                return raw;
-            default:
-                return raw;
-        }
-    }
-
-    /// <summary>
-    /// Runtime counterpart of <see cref="CoerceRead"/>: GuardCompatible, then
-    /// the same Convert.* as the member-read expression.
-    /// </summary>
-    internal static object? CoerceReadValue(object? raw, PrimitiveType target) {
-        var guarded = GuardCompatible(raw, target);
-        return target switch {
-            PrimitiveType.Int64 => Convert.ToInt64(guarded),
-            PrimitiveType.Int32 => Convert.ToInt32(guarded),
-            PrimitiveType.Int16 => Convert.ToInt16(guarded),
-            PrimitiveType.Int8 => Convert.ToSByte(guarded),
-            PrimitiveType.Float64 => Convert.ToDouble(guarded),
-            PrimitiveType.Float32 => Convert.ToSingle(guarded),
-            PrimitiveType.Decimal => Convert.ToDecimal(guarded),
-            PrimitiveType.Boolean => Convert.ToBoolean(guarded),
-            PrimitiveType.String => Convert.ToString(guarded),
-            PrimitiveType.Char => Convert.ToChar(guarded),
-            _ => guarded
-        };
-    }
-}
-
 
 /// <summary>
 /// Utility class to resolve AST type reference nodes to ITypeDefinition.
@@ -1177,6 +942,7 @@ internal sealed class AstCollectionParameterlessConstructor(AstCollectionTypeDef
     public string Name => declaring.Name;
     public ITypeDefinition MemberTypeDefinition => declaring;
     public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public MemberKind Kind => MemberKind.Constructor;
     public IEnumerable<IParameter> Parameters => [];
     public AccessModifier AccessModifier => AccessModifier.Public;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
@@ -1188,6 +954,7 @@ internal sealed class AstCollectionCopyConstructor(AstCollectionTypeDefinition d
     public string Name => declaring.Name;
     public ITypeDefinition MemberTypeDefinition => declaring;
     public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public MemberKind Kind => MemberKind.Constructor;
     public IEnumerable<IParameter> Parameters => [new AstCollectionSourceParameter(declaring)];
     public AccessModifier AccessModifier => AccessModifier.Public;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
@@ -1208,6 +975,7 @@ internal sealed class AstCollectionAddMethod(AstCollectionTypeDefinition declari
     public string Name => "Add";
     public ITypeDefinition MemberTypeDefinition => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(void))!;
     public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public MemberKind Kind => MemberKind.Method;
     public IEnumerable<IParameter> Parameters => [new AstCollectionElementParameter(element)];
     public AccessModifier AccessModifier => AccessModifier.Public;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
@@ -1264,6 +1032,7 @@ internal sealed class AstCollectionItemProperty : ITypeProperty {
     public string Name => "Item";
     public ITypeDefinition MemberTypeDefinition { get; }
     public ITypeDefinition DeclaringTypeDefinition { get; }
+    public MemberKind Kind => MemberKind.Indexer;
     public IEnumerable<IParameter> Parameters { get; }
     public AccessModifier AccessModifier => AccessModifier.Public;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;

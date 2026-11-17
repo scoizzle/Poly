@@ -62,6 +62,10 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     /// </summary>
     public override string Name => _name;
 
+    public override MemberKind Kind => _parameters is { } parameters && parameters.Any()
+        ? MemberKind.Indexer
+        : MemberKind.Property;
+
     /// <summary>
     /// Gets the underlying reflection <see cref="PropertyInfo"/>.
     /// </summary>
@@ -89,7 +93,7 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     /// <summary>
     /// Returns <c>true</c> when the property has a readable getter.
     /// </summary>
-    public new bool CanRead => base.CanRead;
+    public override bool CanRead => _propertyInfo.GetGetMethod(nonPublic: true) is not null;
 
     /// <summary>
     /// Returns <c>true</c> when the property has a writable setter (not init-only).
@@ -102,24 +106,4 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     public new bool CanInitialize => _hasInitSetter;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}{(_parameters is null ? string.Empty : $"[{string.Join(", ", _parameters)}]")}";
-
-    public override Expression? EmitRead(Expression? instance) {
-        if (IsStatic || instance is not null) {
-            var typedInst = IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, _propertyInfo.DeclaringType!);
-            var access = System.Linq.Expressions.Expression.Property(typedInst, _propertyInfo);
-            return _propertyInfo.PropertyType.IsValueType
-                ? System.Linq.Expressions.Expression.Convert(access, typeof(object))
-                : access;
-        }
-        return null;
-    }
-
-    public override Expression? EmitWrite(Expression? instance, Expression value) {
-        if (_isReadOnly) return null;
-        var typedInst = IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, _propertyInfo.DeclaringType!);
-        var val = System.Linq.Expressions.Expression.Convert(value, _propertyInfo.PropertyType);
-        var assign = System.Linq.Expressions.Expression.Assign(
-            System.Linq.Expressions.Expression.Property(typedInst, _propertyInfo), val);
-        return IsStatic ? assign : System.Linq.Expressions.Expression.Block(assign, instance!);
-    }
 }

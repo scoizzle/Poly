@@ -17,6 +17,22 @@ public class PrimitiveVocabularyTests {
     }
 
     [Test]
+    public async Task Vocabulary_NamesDateTimeOffset() {
+        // DateTimeOffset is a date the CLR has and the vocabulary did not name, so a category or conversion rule could
+        // only reach it through typeof.
+        await Assert.That(Enum.GetNames<PrimitiveType>()).Contains("DateTimeOffset");
+    }
+
+    [Test]
+    public async Task ClrRoundTrip_DateTimeOffset_IsItsOwnPrimitive() {
+        await Assert.That(typeof(DateTimeOffset).GetPrimitiveType()).IsEqualTo(PrimitiveType.DateTimeOffset);
+        await Assert.That(PrimitiveType.DateTimeOffset.GetClrType()).IsEqualTo(typeof(DateTimeOffset));
+        var definition = (ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DateTimeOffset));
+        await Assert.That(definition.Kind).IsEqualTo(TypeKind.Primitive);
+        await Assert.That(definition.PrimitiveType).IsEqualTo(PrimitiveType.DateTimeOffset);
+    }
+
+    [Test]
     public async Task SecondHost_StatesAndResolvesItsOwnPrimitives() {
         // The vocabulary names what a second host has; its provider resolves and enumerates it, and the CLR does not
         // pretend to have a type for it.

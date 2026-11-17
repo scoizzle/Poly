@@ -84,7 +84,9 @@ answers null for a host with no CLR types. The neutral contract therefore asks o
 answer, and `TypeDefinitionRuntimeTypeExtensions` (the `ITypeDefinition -> Type?` view) lives in
 `CommonLanguageRuntime/` with it.
 
-The vocabulary is a list of what a host *may* have, not a CLR list: `Undefined`, `Null`, `Symbol` and `BigInt` name
+`PrimitiveType.DateTimeOffset` is a temporal primitive the CLR has and the vocabulary had no id for; it exists so a
+category or conversion rule can name it without `typeof`. The vocabulary is a list of what a host *may* have, not a
+CLR list: `Undefined`, `Null`, `Symbol` and `BigInt` name
 primitives no CLR runtime type exists for, and a platform maps only the subset it has. A primitive the shared
 vocabulary does not name at all is stated by its platform through `ITypeDefinition.PlatformAtom` (a `PrimitiveAtom`),
 never beside `PrimitiveType`: the provider resolves it by name and enumerates it through `Types`. Which platform

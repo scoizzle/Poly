@@ -56,7 +56,11 @@ public enum PrimitiveType {
     Undefined,
     Null,
     Symbol,
-    BigInt
+    BigInt,
+
+    // DateTimeOffset: a temporal primitive the CLR has and the vocabulary had no id for, appended so no earlier
+    // member's ordinal moves. A category or conversion rule can now name it without typeof.
+    DateTimeOffset
 }
 
 /// <summary>

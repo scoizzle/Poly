@@ -282,6 +282,10 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     bool ITypeDefinition.IsCollectionShape => false;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
 
+    /// <summary>A modeled definition is its instance: each declaration builds one, and a closed generic is a closure
+    /// of it, a distinct definition.</summary>
+    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+
     // AST-based types are dictionary-backed at runtime
     public Type RuntimeType => typeof(IDictionary<string, object>);
 
@@ -939,6 +943,22 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
     bool ITypeDefinition.IsCollectionShape => true;
     ITypeDefinition? ITypeDefinition.SequenceElementType => _item.MemberTypeDefinition;
+
+    /// <summary>
+    /// Two synthetic collections of one kind and element are the same type: each resolve builds a fresh instance, so
+    /// reference equality alone never matches an omitted collection argument. A nested collection compares by this
+    /// notion again (its name does not carry its element's namespace).
+    /// </summary>
+    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) {
+        if (ReferenceEquals(this, other))
+            return true;
+        if (other is not AstCollectionTypeDefinition right || Kind != right.Kind)
+            return false;
+        if (ElementType is AstCollectionTypeDefinition || right.ElementType is AstCollectionTypeDefinition)
+            return TypeDefinitionExtensions.IsSameType(ElementType, right.ElementType);
+        return string.Equals(ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
+            && string.Equals(ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
+    }
     public PrimitiveType? PrimitiveType => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(System.Collections.IList);
@@ -1023,6 +1043,18 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
     bool ITypeDefinition.IsCollectionShape => false;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
+
+    /// <summary>
+    /// A generic parameter is its name on its declaring type. The definition holds no declaring member, so two
+    /// method-level parameters of one name on one type are the same type here: a stated limitation, and no DSL
+    /// construct declares a method-level type parameter.
+    /// </summary>
+    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) =>
+        ReferenceEquals(this, other)
+        || (other is AstGenericParameterTypeDefinition right
+            && string.Equals(Name, right.Name, StringComparison.Ordinal)
+            && TypeDefinitionExtensions.IsSameType(DeclaringType, right.DeclaringType));
+
     public PrimitiveType? PrimitiveType => null;
     TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(object);

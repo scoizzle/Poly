@@ -81,6 +81,9 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// </summary>
     public IReadOnlyList<ClrTypeOperator> Operators => _operators.Value;
 
+    /// <summary>A CLR type is its definition instance: the registry builds one per runtime type and hands it out.</summary>
+    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+
     /// <summary>
     /// A CLR sequence shape: an array or a closed <c>IEnumerable&lt;&gt;</c>, and not itself a primitive (so
     /// <c>byte[]</c> stays binary).

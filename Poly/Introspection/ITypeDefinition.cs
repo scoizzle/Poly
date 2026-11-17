@@ -82,6 +82,14 @@ public interface ITypeDefinition {
     IEnumerable<ITypeOperator> Operators { get; }
 
     /// <summary>
+    /// True when <paramref name="other"/> is the same type as this one, by this platform's identity notion. Identity is
+    /// the platform's answer, not the root's: a host decides what makes two of its definitions the same (a runtime
+    /// type, a declared name, a synthetic collection's kind and element), and a definition from another platform is
+    /// never the same type. Callers ask through <see cref="TypeDefinitionExtensions.IsSameType"/>.
+    /// </summary>
+    internal bool IsSameTypeAs(ITypeDefinition other);
+
+    /// <summary>
     /// True when this type exposes a sequence shape: a platform's own collection definition, or a type whose
     /// representation is an array or a closed <c>IEnumerable&lt;&gt;</c>. A shape is structural, so the platform answers,
     /// and the root names no collection type.

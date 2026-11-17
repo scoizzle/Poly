@@ -261,11 +261,12 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
             Error(context, yield, "IT0004", "yield return cannot appear in a try block that has a catch clause.");
             return;
         }
-        var valueType = context.GetResolvedType(yield.Value)?.GetRuntimeType();
-        if (valueType is not null && scope.ElementType is { } element
-            && !SyntaxTypeCompatibilityAnalyzer.IsImplicitlyConvertible(valueType, element)) {
+        var valueDef = context.GetResolvedType(yield.Value);
+        if (valueDef is not null && scope.ElementType is { } element
+            && context.TypeDefinitions.GetClrTypeDefinition(element) is { } elementDef
+            && !SyntaxTypeCompatibilityAnalyzer.IsImplicitlyConvertible(valueDef, elementDef)) {
             Error(context, yield, "IT0006",
-                $"cannot yield a value of type '{valueType.Name}' from an iterator of '{element.Name}'.");
+                $"cannot yield a value of type '{valueDef.Name}' from an iterator of '{element.Name}'.");
         }
     }
 

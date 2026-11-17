@@ -772,17 +772,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         var yieldClr = yieldType?.GetRuntimeType();
         Type delType;
         try {
-            if (yieldClr is null || yieldClr == typeof(void)) {
-                delType = paramClr.Length == 0
-                    ? typeof(Action)
-                    : System.Linq.Expressions.Expression.GetActionType(paramClr);
-            }
-            else {
-                var funcArgs = new Type[paramClr.Length + 1];
-                paramClr.CopyTo(funcArgs, 0);
-                funcArgs[^1] = yieldClr;
-                delType = System.Linq.Expressions.Expression.GetFuncType(funcArgs);
-            }
+            delType = ClrDelegateTypes.Of(paramClr, yieldClr);
         }
         catch (ArgumentException) {
             return context.TypeDefinitions.GetTypeDefinition(typeof(object));

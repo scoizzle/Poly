@@ -107,8 +107,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             Report(context, loop, "cannot resolve the foreach loop variable's declared type");
             return;
         }
-        var element = context.GetMetadata<ForEachElementTypeMetadata>(loop)?.ElementType?.GetRuntimeType();
-        if (element is null || CanConvert(element, declared))
+        var elementDef = context.GetMetadata<ForEachElementTypeMetadata>(loop)?.ElementType;
+        var element = elementDef?.GetRuntimeType();
+        if (element is null || declaredDef is null || CanConvert(elementDef!, declaredDef))
             return;
         Report(context, loop,
             $"cannot convert each element of type '{element.Name}' to the loop variable type '{declared.Name}'");
@@ -116,54 +117,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     /// <summary>A declared <c>foreach (V x in …)</c> loop variable needs an implicit
     /// conversion from the element type to <c>V</c>, as in C#.</summary>
-    private static bool CanConvert(Type from, Type to) => IsImplicitlyConvertible(from, to);
+    private static bool CanConvert(ITypeDefinition from, ITypeDefinition to) => IsImplicitlyConvertible(from, to);
 
-    /// <summary>True when C# converts <paramref name="from"/> to <paramref name="to"/>
-    /// implicitly: identity, reference/boxing, nullable lifting, or a built-in numeric
-    /// conversion. This is a language rule, not a storage rule.</summary>
-    internal static bool IsImplicitlyConvertible(Type from, Type to) {
-        if (from == to)
-            return true;
-        if (Nullable.GetUnderlyingType(to) is { } targetUnderlying) {
-            if (from == targetUnderlying)
-                return true;
-            if (Nullable.GetUnderlyingType(from) is { } sourceUnderlying)
-                return IsImplicitNumeric(sourceUnderlying, targetUnderlying);
-            return IsImplicitNumeric(from, targetUnderlying);
-        }
-        if (Nullable.GetUnderlyingType(from) is not null)
-            return false;
-        if (to.IsAssignableFrom(from))
-            return true;
-        return IsImplicitNumeric(from, to);
-    }
-
-    private static bool IsImplicitNumeric(Type from, Type to) {
-        if (from.IsEnum || to.IsEnum || from.IsPointer || to.IsPointer)
-            return false;
-        return (Type.GetTypeCode(from), Type.GetTypeCode(to)) switch {
-            (TypeCode.SByte, TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64
-                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Byte, TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32
-                or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
-                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Int16, TypeCode.Int32 or TypeCode.Int64
-                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.UInt16, TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64
-                or TypeCode.UInt64 or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Int32, TypeCode.Int64 or TypeCode.Single or TypeCode.Double
-                or TypeCode.Decimal) => true,
-            (TypeCode.UInt32, TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
-                or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Int64, TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.UInt64, TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Char, TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32
-                or TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
-                or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Single, TypeCode.Double) => true,
-            _ => false,
-        };
-    }
+    /// <summary>True when the platform converts <paramref name="from"/> to <paramref name="to"/> implicitly: identity,
+    /// reference/boxing, nullable lifting, or a built-in numeric conversion. The platform answers it
+    /// (<see cref="ITypeDefinition.IsAssignableWithoutConversion"/>, <see cref="ITypeDefinition.ResolveConversionFrom"/>),
+    /// so the analysis keeps no CLR type table of its own. This is a language rule, not a storage rule.</summary>
+    internal static bool IsImplicitlyConvertible(ITypeDefinition from, ITypeDefinition to) =>
+        to.IsAssignableWithoutConversion(from)
+        || to.ResolveConversionFrom(from) is { Kind: ConversionOperatorKind.Implicit };
 
 
     /// <summary>
@@ -702,8 +664,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             Replace(context, assignment, stated);
             return;
         }
-        bool convertible = IsImplicitlyConvertible(rhsType, priorType)
-            || (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef));
+        bool convertible = rhsType == priorType
+            || (destDef is not null && srcDef is not null
+                && (IsImplicitlyConvertible(srcDef, destDef) || destDef.IsAssignableFrom(srcDef)));
         if (convertible) {
             if (destDef is not null && srcDef is not null)
                 RewriteAssignmentConversion(context, assignment, destDef, srcDef);
@@ -769,7 +732,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 || (srcNumeric && destCat is Cat.Enum)) {
                 // Convert.ToInt16 throws. An unchecked C# cast wraps, and the emitter
                 // compiles that cast. A checked cast keeps Convert.To*, which throws.
-                if (UncheckedIntegerCast(typeCast, source, dest))
+                if (UncheckedIntegerCast(typeCast, srcDef, destDef))
                     return;
                 if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                     return;
@@ -783,7 +746,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (sc is Cat.Unknown or Cat.Null || dc is Cat.Unknown or Cat.Null)
             return;
         if (sc is Cat.Number && dc is Cat.Number) {
-            if (UncheckedIntegerCast(typeCast, source, dest))
+            if (UncheckedIntegerCast(typeCast, srcDef, destDef))
                 return;
             if (destDef is not null && srcDef is not null
                 && TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
@@ -1066,14 +1029,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (destClr is null)
             return false;
         var underlying = Nullable.GetUnderlyingType(destClr) ?? destClr;
-        if (ConvertMethodName(underlying) is not { } name)
+        if (ClrConvertMethods.NameOf(underlying) is not { } name)
             return false;
         var convertDef = context.TypeDefinitions.GetTypeDefinition(typeof(Convert));
         if (convertDef is null)
             return false;
         Node source = value;
         var sourceDef = srcDef;
-        if (srcClr is not null && IsIeeeFloating(srcClr) && IsIntegerType(underlying)) {
+        var underlyingDefinition = destDef.NullableOf ?? destDef;
+        if (srcClr is not null && IsIeeeFloating(srcDef) && IsIntegerType(underlyingDefinition)) {
             var doubleDef = context.TypeDefinitions.GetTypeDefinition(typeof(double));
             var mathDef = context.TypeDefinitions.GetTypeDefinition(typeof(Math));
             if (doubleDef is null || mathDef is null)
@@ -1116,19 +1080,21 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             context.SetResolvedType(original, resolved);
     }
 
-    private static bool IsIeeeFloating(Type type) =>
-        type == typeof(double) || type == typeof(float);
+    private static bool IsIeeeFloating(ITypeDefinition? definition) =>
+        definition?.PrimitiveType is PrimitiveType.Float32 or PrimitiveType.Float64;
 
     /// <summary>An unchecked cast between integer widths. The emitter narrows it;
     /// <see cref="Convert"/> would throw instead of wrapping.</summary>
-    private static bool UncheckedIntegerCast(TypeCast typeCast, Type? source, Type? dest) =>
+    private static bool UncheckedIntegerCast(TypeCast typeCast, ITypeDefinition? source, ITypeDefinition? dest) =>
         !typeCast.IsChecked && source is not null && dest is not null
         && IsIntegerType(source) && IsIntegerType(dest);
 
-    private static bool IsIntegerType(Type type) =>
-        type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte)
-        || type == typeof(sbyte) || type == typeof(uint) || type == typeof(ulong) || type == typeof(ushort)
-        || type == typeof(char);
+    /// <summary>An integer width, char included, and an enum (an enum is integral: its underlying type is an integer).
+    /// The platform names the primitive, so this is not a CLR listing.</summary>
+    private static bool IsIntegerType(ITypeDefinition? definition) =>
+        definition is not null
+        && (definition.PrimitiveType is { } primitive && (primitive.IsInteger() || primitive is PrimitiveType.Char)
+            || definition.Kind == TypeKind.Enum);
 
     /// <summary>The Date-offset fence's amount conversion; its <c>Convert.To*</c> fallback is a private conversion rule. Removed by T-10.</summary>
     private static Node? CoerceTo(AnalysisContext context, Node value, ITypeDefinition destDef) {
@@ -1138,14 +1104,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 : null);
         if (srcDef is null)
             return null;
-        if (destDef is IClrTypeDefinition d && srcDef is IClrTypeDefinition s
-            && d.RuntimeType.IsAssignableFrom(s.RuntimeType))
+        if (destDef.IsAssignableWithoutConversion(srcDef))
             return value;
         if (TryConversionInvoke(context, value, destDef, srcDef, implicitOnly: true) is { } conv)
             return conv;
-        var destClr = destDef.GetRuntimeType() ?? (destDef as IClrTypeDefinition)?.RuntimeType;
-        if (destClr is not null && ConvertMethodName(destClr) is { } name) {
-            var convertDef = context.TypeDefinitions.GetTypeDefinition(typeof(Convert));
+        if (ClrConvertMethods.NameOf(destDef) is { } name) {
+            var convertDef = context.TypeDefinitions.GetTypeDefinition("System.Convert");
             var method = convertDef?.FindMatchingMethodOverloads(name, [srcDef]).FirstOrDefault();
             if (method is not null)
                 return StampStaticInvoke(context, method, value);
@@ -1159,23 +1123,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var invoke = new Invoke(member, args);
         StampConversion(context, typeRef, member, invoke, method);
         return invoke;
-    }
-
-    private static string? ConvertMethodName(Type dest) {
-        if (dest == typeof(double)) return "ToDouble";
-        if (dest == typeof(float)) return "ToSingle";
-        if (dest == typeof(decimal)) return "ToDecimal";
-        if (dest == typeof(int)) return "ToInt32";
-        if (dest == typeof(long)) return "ToInt64";
-        if (dest == typeof(short)) return "ToInt16";
-        if (dest == typeof(byte)) return "ToByte";
-        if (dest == typeof(sbyte)) return "ToSByte";
-        if (dest == typeof(uint)) return "ToUInt32";
-        if (dest == typeof(ulong)) return "ToUInt64";
-        if (dest == typeof(ushort)) return "ToUInt16";
-        if (dest == typeof(char)) return "ToChar";
-        if (dest == typeof(bool)) return "ToBoolean";
-        return null;
     }
 
     private static Node TypeRef(ITypeDefinition def) =>

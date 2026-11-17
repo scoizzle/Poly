@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -61,7 +62,7 @@ public class SuspendResumeVmTests {
     [Test]
     public async Task SuspendInLambda_IsACompileRejection() {
         var declaration = new Variable("fn");
-        var x = new Parameter("x", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
         var node = new Block([
             new Assignment(declaration, new Lambda([x], new Block([
                 new SuspendNode(new Constant(0L), "mid"),
@@ -77,7 +78,7 @@ public class SuspendResumeVmTests {
 
     [Test]
     public async Task Suspend_InsideSetArgsBody_ResumesAndReturnsParameter() {
-        var x = new Parameter("x", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
         var body = new Invoke(new Lambda([x], new Block([
             new SuspendNode(new Constant(0L), "mid"),
             x

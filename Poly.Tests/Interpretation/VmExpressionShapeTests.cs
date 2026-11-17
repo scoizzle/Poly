@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -178,7 +179,7 @@ public class VmExpressionShapeTests {
         var node = new Block([
             new TryCatchFinally(
                 new Block([new Assignment(x, new Constant(1L))]),
-                [new CatchClause(TypeReference.To<Exception>(), "ex", new Assignment(x, new Constant(2L)))]),
+                [new CatchClause(ClrTypeReferences.To<Exception>(), "ex", new Assignment(x, new Constant(2L)))]),
             x
         ], [x]);
         var built = Build(node, CompilationMode.Normal);

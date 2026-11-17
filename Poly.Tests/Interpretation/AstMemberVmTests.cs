@@ -2,6 +2,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -176,7 +177,7 @@ public class AstMemberVmTests {
         return ctx.TypeDefinitions;
     }
 
-    private static readonly Parameter ObjectValue = new("v", TypeReference.To<object>());
+    private static readonly Parameter ObjectValue = new("v", ClrTypeReferences.To<object>());
 
     // Box(object v) { this.V = v; } and Set(object v) { this.V = v; }
     private static TypeDefinitionNode BoxType() => new(
@@ -186,7 +187,7 @@ public class AstMemberVmTests {
                 [ObjectValue],
                 new Block([new Assignment(new Member(new ThisReference(), "V"), ObjectValue)]))
         ],
-        Properties: [new PropertyDefinitionNode("V", TypeReference.To<object>())],
+        Properties: [new PropertyDefinitionNode("V", ClrTypeReferences.To<object>())],
         Methods: [
             new MethodDefinitionNode(
                 "Set",
@@ -258,7 +259,7 @@ public class AstMemberVmTests {
 
     // A method body with a lambda does not compile as its own frame.
     private static Node LambdaArgument() =>
-        new Lambda([new Parameter("x", TypeReference.To<long>())], new Parameter("x"));
+        new Lambda([new Parameter("x", ClrTypeReferences.To<long>())], new Parameter("x"));
 
     [Test]
     public async Task Compile_AstMethodNamedCreate_BodyFails_FallsBack() {

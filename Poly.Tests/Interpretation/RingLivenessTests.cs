@@ -4,6 +4,7 @@ using Poly.Ast.Nodes;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
@@ -57,7 +58,7 @@ public class RingLivenessTests {
         var x = new Variable("x");
         var b = new Variable("b");
         // An index access is the reliably deep statement: receiver, index, and result.
-        var makeArray = new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(4L)));
+        var makeArray = new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L)));
         var deep = new Assignment(x, new IndexAccess(arr, new Constant(0L)));
         var shallow = new Assignment(b, new Constant(1L));
 

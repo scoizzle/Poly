@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
 
@@ -18,7 +19,7 @@ public class AbiEmitterOptionalArithmeticTests {
     }
 
     private static Parameter OptionalAge() =>
-        new("age", new OptionalTypeReference(TypeReference.To<long>()));
+        new("age", new OptionalTypeReference(ClrTypeReferences.To<long>()));
 
     [Test]
     public async Task OptionalScalar_ValuePlusNullable_Right_UsesValue() {
@@ -46,10 +47,10 @@ public class AbiEmitterOptionalArithmeticTests {
     }
 
     private static Parameter OptionalByte() =>
-        new("b", new OptionalTypeReference(TypeReference.To<byte>()));
+        new("b", new OptionalTypeReference(ClrTypeReferences.To<byte>()));
 
     private static Parameter OptionalShort() =>
-        new("s", new OptionalTypeReference(TypeReference.To<short>()));
+        new("s", new OptionalTypeReference(ClrTypeReferences.To<short>()));
 
     /// <summary>C# promotes a smaller integral to <c>int</c> before the operator runs, and
     /// the nullable lift keeps the promotion: <c>byte? + byte?</c> is <c>int?</c>, so the
@@ -57,7 +58,7 @@ public class AbiEmitterOptionalArithmeticTests {
     [Test, Timeout(10_000)]
     public async Task OptionalByte_BytePlusByte_OverflowsAsInt(CancellationToken ct) {
         _ = ct;
-        var a = new Parameter("a", new OptionalTypeReference(TypeReference.To<byte>()));
+        var a = new Parameter("a", new OptionalTypeReference(ClrTypeReferences.To<byte>()));
         using var exec = Execute(new Add(a, OptionalByte()), (byte)200, (byte)200);
         await Assert.That(exec.Result.Value).IsEqualTo(400);
         await Assert.That(exec.Result.Value?.GetType()).IsEqualTo(typeof(int));
@@ -67,7 +68,7 @@ public class AbiEmitterOptionalArithmeticTests {
     [Test, Timeout(10_000)]
     public async Task OptionalShort_ShortTimesShort_ExceedsInt16(CancellationToken ct) {
         _ = ct;
-        var a = new Parameter("a", new OptionalTypeReference(TypeReference.To<short>()));
+        var a = new Parameter("a", new OptionalTypeReference(ClrTypeReferences.To<short>()));
         using var exec = Execute(new Multiply(a, OptionalShort()), (short)30000, (short)2);
         await Assert.That(exec.Result.Value).IsEqualTo(60000);
         await Assert.That(exec.Result.Value?.GetType()).IsEqualTo(typeof(int));

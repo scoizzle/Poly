@@ -30,7 +30,7 @@ public class VmCorrectnessTests {
     /// read as 0 (T-21a).</summary>
     [Test]
     public async Task SetArgs_NullForAnIntParameter_IsRefused() {
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var body = new Invoke(new Lambda([x], x));
         await Assert.That(() => ExecVm(body, s => s.SetArgs(new object?[] { null })))
             .Throws<InvalidOperationException>()
@@ -45,7 +45,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task SetArgs_SingleLongArg() {
-        var x = new Parameter("x", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
         var body = new Invoke(new Lambda([x], x));
         var (_, result) = ExecVm(body, s => s.SetArgs(42L));
         await Assert.That(result).IsEqualTo(42L);
@@ -53,8 +53,8 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task SetArgs_MultipleIntArgs_AddsCorrectly() {
-        var x = new Parameter("x", TypeReference.To<int>());
-        var y = new Parameter("y", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var y = new Parameter("y", ClrTypeReferences.To<int>());
         var body = new Invoke(new Lambda([x, y], new SN.Add(x, y)));
         var (_, result) = ExecVm(body, s => s.SetArgs(10, 20));
         await Assert.That(result).IsEqualTo(30L);
@@ -62,7 +62,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task SetArgs_RefType_PropertyAccess() {
-        var e = new Parameter("entity", TypeReference.To<PersonRecord>());
+        var e = new Parameter("entity", ClrTypeReferences.To<PersonRecord>());
         var body = new Invoke(new Lambda([e], new Member(e, "Age")));
         var (_, result) = ExecVm(body, s => s.SetArgs(new PersonRecord("Alice", 25)));
         await Assert.That(result).IsEqualTo(25L);
@@ -70,7 +70,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task SetArgs_StalePoolData_Overwritten() {
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var body = new Invoke(new Lambda([x], x));
         var prog = Compile(body);
         var d = new VmState(prog);
@@ -82,7 +82,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task HeapConst_StringAfterEntity() {
-        var e = new Parameter("entity", TypeReference.To<PersonRecord>());
+        var e = new Parameter("entity", ClrTypeReferences.To<PersonRecord>());
         var body = new Invoke(new Lambda([e],
             new Equal(new Member(e, "Name"), new Constant("Alice"))));
         var (_, result) = ExecVm(body, s => s.SetArgs(new PersonRecord("Alice", 30)));
@@ -176,7 +176,7 @@ public class VmCorrectnessTests {
     [Test]
     public async Task Regression_BareParameter_WithoutTypeRef_FailsPropertyAccess() {
         // Found during Stress_PropertyAccessInLoop: a bare Parameter("entity")
-        // without TypeReference.To<PersonRecord>() cannot resolve .Age or .Name
+        // without ClrTypeReferences.To<PersonRecord>() cannot resolve .Age or .Name
         // because the type resolver has no way to infer the type.  Property
         // access µops (CallExternalDirect) require the declaring type to be
         // known.  This test documents that TypeReference is REQUIRED for
@@ -193,7 +193,7 @@ public class VmCorrectnessTests {
         // (which triggers RegisterParameters) or used as bare parameters
         // (which triggers the EmitParameter fallback).  Both paths must
         // produce the same result.
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
 
         // Path A: wrapped in Lambda+Invoke
         var bodyA = new Invoke(new Lambda([x], x));
@@ -209,7 +209,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task StringEquality_OnEntityProperty_ReturnsOneOrZero() {
-        var e = new Parameter("entity", TypeReference.To<PersonRecord>());
+        var e = new Parameter("entity", ClrTypeReferences.To<PersonRecord>());
         var body = new Invoke(new Lambda([e],
             new Equal(new Member(e, "Name"), new Constant("Alice"))));
         var (_, r1) = ExecVm(body, s => s.SetArgs(new PersonRecord("Alice", 30)));
@@ -220,7 +220,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task CompositeGuard_AgeInRange_ReturnsOneOrZero() {
-        var e = new Parameter("entity", TypeReference.To<PersonRecord>());
+        var e = new Parameter("entity", ClrTypeReferences.To<PersonRecord>());
         var body = new Invoke(new Lambda([e],
             new SN.And(
                 new GreaterThanOrEqual(new Member(e, "Age"), new Constant(18L)),
@@ -249,7 +249,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task Stress_SequentialStates_DifferentArgs() {
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var body = new Invoke(new Lambda([x], x));
         var prog = Compile(body);
         for (int i = 0; i < 100; i++) {
@@ -260,7 +260,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task Stress_InterleavedPrograms() {
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var add = Compile(new Invoke(new Lambda([x], new SN.Add(x, new Constant(1L)))));
         var mul = Compile(new Invoke(new Lambda([x], new SN.Multiply(x, new Constant(2L)))));
         for (int i = 0; i < 50; i++) {
@@ -310,8 +310,8 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task SetArgs_TwoParamsAndLocals_SecondParamSurvivesLocalStores() {
-        var x = new Parameter("x", TypeReference.To<long>());
-        var y = new Parameter("y", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var y = new Parameter("y", ClrTypeReferences.To<long>());
         var a = new Variable("a");
         var b = new Variable("b");
         var body = new Invoke(new Lambda([x, y], new Block(
@@ -324,7 +324,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task Stress_PropertyAccessInLoop() {
-        var e = new Parameter("entity", TypeReference.To<PersonRecord>());
+        var e = new Parameter("entity", ClrTypeReferences.To<PersonRecord>());
         var c = new Variable("c");
         var body = new Invoke(new Lambda([e], new Block(
             [new Assignment(c, new Constant(0L)),
@@ -379,7 +379,7 @@ public class VmCorrectnessTests {
     public async Task Fuzz_NewArray_Store_Load() {
         var arr = new Variable("arr");
         var body = new Block(
-            [new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(5L))),
+            [new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(5L))),
              new Assignment(new IndexAccess(arr, new Constant(0L)), new Constant(100L)),
              new Assignment(new IndexAccess(arr, new Constant(1L)), new Constant(200L)),
              new SN.Add(
@@ -398,7 +398,7 @@ public class VmCorrectnessTests {
         // checking or a safe-load µop for domains that need it.
         var arr = new Variable("arr");
         var body = new Block(
-            [new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(3L))),
+            [new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
              new IndexAccess(arr, new Constant(999L))],
             [arr]);
         var prog = Compile(body);
@@ -416,8 +416,8 @@ public class VmCorrectnessTests {
         var body = new Block(
             [new Assignment(s, new Constant("hello")),
              new Invoke(
-                 new Lambda([new Parameter("x", TypeReference.To<string>())],
-                     new Member(new Parameter("x", TypeReference.To<string>()), "Length")),
+                 new Lambda([new Parameter("x", ClrTypeReferences.To<string>())],
+                     new Member(new Parameter("x", ClrTypeReferences.To<string>()), "Length")),
                  s)],
             [s]);
         var (_, r) = ExecVm(body);
@@ -522,7 +522,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task Fuzz_VmState_Reset_Reuse() {
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var body = new Invoke(new Lambda([x], x));
         var prog = Compile(body);
 
@@ -538,7 +538,7 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task Fuzz_VmState_Reset_ClearsHeap() {
-        var e = new Parameter("entity", TypeReference.To<PersonRecord>());
+        var e = new Parameter("entity", ClrTypeReferences.To<PersonRecord>());
         var body = new Invoke(new Lambda([e], new Member(e, "Age")));
         var prog = Compile(body);
 

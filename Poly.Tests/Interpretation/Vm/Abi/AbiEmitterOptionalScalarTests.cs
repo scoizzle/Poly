@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
 
@@ -38,7 +39,7 @@ public class AbiEmitterOptionalScalarTests {
     }
 
     private static Parameter OptionalAge() =>
-        new("age", new OptionalTypeReference(TypeReference.To<long>()), DefaultValue: new Constant(null));
+        new("age", new OptionalTypeReference(ClrTypeReferences.To<long>()), DefaultValue: new Constant(null));
 
     [Test]
     public async Task AstMethod_OptionalScalar_PresentZero_NotNull() {
@@ -76,7 +77,7 @@ public class AbiEmitterOptionalScalarTests {
                     ]))
             ],
             Properties: [
-                new PropertyDefinitionNode("Limit", new OptionalTypeReference(TypeReference.To<long>()))
+                new PropertyDefinitionNode("Limit", new OptionalTypeReference(ClrTypeReferences.To<long>()))
             ]));
         using var exec = Interpreter.Execute(
             Interpreter.Compile(new New(new TypeReference("Branch.CopyLot"), new Constant(41L)), types));
@@ -97,7 +98,7 @@ public class AbiEmitterOptionalScalarTests {
                     ]))
             ],
             Properties: [
-                new PropertyDefinitionNode("Limit", new OptionalTypeReference(TypeReference.To<long>()))
+                new PropertyDefinitionNode("Limit", new OptionalTypeReference(ClrTypeReferences.To<long>()))
             ]));
         using var exec = Interpreter.Execute(
             Interpreter.Compile(new New(new TypeReference("Branch.OmitLot")), types));
@@ -113,7 +114,7 @@ public class AbiEmitterOptionalScalarTests {
             "RequiredLot", "Branch",
             Constructors: [
                 new ConstructorDefinitionNode(
-                    [new Parameter("count", TypeReference.To<long>())],
+                    [new Parameter("count", ClrTypeReferences.To<long>())],
                     new Block([]))
             ]));
         await Assert.That(() => Interpreter.Compile(new New(new TypeReference("Branch.RequiredLot")), types))
@@ -123,7 +124,7 @@ public class AbiEmitterOptionalScalarTests {
 
     [Test]
     public async Task AstMethod_RequiredScalar_Omitted_IsAnalysisError() {
-        var age = new Parameter("age", TypeReference.To<long>());
+        var age = new Parameter("age", ClrTypeReferences.To<long>());
         var types = ProbeType(age, new NotEqual(age, new Constant(null)));
         await Assert.That(() => Interpreter.Compile(Call(), types))
             .Throws<InvalidOperationException>()

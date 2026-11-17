@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Integration;
 
@@ -17,7 +18,7 @@ public class MiddlewareInterpreterIntegrationTests {
     [Test]
     public async Task SharedContext_ReuseAcrossMultipleFragments_MaintainsConsistentParameterBindings() {
         // Arrange
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
 
         // Act - interpret the first AST (x + 10), then a second (x * 2)
         var program1 = Interpreter.Compile(new Add(x, Wrap(10)));
@@ -40,8 +41,8 @@ public class MiddlewareInterpreterIntegrationTests {
     [Test]
     public async Task SharedContext_MultipleParameters_AllAccessible() {
         // Arrange
-        var x = new Parameter("x", TypeReference.To<int>());
-        var y = new Parameter("y", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var y = new Parameter("y", ClrTypeReferences.To<int>());
 
         // Act
         var program = Interpreter.Compile(new Add(x, y));
@@ -94,7 +95,7 @@ public class MiddlewareInterpreterIntegrationTests {
     [Test]
     public async Task SemanticAnalysis_ComplexExpression_ResolvesTypesCorrectly() {
         // Arrange
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
 
         // Act - Build and interpret: (x + 10) * 2
         var addTen = new Add(x, Wrap(10));
@@ -164,7 +165,7 @@ public class MiddlewareInterpreterIntegrationTests {
     [Test]
     public async Task ComplexNested_WithParametersAndConstants_ExecutesCorrectly() {
         // Arrange
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
 
         // Act - Build: ((x + 5) * 2) - 3
         var addFive = new Add(x, Wrap(5));
@@ -189,7 +190,7 @@ public class MiddlewareInterpreterIntegrationTests {
     [Test]
     public async Task NullCoalescing_WithParameter_ReturnsCorrectValue() {
         // Arrange
-        var x = new Parameter("x", TypeReference.To<int?>());
+        var x = new Parameter("x", ClrTypeReferences.To<int?>());
 
         // Act - Build: x ?? 42
         var ast = new Coalesce(x, Wrap(42));
@@ -227,7 +228,7 @@ public class MiddlewareInterpreterIntegrationTests {
     [Test]
     public async Task TypeCast_IntToDouble_CastsCorrectly() {
         // Act - Build: (double)42
-        var ast = new TypeCast(Wrap(42), TypeReference.To<double>());
+        var ast = new TypeCast(Wrap(42), ClrTypeReferences.To<double>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(ast));
@@ -242,7 +243,7 @@ public class MiddlewareInterpreterIntegrationTests {
     [Test]
     public async Task ContextPreservation_MultipleParameterAccess_UsesSameValue() {
         // Arrange
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var node = new Add(x, x);
 
         // Act

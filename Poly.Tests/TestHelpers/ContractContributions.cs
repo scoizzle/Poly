@@ -5,6 +5,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
@@ -56,7 +57,7 @@ public static class ContractContributions {
             new Member(new ClrTypeReference(typeof(System.Diagnostics.Debug)), "WriteLine"),
             [
                 new Invoke(
-                    new Member(TypeReference.To<string>(), "Concat"),
+                    new Member(ClrTypeReferences.To<string>(), "Concat"),
                     [
                         new Constant($"Contract endpoint '{endpointName}' request: "),
                         new Parameter("request"),

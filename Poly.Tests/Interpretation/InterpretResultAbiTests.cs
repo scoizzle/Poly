@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -77,7 +78,7 @@ public class InterpretResultAbiTests {
 
     [Test]
     public async Task ThrowStatement_PropagatesClrException_NotResultKindThrow() {
-        var node = new ThrowStatement(new New(TypeReference.To<InvalidOperationException>(), new Constant("x")));
+        var node = new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>(), new Constant("x")));
         await Assert.That(() => {
             using var exec = Interpreter.Execute(Interpreter.Compile(node));
             _ = exec.Result.Kind; // would be Throw if dead API were used

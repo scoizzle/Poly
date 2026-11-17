@@ -3,6 +3,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -37,7 +38,7 @@ public class AnalysisFactOwnershipTests {
             (new Divide(new Constant(1L), new Constant(0L)), false, false, false),
             // A property read and an allocation are state effects, where they used to be "pure".
             (new Member(new Variable("o"), "Flag"), true, false, false),
-            (new NewArray(TypeReference.To<int>(), new Constant(1L)), true, false, false),
+            (new NewArray(ClrTypeReferences.To<int>(), new Constant(1L)), true, false, false),
         };
 
         foreach (var (condition, hasEffects, elidesThen, elidesElse) in cases) {

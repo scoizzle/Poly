@@ -5,6 +5,7 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using CSharpCallOracle = Poly.Tests.Introspection.CSharpCallOracle;
 
@@ -62,7 +63,7 @@ public class ValueRepresentationEmitTests {
     public async Task ScalarIntoObjectParameter_IsBoxedWithoutARepresentationPass() {
         // A non-constant scalar has no representation metadata here; emit must read
         // the parameter's resolved type and box the raw word, not deref it.
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var node = new Invoke(Probe(nameof(RepresentationProbe.SeenAsObject)), x);
         var result = Analyze(node);
 
@@ -79,7 +80,7 @@ public class ValueRepresentationEmitTests {
         var a = new Variable("a");
         var b = new Variable("b");
         var c = new Variable("c");
-        var p = new Parameter("p", TypeReference.To<long>());
+        var p = new Parameter("p", ClrTypeReferences.To<long>());
         var node = new Block([
             new Assignment(a, new Constant("one")),
             new Assignment(b, new Constant("two")),
@@ -122,7 +123,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task IfTrue_NestedConditionalReturn_YieldsTheUnconditionalReturn() {
-        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var flag = new Parameter("flag", ClrTypeReferences.To<bool>());
         var node = new Block([
             new IfStatement(new Constant(true), new Block([
                 new IfStatement(flag, new Return(new Constant("s"))),
@@ -153,7 +154,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task IfTrue_IfElseBothReturn_YieldsTheBranchValue() {
-        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var flag = new Parameter("flag", ClrTypeReferences.To<bool>());
         var node = new Block([
             new IfStatement(new Constant(true), new Block([
                 new IfStatement(flag, new Return(new Constant(1L)), new Return(new Constant(2L)))
@@ -170,7 +171,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task IfTrue_WithFallThroughIf_DoesNotStealTheLaterReturn() {
-        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var flag = new Parameter("flag", ClrTypeReferences.To<bool>());
         var a = new Variable("a");
         var node = new Block([
             new Assignment(a, new Constant("heap")),
@@ -189,7 +190,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task IfElse_DifferentArmTypes_DoNotBecomeTheBlockType() {
-        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var flag = new Parameter("flag", ClrTypeReferences.To<bool>());
         var a = new Variable("a");
         var node = new Block([
             new Assignment(a, new Constant("heap")),
@@ -219,7 +220,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task NullableMember_PassedToMethod_IsTheValueNotTheHandle() {
-        var arg = new Parameter("box", TypeReference.To<NullableProbe.Box>());
+        var arg = new Parameter("box", ClrTypeReferences.To<NullableProbe.Box>());
         var node = new Invoke(
             new Member(new ClrTypeReference(typeof(NullableProbe)), nameof(NullableProbe.Id)),
             new Member(arg, nameof(NullableProbe.Box.N)));
@@ -245,7 +246,7 @@ public class ValueRepresentationEmitTests {
     public async Task FoldedShift_CarriesTheOriginalIntegerType() {
         // x * 8 lowers to ShiftLeft(x, 3); the replacement must carry x's type so
         // emit classifies it as a scalar.
-        var p = new Parameter("p", TypeReference.To<int>());
+        var p = new Parameter("p", ClrTypeReferences.To<int>());
         var multiply = new Multiply(p, new Constant(8L));
         var node = new Block([
             new Assignment(new Variable("a"), new Constant("heap")),
@@ -271,7 +272,7 @@ public class ValueRepresentationEmitTests {
     [Test]
     public async Task DateOffset_RootIsTheDate() {
         var date = new DateOnly(2026, 1, 1);
-        var p = new Parameter("p", TypeReference.To<DateOnly>());
+        var p = new Parameter("p", ClrTypeReferences.To<DateOnly>());
         var node = new Add(p, new Constant(1L));
         var result = Analyze(node);
 
@@ -283,7 +284,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task DecimalArithmetic_RootIsADecimal() {
-        var p = new Parameter("d", TypeReference.To<decimal>());
+        var p = new Parameter("d", ClrTypeReferences.To<decimal>());
         var node = new Add(p, new Constant(1m));
         var result = Analyze(node);
 
@@ -303,7 +304,7 @@ public class ValueRepresentationEmitTests {
         }
     }
 
-    private static Parameter P<T>(string name) => new(name, TypeReference.To<T>());
+    private static Parameter P<T>(string name) => new(name, ClrTypeReferences.To<T>());
 
     private static Invoke NullableCall(string method, bool present) =>
         new(new Member(new ClrTypeReference(typeof(NullableProbe)), method), new Constant(present));
@@ -423,7 +424,7 @@ public class ValueRepresentationEmitTests {
     [Test]
     public async Task DateMinusDecimalDays_AddDaysOfTheNegatedCount_IsTheEarlierDate() {
         var node = new Invoke(new Member(P<DateOnly>("start"), nameof(DateOnly.AddDays)),
-            new TypeCast(new UnaryMinus(P<decimal>("days")), TypeReference.To<int>()));
+            new TypeCast(new UnaryMinus(P<decimal>("days")), ClrTypeReferences.To<int>()));
         await Assert.That(Answer(node, new DateOnly(2024, 2, 28), 2m)).IsEqualTo($"DateOnly {new DateOnly(2024, 2, 26)}");
     }
 

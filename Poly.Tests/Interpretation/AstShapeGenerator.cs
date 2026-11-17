@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -285,9 +286,9 @@ public static class AstShapeGenerator {
     }
 
     static Node TypeRef(Ty type) => type switch {
-        Ty.Long => TypeReference.To<long>(),
-        Ty.Double => TypeReference.To<double>(),
-        _ => TypeReference.To<int>(),
+        Ty.Long => ClrTypeReferences.To<long>(),
+        Ty.Double => ClrTypeReferences.To<double>(),
+        _ => ClrTypeReferences.To<int>(),
     };
 
     static string Literal(object value) => value switch {

@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -9,7 +10,7 @@ public class ParameterNodeTests {
     [Test]
     public async Task Parameter_IntType_CompilesAndExecutesWithValue() {
         // Arrange
-        var param = new Parameter("x", TypeReference.To<int>());
+        var param = new Parameter("x", ClrTypeReferences.To<int>());
 
         // Act
         var program = Interpreter.Compile(param);
@@ -24,7 +25,7 @@ public class ParameterNodeTests {
     [Test]
     public async Task Parameter_StringType_CompilesAndExecutesWithValue() {
         // Arrange
-        var param = new Parameter("name", TypeReference.To<string>());
+        var param = new Parameter("name", ClrTypeReferences.To<string>());
 
         // Act
         var program = Interpreter.Compile(param);
@@ -39,7 +40,7 @@ public class ParameterNodeTests {
     [Test]
     public async Task Parameter_DoubleType_CompilesAndExecutesWithValue() {
         // Arrange
-        var param = new Parameter("value", TypeReference.To<double>());
+        var param = new Parameter("value", ClrTypeReferences.To<double>());
 
         // Act
         var program = Interpreter.Compile(param);
@@ -54,7 +55,7 @@ public class ParameterNodeTests {
     [Test]
     public async Task Parameter_BoolType_CompilesAndExecutesWithValue() {
         // Arrange
-        var param = new Parameter("flag", TypeReference.To<bool>());
+        var param = new Parameter("flag", ClrTypeReferences.To<bool>());
 
         // Act
         var program = Interpreter.Compile(param);
@@ -69,8 +70,8 @@ public class ParameterNodeTests {
     [Test]
     public async Task Parameter_MultipleParameters_CompilesAndExecutes() {
         // Arrange
-        var x = new Parameter("x", TypeReference.To<int>());
-        var y = new Parameter("y", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var y = new Parameter("y", ClrTypeReferences.To<int>());
 
         // Act - Just return the first parameter
         var program = Interpreter.Compile(x);
@@ -100,7 +101,7 @@ public class ParameterNodeTests {
     [Test]
     public async Task Parameter_SameParameterTwice_UsesSameArgument() {
         // Arrange
-        var param = new Parameter("x", TypeReference.To<int>());
+        var param = new Parameter("x", ClrTypeReferences.To<int>());
         var node = new Add(param, param);
 
         // Act

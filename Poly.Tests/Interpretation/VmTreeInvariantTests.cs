@@ -5,6 +5,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 using static System.Linq.Expressions.Expression;
@@ -55,7 +56,7 @@ public class VmTreeInvariantTests {
     /// no argument expressions.</summary>
     [Test, Timeout(10_000)]
     public async Task SetArgsInvoke_IsClean(CancellationToken ct) {
-        var p = new Parameter("p", TypeReference.To<long>());
+        var p = new Parameter("p", ClrTypeReferences.To<long>());
         AssertClean(new Add(new Constant(41L), new Invoke(new Lambda([p], p))));
     }
 
@@ -136,7 +137,7 @@ public class VmTreeInvariantTests {
         get {
             var item = new Variable("item");
             yield return ("IfStatement", new IfStatement(
-                new New(TypeReference.To<AstParityTests.ParityWidget>()), new Constant(2L)));
+                new New(ClrTypeReferences.To<AstParityTests.ParityWidget>()), new Constant(2L)));
             yield return ("WhileLoop", new WhileLoop(new Constant(false), new Constant(1L)));
             yield return ("DoWhileLoop", new DoWhileLoop(new Constant(1L), new Constant(false)));
             yield return ("ForLoop", new ForLoop(null, new Constant(false), null, new Constant(1L)));
@@ -152,11 +153,11 @@ public class VmTreeInvariantTests {
                 new Block([new LabelDeclaration("end", new Constant(1L)), new GotoStatement("end")]));
             yield return ("LabelDeclaration", new LabelDeclaration("start", new Constant(1L)));
             yield return ("ThrowStatement",
-                new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())));
+                new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>())));
             yield return ("TryCatchFinally",
                 new TryCatchFinally(new Constant(1L), null, new Constant(2L)));
             yield return ("UsingStatement",
-                new UsingStatement(new New(TypeReference.To<MemoryStream>()), new Constant(1L)));
+                new UsingStatement(new New(ClrTypeReferences.To<MemoryStream>()), new Constant(1L)));
             yield return ("SuspendNode", new SuspendNode(new Constant(1L)));
         }
     }

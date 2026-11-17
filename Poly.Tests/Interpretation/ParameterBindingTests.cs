@@ -3,6 +3,7 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -29,13 +30,13 @@ public class ParameterBindingTests {
 
     [Test]
     public async Task MethodParameter_ReaderShapedUse_BindsAndInvokes() {
-        var predicate = new Parameter("pred", TypeReference.To<Func<int, bool>>());
+        var predicate = new Parameter("pred", ClrTypeReferences.To<Func<int, bool>>());
         var type = new TypeDefinitionNode(
             "Forwarder", "Sample",
             Methods: [
                 new MethodDefinitionNode(
                     "Count",
-                    TypeReference.To<long>(),
+                    ClrTypeReferences.To<long>(),
                     Parameters: [predicate],
                     Body: new Invoke(
                         Probe(nameof(CountIf)),
@@ -58,13 +59,13 @@ public class ParameterBindingTests {
 
     [Test]
     public async Task MethodParameter_ReaderShapedWrite_UpdatesTheParameter() {
-        var value = new Parameter("value", TypeReference.To<long>());
+        var value = new Parameter("value", ClrTypeReferences.To<long>());
         var type = new TypeDefinitionNode(
             "Counter", "Sample",
             Methods: [
                 new MethodDefinitionNode(
                     "Bump",
-                    TypeReference.To<long>(),
+                    ClrTypeReferences.To<long>(),
                     Parameters: [value],
                     Body: new Block([
                         new Assignment(
@@ -97,13 +98,13 @@ public class ParameterBindingTests {
 
     [Test]
     public async Task MethodParameter_MemberAccess_Resolves() {
-        var text = new Parameter("text", TypeReference.To<string>());
+        var text = new Parameter("text", ClrTypeReferences.To<string>());
         var type = new TypeDefinitionNode(
             "Formatter", "Sample",
             Methods: [
                 new MethodDefinitionNode(
                     "HasLength",
-                    TypeReference.To<bool>(),
+                    ClrTypeReferences.To<bool>(),
                     Parameters: [text],
                     Body: new GreaterThan(
                         new Member(new Variable("text"), nameof(string.Length)),
@@ -123,13 +124,13 @@ public class ParameterBindingTests {
 
     [Test]
     public async Task MethodParameter_AssigningStringToInt_FailsClosed() {
-        var value = new Parameter("value", TypeReference.To<int>());
+        var value = new Parameter("value", ClrTypeReferences.To<int>());
         var type = new TypeDefinitionNode(
             "Writer", "Sample",
             Methods: [
                 new MethodDefinitionNode(
                     "Write",
-                    TypeReference.To<long>(),
+                    ClrTypeReferences.To<long>(),
                     Parameters: [value],
                     Body: new Assignment(new Variable("value"), new Constant("hi")))
             ]);

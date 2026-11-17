@@ -4,6 +4,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Benchmarks;
 
@@ -191,7 +192,7 @@ public class PrimeSieveBenchmark {
 
         return new Block(
         [
-            new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant(wordCnt))),
+            new Assignment(bits, new NewArray(ClrTypeReferences.To<long>(), new Constant(wordCnt))),
             new Assignment(i, new Constant(2)),
             new WhileLoop(
                 new LessThanOrEqual(new Multiply(i, i), new Constant(limit)),
@@ -273,9 +274,9 @@ public class PrimeSieveBenchmark {
         //  Phase 1 – base primes up to sqrt(limit)
         // ════════════════════════════════════════════════════════
         nodes.Add(new Assignment(baseBits,
-            new NewArray(TypeReference.To<long>(), new Constant(sqrtWordCnt))));
+            new NewArray(ClrTypeReferences.To<long>(), new Constant(sqrtWordCnt))));
         nodes.Add(new Assignment(basePrimes,
-            new NewArray(TypeReference.To<long>(), new Constant(maxPrimes))));
+            new NewArray(ClrTypeReferences.To<long>(), new Constant(maxPrimes))));
 
         // Sieve
         nodes.Add(new Assignment(i, new Constant(2L)));
@@ -312,7 +313,7 @@ public class PrimeSieveBenchmark {
             new Block([
                 // Fresh segment array (CLR zero-initialises)
                 new Assignment(seg,
-                    new NewArray(TypeReference.To<long>(), new Constant(segWordCnt))),
+                    new NewArray(ClrTypeReferences.To<long>(), new Constant(segWordCnt))),
 
                 // high = min(low + segmentSize - 1, limit)
                 new Assignment(high, new Conditional(

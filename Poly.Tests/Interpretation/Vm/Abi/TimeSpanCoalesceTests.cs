@@ -1,12 +1,13 @@
 using Poly.Interpretation;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
 
 /// <summary>An optional struct parameter coalesced with a call arm answers the struct, not a word.</summary>
 public class TimeSpanCoalesceTests {
     private static Node Body() {
-        var budget = new Parameter("budget", new OptionalTypeReference(TypeReference.To<TimeSpan>()));
+        var budget = new Parameter("budget", new OptionalTypeReference(ClrTypeReferences.To<TimeSpan>()));
         var fallback = new Invoke(
             new Member(new NamedTypeReference("TimeSpan"), "FromMinutes"),
             new Constant(30.0));

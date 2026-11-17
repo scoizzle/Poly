@@ -107,7 +107,7 @@ public class CompatibilityProviderTests {
         return exec.RawValue;
     }
 
-    private static Parameter Param<T>(string name) => new(name, TypeReference.To<T>());
+    private static Parameter Param<T>(string name) => new(name, ClrTypeReferences.To<T>());
 
     /// <summary>
     /// Count and key checksum per family, verdict and provider answer. T-18 moved these from master (pinned in its
@@ -308,7 +308,7 @@ public class CompatibilityProviderTests {
     private static Node AssignMember(string member, object? value) {
         var host = new Variable("host");
         return new Block([
-            new Assignment(host, new New(TypeReference.To<AssignHost>())),
+            new Assignment(host, new New(ClrTypeReferences.To<AssignHost>())),
             new Assignment(new Member(host, member), new Constant(value))
         ], [host]);
     }
@@ -346,7 +346,7 @@ public class CompatibilityProviderTests {
     /// </summary>
     [Test]
     public async Task And_TrueWithNullableBool_IsAccepted_UntilT28() {
-        var node = new And(new Constant(true), new Parameter("f", TypeReference.To<bool?>()));
+        var node = new And(new Constant(true), new Parameter("f", ClrTypeReferences.To<bool?>()));
         await Assert.That(Interpreter.Analyze(node).Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
     }
 
@@ -359,8 +359,8 @@ public class CompatibilityProviderTests {
     [Arguments(null)]
     public async Task AndOr_OverNullableBool_ReadTheValue_AbsentIsNotTrue(bool? flag) {
         var sources = new (string Name, Func<Node> Operand, object?[] Args)[] {
-            ("parameter", static () => new Parameter("f", TypeReference.To<bool?>()), [flag]),
-            ("property", static () => new Member(new Parameter("b", TypeReference.To<NullableFlagBox>()), nameof(NullableFlagBox.Flag)), [new NullableFlagBox { Flag = flag }]),
+            ("parameter", static () => new Parameter("f", ClrTypeReferences.To<bool?>()), [flag]),
+            ("property", static () => new Member(new Parameter("b", ClrTypeReferences.To<NullableFlagBox>()), nameof(NullableFlagBox.Flag)), [new NullableFlagBox { Flag = flag }]),
             ("call", () => new Invoke(new Member(new ClrTypeReference(typeof(NullableFlagBox)), nameof(NullableFlagBox.Of)), new Constant(NullableFlagBox.Code(flag))), []),
         };
         var answers = new List<string>();
@@ -380,7 +380,7 @@ public class CompatibilityProviderTests {
         await Assert.That(answers).IsEquivalentTo(sources.SelectMany(s => new[] { "true and X", "X and true", "false or X", "X or false" }
             .Select(shape => $"{s.Name} {shape}: Boolean {expected}")).ToArray());
 
-        var both = Interpreter.Compile(new And(new Parameter("f", TypeReference.To<bool?>()), new Parameter("g", TypeReference.To<bool?>())));
+        var both = Interpreter.Compile(new And(new Parameter("f", ClrTypeReferences.To<bool?>()), new Parameter("g", ClrTypeReferences.To<bool?>())));
         await Assert.That(both.RootClrType).IsEqualTo(typeof(bool));
         using var pair = Interpreter.Execute(both, true, flag);
         await Assert.That(pair.RawValue).IsEqualTo(expected);

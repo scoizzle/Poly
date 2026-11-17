@@ -7,6 +7,7 @@ using Poly.Grammar;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Packs.Product;
 using Poly.Tests.Interpretation;
 
@@ -91,10 +92,10 @@ internal static class PatternRowCorpus {
     public static IReadOnlyList<(string Name, TypeDefinitionNode Type)> CSharpTypes { get; } = [
         ("empty-enum", new TypeDefinitionNode("Empty", Kind: TypeKind.Enum)),
         ("negative-enum", new TypeDefinitionNode("Negative", Kind: TypeKind.Enum, Fields: [
-            new FieldDefinitionNode("A", TypeReference.To<int>(), new Constant(-1), IsStatic: true, IsConst: true),
+            new FieldDefinitionNode("A", ClrTypeReferences.To<int>(), new Constant(-1), IsStatic: true, IsConst: true),
         ])),
         ("body-less-method", new TypeDefinitionNode("Shell", Methods: [
-            new MethodDefinitionNode("Declared", TypeReference.To<long>()),
+            new MethodDefinitionNode("Declared", ClrTypeReferences.To<long>()),
         ])),
     ];
 

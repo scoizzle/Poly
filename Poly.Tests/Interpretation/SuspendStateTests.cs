@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -86,7 +87,7 @@ public class SuspendStateTests {
     public async Task ArrayHandleAcrossSuspend_SurvivesResume() {
         var cols = new Variable("cols");
         var program = Interpreter.Compile(new Block([
-            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(4L))),
+            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L))),
             new Assignment(new IndexAccess(cols, new Constant(1L)), new Constant(5L)),
             new SuspendNode(new Constant(0L), "mid"),
             new IndexAccess(cols, new Constant(1L)),
@@ -135,7 +136,7 @@ public class SuspendStateTests {
     /// suspend to a statement position and keep <c>_coal</c> in the spill set.</summary>
     [Test]
     public async Task CoalesceRightArmSuspend_KeepsTheHelperLocal() {
-        var age = new Parameter("age", TypeReference.To<long?>());
+        var age = new Parameter("age", ClrTypeReferences.To<long?>());
         var node = new Coalesce(
             age,
             new Block([
@@ -155,7 +156,7 @@ public class SuspendStateTests {
     /// which the CLR rejects, so the operand's suspend has to be hoisted to a statement.</summary>
     [Test]
     public async Task ShiftOperandSuspend_KeepsTheHelperLocal() {
-        var n = new Parameter("n", TypeReference.To<long?>());
+        var n = new Parameter("n", ClrTypeReferences.To<long?>());
         var node = new ShiftLeft(n, new Block([
             new SuspendNode(new Constant(0L), "mid"),
             new Constant(1L),
@@ -176,9 +177,9 @@ public class SuspendStateTests {
     /// Parameter 0 aliases <c>_this</c>, so the test reads parameter 1.</summary>
     [Test]
     public async Task SetArgsBodySuspend_RestoresCallerFramePos() {
-        var a = new Parameter("a", TypeReference.To<long>());
-        var b = new Parameter("b", TypeReference.To<long>());
-        var x = new Parameter("x", TypeReference.To<long>());
+        var a = new Parameter("a", ClrTypeReferences.To<long>());
+        var b = new Parameter("b", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
         var inner = new Invoke(new Lambda([x], new Block([
             new SuspendNode(new Constant(0L), "mid"),
             x,

@@ -57,7 +57,6 @@ public class ArchitectureBoundaryTests {
     /// here in the same change, so the budget only shrinks.</summary>
     private static readonly Dictionary<string, (string RemovingRow, Dictionary<string, int> Max)> Budget = new(StringComparer.Ordinal) {
         ["Poly/Ast/Nodes/ClrTypeReference.cs"] = ("an AST node carries a CLR type; removing row: the node leaves the AST (I8b, #972)", new(StringComparer.Ordinal) { ["ClrTypeReference"] = 1, ["RuntimeType"] = 3 }),
-        ["Poly/Ast/Nodes/TypeReference.cs"] = ("a CLR convenience beside the AST reference; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["ClrTypeReference"] = 1, ["typeof("] = 1 }),
         ["Poly/Interpretation/Analysis/ConstantFolding/ConstantFoldingPass.cs"] = ("analysis-time invocation and CLR primitives (#954); removing row: I9 (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["ClrTypeReference"] = 1, ["RuntimeType"] = 1, ["typeof("] = 66 }),
         ["Poly/Interpretation/Analysis/Semantics/AwaitPattern.cs"] = ("awaiter reflection and CLR members; removing row: I9 (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 7 }),
         ["Poly/Interpretation/Analysis/Semantics/ClrTypeResolution.cs"] = ("resolves a CLR type reference; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["ClrTypeReference"] = 1, ["GetRuntimeType"] = 2, ["RuntimeType"] = 1 }),

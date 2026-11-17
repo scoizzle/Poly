@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
 
@@ -24,7 +25,7 @@ public class AbiEmitterLiftedOperandOrderTests {
     private static ITypeDefinitionProvider CounterType() =>
         Analyze(new TypeDefinitionNode(
             "CountLot", "Branch",
-            Fields: [new FieldDefinitionNode("n", TypeReference.To<long>(), new Constant(0L))],
+            Fields: [new FieldDefinitionNode("n", ClrTypeReferences.To<long>(), new Constant(0L))],
             Constructors: [new ConstructorDefinitionNode([], new Block([]))],
             Methods: [
                 CountingMethod("Next", 1L),
@@ -36,7 +37,7 @@ public class AbiEmitterLiftedOperandOrderTests {
     private static MethodDefinitionNode CountingMethod(string name, long scale) =>
         new(
             name,
-            new OptionalTypeReference(TypeReference.To<long>()),
+            new OptionalTypeReference(ClrTypeReferences.To<long>()),
             Parameters: [],
             Body: new Block([
                 new Assignment(

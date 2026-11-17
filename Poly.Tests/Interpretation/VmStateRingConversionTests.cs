@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -71,9 +72,9 @@ public class VmStateRingConversionTests {
         var boxed = new TypeCast(new Constant(7), new ClrTypeReference(typeof(object)));
         using (var text = Interpreter.Execute(Interpreter.Compile(Call(typeof(Convert), nameof(Convert.ToString), boxed))))
             await Assert.That(text.GetValue<string>()).IsEqualTo("7");
-        using (var back = Interpreter.Execute(Interpreter.Compile(new TypeCast(boxed, TypeReference.To<int>()))))
+        using (var back = Interpreter.Execute(Interpreter.Compile(new TypeCast(boxed, ClrTypeReferences.To<int>()))))
             await Assert.That(back.GetValue<int>()).IsEqualTo(7);
-        var date = new Parameter("d", TypeReference.To<DateOnly>());
+        var date = new Parameter("d", ClrTypeReferences.To<DateOnly>());
         var dateText = Call(typeof(Convert), nameof(Convert.ToString), new TypeCast(date, new ClrTypeReference(typeof(object))));
         using (var text = Interpreter.Execute(Interpreter.Compile(dateText), new DateOnly(2024, 2, 28)))
             await Assert.That(text.GetValue<string>()).IsEqualTo(Convert.ToString((object)new DateOnly(2024, 2, 28)));
@@ -82,7 +83,7 @@ public class VmStateRingConversionTests {
     /// <summary><c>(int?)x</c> of an <c>int</c> is a present optional holding the value.</summary>
     [Test]
     public async Task CastToNullable_OfAnInt_IsPresentWithTheValue() {
-        var cast = new TypeCast(new Parameter("x", TypeReference.To<int>()), TypeReference.To<int?>());
+        var cast = new TypeCast(new Parameter("x", ClrTypeReferences.To<int>()), ClrTypeReferences.To<int?>());
         using (var root = Interpreter.Execute(Interpreter.Compile(cast), 7))
             await Assert.That(root.Result.Value).IsEqualTo((object)7);
         using var passed = Interpreter.Execute(Interpreter.Compile(Call(typeof(NullableIntProbe), nameof(NullableIntProbe.OrMinusOne), cast)), 7);
@@ -157,7 +158,7 @@ public class VmStateRingConversionTests {
 
     [Test]
     public async Task RootArgument_NullForANonNullableValueType_IsRefused() {
-        var program = Interpreter.Compile(new Parameter("p", TypeReference.To<int>()));
+        var program = Interpreter.Compile(new Parameter("p", ClrTypeReferences.To<int>()));
         var ex = Assert.Throws<InvalidOperationException>(() => {
             using var exec = Interpreter.Execute(program, (object?)null);
         });

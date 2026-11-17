@@ -23,7 +23,7 @@ public class ActionScopeSpikeTests {
     /// finally { if (!done) Rollback }</c></summary>
     private static (Node Body, Parameter Bag, Parameter Commit) Tree() {
         var bag = new Parameter("bag", BagType);
-        var commit = new Parameter("commit", TypeReference.To<bool>());
+        var commit = new Parameter("commit", ClrTypeReferences.To<bool>());
         var scope = new Variable("__scope");
         var done = new Variable("__done");
         var body = new Block([
@@ -84,7 +84,7 @@ public class ActionScopeSpikeTests {
         var depth = new Variable("__depth");
         var created = new Variable("__created");
         // Cast to its own type, as the wrapper casts its token: the VM analysis does not resolve a static member's type.
-        Node CreatedCount() => new TypeCast(new Member(new Member(Scope, "CreatedInstances"), "Count"), TypeReference.To<int>());
+        Node CreatedCount() => new TypeCast(new Member(new Member(Scope, "CreatedInstances"), "Count"), ClrTypeReferences.To<int>());
         Node Put(string key, Node value) => new Block([
             new Invoke(new Member(bag, "Remove"), new Constant(key)),
             new Invoke(new Member(bag, "Add"), new Constant(key), value)
@@ -132,7 +132,7 @@ public class ActionScopeSpikeTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Run",
-                    TypeReference.To<long>(),
+                    ClrTypeReferences.To<long>(),
                     [bag, commit],
                     body,
                     IsStatic: true)

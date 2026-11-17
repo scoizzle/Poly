@@ -3,6 +3,7 @@ using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -32,7 +33,7 @@ public class SideEffectElisionTests {
         var i = new Variable("i");
         var read = new IndexAccess(a, i);
         var program = new Block([
-            new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(1))),
+            new Assignment(a, new NewArray(ClrTypeReferences.To<int>(), Wrap(1))),
             new Assignment(i, Wrap(2)),
             read,
             Wrap(1),
@@ -70,7 +71,7 @@ public class SideEffectElisionTests {
         var i = new Variable("i");
         var nested = new Block(new IndexAccess(a, i), Wrap(1));
         var program = new Block([
-            new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(1))),
+            new Assignment(a, new NewArray(ClrTypeReferences.To<int>(), Wrap(1))),
             new Assignment(i, Wrap(2)),
             nested,
             Wrap(1),
@@ -111,7 +112,7 @@ public class SideEffectElisionTests {
         var i = new Variable("i");
         var init = new IndexAccess(a, i);
         var loop = new ForLoop(init, Wrap(false), null, new Block(Wrap(1)));
-        var program = new Block([new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(1))), loop, Wrap(1)], [a, i]);
+        var program = new Block([new Assignment(a, new NewArray(ClrTypeReferences.To<int>(), Wrap(1))), loop, Wrap(1)], [a, i]);
 
         var analysis = Analyze(program);
 
@@ -121,7 +122,7 @@ public class SideEffectElisionTests {
 
     [Test]
     public async Task LambdaStatementWithAThrowingBody_IsStillElidable() {
-        var p = new Parameter("p", TypeReference.To<int>());
+        var p = new Parameter("p", ClrTypeReferences.To<int>());
         var lambda = new Lambda([p], new Divide(p, Wrap(2)));
         var program = new Block([lambda, Wrap(1)]);
 
@@ -139,7 +140,7 @@ public class SideEffectElisionTests {
         var i = new Variable("i");
         var increment = new IndexAccess(a, i);
         var loop = new ForLoop(null, Wrap(false), increment, new Block(Wrap(1)));
-        var program = new Block([new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(1))), loop, Wrap(1)], [a, i]);
+        var program = new Block([new Assignment(a, new NewArray(ClrTypeReferences.To<int>(), Wrap(1))), loop, Wrap(1)], [a, i]);
 
         var analysis = Analyze(program);
 
@@ -153,7 +154,7 @@ public class SideEffectElisionTests {
         var i = new Variable("i");
         var read = new IndexAccess(a, i);
         var program = new Block([
-            new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(1))),
+            new Assignment(a, new NewArray(ClrTypeReferences.To<int>(), Wrap(1))),
             new Assignment(i, Wrap(2)),
             read,
             Wrap(1),

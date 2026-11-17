@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -33,7 +34,7 @@ public class StridedSetBitsCacheTests {
     public async Task PromotedStridedSetBits_StillSetsTheBits() {
         var a = new Variable("a");
         var body = new Block([
-            new Assignment(a, new NewArray(TypeReference.To<long>(), new Constant(4L))),
+            new Assignment(a, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L))),
             new StridedSetBits(a, new Constant(2L), new Constant(3L), new Constant(20L)),
             new IndexAccess(a, new Constant(0L))
         ], [a]);
@@ -50,7 +51,7 @@ public class StridedSetBitsCacheTests {
         // heap path and the strided store must still work through the deref.
         var a = new Variable("a");
         var body = new Block([
-            new Assignment(a, new NewArray(TypeReference.To<long>(), new Constant(4L))),
+            new Assignment(a, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L))),
             new StridedSetBits(a, new Constant(2L), new Constant(1L), new Constant(5L)),
             new IndexAccess(a, new Constant(0L))
         ], [a]);
@@ -73,7 +74,7 @@ public class StridedSetBitsCacheTests {
             new Constant(0L));
 
         return new Block(
-            [new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant((long)wordCnt))),
+            [new Assignment(bits, new NewArray(ClrTypeReferences.To<long>(), new Constant((long)wordCnt))),
              new Assignment(i, new Constant(2L)),
              new WhileLoop(new LessThanOrEqual(new Multiply(i, i), new Constant((long)limit)),
                  new Block([

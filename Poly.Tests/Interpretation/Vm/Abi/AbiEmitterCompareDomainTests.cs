@@ -10,6 +10,7 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.Introspection;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
@@ -29,10 +30,10 @@ public class AbiEmitterCompareDomainTests {
         return exec.RawValue;
     }
 
-    private static Parameter Param<T>(string name) => new(name, TypeReference.To<T>());
+    private static Parameter Param<T>(string name) => new(name, ClrTypeReferences.To<T>());
 
     private static Parameter Optional<T>(string name) =>
-        new(name, new OptionalTypeReference(TypeReference.To<T>()));
+        new(name, new OptionalTypeReference(ClrTypeReferences.To<T>()));
 
     [Test]
     public async Task RequiredDecimal_EqualNull_Unseeded_IsFalse() {
@@ -545,13 +546,13 @@ public class AbiEmitterCompareDomainTests {
         analyzer.Analyze(context, new TypeDefinitionNode(
             "StampLot", "Branch",
             Fields: [
-                new FieldDefinitionNode("n", TypeReference.To<long>(), new Constant(0L)),
-                new FieldDefinitionNode("mark", TypeReference.To<long>(), new Constant(0L)),
+                new FieldDefinitionNode("n", ClrTypeReferences.To<long>(), new Constant(0L)),
+                new FieldDefinitionNode("mark", ClrTypeReferences.To<long>(), new Constant(0L)),
             ],
             Constructors: [new ConstructorDefinitionNode([], new Block([]))],
             Methods: [
-                Stamp("Left", TypeReference.To<int>(), new Constant(0), 1L),
-                Stamp("Right", TypeReference.To<decimal>(), new Constant(0m), 2L),
+                Stamp("Left", ClrTypeReferences.To<int>(), new Constant(0), 1L),
+                Stamp("Right", ClrTypeReferences.To<decimal>(), new Constant(0m), 2L),
             ]));
         return context.TypeDefinitions;
     }

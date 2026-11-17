@@ -1,5 +1,6 @@
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -214,7 +215,7 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_New_ProducesConstructorCall() {
-        var node = new New(TypeReference.To<string>(), new Constant("hello"));
+        var node = new New(ClrTypeReferences.To<string>(), new Constant("hello"));
         var result = new CSharpGenerator().Generate(node);
         await Assert.That(result).IsEqualTo("new System.String(\"hello\");");
     }
@@ -242,21 +243,21 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_TypeCast_ProducesCastExpression() {
-        var node = new TypeCast(new Variable("x"), TypeReference.To<int>());
+        var node = new TypeCast(new Variable("x"), ClrTypeReferences.To<int>());
         var result = new CSharpGenerator().Generate(node);
         await Assert.That(result).IsEqualTo("_ = (System.Int32)x;");
     }
 
     [Test]
     public async Task Generate_TypeIs_ProducesIsExpression() {
-        var node = new TypeIs(new Variable("x"), TypeReference.To<string>());
+        var node = new TypeIs(new Variable("x"), ClrTypeReferences.To<string>());
         var result = new CSharpGenerator().Generate(node);
         await Assert.That(result).IsEqualTo("_ = x is System.String;");
     }
 
     [Test]
     public async Task Generate_TypeAs_ProducesAsExpression() {
-        var node = new TypeAs(new Variable("x"), TypeReference.To<string>());
+        var node = new TypeAs(new Variable("x"), ClrTypeReferences.To<string>());
         var result = new CSharpGenerator().Generate(node);
         await Assert.That(result).IsEqualTo("_ = x as System.String;");
     }
@@ -273,7 +274,7 @@ public class CSharpGeneratorTests {
         var param = new Parameter("x");
         var node = new Lambda([param], new Add(param, new Constant(1)));
         // A lambda has no statement form; a cast gives it the delegate type C# needs.
-        var result = new CSharpGenerator().Generate(new TypeCast(node, TypeReference.To<Func<int, int>>()));
+        var result = new CSharpGenerator().Generate(new TypeCast(node, ClrTypeReferences.To<Func<int, int>>()));
         await Assert.That(result).IsEqualTo("_ = (Func<int, int>)(x => x + 1);");
     }
 
@@ -282,7 +283,7 @@ public class CSharpGeneratorTests {
         var x = new Parameter("x");
         var y = new Parameter("y");
         var node = new Lambda([x, y], new Add(x, y));
-        var result = new CSharpGenerator().Generate(new TypeCast(node, TypeReference.To<Func<int, int, int>>()));
+        var result = new CSharpGenerator().Generate(new TypeCast(node, ClrTypeReferences.To<Func<int, int, int>>()));
         await Assert.That(result).IsEqualTo("_ = (Func<int, int, int>)((x, y) => x + y);");
     }
 
@@ -517,7 +518,7 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_Throw_ProducesThrow() {
-        var result = new CSharpGenerator().Generate(new ThrowStatement(new New(TypeReference.To<Exception>())));
+        var result = new CSharpGenerator().Generate(new ThrowStatement(new New(ClrTypeReferences.To<Exception>())));
         await Assert.That(result).IsEqualTo("throw new System.Exception();");
     }
 
@@ -525,7 +526,7 @@ public class CSharpGeneratorTests {
     public async Task Generate_TryCatchFinally_ProducesFullStructure() {
         var node = new TryCatchFinally(
             new Block(new Constant(1)),
-            [new CatchClause(TypeReference.To<Exception>(), "ex", new Block(new Constant(2)))],
+            [new CatchClause(ClrTypeReferences.To<Exception>(), "ex", new Block(new Constant(2)))],
             new Block(new Constant(3)));
         var result = new CSharpGenerator().Generate(node);
         var expected = "try" + Environment.NewLine +
@@ -569,7 +570,7 @@ public class CSharpGeneratorTests {
         // to compile).
         var node = new TryCatchFinally(
             new Block(new Constant(1)),
-            [new CatchClause(TypeReference.To<Exception>(), "ex", new Return(new Constant(2)))]);
+            [new CatchClause(ClrTypeReferences.To<Exception>(), "ex", new Return(new Constant(2)))]);
         var result = new CSharpGenerator().Generate(node);
         var expected = "try" + Environment.NewLine +
                        "{" + Environment.NewLine +
@@ -888,7 +889,7 @@ public class CSharpGeneratorTests {
                 new Constant("Items"))
         );
         var lambda = new Lambda([bParam], body);
-        var result = new CSharpGenerator().Generate(new TypeCast(lambda, TypeReference.To<Func<object, object>>()));
+        var result = new CSharpGenerator().Generate(new TypeCast(lambda, ClrTypeReferences.To<Func<object, object>>()));
         // Each invocation should have a trailing semicolon
         await Assert.That(result).Contains("FindNavigation(\"Loans\");");
         await Assert.That(result).Contains("ToTable(\"Items\");");
@@ -922,9 +923,9 @@ public class CSharpGeneratorTests {
     [Test]
     public async Task Generate_Default_TypeOf_NewArray_Suspend_Print() {
         var g = new CSharpGenerator();
-        await Assert.That(g.Generate(new Default(TypeReference.To<int>()))).Contains("default");
-        await Assert.That(g.Generate(new TypeOf(TypeReference.To<string>()))).Contains("typeof");
-        await Assert.That(g.Generate(new NewArray(TypeReference.To<long>(), new Constant(3L)))).Contains("Int64");
+        await Assert.That(g.Generate(new Default(ClrTypeReferences.To<int>()))).Contains("default");
+        await Assert.That(g.Generate(new TypeOf(ClrTypeReferences.To<string>()))).Contains("typeof");
+        await Assert.That(g.Generate(new NewArray(ClrTypeReferences.To<long>(), new Constant(3L)))).Contains("Int64");
         await Assert.That(g.Generate(new SuspendNode(new Constant(1L), "bp"))).Contains("1");
     }
 

@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -27,7 +28,7 @@ public class ClosureVmTests {
     [Test]
     public async Task Lambda_WithParam_ReturnsParam() {
         // ((x) => x)(99)
-        var p = new Parameter("x", TypeReference.To<long>());
+        var p = new Parameter("x", ClrTypeReferences.To<long>());
         var lambda = new Lambda([p], p);
         var invoke = new Invoke(lambda, new Constant(99L));
         var program = Interpreter.Compile(invoke);
@@ -45,10 +46,10 @@ public class ClosureVmTests {
         // g(x) = f(x)
         // g(42) = 42
         // Tests basic nested function call.
-        var pF = new Parameter("x", TypeReference.To<long>());
+        var pF = new Parameter("x", ClrTypeReferences.To<long>());
         var f = new Lambda([pF], pF);
 
-        var pG = new Parameter("x", TypeReference.To<long>());
+        var pG = new Parameter("x", ClrTypeReferences.To<long>());
         var gBody = new Invoke(f, pG);
         var g = new Lambda([pG], gBody);
 
@@ -63,10 +64,10 @@ public class ClosureVmTests {
         // f(x) = x + 1
         // g(x) = f(x)
         // g(41) → 42
-        var pF = new Parameter("x", TypeReference.To<long>());
+        var pF = new Parameter("x", ClrTypeReferences.To<long>());
         var f = new Lambda([pF], new Add(pF, new Constant(1L)));
 
-        var pG = new Parameter("x", TypeReference.To<long>());
+        var pG = new Parameter("x", ClrTypeReferences.To<long>());
         var g = new Lambda([pG], new Invoke(f, pG));
 
         var invoke = new Invoke(g, new Constant(41L));
@@ -80,10 +81,10 @@ public class ClosureVmTests {
         // f(x) = x
         // g(x) = f(x * 2)
         // g(20) → 40  (passthrough, no transformation in f)
-        var pF = new Parameter("x", TypeReference.To<long>());
+        var pF = new Parameter("x", ClrTypeReferences.To<long>());
         var f = new Lambda([pF], pF);
 
-        var pG = new Parameter("x", TypeReference.To<long>());
+        var pG = new Parameter("x", ClrTypeReferences.To<long>());
         var g = new Lambda([pG], new Invoke(f, new Multiply(pG, new Constant(2L))));
 
         var invoke = new Invoke(g, new Constant(20L));
@@ -99,11 +100,11 @@ public class ClosureVmTests {
         // g(20) → f(40) → 41
         // The inner call f(40) exercises SavedSp ring save in g's delegate:
         // g's ring state must not be clobbered by f's ring allocation.
-        var pF = new Parameter("x", TypeReference.To<long>());
+        var pF = new Parameter("x", ClrTypeReferences.To<long>());
         var fBody = new Add(pF, new Constant(1L));
         var f = new Lambda([pF], fBody);
 
-        var pG = new Parameter("x", TypeReference.To<long>());
+        var pG = new Parameter("x", ClrTypeReferences.To<long>());
         var gBody = new Invoke(f, new Multiply(pG, new Constant(2L)));
         var g = new Lambda([pG], gBody);
 
@@ -116,7 +117,7 @@ public class ClosureVmTests {
     [Test]
     public async Task Lambda_Call_RingPreservedAcrossCalls() {
         // f(x) = x + 1; f(41) → 42
-        var p = new Parameter("x", TypeReference.To<long>());
+        var p = new Parameter("x", ClrTypeReferences.To<long>());
         var body = new Add(p, new Constant(1L));
         var lambda = new Lambda([p], body);
         var invoke = new Invoke(lambda, new Constant(41L));

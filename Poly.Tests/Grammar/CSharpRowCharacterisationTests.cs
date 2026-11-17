@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Grammar;
 
@@ -84,7 +85,7 @@ public class CSharpRowCharacterisationTests {
         await Assert.That(UnitBody(CSharpLanguage.Read("interface IShape { int Sides { get; } long Area(long scale); }")))
             .IsEqualTo("public interface IShape\n{\n    public int Sides { get; }\n    public long Area(long scale);\n}");
         await Assert.That(Lf(CSharpLanguage.Write([new TypeDefinitionNode("I", Kind: TypeKind.Interface,
-                Properties: [new PropertyDefinitionNode("P", TypeReference.To<int>())])])))
+                Properties: [new PropertyDefinitionNode("P", ClrTypeReferences.To<int>())])])))
             .IsEqualTo("#nullable enable\npublic interface I\n{\n    public System.Int32 P { get; set; }\n}");
     }
 

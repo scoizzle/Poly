@@ -2,6 +2,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -380,7 +381,7 @@ public class ConstantFoldingTests {
 
     [Test]
     public async Task And_WithConstantFalseLeft_FoldsToFalse() {
-        var parameter = new Parameter("flag", TypeReference.To<bool>());
+        var parameter = new Parameter("flag", ClrTypeReferences.To<bool>());
         var ast = new And(Wrap(false), parameter);
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
@@ -398,7 +399,7 @@ public class ConstantFoldingTests {
 
     [Test]
     public async Task Or_WithConstantTrueLeft_FoldsToTrue() {
-        var parameter = new Parameter("flag", TypeReference.To<bool>());
+        var parameter = new Parameter("flag", ClrTypeReferences.To<bool>());
         var ast = new Or(Wrap(true), parameter);
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
@@ -454,7 +455,7 @@ public class ConstantFoldingTests {
 
     [Test]
     public async Task InvokeLambda_WithConstantArguments_FoldsToInvokedResult() {
-        var parameter = new Parameter("x", TypeReference.To<int>());
+        var parameter = new Parameter("x", ClrTypeReferences.To<int>());
         var lambda = new Lambda([parameter], new Add(parameter, Wrap(10)));
         var ast = new Invoke(lambda, Wrap(5));
 
@@ -473,8 +474,8 @@ public class ConstantFoldingTests {
 
     [Test]
     public async Task InvokeLambda_WithCapturedConstantArguments_FoldsNestedExpression() {
-        var outer = new Parameter("outer", TypeReference.To<int>());
-        var inner = new Parameter("inner", TypeReference.To<int>());
+        var outer = new Parameter("outer", ClrTypeReferences.To<int>());
+        var inner = new Parameter("inner", ClrTypeReferences.To<int>());
         var lambda = new Lambda([inner], new Add(inner, new Multiply(outer, Wrap(2))));
         var ast = new Invoke(new Lambda([outer], new Invoke(lambda, Wrap(5))), Wrap(3));
 

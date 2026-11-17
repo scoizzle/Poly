@@ -1,5 +1,6 @@
 using Poly.Ast.Nodes;
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -15,7 +16,7 @@ public class InlineInvokeRingTests {
     /// <summary>A lambda with a parameter and an invoke with no argument
     /// expressions: the SetArgs shape, which is the path that took the copies.</summary>
     private static Node SetArgsLambda(long value) =>
-        new Lambda([new Parameter("p", TypeReference.To<long>())], new Constant(value));
+        new Lambda([new Parameter("p", ClrTypeReferences.To<long>())], new Constant(value));
 
     /// <summary>Two SetArgs invokes as operands: the first result is live in a ring
     /// slot while the second one runs.</summary>

@@ -8,7 +8,7 @@ namespace Poly.Tests.Interpretation;
 public class NewNodeTests {
     [Test]
     public async Task AnalyzeNode_New_ResolvesParameterlessConstructor() {
-        var node = new New(TypeReference.To<Widget>());
+        var node = new New(ClrTypeReferences.To<Widget>());
 
         var analysis = node.AnalyzeNode();
         var resolvedConstructor = analysis.GetResolvedMember(node) as ITypeConstructor;
@@ -22,7 +22,7 @@ public class NewNodeTests {
 
     [Test]
     public async Task AnalyzeNode_New_ResolvesBestMatchingOverload() {
-        var node = new New(TypeReference.To<Widget>(), Wrap("alpha"));
+        var node = new New(ClrTypeReferences.To<Widget>(), Wrap("alpha"));
 
         var analysis = node.AnalyzeNode();
         var resolvedConstructor = analysis.GetResolvedMember(node) as ITypeConstructor;
@@ -35,7 +35,7 @@ public class NewNodeTests {
 
     [Test]
     public async Task New_ParameterlessConstructor_CompilesAndCreatesInstance() {
-        var node = new New(TypeReference.To<Widget>());
+        var node = new New(ClrTypeReferences.To<Widget>());
 
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var vmResult = exec.GetValue<Widget>();
@@ -46,7 +46,7 @@ public class NewNodeTests {
 
     [Test]
     public async Task New_WithOptionalParameter_UsesDefaultValueWhenOmitted() {
-        var node = new New(TypeReference.To<Widget>(), Wrap("alpha"));
+        var node = new New(ClrTypeReferences.To<Widget>(), Wrap("alpha"));
 
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var vmResult = exec.GetValue<Widget>();
@@ -57,7 +57,7 @@ public class NewNodeTests {
 
     [Test]
     public async Task New_WithExplicitArguments_BindsAllConstructorParameters() {
-        var node = new New(TypeReference.To<Widget>(), Wrap("beta"), Wrap(42));
+        var node = new New(ClrTypeReferences.To<Widget>(), Wrap("beta"), Wrap(42));
 
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var vmResult = exec.GetValue<Widget>();
@@ -68,7 +68,7 @@ public class NewNodeTests {
 
     [Test]
     public async Task New_AllOptionalCtor_ZeroArgs_AppliesDefaults() {
-        var node = new New(TypeReference.To<AllOptional>());
+        var node = new New(ClrTypeReferences.To<AllOptional>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var vmResult = exec.GetValue<AllOptional>();
         await Assert.That(vmResult).IsNotNull();
@@ -77,14 +77,14 @@ public class NewNodeTests {
 
     [Test]
     public async Task New_NoMatchingConstructor_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new New(TypeReference.To<NeedsArg>())))
+        await Assert.That(() => Interpreter.Compile(new New(ClrTypeReferences.To<NeedsArg>())))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("constructor");
     }
 
     [Test]
     public async Task New_ToString_UsesSourceLikeSyntax() {
-        var node = new New(TypeReference.To<Widget>(), Wrap("gamma"), Wrap(7));
+        var node = new New(ClrTypeReferences.To<Widget>(), Wrap("gamma"), Wrap(7));
 
         await Assert.That(node.ToString()).Contains("new");
         await Assert.That(node.ToString().Contains("System.String")).IsFalse();

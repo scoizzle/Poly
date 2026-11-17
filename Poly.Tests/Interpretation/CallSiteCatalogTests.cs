@@ -1,6 +1,7 @@
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -177,7 +178,7 @@ public class CallSiteCatalogTests {
 
     [Test]
     public async Task New_ResolvedConstructor_GetsSiteIndex() {
-        var newExpr = new New(TypeReference.To<string>(), new Constant('x'), new Constant(3));
+        var newExpr = new New(ClrTypeReferences.To<string>(), new Constant('x'), new Constant(3));
         var result = Analyze(newExpr);
 
         var catalog = result.GetCallSiteCatalog();

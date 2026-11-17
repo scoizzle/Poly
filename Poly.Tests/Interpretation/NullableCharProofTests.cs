@@ -186,7 +186,7 @@ internal static class NullableCharGrid {
 }
 
 public class NullableCharProofTests {
-    private static Parameter Param<T>(string name) => new(name, TypeReference.To<T>());
+    private static Parameter Param<T>(string name) => new(name, ClrTypeReferences.To<T>());
 
     private static ExecutionResult Execute(Node node, params object?[] args) =>
         Interpreter.Execute(Interpreter.Compile(node), s => s.SetArgs(args));

@@ -3,6 +3,7 @@ using Poly.Grammar;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Grammar;
 
@@ -86,7 +87,7 @@ public class CSharpRowRoundTripTests {
     [Test]
     public async Task Interface_PropertyWithNoAccessors_TakesTheClassConvention() {
         var printed = CSharpLanguage.Write([new TypeDefinitionNode("I", Kind: TypeKind.Interface,
-            Properties: [new PropertyDefinitionNode("P", TypeReference.To<int>())])]);
+            Properties: [new PropertyDefinitionNode("P", ClrTypeReferences.To<int>())])]);
         await Assert.That(printed).Contains("System.Int32 P { get; set; }");
         await Assert.That(CSharpLanguage.Read(printed).Types.Single().Properties!.Single().Setter is not null).IsTrue();
     }
@@ -287,7 +288,7 @@ public class CSharpRowRoundTripTests {
 
     private static TypeDefinitionNode EnumOf(params (string Name, object Value)[] members) =>
         new("E", Kind: TypeKind.Enum, Fields: [.. members.Select(m =>
-            new FieldDefinitionNode(m.Name, TypeReference.To<int>(), new Constant(m.Value), IsStatic: true, IsConst: true))]);
+            new FieldDefinitionNode(m.Name, ClrTypeReferences.To<int>(), new Constant(m.Value), IsStatic: true, IsConst: true))]);
 
     [Test]
     public async Task EnumNegativeValue_ReReadsToTheSameTree() {
@@ -350,8 +351,8 @@ public class CSharpRowRoundTripTests {
     [Test]
     public async Task EnumMember_WithANonIntegralDefault_PrintsItsOrdinal() {
         var text = CSharpLanguage.Write([new TypeDefinitionNode("E", Kind: TypeKind.Enum, Fields: [
-            new FieldDefinitionNode("A", TypeReference.To<int>(), new Constant("A"), IsStatic: true, IsConst: true),
-            new FieldDefinitionNode("B", TypeReference.To<int>(), null, IsStatic: true, IsConst: true),
+            new FieldDefinitionNode("A", ClrTypeReferences.To<int>(), new Constant("A"), IsStatic: true, IsConst: true),
+            new FieldDefinitionNode("B", ClrTypeReferences.To<int>(), null, IsStatic: true, IsConst: true),
         ])]).ReplaceLineEndings("\n");
         await Assert.That(text).Contains("A = 0,").And.Contains("B = 1\n");
     }

@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -114,8 +115,8 @@ public class NumericTypePromotionTests {
     [Test]
     public async Task NumericTypePromotion_Add_WithParameters_PromotesCorrectly() {
         // Arrange
-        var param1 = new Parameter("a", TypeReference.To<int>());
-        var param2 = new Parameter("b", TypeReference.To<double>());
+        var param1 = new Parameter("a", ClrTypeReferences.To<int>());
+        var param2 = new Parameter("b", ClrTypeReferences.To<double>());
         var node = new Add(param1, param2);
 
         // Act
@@ -128,7 +129,7 @@ public class NumericTypePromotionTests {
 
     [Test]
     public async Task NumericTypePromotion_Divide_ULongByTwo_UsesUnsignedValue() {
-        var n = new Parameter("n", TypeReference.To<ulong>());
+        var n = new Parameter("n", ClrTypeReferences.To<ulong>());
         using var exec = Interpreter.Execute(
             Interpreter.Compile(new Divide(n, new Constant(2UL))),
             s => s.SetArgs(ulong.MaxValue));
@@ -137,7 +138,7 @@ public class NumericTypePromotionTests {
 
     [Test]
     public async Task NumericTypePromotion_ShiftRight_ULong_IsLogical() {
-        var n = new Parameter("n", TypeReference.To<ulong>());
+        var n = new Parameter("n", ClrTypeReferences.To<ulong>());
         using var exec = Interpreter.Execute(
             Interpreter.Compile(new ShiftRight(n, new Constant(1))),
             s => s.SetArgs(ulong.MaxValue));

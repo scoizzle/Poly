@@ -2,6 +2,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -52,9 +53,9 @@ public class InvokeResultConventionTests {
 
     [Test]
     public async Task InlineSetArgsInvokeInsideFunctionBody_KeepsParameterAddressing() {
-        var seed = new Parameter("seed", TypeReference.To<long>());
-        var x = new Parameter("x", TypeReference.To<long>());
-        var q = new Parameter("q", TypeReference.To<long>());
+        var seed = new Parameter("seed", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var q = new Parameter("q", ClrTypeReferences.To<long>());
         // The SetArgs shape: a lambda with a parameter invoked with no arguments.
         var inner = new Lambda([q], new Constant(7L));
         // x is read before the inline SetArgs body, which is what keeps that frame live,

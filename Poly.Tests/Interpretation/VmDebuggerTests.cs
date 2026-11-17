@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -95,11 +96,11 @@ public class VmDebuggerTests {
             new Assignment(x, new Constant(0L)),
             new TryCatchFinally(
                 new Block([
-                    new ThrowStatement(new New(TypeReference.To<InvalidOperationException>()))
+                    new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>()))
                 ]),
                 CatchClauses: [
                     new CatchClause(
-                        TypeReference.To<InvalidOperationException>(),
+                        ClrTypeReferences.To<InvalidOperationException>(),
                         null,
                         new Block([new Assignment(x, new Constant(1L))]))
                 ],
@@ -115,7 +116,7 @@ public class VmDebuggerTests {
     [Test]
     public async Task DebugHook_LambdaBlockBody_FiresInsideInvoke() {
         var kinds = new List<string>();
-        var x = new Parameter("x", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
         var lambda = new Lambda([x], new Block([new Add(x, new Constant(1L))]));
         var program = Interpreter.Compile(new Invoke(lambda, new Constant(41L)));
         Interpreter.Execute(program, s => s.DebugHook = (n, _, _) => kinds.Add(n.GetType().Name));
@@ -268,7 +269,7 @@ public class VmDebuggerTests {
     [Test]
     public async Task VmDebugger_ProgramThrow_IsCapturedAsFault() {
         var program = Interpreter.Compile(
-            new ThrowStatement(new New(TypeReference.To<InvalidOperationException>(), new Constant("boom"))));
+            new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>(), new Constant("boom"))));
         using var dbg = new VmDebugger(program);
         var start = dbg.Start();
         DebugResult done = start.IsCompleted ? start : dbg.Continue();

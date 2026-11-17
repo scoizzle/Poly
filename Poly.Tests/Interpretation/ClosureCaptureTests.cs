@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -12,7 +13,7 @@ public class ClosureCaptureTests {
     public async Task Stored_CaptureAndArgs_MutateOffset_SeesLatest() {
         var offset = new Variable("offset");
         var fn = new Variable("fn");
-        var x = new Parameter("x", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
         var node = new Block([
             new Assignment(offset, new Constant(10L)),
             new Assignment(fn, new Lambda([x], new Add(x, offset))),
@@ -146,7 +147,7 @@ public class ClosureCaptureTests {
 
     [Test]
     public async Task Stored_OuterParameterCapture_ReturnsSetArg() {
-        var outer = new Parameter("outer", TypeReference.To<long>());
+        var outer = new Parameter("outer", ClrTypeReferences.To<long>());
         var fn = new Variable("fn");
         var node = new Block([
             new Assignment(fn, new Lambda([], outer)),
@@ -159,7 +160,7 @@ public class ClosureCaptureTests {
 
     [Test]
     public async Task Stored_NestedLambdaCapturesOuterParameter() {
-        var p = new Parameter("p", TypeReference.To<long>());
+        var p = new Parameter("p", ClrTypeReferences.To<long>());
         var inner = new Variable("inner");
         var resultFn = new Variable("resultFn");
         var outer = new Lambda([p], new Block([
@@ -293,7 +294,7 @@ public class ClosureCaptureTests {
 
     [Test]
     public async Task Invoke_ParameterHoldingLambda_CallsThrough() {
-        var x = new Parameter("x", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
         var add1 = new Lambda([x], new Add(x, new Constant(1L)));
         var f = new Parameter("f");
         var apply = new Lambda([f], new Invoke(f, new Constant(41L)));
@@ -358,7 +359,7 @@ public class ClosureCaptureTests {
 
     [Test]
     public async Task StoredHof_InvokeVariable_BindsCalleeAndBoolResult() {
-        var x = new Parameter("x", TypeReference.To<bool>());
+        var x = new Parameter("x", ClrTypeReferences.To<bool>());
         var notX = new Lambda([x], new Not(x));
         var f = new Parameter("f");
         var apply = new Lambda([f], new Invoke(f, new Constant(false)));

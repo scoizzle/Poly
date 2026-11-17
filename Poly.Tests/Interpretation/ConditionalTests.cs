@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -20,7 +21,7 @@ public class ConditionalTests {
     [Test]
     public async Task Conditional_WithParameterCondition_EvaluatesCorrectly() {
         // Arrange
-        var param = new Parameter("x", TypeReference.To<bool>());
+        var param = new Parameter("x", ClrTypeReferences.To<bool>());
         var node = new Conditional(param, Wrap(10), Wrap(20));
 
         // Act
@@ -44,7 +45,7 @@ public class ConditionalTests {
 
     [Test]
     public async Task Conditional_WithComparison_PicksBranch() {
-        var param = new Parameter("x", TypeReference.To<int>());
+        var param = new Parameter("x", ClrTypeReferences.To<int>());
         var node = new Conditional(new GreaterThan(param, Wrap(5)), Wrap(10), Wrap(0));
         // Act
         var program = Interpreter.Compile(node);

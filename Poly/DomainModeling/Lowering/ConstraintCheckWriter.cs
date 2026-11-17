@@ -3,6 +3,7 @@ using System.Globalization;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 using PrimType = Poly.Introspection.PrimitiveType;
@@ -83,8 +84,8 @@ internal static class ConstraintCheckWriter {
             Order: CheckOrder.Declaration);
 
         internal static readonly ConstraintCheckStyle Assign = new(
-            () => TypeReference.To<string>(),
-            () => TypeReference.To<System.Text.RegularExpressions.Regex>(),
+            () => ClrTypeReferences.To<string>(),
+            () => ClrTypeReferences.To<System.Text.RegularExpressions.Regex>(),
             NamesEnumValue: false,
             Presence: PresencePolicy.AssignValue,
             Order: CheckOrder.Category);

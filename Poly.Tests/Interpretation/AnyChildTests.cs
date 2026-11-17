@@ -1,3 +1,5 @@
+using Poly.Introspection.CommonLanguageRuntime;
+
 namespace Poly.Tests.Interpretation;
 
 public class AnyChildTests {
@@ -55,7 +57,7 @@ public class AnyChildTests {
             Methods: [
                 new MethodDefinitionNode(
                     "M",
-                    TypeReference.To<object>(),
+                    ClrTypeReferences.To<object>(),
                     Body: new Block(new ThrowStatement(new Variable("ex"))))
             ]);
         var root = new CompilationUnitNode([], null, [typeDef], null);

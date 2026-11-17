@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -88,7 +89,7 @@ public class ShadowedVariableVmTests {
     public async Task QuotedLambdaParameter_ShadowsCapturedOuterOfTheSameName() {
         // A quoted body use is a fresh Variable, distinct from both the parameter and the outer local.
         var outer = new Variable("s");
-        var param = new Parameter("s", TypeReference.To<long>());
+        var param = new Parameter("s", ClrTypeReferences.To<long>());
         var lambda = new Lambda([param], new Add(new Variable("s"), new Constant(1L)));
         var node = new Block([
             new Assignment(outer, new Constant(100L)),
@@ -103,7 +104,7 @@ public class ShadowedVariableVmTests {
     public async Task QuotedLambda_TwoUsesOfCapturedLocal_SeeTheSameValue() {
         // Two fresh uses of one captured local. Both must read 3: 10 + 3 + 3.
         var outer = new Variable("s");
-        var x = new Parameter("x", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
         var lambda = new Lambda([x], new Add(new Add(x, new Variable("s")), new Variable("s")));
         var node = new Block([
             new Assignment(outer, new Constant(3L)),
@@ -116,7 +117,7 @@ public class ShadowedVariableVmTests {
 
     [Test]
     public async Task InlineParameterUse_FreshVariable_ReadsTheParameter() {
-        var n = new Parameter("n", TypeReference.To<long>());
+        var n = new Parameter("n", ClrTypeReferences.To<long>());
         var lambda = new Lambda([n], new Add(new Variable("n"), new Constant(1L)));
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda, new Constant(9L))));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(10L)

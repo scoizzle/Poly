@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -232,7 +233,7 @@ public class DirectVmAbiEmitterTests {
         var offset = new Variable("offset");
         // The parameter is typed: the integer width comes from analysis, and an operand
         // whose width is unnamed is a compile rejection rather than a silent 64-bit guess.
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var lambda = new Lambda([x], new Add(x, offset));
         var invoke = new Invoke(lambda, new Constant(32));
         var code = new Block([
@@ -490,7 +491,7 @@ public class DirectVmAbiEmitterTests {
     /// arm writes <c>0L</c> there. Slot 0 is the receiver, so the reserved slot is 1.</summary>
     [Test, Timeout(10_000)]
     public async Task VoidClrInvoke_AssignsItsReservedSlot(CancellationToken ct) {
-        var node = new Invoke(new Member(new New(TypeReference.To<List<long>>()), "Clear"));
+        var node = new Invoke(new Member(new New(ClrTypeReferences.To<List<long>>()), "Clear"));
         var built = AbiEmitter.Build(node, Interpreter.Analyze(node), CompilationMode.NoDebug);
         var scan = VmTree.Read(built.Expression);
 
@@ -508,7 +509,7 @@ public class DirectVmAbiEmitterTests {
         var node = new Block([
             new Invoke(new Member(new Constant("abc"), "ToString")),
             new Equal(
-                new Invoke(new Member(new New(TypeReference.To<List<long>>()), "Clear")),
+                new Invoke(new Member(new New(ClrTypeReferences.To<List<long>>()), "Clear")),
                 new Constant(0L)),
         ]);
         await Assert.That(ExecDirect(node)).IsEqualTo(1L);

@@ -1,6 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.Interpretation;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -22,7 +23,7 @@ public class ForEachDeclaredTypeVmTests {
             new Assignment(sum, new Constant(0.0)),
             new ForEachLoop(d, new Constant(new long[] { 1L, 3L }),
                 new Assignment(sum, new Add(sum, new Divide(d, new Constant(2L)))),
-                DeclaredType: TypeReference.To<double>()),
+                DeclaredType: ClrTypeReferences.To<double>()),
             sum
         ], [sum]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -37,7 +38,7 @@ public class ForEachDeclaredTypeVmTests {
             new Assignment(sum, new Constant(0L)),
             new ForEachLoop(d, new Constant(new long[] { 1L, 3L }),
                 new Assignment(sum, new Add(sum, new Divide(d, new Constant(2L)))),
-                DeclaredType: TypeReference.To<int>()),
+                DeclaredType: ClrTypeReferences.To<int>()),
             sum
         ], [sum]);
         // C# has no implicit long-to-int conversion for the loop variable.
@@ -49,7 +50,7 @@ public class ForEachDeclaredTypeVmTests {
         var d = new Variable("d");
         var node = new Block([
             new ForEachLoop(d, new Constant(new long[] { 1L }), new Assignment(d, d),
-                DeclaredType: TypeReference.To<string>())
+                DeclaredType: ClrTypeReferences.To<string>())
         ]);
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
@@ -61,7 +62,7 @@ public class ForEachDeclaredTypeVmTests {
         var d = new Variable("d");
         var node = new Block([
             new ForEachLoop(d, new Constant(new long[] { 1L }), new Assignment(d, d),
-                DeclaredType: TypeReference.To<decimal>())
+                DeclaredType: ClrTypeReferences.To<decimal>())
         ]);
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }

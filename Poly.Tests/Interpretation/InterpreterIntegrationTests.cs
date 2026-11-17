@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -26,7 +27,7 @@ public class InterpreterIntegrationTests {
     [Test]
     public async Task ParameterizedExpression_SingleParameter_EvaluatesForMultipleInputs() {
         // Arrange - (x * 2) + 10
-        var param = new Parameter("x", TypeReference.To<int>());
+        var param = new Parameter("x", ClrTypeReferences.To<int>());
         var multiply = new Multiply(param, new Constant(2));
         var node = new Add(multiply, new Constant(10));
 
@@ -45,9 +46,9 @@ public class InterpreterIntegrationTests {
     [Test]
     public async Task ParameterizedExpression_MultipleParameters_EvaluatesCorrectly() {
         // Arrange - (x + y) * z
-        var x = new Parameter("x", TypeReference.To<int>());
-        var y = new Parameter("y", TypeReference.To<int>());
-        var z = new Parameter("z", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var y = new Parameter("y", ClrTypeReferences.To<int>());
+        var z = new Parameter("z", ClrTypeReferences.To<int>());
         var add = new Add(x, y);
         var node = new Multiply(add, z);
 
@@ -66,7 +67,7 @@ public class InterpreterIntegrationTests {
     [Test]
     public async Task ConditionalWithArithmetic_EvaluatesCorrectBranch() {
         // Arrange - if (x > 10) then (x * 2) else (x + 5)
-        var param = new Parameter("x", TypeReference.To<int>());
+        var param = new Parameter("x", ClrTypeReferences.To<int>());
         var condition = new GreaterThan(param, new Constant(10));
         var ifTrue = new Multiply(param, new Constant(2));
         var ifFalse = new Add(param, new Constant(5));
@@ -101,7 +102,7 @@ public class InterpreterIntegrationTests {
     [Test]
     public async Task NullCoalesceInExpression_HandlesNullCorrectly() {
         // Arrange - (x ?? 10) + 5
-        var param = new Parameter("x", TypeReference.To<int?>());
+        var param = new Parameter("x", ClrTypeReferences.To<int?>());
         var coalesce = new Coalesce(param, new Constant(10));
         var node = new Add(coalesce, new Constant(5));
 
@@ -134,7 +135,7 @@ public class InterpreterIntegrationTests {
     [Test]
     public async Task NestedConditionals_EvaluatesCorrectPath() {
         // Arrange - if (x > 10) then (if (x > 20) then 100 else 50) else 0
-        var param = new Parameter("x", TypeReference.To<int>());
+        var param = new Parameter("x", ClrTypeReferences.To<int>());
         var innerCondition = new GreaterThan(param, new Constant(20));
         var innerConditional = new Conditional(innerCondition, new Constant(100), new Constant(50));
         var outerCondition = new GreaterThan(param, new Constant(10));
@@ -187,9 +188,9 @@ public class InterpreterIntegrationTests {
         // Arrange - (-b + sqrt(b^2 - 4ac)) / (2a) simplified part: b^2 - 4ac
         // Let b = 5, a = 1, c = 6
         // Result should be: 5^2 - 4*1*6 = 25 - 24 = 1
-        var b = new Parameter("b", TypeReference.To<int>());
-        var a = new Parameter("a", TypeReference.To<int>());
-        var c = new Parameter("c", TypeReference.To<int>());
+        var b = new Parameter("b", ClrTypeReferences.To<int>());
+        var a = new Parameter("a", ClrTypeReferences.To<int>());
+        var c = new Parameter("c", ClrTypeReferences.To<int>());
 
         var bSquared = new Multiply(b, b);
         var fourA = new Multiply(new Constant(4), a);
@@ -223,7 +224,7 @@ public class InterpreterIntegrationTests {
     [Test]
     public async Task StringParameterExpression_ConcatenatesWithParameter() {
         // Arrange
-        var param = new Parameter("name", TypeReference.To<string>());
+        var param = new Parameter("name", ClrTypeReferences.To<string>());
         var node = new Add(new Constant("Hello, "), param);
 
         // Act

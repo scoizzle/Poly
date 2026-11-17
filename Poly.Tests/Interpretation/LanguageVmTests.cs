@@ -148,7 +148,7 @@ public class LanguageVmTests {
                 new Assignment(caught,
                     new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Faulted))))),
                 CatchClauses: [
-                    new CatchClause(TypeReference.To<InvalidOperationException>(), "ex",
+                    new CatchClause(ClrTypeReferences.To<InvalidOperationException>(), "ex",
                         new Assignment(caught, new Constant(1L)))
                 ]),
             caught
@@ -167,7 +167,7 @@ public class LanguageVmTests {
                 new Assignment(x,
                     new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed))))),
                 CatchClauses: [
-                    new CatchClause(TypeReference.To<InvalidOperationException>(), "ex",
+                    new CatchClause(ClrTypeReferences.To<InvalidOperationException>(), "ex",
                         new Assignment(x, new Constant(1L)))
                 ]),
             x
@@ -254,7 +254,7 @@ public class LanguageVmTests {
         var host = new Variable("host");
         var assignLength = new Assignment(new Member(host, "Length"), new Constant(2.5));
         var node = new Block([
-            new Assignment(host, new New(TypeReference.To<Poly.Tests.Introspection.TypeCompatibilityTests.ConversionHost>())),
+            new Assignment(host, new New(ClrTypeReferences.To<Poly.Tests.Introspection.TypeCompatibilityTests.ConversionHost>())),
             assignLength,
             new Member(host, "Length")
         ], [host]);
@@ -269,24 +269,24 @@ public class LanguageVmTests {
 
     [Test]
     public async Task TypeCast_IntToDouble_BitcastResult() {
-        var node = new TypeCast(new Constant(42), TypeReference.To<double>());
+        var node = new TypeCast(new Constant(42), ClrTypeReferences.To<double>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(42.0);
     }
 
     [Test]
     public async Task TypeCast_DoubleToInt_Truncates() {
-        var node = new TypeCast(new Constant(3.9), TypeReference.To<int>());
+        var node = new TypeCast(new Constant(3.9), ClrTypeReferences.To<int>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(3);
     }
 
     [Test]
     public async Task Add_NestedStrings_FlattensToSingleConcat() {
-        var a = new Parameter("a", TypeReference.To<string>());
-        var b = new Parameter("b", TypeReference.To<string>());
-        var c = new Parameter("c", TypeReference.To<string>());
-        var d = new Parameter("d", TypeReference.To<string>());
+        var a = new Parameter("a", ClrTypeReferences.To<string>());
+        var b = new Parameter("b", ClrTypeReferences.To<string>());
+        var c = new Parameter("c", ClrTypeReferences.To<string>());
+        var d = new Parameter("d", ClrTypeReferences.To<string>());
         var nested = new Add(new Add(a, b), new Add(c, d));
         var analysis = Interpreter.Analyze(nested);
         var rewritten = analysis.GetNodeReplacement(nested) as Invoke;
@@ -299,11 +299,11 @@ public class LanguageVmTests {
 
     [Test]
     public async Task Add_FiveStrings_FlattensToEnumerableConcat() {
-        var w = new Parameter("w", TypeReference.To<string>());
-        var x = new Parameter("x", TypeReference.To<string>());
-        var y = new Parameter("y", TypeReference.To<string>());
-        var y2 = new Parameter("y2", TypeReference.To<string>());
-        var z = new Parameter("z", TypeReference.To<string>());
+        var w = new Parameter("w", ClrTypeReferences.To<string>());
+        var x = new Parameter("x", ClrTypeReferences.To<string>());
+        var y = new Parameter("y", ClrTypeReferences.To<string>());
+        var y2 = new Parameter("y2", ClrTypeReferences.To<string>());
+        var z = new Parameter("z", ClrTypeReferences.To<string>());
         var node = new Add(new Add(new Add(w, x), y), new Add(y2, z));
         var analysis = Interpreter.Analyze(node);
         var rewritten = analysis.GetNodeReplacement(node) as Invoke;
@@ -389,8 +389,8 @@ public class LanguageVmTests {
 
     [Test]
     public async Task Add_SameParameterRepeated_FlattensAndEvaluates() {
-        var name = new Parameter("name", TypeReference.To<string>());
-        var sep = new Parameter("sep", TypeReference.To<string>());
+        var name = new Parameter("name", ClrTypeReferences.To<string>());
+        var sep = new Parameter("sep", ClrTypeReferences.To<string>());
         var node = new Add(new Add(name, sep), name);
         var analysis = Interpreter.Analyze(node);
         var rewritten = analysis.GetNodeReplacement(node) as Invoke;
@@ -415,21 +415,21 @@ public class LanguageVmTests {
 
     [Test]
     public async Task TypeAs_MatchingReference_KeepsObject() {
-        var node = new TypeAs(new Constant("hello"), TypeReference.To<object>());
+        var node = new TypeAs(new Constant("hello"), ClrTypeReferences.To<object>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("hello");
     }
 
     [Test]
     public async Task TypeAs_Mismatch_IsNull() {
-        var node = new TypeAs(new Constant("hello"), TypeReference.To<Uri>());
+        var node = new TypeAs(new Constant("hello"), ClrTypeReferences.To<Uri>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<object>()).IsNull();
     }
 
     [Test]
     public async Task TypeOf_String_ReturnsRuntimeType() {
-        var node = new TypeOf(TypeReference.To<string>());
+        var node = new TypeOf(ClrTypeReferences.To<string>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<Type>()).IsEqualTo(typeof(string));
     }
@@ -442,13 +442,13 @@ public class LanguageVmTests {
 
     [Test]
     public async Task Default_String_IsAbiNull() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(new Default(TypeReference.To<string>())));
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Default(ClrTypeReferences.To<string>())));
         await Assert.That(exec.GetValue<object>()).IsNull();
     }
 
     [Test]
     public async Task ThrowExpression_ThrowsOperand() {
-        var node = new ThrowExpression(new New(TypeReference.To<InvalidOperationException>()));
+        var node = new ThrowExpression(new New(ClrTypeReferences.To<InvalidOperationException>()));
         await Assert.That(() => {
             using var exec = Interpreter.Execute(Interpreter.Compile(node));
         }).Throws<InvalidOperationException>();
@@ -456,8 +456,8 @@ public class LanguageVmTests {
 
     [Test]
     public async Task Lambda_Invoke_AddsArguments() {
-        var x = new Parameter("x", TypeReference.To<long>());
-        var y = new Parameter("y", TypeReference.To<long>());
+        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var y = new Parameter("y", ClrTypeReferences.To<long>());
         var node = new Invoke(new Lambda([x, y], new Add(x, y)), new Constant(3L), new Constant(4L));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
@@ -472,7 +472,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task New_Exception_IsHeapObject() {
-        var node = new New(TypeReference.To<InvalidOperationException>(), new Constant("boom"));
+        var node = new New(ClrTypeReferences.To<InvalidOperationException>(), new Constant("boom"));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var ex = exec.GetValue<InvalidOperationException>();
         await Assert.That(ex).IsNotNull();
@@ -481,7 +481,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task NewArray_Object_IsHeapArray() {
-        var node = new NewArray(TypeReference.To<object>(), new Constant(3L));
+        var node = new NewArray(ClrTypeReferences.To<object>(), new Constant(3L));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var arr = exec.GetValue<Array>();
         await Assert.That(arr).IsNotNull();
@@ -501,7 +501,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task Parameter_SetArgs_ReturnsArg() {
-        var p = new Parameter("x", TypeReference.To<long>());
+        var p = new Parameter("x", ClrTypeReferences.To<long>());
         var program = Interpreter.Compile(p);
         using var exec = Interpreter.Execute(program, s => s.SetArgs(9L));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(9L);
@@ -589,9 +589,9 @@ public class LanguageVmTests {
 
     [Test]
     public async Task NestedLambda_InnerParamDifferentName_CallsThrough() {
-        var innerP = new Parameter("y", TypeReference.To<long>());
+        var innerP = new Parameter("y", ClrTypeReferences.To<long>());
         var inner = new Lambda([innerP], new Add(innerP, new Constant(1L)));
-        var outerP = new Parameter("x", TypeReference.To<long>());
+        var outerP = new Parameter("x", ClrTypeReferences.To<long>());
         var outer = new Lambda([outerP], new Invoke(inner, outerP));
         var node = new Invoke(outer, new Constant(41L));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -617,8 +617,8 @@ public class LanguageVmTests {
 
     [Test]
     public async Task Lambda_SameNameDifferentParameterInstance_BindsAsOwn() {
-        var own = new Parameter("x", TypeReference.To<long>());
-        var other = new Parameter("x", TypeReference.To<long>());
+        var own = new Parameter("x", ClrTypeReferences.To<long>());
+        var other = new Parameter("x", ClrTypeReferences.To<long>());
         var node = new Invoke(new Lambda([own], other), new Constant(7L));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
@@ -627,8 +627,8 @@ public class LanguageVmTests {
     [Test]
     public async Task StoredLambda_SameNameDifferentParameterInstance_BindsAsOwn() {
         var fn = new Variable("fn");
-        var own = new Parameter("x", TypeReference.To<long>());
-        var other = new Parameter("x", TypeReference.To<long>());
+        var own = new Parameter("x", ClrTypeReferences.To<long>());
+        var other = new Parameter("x", ClrTypeReferences.To<long>());
         var node = new Block([
             new Assignment(fn, new Lambda([own], other)),
             new Invoke(fn, new Constant(7L))
@@ -654,7 +654,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task SetArgs_ULongMaxValue_RoundTrips() {
-        var p = new Parameter("x", TypeReference.To<ulong>());
+        var p = new Parameter("x", ClrTypeReferences.To<ulong>());
         var program = Interpreter.Compile(p);
         using var exec = Interpreter.Execute(program, s => s.SetArgs(ulong.MaxValue));
         await Assert.That(exec.GetValue<ulong>()).IsEqualTo(ulong.MaxValue);
@@ -829,7 +829,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task TypeReference_AsValue_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new Add(TypeReference.To<string>(), new Constant(1L))))
+        await Assert.That(() => Interpreter.Compile(new Add(ClrTypeReferences.To<string>(), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 
@@ -882,7 +882,7 @@ public class LanguageVmTests {
     // non-null receiver reads the member.
     [Test]
     public async Task ConditionalAccess_NullReceiver_YieldsNull() {
-        var receiver = new Parameter("a", TypeReference.To<string>());
+        var receiver = new Parameter("a", ClrTypeReferences.To<string>());
         var access = new Conditional(
             new Equal(receiver, new Constant(null)),
             new Constant(null),
@@ -893,7 +893,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task ConditionalAccess_NonNullReceiver_ReadsMember() {
-        var receiver = new Parameter("a", TypeReference.To<string>());
+        var receiver = new Parameter("a", ClrTypeReferences.To<string>());
         var access = new Conditional(
             new Equal(receiver, new Constant(null)),
             new Constant(null),
@@ -908,7 +908,7 @@ public class LanguageVmTests {
         // conditional is classified as the member's scalar type. A null arm has no
         // slot representation then: the form must throw rather than yield the 0
         // sentinel (C#'s `a?.Length` is `int?`, which this subset cannot represent).
-        var receiver = new Parameter("a", TypeReference.To<string>());
+        var receiver = new Parameter("a", ClrTypeReferences.To<string>());
         var access = new Conditional(
             new Not(new Equal(receiver, new Constant(null))),
             new Member(receiver, "Length"),
@@ -938,7 +938,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task TypeIs_StringIsString_IsTrue() {
-        var node = new TypeIs(new Constant("hello"), TypeReference.To<string>());
+        var node = new TypeIs(new Constant("hello"), ClrTypeReferences.To<string>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.RawValue).IsEqualTo(1L);
     }
@@ -1054,7 +1054,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task ThrowStatement_ThrowsOperand() {
-        var node = new ThrowStatement(new New(TypeReference.To<InvalidOperationException>(), new Constant("vm")));
+        var node = new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>(), new Constant("vm")));
         await Assert.That(() => {
             using var exec = Interpreter.Execute(Interpreter.Compile(node));
         }).Throws<InvalidOperationException>();
@@ -1066,9 +1066,9 @@ public class LanguageVmTests {
         var node = new Block([
             new Assignment(caught, new Constant(0L)),
             new TryCatchFinally(
-                new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())),
+                new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>())),
                 CatchClauses: [
-                    new CatchClause(TypeReference.To<InvalidOperationException>(), "ex", new Assignment(caught, new Constant(1L)))
+                    new CatchClause(ClrTypeReferences.To<InvalidOperationException>(), "ex", new Assignment(caught, new Constant(1L)))
                 ]),
             caught
         ], [caught]);
@@ -1095,7 +1095,7 @@ public class LanguageVmTests {
     public async Task StridedSetBits_SetsWordBits() {
         var arr = new Variable("arr");
         var node = new Block([
-            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(2L))),
+            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(2L))),
             new StridedSetBits(arr, new Constant(4L), new Constant(2L), new Constant(8L)),
             new IndexAccess(arr, new Constant(0L))
         ], [arr]);

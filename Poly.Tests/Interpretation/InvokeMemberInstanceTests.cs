@@ -6,6 +6,7 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -185,7 +186,7 @@ public class InvokeMemberInstanceTests {
     public async Task VoidInvoke_LeavesZero() {
         var list = new List<string> { "a" };
         var invoke = new Invoke(
-            new Member(new Parameter("list", TypeReference.To<List<string>>()), "Clear"));
+            new Member(new Parameter("list", ClrTypeReferences.To<List<string>>()), "Clear"));
         using var exec = Interpreter.Execute(
             Interpreter.Compile(invoke), s => s.SetArgs(new object?[] { list }));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);

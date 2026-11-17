@@ -1,4 +1,5 @@
 using Poly.Interpretation.Mermaid;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Integration;
@@ -73,7 +74,7 @@ public class MermaidAstVisualizationTests {
     [Test]
     public async Task WithParameter_ShowsParameterNode() {
         // Arrange
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var ast = new Add(x, Wrap(10));
         var generator = new MermaidAstGenerator();
 
@@ -224,7 +225,7 @@ public class MermaidAstVisualizationTests {
     [Test]
     public async Task CoalesceOperator_NullCoalescing_ShowsValueAndDefault() {
         // Arrange: x ?? 42
-        var x = new Parameter("x", TypeReference.To<int?>());
+        var x = new Parameter("x", ClrTypeReferences.To<int?>());
         var ast = new Coalesce(x, Wrap(42));
         var generator = new MermaidAstGenerator();
 
@@ -243,7 +244,7 @@ public class MermaidAstVisualizationTests {
     [Test]
     public async Task TypeCast_IntToDouble_ShowsCastOperation() {
         // Arrange: (double)42
-        var ast = new TypeCast(Wrap(42), TypeReference.To<double>());
+        var ast = new TypeCast(Wrap(42), ClrTypeReferences.To<double>());
         var generator = new MermaidAstGenerator();
 
         // Act

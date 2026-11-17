@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -92,7 +93,7 @@ public class IntegerWidthParityTests {
 
     [Test]
     public async Task PureLambda_NegOfIntMinValueParameter_WrapsAtIntWidth() {
-        var x = new Parameter("x", TypeReference.To<int>());
+        var x = new Parameter("x", ClrTypeReferences.To<int>());
         var lambda = new Lambda([x], new UnaryMinus(x));
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(
             new Member(new ClrTypeReference(typeof(NegProbe)), nameof(NegProbe.ApplyInt)),

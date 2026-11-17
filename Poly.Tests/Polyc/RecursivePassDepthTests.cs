@@ -4,6 +4,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Packs.Product;
 using Poly.Tests.DomainModeling.Parsing;
 using Poly.Tests.TestHelpers;
@@ -81,7 +82,7 @@ public class RecursivePassDepthTests {
             if (analysis.HasErrors)
                 throw new InvalidOperationException("analysis: " + string.Join("; ", analysis.Diagnostics.Select(d => d.Message)));
 
-            var entityParam = new Parameter("entity", TypeReference.To<FlagSubject>());
+            var entityParam = new Parameter("entity", ClrTypeReferences.To<FlagSubject>());
             var pass = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(entityParam));
             var lowered = pass.Lower(parsed, entityParam);
             var printed = new DomainDslPrinter(compiled.Session).Print(compiled.Domain!);

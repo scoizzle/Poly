@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -42,8 +43,8 @@ public class ModuloTests {
     [Test]
     public async Task Modulo_WithParameters_EvaluatesCorrectly() {
         // Arrange
-        var param1 = new Parameter("a", TypeReference.To<int>());
-        var param2 = new Parameter("b", TypeReference.To<int>());
+        var param1 = new Parameter("a", ClrTypeReferences.To<int>());
+        var param2 = new Parameter("b", ClrTypeReferences.To<int>());
         var node = new Modulo(param1, param2);
 
         // Act

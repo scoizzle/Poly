@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -18,7 +19,7 @@ public class TypeOfAllocationTests {
     /// evaluation itself allocates nothing.</summary>
     [Test]
     public async Task TypeOf_AllocatesOncePerProgram() {
-        var tree = Build(new TypeOf(TypeReference.To<long>())).Expression;
+        var tree = Build(new TypeOf(ClrTypeReferences.To<long>())).Expression;
         var calls = new HeapCalls();
         calls.Visit(tree);
 
@@ -45,7 +46,7 @@ public class TypeOfAllocationTests {
             new WhileLoop(
                 new LessThan(i, new Constant((long)Iterations)),
                 new Block([
-                    new Assignment(t, new TypeOf(TypeReference.To<long>())),
+                    new Assignment(t, new TypeOf(ClrTypeReferences.To<long>())),
                     new Assignment(i, new Add(i, new Constant(1L)))
                 ], [])),
             i
@@ -72,8 +73,8 @@ public class TypeOfAllocationTests {
     [Test]
     public async Task TwoTypeOfSites_ShareOneHandle() {
         var tree = Build(new Block([
-            new TypeOf(TypeReference.To<long>()),
-            new TypeOf(TypeReference.To<long>())
+            new TypeOf(ClrTypeReferences.To<long>()),
+            new TypeOf(ClrTypeReferences.To<long>())
         ], [])).Expression;
         var calls = new HeapCalls();
         calls.Visit(tree);
@@ -85,8 +86,8 @@ public class TypeOfAllocationTests {
         await Assert.That(calls.HandleReads.Count).IsEqualTo(2);
 
         using var execution = Interpreter.Execute(Interpreter.Compile(new Block([
-            new TypeOf(TypeReference.To<long>()),
-            new TypeOf(TypeReference.To<long>())
+            new TypeOf(ClrTypeReferences.To<long>()),
+            new TypeOf(ClrTypeReferences.To<long>())
         ], [])));
         int slots = execution.State.Heap.RawSlots
             .Count(o => ReferenceEquals(o, typeof(long)));
@@ -98,8 +99,8 @@ public class TypeOfAllocationTests {
     [Test]
     public async Task DistinctTypes_GetDistinctHandles() {
         var program = new Block([
-            new TypeOf(TypeReference.To<long>()),
-            new TypeOf(TypeReference.To<string>())
+            new TypeOf(ClrTypeReferences.To<long>()),
+            new TypeOf(ClrTypeReferences.To<string>())
         ], []);
         var calls = new HeapCalls();
         calls.Visit(Build(program).Expression);
@@ -120,10 +121,10 @@ public class TypeOfAllocationTests {
     /// <summary>The representation changed; the meaning did not.</summary>
     [Test]
     public async Task TypeOf_StillYieldsItsType() {
-        using var longExec = Interpreter.Execute(Interpreter.Compile(new TypeOf(TypeReference.To<long>())));
+        using var longExec = Interpreter.Execute(Interpreter.Compile(new TypeOf(ClrTypeReferences.To<long>())));
         await Assert.That(longExec.GetValue<Type>()).IsEqualTo(typeof(long));
 
-        using var stringExec = Interpreter.Execute(Interpreter.Compile(new TypeOf(TypeReference.To<string>())));
+        using var stringExec = Interpreter.Execute(Interpreter.Compile(new TypeOf(ClrTypeReferences.To<string>())));
         await Assert.That(stringExec.GetValue<Type>()).IsEqualTo(typeof(string));
     }
 

@@ -260,7 +260,7 @@ internal static class NodeFactCorpus {
         yield return Sample<IfStatement>("LanguageVmTests.IfStatement_ThenBranch_Runs",
             new IfStatement(new Constant(true), new Constant(1L)));
         yield return Sample<IndexAccess>("LanguageVmTests.IndexAccess_Array_ReturnsElement",
-            new IndexAccess(new NewArray(TypeReference.To<long>(), new Constant(2L)), new Constant(0L)));
+            new IndexAccess(new NewArray(ClrTypeReferences.To<long>(), new Constant(2L)), new Constant(0L)));
         yield return Sample<LabelDeclaration>("LanguageVmTests.Goto_AndLabel_SkipAssignment", new Block([
             new Assignment(x, new Constant(10L)),
             new GotoStatement("exit"),
@@ -271,7 +271,7 @@ internal static class NodeFactCorpus {
         yield return Sample<ShiftLeft>("LanguageVmTests", new ShiftLeft(new Constant(1L), new Constant(3L)));
         yield return Sample<ShiftRight>("LanguageVmTests", new ShiftRight(new Constant(8L), new Constant(2L)));
         yield return Sample<StridedSetBits>("LanguageVmTests.StridedSetBits_SetsWordBits", new Block([
-            new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant(2L))),
+            new Assignment(bits, new NewArray(ClrTypeReferences.To<long>(), new Constant(2L))),
             new StridedSetBits(bits, new Constant(4L), new Constant(2L), new Constant(8L)),
         ], [bits]));
         yield return Sample<SuspendNode>("LanguageVmTests", new SuspendNode(new Constant(7L), "bp"));
@@ -282,15 +282,15 @@ internal static class NodeFactCorpus {
             ], new Constant(3L)),
         ], [x]));
         yield return Sample<ThrowExpression>("LanguageVmTests.ThrowExpression_ThrowsOperand",
-            new ThrowExpression(new New(TypeReference.To<InvalidOperationException>(), new Constant("vm"))));
+            new ThrowExpression(new New(ClrTypeReferences.To<InvalidOperationException>(), new Constant("vm"))));
         yield return Sample<TryCatchFinally>("LanguageVmTests", new TryCatchFinally(new Constant(1L)));
         yield return Sample<TypeAs>("LanguageVmTests.TypeAs_MatchingReference_KeepsObject",
-            new TypeAs(new Constant("hello"), TypeReference.To<object>()));
+            new TypeAs(new Constant("hello"), ClrTypeReferences.To<object>()));
         yield return Sample<TypeCast>("LanguageVmTests.TypeCast_IntToDouble_BitcastResult",
-            new TypeCast(new Constant(1L), TypeReference.To<long>()));
-        yield return Sample<TypeIs>("LanguageVmTests", new TypeIs(new Constant("x"), TypeReference.To<string>()));
+            new TypeCast(new Constant(1L), ClrTypeReferences.To<long>()));
+        yield return Sample<TypeIs>("LanguageVmTests", new TypeIs(new Constant("x"), ClrTypeReferences.To<string>()));
         yield return Sample<TypeOf>("LanguageVmTests.TypeOf_String_ReturnsRuntimeType",
-            new TypeOf(TypeReference.To<string>()));
+            new TypeOf(ClrTypeReferences.To<string>()));
         // A yield lives in a method body, which the program block does not expose as a child: the
         // kind is found in the unit and the program block is what the VM compiles.
         var iterator = CSharpScript.ReadUnit(
@@ -313,7 +313,7 @@ internal static class NodeFactCorpus {
             new TypeDefinitionReference(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string))));
         yield return Sample<UnionTypeReference>(
             "CSharpWriterFailClosedTests.KindsWithoutWriterArm_Throw_InsteadOfPrintingTheirToString",
-            new UnionTypeReference([TypeReference.To<long>()]));
+            new UnionTypeReference([ClrTypeReferences.To<long>()]));
     }
 
     private static (Type Kind, string Source, Node Program, Node? Root) Sample<T>(string source, Node program) =>

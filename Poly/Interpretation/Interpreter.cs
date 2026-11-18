@@ -19,6 +19,7 @@ namespace Poly.Interpretation;
 public static class Interpreter {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseTypeDefinitionNodeAnalyzer()
+        .UseUnitTypeScope()
         .UseThisReferenceContext()
         // Bindings precede type/member resolution so a use's type projects from its
         // declaration; the bind pass resolves dotted type names against the scope.

@@ -11,4 +11,11 @@ public interface ITypeSource {
     /// namespace). A type nested in another type is not listed. Names are compared ordinally.
     /// </summary>
     IEnumerable<ITypeDefinition> TypesIn(string? @namespace);
+
+    /// <summary>
+    /// Gets the definition named <paramref name="name"/> that this source declares directly in
+    /// <paramref name="namespace"/>, or null. A generic definition is named with its arity, as its platform names it.
+    /// </summary>
+    ITypeDefinition? TypeIn(string? @namespace, string name) =>
+        TypesIn(@namespace).FirstOrDefault(type => string.Equals(type.Name, name, StringComparison.Ordinal));
 }

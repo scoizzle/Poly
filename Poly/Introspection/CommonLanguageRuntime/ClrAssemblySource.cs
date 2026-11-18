@@ -7,15 +7,23 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// reached through a source is the same type reached any other way.
 /// </summary>
 public sealed class ClrAssemblySource : ITypeSource {
+    private readonly Assembly _assembly;
     private readonly Lazy<ILookup<string?, Type>> _byNamespace;
 
     public ClrAssemblySource(Assembly assembly) {
         ArgumentNullException.ThrowIfNull(assembly);
+        _assembly = assembly;
         _byNamespace = new(() => Declared(assembly).ToLookup(static type => type.Namespace, StringComparer.Ordinal));
     }
 
     public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) =>
         _byNamespace.Value[@namespace].Select(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition);
+
+    public ITypeDefinition? TypeIn(string? @namespace, string name) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var found = _assembly.GetType(@namespace is null ? name : $"{@namespace}.{name}", throwOnError: false, ignoreCase: false);
+        return found is { IsNested: false } ? ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(found) : null;
+    }
 
     /// <summary>The types the assembly declares at namespace level, minus the compiler's own (closures, anonymous
     /// types), which no source text can name. A type that fails to load is skipped: the rest are still what the

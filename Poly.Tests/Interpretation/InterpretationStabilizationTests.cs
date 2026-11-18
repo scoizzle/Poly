@@ -454,6 +454,7 @@ public class InterpretationStabilizationTests {
     public async Task StandardAnalyzer_PassNames_MatchInterpreterPipeline() {
         string[] expected = [
             TypeDefinitionNodeAnalyzer.Id,
+            UnitTypeScopeAnalyzer.Id,
             ThisReferenceContextAnalyzer.Id,
             ScopeValidator.Id,
             TypeAndMemberResolver.Id,

@@ -71,6 +71,33 @@ public class TypeSourceTests {
     }
 
     [Test]
+    public async Task ClrAssembly_TypeIn_FindsOneTypeByItsNamespaceAndName() {
+        var source = new ClrAssemblySource(typeof(TypeSourceTests).Assembly);
+        var @namespace = typeof(TypeSourceTests).Namespace;
+
+        await Assert.That(source.TypeIn(@namespace, nameof(TypeSourceTests)))
+            .IsSameReferenceAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TypeSourceTests)));
+        await Assert.That(source.TypeIn(@namespace, "NoSuchType")).IsNull();
+        await Assert.That(source.TypeIn(@namespace, $"{nameof(TypeSourceTests)}+{nameof(NestedInTheTests)}")).IsNull()
+            .Because("a nested type is not declared in the namespace");
+        await Assert.That(source.TypeIn(null, nameof(DeclaredInTheGlobalNamespace))).IsNotNull();
+    }
+
+    [Test]
+    public async Task ClrRegistry_BareName_IsNotLookedUpAcrossLoadedAssemblies() {
+        ITypeSource loaded = ClrTypeDefinitionRegistry.Shared;
+        // Resolving the type by its runtime type first caches it under its full name, which for a global type has no
+        // dot: a bare lookup must not then find it in the cache.
+        _ = new ClrAssemblySource(typeof(DeclaredInTheGlobalNamespace).Assembly).TypeIn(null, nameof(DeclaredInTheGlobalNamespace));
+
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(nameof(DeclaredInTheGlobalNamespace))).IsNull()
+            .Because("a loaded assembly declares it, and a bare name is a scope's to bind, not the process's");
+        await Assert.That(loaded.TypeIn(null, nameof(DeclaredInTheGlobalNamespace))).IsNull();
+        await Assert.That(loaded.TypeIn("System.Text", nameof(StringBuilder)))
+            .IsSameReferenceAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(StringBuilder)));
+    }
+
+    [Test]
     public async Task Declarations_TypesIn_ListsADeclarationUnderItsOwnNamespace() {
         var registry = new AstTypeRegistry();
         var order = new AstTypeDefinition(new TypeDefinitionNode("Order", Namespace: "Shop"), registry);

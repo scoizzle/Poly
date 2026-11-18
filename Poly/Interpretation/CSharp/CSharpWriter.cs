@@ -1057,6 +1057,9 @@ public sealed class CSharpWriter {
                 return Render("expr-primary", "this");
             case TypeOf typeOf:
                 return Render("expr-primary", "typeof", TypeText(typeOf.Type));
+            case TypeDefinitionReference { TypeDefinition: IClrTypeDefinition { RuntimeType: var clr } }:
+                // The receiver of a static call: `object.Equals`, not `System.Object.Equals`.
+                return ClrTypeText(clr);
             case TypeReference typeRef:
                 // Callee position stays raw: nameof(...) and string.Concat.
                 return typeRef.TypeName;
@@ -1650,7 +1653,10 @@ public sealed class CSharpWriter {
     /// </summary>
     private string TypeText(Node type, bool asArgument) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
-        TypeDefinitionReference t when t.TypeDefinition is IClrTypeDefinition { RuntimeType: var clr } => ClrTypeText(clr),
+        // The same rule a named reference follows: an argument position spells a primitive as its C# keyword, the
+        // declaration position spells the CLR name.
+        TypeDefinitionReference t when t.TypeDefinition is IClrTypeDefinition { RuntimeType: var clr } =>
+            asArgument ? ArgumentSpelling(ClrTypeName(clr)) : ClrTypeText(clr),
         TypeDefinitionReference t => EscapeTypeName(t.TypeName),
         TypeReference t => EscapeTypeName(t.TypeName),
         NamedTypeReference n => NamedTypeText(n, asArgument),

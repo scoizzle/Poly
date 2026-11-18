@@ -1,0 +1,81 @@
+using Poly.Ast.Nodes;
+using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
+
+namespace Poly.Tests.Introspection;
+
+/// <summary>
+/// A type reference the CLR host mints carries the platform's definition, not a spelling of its name: two types that
+/// share a full name are still different types, and an implementer is assignable to the interface it implements. The
+/// string form is what a reference prints, never what it means.
+/// </summary>
+public class ClrReferenceIdentityTests {
+    [Test]
+    public async Task Of_PlainType_CarriesTheProvidersDefinition() {
+        var reference = ClrTypeReferences.Of(typeof(string));
+
+        await Assert.That(reference).IsTypeOf<TypeDefinitionReference>();
+        var stated = ((TypeDefinitionReference)reference).TypeDefinition;
+        await Assert.That(stated.IsSameTypeAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string))))
+            .IsTrue().Because("a minted reference states the provider's definition, not a name to resolve again");
+    }
+
+    [Test]
+    public async Task Of_GenericType_CarriesTheClosedDefinition() {
+        var reference = ClrTypeReferences.Of(typeof(Func<int, string>));
+
+        await Assert.That(reference).IsTypeOf<TypeDefinitionReference>();
+        var stated = ((TypeDefinitionReference)reference).TypeDefinition;
+        await Assert.That(stated.TryGetRuntimeType(out var runtime) && runtime == typeof(Func<int, string>))
+            .IsTrue();
+    }
+
+    [Test]
+    public async Task Of_NullableType_KeepsTheOptionalShapeOverItsUnderlyingDefinition() {
+        var reference = ClrTypeReferences.Of(typeof(int?));
+
+        await Assert.That(reference).IsTypeOf<OptionalTypeReference>();
+        await Assert.That(((OptionalTypeReference)reference).InnerType).IsTypeOf<TypeDefinitionReference>();
+    }
+
+    [Test]
+    public async Task Assignability_AsksTheDefinition_NotTheName() {
+        var port = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(IStoragePort));
+
+        ITypeDefinition sameName = new NamedType("Poly.Runtime", "IStoragePort");
+        await Assert.That(TypeDefinitionExtensions.IsAssignableByHierarchy(port, sameName)).IsFalse()
+            .Because("a definition from another platform with the same full name is not the port");
+
+        ITypeDefinition implementer = new NamedType("App", "AppDbContext", [port]);
+        await Assert.That(TypeDefinitionExtensions.IsAssignableByHierarchy(port, implementer)).IsTrue()
+            .Because("an implementer of the port is the port's shape, which a name comparison cannot see");
+    }
+
+    /// <summary>A definition with no platform behind it: the second-platform case in miniature. Identity is its own
+    /// reference, so a same-named definition from elsewhere is a different type.</summary>
+    private sealed class NamedType(
+        string ns, string name, IReadOnlyList<ITypeDefinition>? interfaces = null) : ITypeDefinition {
+        public string Name => name;
+        public string? Namespace => ns;
+        public AccessModifier AccessModifier => AccessModifier.Public;
+        public ITypeDefinition? BaseType => null;
+        public IEnumerable<ITypeDefinition> Interfaces => interfaces ?? [];
+        public IEnumerable<IParameter> GenericParameters => [];
+        public IEnumerable<ITypeMember> Members => [];
+        public IEnumerable<ITypeField> Fields => [];
+        public IEnumerable<ITypeProperty> Properties => [];
+        public IEnumerable<ITypeMethod> Methods => [];
+        public IEnumerable<ITypeConstructor> Constructors => [];
+        public IEnumerable<ITypeOperator> Operators => [];
+        public PrimitiveType? PrimitiveType => null;
+        public PrimitiveAtom? PlatformAtom => null;
+        public ITypeDefinition? NullableOf => null;
+        public TypeKind Kind => TypeKind.Class;
+        public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+        IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
+        bool ITypeDefinition.IsCollectionShape => false;
+        ITypeDefinition? ITypeDefinition.SequenceElementType => null;
+        ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
+        ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
+    }
+}

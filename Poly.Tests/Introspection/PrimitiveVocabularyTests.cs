@@ -28,7 +28,7 @@ public class PrimitiveVocabularyTests {
         await Assert.That(typeof(DateTimeOffset).GetPrimitiveType()).IsEqualTo(PrimitiveType.DateTimeOffset);
         await Assert.That(PrimitiveType.DateTimeOffset.GetClrType()).IsEqualTo(typeof(DateTimeOffset));
         var definition = (ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DateTimeOffset));
-        await Assert.That(definition.Kind).IsEqualTo(TypeKind.Primitive);
+        await Assert.That(definition.PrimitiveType).IsNotNull();
         await Assert.That(definition.PrimitiveType).IsEqualTo(PrimitiveType.DateTimeOffset);
     }
 
@@ -49,30 +49,27 @@ public class PrimitiveVocabularyTests {
     }
 
     [Test]
-    public async Task NeutralDefinition_CanStateAPlatformPrimitiveAtom() {
-        // I6: a host primitive the shared vocabulary does not name is stated by its platform, beside PrimitiveType.
-        var member = typeof(ITypeDefinition).GetProperty(
-            "PlatformAtom", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        await Assert.That(member).IsNotNull();
-    }
-
-    [Test]
-    public async Task SecondHost_StatesAndResolvesItsOwnPrimitiveAtom() {
-        // A primitive the shared vocabulary does not name: the host states it, its provider resolves and enumerates it,
-        // and it is not confusable with a shared id.
+    public async Task SecondHost_StatesAPrimitiveTheVocabularyDoesNotName_AsAFactOfItsOwn() {
+        // A primitive the shared vocabulary does not name: the host states what it is as a fact of its own, its
+        // provider resolves and enumerates it, and it is not confusable with a shared id. (Formerly a PrimitiveAtom:
+        // a fact needs no escape hatch beside a closed list.)
         var provider = new SecondHostProvider();
-        var atom = new PrimitiveAtom("Decimal128");
-        provider.Add(new HostPrimitive("Decimal128", primitive: null, atom), primitive: null);
+        var decimal128 = new HostDecimal(Bits: 128);
+        provider.Add(new HostPrimitive("Decimal128", primitive: null, decimal128), primitive: null);
 
         var resolved = provider.GetTypeDefinition("Decimal128");
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved!.PrimitiveType).IsNull();
-        await Assert.That(resolved.PlatformAtom).IsEqualTo(atom);
-        await Assert.That(resolved.Kind).IsEqualTo(TypeKind.Primitive);
+        await Assert.That(resolved.GetFact<HostDecimal>()).IsEqualTo(decimal128);
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(decimal)).GetFact<HostDecimal>()).IsNull()
+            .Because("the CLR's decimal is not the host's, and states nothing for the host's question");
         await Assert.That(provider.GetTypeDefinition(PrimitiveType.Decimal)).IsNull();
         await Assert.That(provider.Types).Contains(resolved);
     }
+
+    /// <summary>What the second host's decimal is, in the host's own terms.</summary>
+    private sealed record HostDecimal(int Bits) : TypeFact;
 
     private sealed class SecondHostProvider : ITypeDefinitionProvider {
         private readonly Dictionary<string, ITypeDefinition> _types = new(StringComparer.Ordinal);
@@ -89,7 +86,8 @@ public class PrimitiveVocabularyTests {
         public IEnumerable<ITypeDefinition> Types => _types.Values;
     }
 
-    private sealed class HostPrimitive(string name, PrimitiveType? primitive, PrimitiveAtom? atom = null) : ITypeDefinition {
+    private sealed class HostPrimitive(string name, PrimitiveType? primitive, object? fact = null) : ITypeDefinition {
+        public TFact? GetFact<TFact>() where TFact : TypeFact => fact as TFact;
         public string Name => name;
         public string? Namespace => null;
         public AccessModifier AccessModifier => AccessModifier.Public;
@@ -103,9 +101,7 @@ public class PrimitiveVocabularyTests {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         public PrimitiveType? PrimitiveType => primitive;
-        public PrimitiveAtom? PlatformAtom => atom;
         public ITypeDefinition? NullableOf => null;
-        public TypeKind Kind => TypeKind.Primitive;
 
         public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
 

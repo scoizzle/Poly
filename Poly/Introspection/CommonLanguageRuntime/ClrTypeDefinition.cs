@@ -133,15 +133,28 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
     PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
 
-    /// <summary>The CLR maps every primitive it has into the shared vocabulary, so it states no atom.</summary>
-    PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
 
     /// <summary>A CLR nullable form is <c>Nullable&lt;T&gt;</c>; every other definition wraps nothing.</summary>
     ITypeDefinition? ITypeDefinition.NullableOf =>
         Nullable.GetUnderlyingType(RuntimeType) is { } underlying
             ? _provider.GetTypeDefinition(underlying)
             : null;
-    public TypeKind Kind => GetTypeKind(RuntimeType);
+    private Enumeration? _enumeration;
+
+    /// <summary>The shape facts the CLR states from the runtime type: an enum is an enumeration over its underlying
+    /// type, a value type has value semantics (an enum and a primitive included: facts are not exclusive), and an
+    /// interface and a delegate are each their own shape.</summary>
+    public TFact? GetFact<TFact>() where TFact : TypeFact {
+        if (typeof(TFact) == typeof(Enumeration))
+            return (RuntimeType.IsEnum ? _enumeration ??= new Enumeration(_provider.GetTypeDefinition(Enum.GetUnderlyingType(RuntimeType))) : null) as TFact;
+        if (typeof(TFact) == typeof(ValueSemantics))
+            return (RuntimeType.IsValueType ? ValueSemantics.Instance : null) as TFact;
+        if (typeof(TFact) == typeof(InterfaceContract))
+            return (RuntimeType.IsInterface ? InterfaceContract.Instance : null) as TFact;
+        if (typeof(TFact) == typeof(DelegateSignature))
+            return (typeof(Delegate).IsAssignableFrom(RuntimeType) ? DelegateSignature.Instance : null) as TFact;
+        return null;
+    }
     public override string ToString() => FullName;
 
     /// <summary>
@@ -578,20 +591,4 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private static PrimitiveType? GetPrimitiveTypeId(Type type) =>
         type.GetPrimitiveType();
 
-    private static TypeKind GetTypeKind(Type type) {
-        ArgumentNullException.ThrowIfNull(type);
-
-        if (GetPrimitiveTypeId(type) is not null)
-            return TypeKind.Primitive;
-        if (type.IsEnum)
-            return TypeKind.Enum;
-        // Nullable<T> lands here: it is a value type, not a primitive.
-        if (type.IsValueType)
-            return TypeKind.Struct;
-        if (type.IsInterface)
-            return TypeKind.Interface;
-        if (typeof(Delegate).IsAssignableFrom(type))
-            return TypeKind.Delegate;
-        return TypeKind.Class;
-    }
 }

@@ -113,19 +113,22 @@ public class TypeDefinitionProviderCollectionTests {
 
         // int is primitive
         await Assert.That(intType.PrimitiveType).IsEqualTo(PrimitiveType.Int32);
-        await Assert.That(intType.Kind).IsEqualTo(TypeKind.Primitive);
+        await Assert.That(intType.PrimitiveType).IsNotNull();
 
         // string is primitive
         await Assert.That(stringType.PrimitiveType).IsEqualTo(PrimitiveType.String);
-        await Assert.That(stringType.Kind).IsEqualTo(TypeKind.Primitive);
+        await Assert.That(stringType.PrimitiveType).IsNotNull();
 
         // DateTime is primitive, not a DateTime-shaped category bit
         await Assert.That(dateTimeType.PrimitiveType).IsEqualTo(PrimitiveType.DateTime);
-        await Assert.That(dateTimeType.Kind).IsEqualTo(TypeKind.Primitive);
+        await Assert.That(dateTimeType.PrimitiveType).IsNotNull();
 
         // List<int> is a class; its element type is structural, not a flag
         await Assert.That(listType.PrimitiveType).IsNull();
-        await Assert.That(listType.Kind).IsEqualTo(TypeKind.Class);
+        await Assert.That(listType.GetFact<Poly.Introspection.ValueSemantics>()).IsNull();
+        await Assert.That(listType.GetFact<Poly.Introspection.Enumeration>()).IsNull();
+        await Assert.That(listType.GetFact<Poly.Introspection.InterfaceContract>()).IsNull();
+        await Assert.That(listType.GetFact<Poly.Introspection.DelegateSignature>()).IsNull();
         await Assert.That(listType.GetElementType()!.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(int));
     }
 
@@ -139,9 +142,7 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
         public PrimitiveType? PrimitiveType => null;
-        public PrimitiveAtom? PlatformAtom => null;
         public ITypeDefinition? NullableOf => null;
-        public TypeKind Kind => TypeKind.Class;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public bool IsAssignableTo(ITypeDefinition targetType) => false;

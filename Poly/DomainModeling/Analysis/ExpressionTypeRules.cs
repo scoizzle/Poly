@@ -9,7 +9,6 @@ using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Prim = Poly.Introspection.PrimitiveType;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
-using TypeKind = Poly.Introspection.TypeKind;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -28,13 +27,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static TypeFamily? Family(ExprType type) {
         if (type.IsNullLiteral) return TypeFamily.Null;
         if (type.Definition is not { } definition) return null;
-        if (definition.Kind is TypeKind.Enum) return TypeFamily.Enum;
+        if (definition.GetFact<Enumeration>() is not null) return TypeFamily.Enum;
         if (definition.PrimitiveType is null) {
-            return definition.Kind switch {
-                TypeKind.Class => TypeFamily.Entity,
-                TypeKind.Struct => TypeFamily.Value,
-                _ => null,
-            };
+            // A value type is the Value family and a class the Entity family; an interface or a delegate is neither.
+            if (definition.GetFact<ValueSemantics>() is not null) return TypeFamily.Value;
+            return definition.GetFact<InterfaceContract>() is null && definition.GetFact<DelegateSignature>() is null
+                ? TypeFamily.Entity
+                : null;
         }
         return definition.PrimitiveType switch {
             Prim.String => TypeFamily.Text,

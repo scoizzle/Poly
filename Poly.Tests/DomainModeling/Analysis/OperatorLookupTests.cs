@@ -38,7 +38,7 @@ internal sealed class ModeledTypeSet : IClrTypeDefinitionProvider {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
     public AstTypeDefinition Add(string name, params MethodDefinitionNode[] methods) {
-        var definition = new AstTypeDefinition(new TypeDefinitionNode(name, Kind: TypeKind.Struct, Methods: methods), this);
+        var definition = new AstTypeDefinition(new TypeDefinitionNode(name, Form: TypeDeclarationForm.Struct, Methods: methods), this);
         _types[name] = definition;
         return definition;
     }

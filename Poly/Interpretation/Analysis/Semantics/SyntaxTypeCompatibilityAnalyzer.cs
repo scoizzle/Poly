@@ -277,7 +277,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static string NameOf(ITypeDefinition definition) => definition.GetRuntimeType()?.Name ?? definition.Name;
 
-    private static bool IsEnum(ITypeDefinition definition) => definition.Kind is TypeKind.Enum;
+    private static bool IsEnum(ITypeDefinition definition) => definition.GetFact<Enumeration>() is not null;
 
     private static bool IsText(ITypeDefinition definition) =>
         definition.GetRuntimeType() is { } runtime && (runtime == typeof(string) || runtime == typeof(char));
@@ -304,11 +304,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// declares no <c>op_Equality</c>) of one type or of types related by inheritance; and ordering of two operands of one
     /// modeled type, which the domain analyzer accepts under T-07's ordering-legality rule.
     /// </summary>
+    /// <summary>A value type that is neither a primitive nor an enumeration: the struct a declared equality is asked of.</summary>
+    private static bool IsPlainValueType(ITypeDefinition definition) =>
+        definition.GetFact<ValueSemantics>() is not null && definition.PrimitiveType is null && !IsEnum(definition);
+
     private static bool UndeclaredComparisonRule(OperatorKind kind, ITypeDefinition left, ITypeDefinition right) {
         var equality = kind is OperatorKind.Equal or OperatorKind.NotEqual;
         var same = TypeDefinitionExtensions.IsSameType(left, right);
         if (left is ClrTypeDefinition || right is ClrTypeDefinition)
-            return equality && left.Kind is TypeKind.Struct && same;
+            return equality && IsPlainValueType(left) && same;
         return equality ? same || left.IsAssignableFrom(right) || right.IsAssignableFrom(left) : same;
     }
 
@@ -474,7 +478,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return true;
         if (paramType.ResolveConversionFrom(argType) is { Kind: ConversionOperatorKind.Implicit })
             return true;
-        if (paramType.Kind == TypeKind.Enum && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
+        if (IsEnum(paramType) && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
             return true; // projected enums are string-valued consts (BuildEnumTypeDef)
         if (arg is Constant { Value: null })
             return AcceptsNull(paramType);
@@ -1100,7 +1104,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static bool IsIntegerType(ITypeDefinition? definition) =>
         definition is not null
         && (definition.PrimitiveType is { } primitive && (primitive.IsInteger() || primitive is PrimitiveType.Char)
-            || definition.Kind == TypeKind.Enum);
+            || IsEnum(definition));
 
     /// <summary>The Date-offset fence's amount conversion; its <c>Convert.To*</c> fallback is a private conversion rule. Removed by T-10.</summary>
     private static Node? CoerceTo(AnalysisContext context, Node value, ITypeDefinition destDef) {
@@ -1168,7 +1172,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// The category a definition belongs to, read from the platform's answers (<see cref="ITypeDefinition.PrimitiveType"/>,
-    /// <see cref="ITypeDefinition.Kind"/> and <see cref="ITypeDefinition.NullableOf"/>) instead of a CLR runtime type.
+    /// the <see cref="Enumeration"/> fact and <see cref="ITypeDefinition.NullableOf"/>) instead of a CLR runtime type.
     /// A host primitive the shared vocabulary does not name is <see cref="Cat.Unknown"/>: this table classifies, it does
     /// not decide what a host's type is.
     /// </summary>
@@ -1185,7 +1189,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 or PrimitiveType.UInt8 or PrimitiveType.UInt16 or PrimitiveType.UInt32 or PrimitiveType.UInt64
                 or PrimitiveType.Float32 or PrimitiveType.Float64 or PrimitiveType.Decimal
                 or PrimitiveType.NInt or PrimitiveType.NUInt => Cat.Number,
-            null when underlying.Kind == TypeKind.Enum => Cat.Enum,
+            null when IsEnum(underlying) => Cat.Enum,
             _ => Cat.Unknown
         };
     }

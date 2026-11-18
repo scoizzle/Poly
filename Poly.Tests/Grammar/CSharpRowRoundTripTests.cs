@@ -23,8 +23,8 @@ public class CSharpRowRoundTripTests {
     // ── #849: an empty enum ──────────────────────────────────────────────────
 
     public static IEnumerable<TypeDefinitionNode> EmptyEnums() => [
-        new TypeDefinitionNode("Empty", Kind: TypeKind.Enum),
-        new TypeDefinitionNode("Empty", Fields: [], Kind: TypeKind.Enum),
+        new TypeDefinitionNode("Empty", Form: TypeDeclarationForm.Enum),
+        new TypeDefinitionNode("Empty", Fields: [], Form: TypeDeclarationForm.Enum),
     ];
 
     [Test]
@@ -34,7 +34,7 @@ public class CSharpRowRoundTripTests {
         var reRead = CSharpLanguage.Read(printed).Types.Single();
 
         await Assert.That(reRead.Name).IsEqualTo("Empty");
-        await Assert.That(reRead.EffectiveKind).IsEqualTo(TypeKind.Enum);
+        await Assert.That(reRead.Form).IsEqualTo(TypeDeclarationForm.Enum);
         await Assert.That(reRead.Fields?.Count ?? 0).IsEqualTo(0);
         await Assert.That(CSharpLanguage.Write([reRead])).IsEqualTo(printed);
         await Assert.That(printed.ReplaceLineEndings("\n")).IsEqualTo("#nullable enable\npublic enum Empty\n{}");
@@ -50,7 +50,7 @@ public class CSharpRowRoundTripTests {
         var printed = CSharpLanguage.Write(CSharpLanguage.Read(ShapeInterface));
         var reRead = CSharpLanguage.Read(printed).Types.Single();
 
-        await Assert.That(reRead.EffectiveKind).IsEqualTo(TypeKind.Interface);
+        await Assert.That(reRead.Form).IsEqualTo(TypeDeclarationForm.Interface);
         await Assert.That(reRead.Properties!.Select(p => p.Name)).IsEquivalentTo(original.Properties!.Select(p => p.Name));
         await Assert.That(reRead.Methods!.Select(m => m.Name)).IsEquivalentTo(original.Methods!.Select(m => m.Name));
         await Assert.That(reRead.Properties![0].Getter is not null).IsTrue();
@@ -62,11 +62,11 @@ public class CSharpRowRoundTripTests {
 
     [Test]
     public async Task Interface_Empty_ReReads() {
-        var printed = CSharpLanguage.Write([new TypeDefinitionNode("IEmpty", Kind: TypeKind.Interface)]);
+        var printed = CSharpLanguage.Write([new TypeDefinitionNode("IEmpty", Form: TypeDeclarationForm.Interface)]);
         var reRead = CSharpLanguage.Read(printed).Types.Single();
 
         await Assert.That(reRead.Name).IsEqualTo("IEmpty");
-        await Assert.That(reRead.EffectiveKind).IsEqualTo(TypeKind.Interface);
+        await Assert.That(reRead.Form).IsEqualTo(TypeDeclarationForm.Interface);
         await Assert.That(CSharpLanguage.Write([reRead])).IsEqualTo(printed);
     }
 
@@ -86,7 +86,7 @@ public class CSharpRowRoundTripTests {
     /// <summary>The class convention: a property with no accessors prints <c>{ get; set; }</c>.</summary>
     [Test]
     public async Task Interface_PropertyWithNoAccessors_TakesTheClassConvention() {
-        var printed = CSharpLanguage.Write([new TypeDefinitionNode("I", Kind: TypeKind.Interface,
+        var printed = CSharpLanguage.Write([new TypeDefinitionNode("I", Form: TypeDeclarationForm.Interface,
             Properties: [new PropertyDefinitionNode("P", ClrTypeReferences.To<int>())])]);
         await Assert.That(printed).Contains("System.Int32 P { get; set; }");
         await Assert.That(CSharpLanguage.Read(printed).Types.Single().Properties!.Single().Setter is not null).IsTrue();
@@ -287,7 +287,7 @@ public class CSharpRowRoundTripTests {
     }
 
     private static TypeDefinitionNode EnumOf(params (string Name, object Value)[] members) =>
-        new("E", Kind: TypeKind.Enum, Fields: [.. members.Select(m =>
+        new("E", Form: TypeDeclarationForm.Enum, Fields: [.. members.Select(m =>
             new FieldDefinitionNode(m.Name, ClrTypeReferences.To<int>(), new Constant(m.Value), IsStatic: true, IsConst: true))]);
 
     [Test]
@@ -350,7 +350,7 @@ public class CSharpRowRoundTripTests {
     /// <summary>The domain exporter stores member-name strings as defaults; they print as ordinals, as before.</summary>
     [Test]
     public async Task EnumMember_WithANonIntegralDefault_PrintsItsOrdinal() {
-        var text = CSharpLanguage.Write([new TypeDefinitionNode("E", Kind: TypeKind.Enum, Fields: [
+        var text = CSharpLanguage.Write([new TypeDefinitionNode("E", Form: TypeDeclarationForm.Enum, Fields: [
             new FieldDefinitionNode("A", ClrTypeReferences.To<int>(), new Constant("A"), IsStatic: true, IsConst: true),
             new FieldDefinitionNode("B", ClrTypeReferences.To<int>(), null, IsStatic: true, IsConst: true),
         ])]).ReplaceLineEndings("\n");

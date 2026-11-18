@@ -158,7 +158,7 @@ public class AbiEmitterMemberAccessTests {
                     IsStatic: true,
                     IsConst: true)
             ],
-            Kind: TypeKind.Enum);
+            Form: TypeDeclarationForm.Enum);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
@@ -172,7 +172,7 @@ public class AbiEmitterMemberAccessTests {
         await Assert.That(result).IsEqualTo("Active");
         await Assert.That(field.IsStatic).IsTrue();
         await Assert.That(field.Mutability.HasFlag(Mutability.CompileTimeConst)).IsTrue();
-        await Assert.That(ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!.Kind)
-            .IsEqualTo(TypeKind.Enum);
+        await Assert.That(ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!.GetFact<Poly.Introspection.Enumeration>())
+            .IsNotNull();
     }
 }

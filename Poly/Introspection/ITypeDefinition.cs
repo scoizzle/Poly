@@ -126,19 +126,12 @@ public interface ITypeDefinition {
     internal ITypeDefinition? NullableOf { get; }
 
     /// <summary>
-    /// Gets the platform's own atom when this definition is a primitive the shared <see cref="PrimitiveType"/> vocabulary
-    /// does not name, or null. Never set beside <see cref="PrimitiveType"/>: a primitive is named once, by the shared
-    /// vocabulary or by the platform that states it. A consumer that knows only the shared vocabulary sees an unnamed
-    /// primitive (<see cref="Kind"/> is still <see cref="TypeKind.Primitive"/>).
+    /// Gets the fact of type <typeparamref name="TFact"/> this platform states about the type, or null when it states
+    /// none. This is the extension point for what a type is: a question is a fact type (Introspection's own are in
+    /// <c>TypeFacts.cs</c>; a consumer declares its own), and the platform that knows the answer gives it. No closed
+    /// list of kinds or of primitive types stands between a platform and its consumers.
     /// </summary>
-    internal PrimitiveAtom? PlatformAtom { get; }
-
-    /// <summary>
-    /// Gets the shape of this type. Exactly one kind, so a type cannot be in two
-    /// shapes at once. A <see cref="TypeKind.Primitive"/> always carries a
-    /// <see cref="PrimitiveType"/> and every other kind reports null.
-    /// </summary>
-    TypeKind Kind { get; }
+    TFact? GetFact<TFact>() where TFact : TypeFact => null;
 
     /// <summary>
     /// The conversion from <paramref name="source"/> to this type that the platform defines, or null.

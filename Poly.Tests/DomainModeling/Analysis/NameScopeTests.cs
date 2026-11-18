@@ -131,7 +131,7 @@ public sealed class NameScopeTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var entityTypes = DomainProgramProjection.ToSyntax(domain, analysis)
-            .Where(t => t.Kind != Poly.Introspection.TypeKind.Enum)
+            .Where(t => t.Form != Poly.Ast.Nodes.TypeDeclarationForm.Enum)
             .ToList();
         await Assert.That(string.Join(",", entityTypes.Select(t => t.Name).Order(StringComparer.Ordinal)))
             .IsEqualTo("Group,Item");

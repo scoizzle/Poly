@@ -66,15 +66,15 @@ internal sealed class DomainTypeDefinitionProvider : IClrTypeDefinitionProvider 
 
     private AstTypeDefinition Synthesize(string name, DomainType declared) {
         var (kind, declaresEquality) = declared switch {
-            EnumType => (TypeKind.Enum, true),
-            Ontology.ValueType => (TypeKind.Struct, true),
-            Entity => (TypeKind.Class, true),
+            EnumType => (TypeDeclarationForm.Enum, true),
+            Ontology.ValueType => (TypeDeclarationForm.Struct, true),
+            Entity => (TypeDeclarationForm.Class, true),
             _ => throw new InvalidOperationException($"Domain type '{name}' is a '{declared.GetType().Name}', which has no definition shape.")
         };
         MethodDefinitionNode[]? methods = declaresEquality
             ? [Equality(OperatorKind.Equal, name), Equality(OperatorKind.NotEqual, name)]
             : null;
-        return new AstTypeDefinition(new TypeDefinitionNode(name, Kind: kind, Methods: methods), this);
+        return new AstTypeDefinition(new TypeDefinitionNode(name, Form: kind, Methods: methods), this);
     }
 
     /// <summary>

@@ -29,9 +29,7 @@ public class TypeDefinitionExtensionsTests {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         public PrimitiveType? PrimitiveType => null;
-        public PrimitiveAtom? PlatformAtom => null;
         public ITypeDefinition? NullableOf => null;
-        public TypeKind Kind => TypeKind.Class;
 
         public bool IsSameTypeAs(ITypeDefinition other) =>
             other is NamedDefinition candidate

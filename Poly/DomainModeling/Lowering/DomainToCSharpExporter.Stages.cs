@@ -4,7 +4,6 @@ using Poly.DomainModeling.Ontology;
 using AccessModifier = Poly.Introspection.AccessModifier;
 using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
-using TypeKind = Poly.Introspection.TypeKind;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -30,7 +29,7 @@ public sealed partial class DomainToCSharpExporter {
         return new TypeDefinitionNode(
             name,
             Fields: fields,
-            Kind: TypeKind.Enum,
+            Form: TypeDeclarationForm.Enum,
             AccessModifier: access,
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         );

@@ -302,15 +302,20 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
     public PrimitiveType? PrimitiveType => _node.PrimitiveTypeId;
 
-    /// <summary>A modeled primitive the shared vocabulary does not name is stated by its declaration's name.</summary>
-    PrimitiveAtom? ITypeDefinition.PlatformAtom =>
-        _node.PrimitiveTypeId is null && _node.EffectiveKind == TypeKind.Primitive
-            ? new PrimitiveAtom(Name)
-            : null;
 
     /// <summary>A modeled definition states no nullable form; optionality is the caller's (T-06).</summary>
     ITypeDefinition? ITypeDefinition.NullableOf => null;
-    TypeKind ITypeDefinition.Kind => _node.EffectiveKind;
+
+    /// <summary>A declaration states the shape its form declares: an enum is an enumeration (its constants are the
+    /// declaration's own, so it names no underlying type), a struct has value semantics, an interface is a contract.</summary>
+    public TFact? GetFact<TFact>() where TFact : TypeFact => _node.Form switch {
+        TypeDeclarationForm.Enum => DeclaredEnumeration as TFact,
+        TypeDeclarationForm.Struct => ValueSemantics.Instance as TFact,
+        TypeDeclarationForm.Interface => InterfaceContract.Instance as TFact,
+        _ => null
+    };
+
+    private static readonly Enumeration DeclaredEnumeration = new(Underlying: null);
 
     private List<AstPropertyDefinition> BuildDeclaredProperties() {
         var properties = new List<PropertyDefinitionNode>();
@@ -975,9 +980,7 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
             && string.Equals(ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
     }
     public PrimitiveType? PrimitiveType => null;
-    PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
     ITypeDefinition? ITypeDefinition.NullableOf => null;
-    TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(System.Collections.IList);
 }
 
@@ -1073,9 +1076,7 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
             && TypeDefinitionExtensions.IsSameType(DeclaringType, right.DeclaringType));
 
     public PrimitiveType? PrimitiveType => null;
-    PrimitiveAtom? ITypeDefinition.PlatformAtom => null;
     ITypeDefinition? ITypeDefinition.NullableOf => null;
-    TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(object);
 }
 

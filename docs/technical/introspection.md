@@ -32,13 +32,13 @@ Provider-based type abstraction decoupled from CLR reflection. Interfaces allow 
 
 **Why keep:** Consumed by `DomainTools.cs` (MCP server) and test files. Not dormant — actively used.
 
-### TypeKind — closed, not a flag set
+### Shape facts — open, stated by the platform
 
-**What it is:** `TypeKind` (`Primitive`, `Class`, `Struct`, `Interface`, `Enum`, `Delegate`, `Union`, `Tuple`) is the one shape an `ITypeDefinition` reports through `ITypeDefinition.Kind`. `Union` and `Tuple` are reserved for a future `ITypeExpression` model; no provider produces them today and the C# writer has no arm for them.
+**What it is:** `ITypeDefinition.GetFact<TFact>()` returns a typed fact the platform states about a type, or null. Introspection's own shape facts are `Enumeration(Underlying)`, `ValueSemantics`, `InterfaceContract` and `DelegateSignature` (`Poly/Introspection/TypeFacts.cs`); a consumer with a question of its own declares its own fact type. Facts are not exclusive: a CLR enum states both `Enumeration` and `ValueSemantics`.
 
-**Why it replaced `TypeCategory`:** the old `[Flags]` enum carried representation, type constructor, and role bits in one field, so `Integer | FloatingPoint` and `Nullable | Duration` were legal description values and every provider had to remember which parent bits to OR in. A closed enum makes those states unrepresentable and forces `PrimitiveType != null` to coincide with `Kind == Primitive` on every provider.
+**Why it replaced `TypeKind`:** the closed enum (`Primitive`, `Class`, `Struct`, `Interface`, `Enum`, `Delegate`, `Union`, `Tuple`) made every platform map onto one list and every consumer switch on it; the domain's entity and value type had to pose as `Class` and `Struct`, and two members had no producer. A fact is a question a platform answers, so a new question needs no change to the contract. The form a declaration is written in (`TypeDeclarationForm`: class, interface, enum, struct) is syntax on the AST node.
 
-**Where the old distinction went:** `Collection` is now structural (`TypeDefinitionExtensions.IsCollectionShape` — an array, a type that implements a closed `IEnumerable<>`, or a synthetic AST collection), `Enumeration` is `Kind == Enum`, and integer-ness is the exact `PrimitiveType.IsInteger()`. Domain vocabulary lives in `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core: core describes shape, the domain describes meaning.
+**Where the old distinction went:** `Collection` is structural (`IsCollectionShape`), an enumeration is the `Enumeration` fact, and integer-ness is still the exact `PrimitiveType.IsInteger()` until `PrimitiveType` is replaced the same way (#998). Domain vocabulary lives in `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
 
 ### TypeDefinitionProviderCollection ICollection surface — KEEP
 

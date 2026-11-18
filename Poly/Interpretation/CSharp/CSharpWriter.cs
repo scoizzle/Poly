@@ -767,15 +767,15 @@ public sealed class CSharpWriter {
     // ── type definitions ─────────────────────────────────────────────────────
 
     private void WriteTypeDefinition(StringBuilder sb, TypeDefinitionNode typeDef, int indent) {
-        var kind = typeDef.EffectiveKind;
-        if (kind is not (TypeKind.Enum or TypeKind.Interface or TypeKind.Class))
-            throw new InvalidOperationException($"Cannot print type '{typeDef.Name}' of kind {kind}.");
+        var form = typeDef.Form;
+        if (form is not (TypeDeclarationForm.Enum or TypeDeclarationForm.Interface or TypeDeclarationForm.Class))
+            throw new InvalidOperationException($"Cannot print type '{typeDef.Name}' declared as {form}.");
 
         var attrs = AttributesText(typeDef.Attributes, indent);
         var mods = AccessModifierText(typeDef.AccessModifier).Trim();
         sb.Append(attrs);
 
-        if (kind is TypeKind.Enum) {
+        if (form is TypeDeclarationForm.Enum) {
             string? members = null;
             if (typeDef.Fields is { Count: > 0 } fields) {
                 var list = new StringBuilder();
@@ -801,7 +801,7 @@ public sealed class CSharpWriter {
             return;
         }
 
-        if (kind is TypeKind.Interface) {
+        if (form is TypeDeclarationForm.Interface) {
             var interfaceMembers = new List<(Node Member, string? CtorName)>();
             foreach (var property in typeDef.Properties ?? [])
                 interfaceMembers.Add((property, null));

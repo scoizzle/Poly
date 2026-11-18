@@ -10,7 +10,7 @@ sealed class LedgerHost : ITypeSource {
     public const string Namespace = "ledger";
 
     public LedgerHost() {
-        Amount = new LedgerDefinition("amount");
+        Amount = new LedgerDefinition("amount", new Money(MinorUnits: 2));
         Account = new LedgerDefinition("account");
         Entry = new LedgerDefinition("entry");
     }
@@ -22,7 +22,11 @@ sealed class LedgerHost : ITypeSource {
     public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) =>
         string.Equals(@namespace, Namespace, StringComparison.Ordinal) ? [Amount, Account, Entry] : [];
 
-    private sealed class LedgerDefinition(string name) : ITypeDefinition {
+    /// <summary>A fact only this host states: the type counts money in minor units.</summary>
+    public sealed record Money(int MinorUnits) : TypeFact;
+
+    private sealed class LedgerDefinition(string name, Money? money = null) : ITypeDefinition {
+        public TFact? GetFact<TFact>() where TFact : TypeFact => money as TFact;
         public string Name => name;
         public string? Namespace => LedgerHost.Namespace;
         public AccessModifier AccessModifier => AccessModifier.Public;
@@ -36,9 +40,7 @@ sealed class LedgerHost : ITypeSource {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         public PrimitiveType? PrimitiveType => null;
-        public PrimitiveAtom? PlatformAtom => null;
         public ITypeDefinition? NullableOf => null;
-        public TypeKind Kind => TypeKind.Class;
         public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;

@@ -333,7 +333,7 @@ public class NativeIntegerTests {
         await Assert.That(resolution.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, nint))).IsTrue();
         await Assert.That(nint.PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nint");
         await Assert.That(Clr(typeof(nuint)).PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nuint");
-        await Assert.That(nint.Kind).IsEqualTo(Poly.Introspection.TypeKind.Primitive);
+        await Assert.That(nint.PrimitiveType).IsNotNull();
         foreach (var kind in Enum.GetValues<OperatorKind>())
             await Assert.That(nint.Operators.Where(o => o.Kind == kind).Any(static o => o.Method is not null)).IsFalse().Because($"IntPtr's reflected {kind} stands down");
     }

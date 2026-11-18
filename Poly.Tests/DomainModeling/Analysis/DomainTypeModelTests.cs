@@ -78,15 +78,18 @@ public class DomainTypeModelTests {
     [Test]
     public async Task Resolve_Enum_IsSyntheticEnumDefinition() {
         var status = Model().Resolve("Status");
-        await Assert.That(status.Definition!.Kind).IsEqualTo(TypeKind.Enum);
+        await Assert.That(status.Definition!.GetFact<Poly.Introspection.Enumeration>()).IsNotNull();
         await Assert.That(status.DomainName).IsEqualTo("Status");
     }
 
     [Test]
     public async Task Resolve_EntityAndValueType_AreSyntheticClassAndStruct() {
         var model = Model();
-        await Assert.That(model.Resolve("Order").Definition!.Kind).IsEqualTo(TypeKind.Class);
-        await Assert.That(model.Resolve("Money").Definition!.Kind).IsEqualTo(TypeKind.Struct);
+        await Assert.That(model.Resolve("Order").Definition!.GetFact<Poly.Introspection.ValueSemantics>()).IsNull();
+        await Assert.That(model.Resolve("Order").Definition!.GetFact<Poly.Introspection.Enumeration>()).IsNull();
+        await Assert.That(model.Resolve("Order").Definition!.GetFact<Poly.Introspection.InterfaceContract>()).IsNull();
+        await Assert.That(model.Resolve("Order").Definition!.GetFact<Poly.Introspection.DelegateSignature>()).IsNull();
+        await Assert.That(model.Resolve("Money").Definition!.GetFact<Poly.Introspection.ValueSemantics>()).IsNotNull();
     }
 
     [Test]

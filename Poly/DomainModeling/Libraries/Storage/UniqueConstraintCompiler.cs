@@ -382,7 +382,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         string Property, Node Value, Node Destination, Invoke Failure);
 
     private static bool IsString(Node? type) => type switch {
-        TypeDefinitionReference stated => stated.TypeDefinition.GetFact<Poly.Introspection.Text>() is { IsSingleCharacter: false },
+        TypeDefinitionReference stated => stated.TypeDefinition is { IsText: true, IsCharacter: false },
         NamedTypeReference named => string.Equals(named.TypeName, "Text", StringComparison.Ordinal),
         _ => false
     };

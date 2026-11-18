@@ -2,6 +2,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
@@ -400,8 +401,8 @@ internal sealed class ActionReadsWalker {
 
     private TypeClass Classify(Node? type) => type switch {
         OptionalTypeReference optional => Classify(optional.InnerType),
-        TypeDefinitionReference top when top.TypeDefinition.GetFact<Poly.Introspection.TopType>() is not null => UnknownType.Instance,
-        TypeDefinitionReference ground when ground.TypeDefinition.GetFact<Poly.Introspection.Atomic>() is not null => ScalarType.Instance,
+        TypeDefinitionReference top when top.TypeDefinition.IsTopType => UnknownType.Instance,
+        TypeDefinitionReference ground when ground.TypeDefinition.IsGround() => ScalarType.Instance,
         TypeDefinitionReference statesThePort when ClrTypeReferences.Denotes(statesThePort, typeof(IStoragePort)) =>
             PortType.Instance,
         TypeDefinitionReference resolved => ClassifyNamed(resolved.TypeDefinition.Name, resolved.TypeDefinition.FullName, []),

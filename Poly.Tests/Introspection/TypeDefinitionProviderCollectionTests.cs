@@ -125,10 +125,10 @@ public class TypeDefinitionProviderCollectionTests {
 
         // List<int> is a class; its element type is structural, not a flag
         await Assert.That(listType.GetClrPrimitive()).IsNull();
-        await Assert.That(listType.GetFact<Poly.Introspection.ValueSemantics>()).IsNull();
-        await Assert.That(listType.GetFact<Poly.Introspection.Enumeration>()).IsNull();
-        await Assert.That(listType.GetFact<Poly.Introspection.InterfaceContract>()).IsNull();
-        await Assert.That(listType.GetFact<Poly.Introspection.DelegateSignature>()).IsNull();
+        await Assert.That(listType.HasValueSemantics).IsFalse();
+        await Assert.That(listType.IsEnumeration).IsFalse();
+        await Assert.That(listType.IsInterface).IsFalse();
+        await Assert.That(listType.IsDelegate).IsFalse();
         await Assert.That(listType.GetElementType()!.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(int));
     }
 
@@ -159,6 +159,27 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeOperator> Operators => [];
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
+        bool ITypeDefinition.IsEnumeration => false;
+        bool ITypeDefinition.HasValueSemantics => false;
+        bool ITypeDefinition.IsInterface => false;
+        bool ITypeDefinition.IsDelegate => false;
+        bool ITypeDefinition.IsBoolean => false;
+        bool ITypeDefinition.IsText => false;
+        bool ITypeDefinition.IsCharacter => false;
+        bool ITypeDefinition.IsNumber => false;
+        bool ITypeDefinition.IsIntegral => false;
+        bool ITypeDefinition.IsSigned => false;
+        bool ITypeDefinition.IsDecimal => false;
+        bool ITypeDefinition.IsNativeSized => false;
+        int ITypeDefinition.NumberBits => 0;
+        bool ITypeDefinition.IsTemporal => false;
+        bool ITypeDefinition.HasDate => false;
+        bool ITypeDefinition.HasTime => false;
+        bool ITypeDefinition.HasOffset => false;
+        bool ITypeDefinition.IsDuration => false;
+        bool ITypeDefinition.IsUniqueIdentifier => false;
+        bool ITypeDefinition.IsBinary => false;
+        bool ITypeDefinition.IsTopType => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
         bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
         ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;

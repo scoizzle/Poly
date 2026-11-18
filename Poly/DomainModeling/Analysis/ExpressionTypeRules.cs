@@ -26,11 +26,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static TypeFamily? Family(ExprType type) {
         if (type.IsNullLiteral) return TypeFamily.Null;
         if (type.Definition is not { } definition) return null;
-        if (definition.GetFact<Enumeration>() is not null) return TypeFamily.Enum;
-        if (definition.GetFact<Atomic>() is null) {
+        if (definition.IsEnumeration) return TypeFamily.Enum;
+        if (!definition.IsGround()) {
             // A value type is the Value family and a class the Entity family; an interface or a delegate is neither.
-            if (definition.GetFact<ValueSemantics>() is not null) return TypeFamily.Value;
-            return definition.GetFact<InterfaceContract>() is null && definition.GetFact<DelegateSignature>() is null
+            if (definition.HasValueSemantics) return TypeFamily.Value;
+            return !definition.IsInterface && !definition.IsDelegate
                 ? TypeFamily.Entity
                 : null;
         }

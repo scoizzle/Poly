@@ -15,22 +15,22 @@ internal static class DomainGrounds {
     public static DomainGround? Of(ITypeDefinition? definition) {
         if (definition is null)
             return null;
-        if (definition.GetFact<Numeric>() is { } number) {
-            return number switch {
+        if (definition.IsNumber) {
+            return definition switch {
                 { IsDecimal: true } => DomainGround.Decimal,
-                { IsIntegral: true, IsSigned: true, IsNativeSized: false, Bits: 32 } => DomainGround.Int32,
-                { IsIntegral: true, IsSigned: true, IsNativeSized: false, Bits: 64 } => DomainGround.Int64,
-                { IsIntegral: false, Bits: 32 } => DomainGround.Float32,
-                { IsIntegral: false, Bits: 64 } => DomainGround.Float64,
+                { IsIntegral: true, IsSigned: true, IsNativeSized: false, NumberBits: 32 } => DomainGround.Int32,
+                { IsIntegral: true, IsSigned: true, IsNativeSized: false, NumberBits: 64 } => DomainGround.Int64,
+                { IsIntegral: false, NumberBits: 32 } => DomainGround.Float32,
+                { IsIntegral: false, NumberBits: 64 } => DomainGround.Float64,
                 _ => null
             };
         }
-        if (definition.GetFact<Text>() is { } text)
-            return text.IsSingleCharacter ? null : DomainGround.Text;
-        if (definition.GetFact<Truth>() is not null)
+        if (definition.IsText)
+            return definition.IsCharacter ? null : DomainGround.Text;
+        if (definition.IsBoolean)
             return DomainGround.Boolean;
-        if (definition.GetFact<Temporal>() is { } time) {
-            return time switch {
+        if (definition.IsTemporal) {
+            return definition switch {
                 { IsDuration: true } => DomainGround.Duration,
                 { HasOffset: true } => null,
                 { HasDate: true, HasTime: true } => DomainGround.DateTime,
@@ -39,8 +39,8 @@ internal static class DomainGrounds {
                 _ => null
             };
         }
-        if (definition.GetFact<UniqueIdentifier>() is not null)
+        if (definition.IsUniqueIdentifier)
             return DomainGround.Guid;
-        return definition.GetFact<Binary>() is not null ? DomainGround.Binary : null;
+        return definition.IsBinary ? DomainGround.Binary : null;
     }
 }

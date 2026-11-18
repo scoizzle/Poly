@@ -38,7 +38,7 @@ public sealed partial class DomainToCSharpExporter {
     /// ctor leaves unset and would otherwise raise CS8618.
     /// </summary>
     private static bool IsNonNullableReferenceScalar(Node propRef) =>
-        propRef is TypeDefinitionReference stated && stated.TypeDefinition.GetFact<Poly.Introspection.Text>() is { IsSingleCharacter: false };
+        propRef is TypeDefinitionReference stated && stated.TypeDefinition is { IsText: true, IsCharacter: false };
 
     private static bool IsDomainValueType(Domain domain, string typeName) =>
         domain.Types.OfType<ValueType>().Any(v =>

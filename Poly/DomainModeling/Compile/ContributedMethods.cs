@@ -354,7 +354,7 @@ internal static class ContributedMethods {
         else {
             string? resolved = member.Value switch {
                 // A ground type (`string`, `int`, `object`) is never a module type: nothing threads through it.
-                TypeDefinitionReference ground when ground.TypeDefinition.GetFact<Poly.Introspection.Atomic>() is not null => null,
+                TypeDefinitionReference ground when ground.TypeDefinition.IsGround() => null,
                 NamedTypeReference named => named.TypeName,
                 TypeReference type => type.TypeName,
                 _ => null

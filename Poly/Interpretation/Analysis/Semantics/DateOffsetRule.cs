@@ -14,5 +14,5 @@ internal static class DateOffsetRule {
     public static bool Applies(OperatorKind kind, ITypeDefinition left, ITypeDefinition right) =>
         kind is OperatorKind.Add or OperatorKind.Subtract
         && SyntaxTypeCompatibilityAnalyzer.IsDateCategory(left) && SyntaxTypeCompatibilityAnalyzer.IsNumberCategory(right)
-        && !(left.NullableOf is null && right.GetFact<Numeric>() is { IsDecimal: true });
+        && !(left.NullableOf is null && right is { IsNumber: true, IsDecimal: true });
 }

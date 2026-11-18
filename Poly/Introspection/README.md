@@ -28,7 +28,7 @@ Common members include:
 - `Namespace`
 - `FullName`
 - `RuntimeType` (via `IClrTypeDefinition`)
-- `GetFact<TFact>()` (what the type is: see below)
+- `IsEnumeration`, `HasValueSemantics`, `IsNumber`, `NumberBits` and their siblings (what the type is: see below)
 - `Members`
 - `Operators` (`ITypeOperator`, see below)
 - `GetMembers(string name)`
@@ -80,22 +80,21 @@ answers null for a host with no CLR types. The neutral contract therefore asks o
 answer, and `TypeDefinitionRuntimeTypeExtensions` (the `ITypeDefinition -> Type?` view) lives in
 `CommonLanguageRuntime/` with it.
 
-**What a type is, is a fact its platform states.** `ITypeDefinition.GetFact<TFact>()` returns the typed fact a
-platform states about one of its types, or null; a fact type derives from `TypeFact`. The set is open: a consumer
-with a question of its own declares its own fact, and the platform that knows the answer states it. There is no
-shared list of kinds (`TypeKind` is gone) and no shared list of primitive types (`PrimitiveType`, `PrimitiveAtom` and
-the `PrimitiveTypeReference` node are gone). Introspection ships the facts its own consumers ask (`TypeFacts.cs`):
+**What a type is, the definition answers.** `ITypeDefinition` answers it through its own members, none exclusive:
+shape (`IsEnumeration`, `HasValueSemantics`, `IsInterface`, `IsDelegate`), truth and text (`IsBoolean`, `IsText`, `IsCharacter`),
+number representation (`IsNumber`, `IsIntegral`, `IsSigned`, `IsDecimal`, `IsNativeSized`, `NumberBits`), time
+(`IsTemporal`, `HasDate`, `HasTime`, `HasOffset`, `IsDuration`), and `IsUniqueIdentifier`, `IsBinary`, `IsTopType`. A
+sub-answer is false unless its parent is true, and no member has a default body, so every definition answers every
+question. `IsGround()` is derived from them. There is no shared list of kinds (`TypeKind` is gone), no shared list of
+primitive types (`PrimitiveType`, `PrimitiveAtom` and the `PrimitiveTypeReference` node are gone), and no fact lookup
+(`GetFact`, `TypeFact` are gone).
 
-- shape: `Enumeration(Underlying)`, `ValueSemantics`, `InterfaceContract`, `DelegateSignature`;
-- ground types: `Atomic`, `Truth`, `Numeric(IsIntegral, IsSigned, Bits, IsDecimal, IsNativeSized)`,
-  `Text(IsSingleCharacter)`, `Temporal(HasDate, HasTime, HasOffset, IsDuration)`, `UniqueIdentifier`, `Binary`,
-  `TopType`.
-
-The CLR states them in `CommonLanguageRuntime/` (`ClrGroundTypes`, `ClrTypeDefinition.GetFact`). A host with no CLR
-types states its own, including facts no other platform has heard of (the test-only `LedgerHost`). The CLR's own table
-of the types its built-in rules name is `ClrPrimitive`, internal to the CLR host and used only by it and the VM; C#'s
-keywords are the C# surface's names for CLR definitions (`Poly.Interpretation.CSharp/CSharpTypeNames`). A type
-position in a tree is a definition reference (`TypeDefinitionReference`), which the writer spells as its language does.
+The CLR answers in `CommonLanguageRuntime/` (`ClrTypeDefinition`, from the runtime type and its own `ClrGround`
+table). A question only one host can answer goes on that host's own interface, never on the neutral contract
+(`IClrTypeDefinition`; the test-only `LedgerHost.ILedgerType`). The CLR's own table of the types its built-in rules name
+is `ClrPrimitive`, internal to the CLR host and used only by it and the VM; C#'s keywords are the C# surface's names for
+CLR definitions (`Poly.Interpretation.CSharp/CSharpTypeNames`). A type position in a tree is a definition reference
+(`TypeDefinitionReference`), which the writer spells as its language does.
 
 Which platform answers a mixed operator/conversion pair is fixed by the door's shape — the left operand for an
 operator, the destination for a conversion — and `MixedPairAuthorityTests` pins both sides rather than relying on the
@@ -133,12 +132,12 @@ stated by each platform (the CLR's from its representation, a modeled collection
 the host's nullable form (the CLR answers `Nullable<T>`; a modeled definition answers null, where optionality is the
 caller's, T-06), so the lift into a nullable destination is that platform's answer rather than a rule outside the
 contract. The analysis keeps no CLR type table of its own: implicit conversion, integer-ness, IEEE-ness and the type category
-(Text/Number/Boolean/Date/Enum/Guid) are asked of the platform (`IsAssignableWithoutConversion`, `ResolveConversionFrom`, `GetFact`), and the CLR-only `Convert.To*`
+(Text/Number/Boolean/Date/Enum/Guid) are asked of the platform (`IsAssignableWithoutConversion`, `ResolveConversionFrom`, `IsNumber` and its siblings), and the CLR-only `Convert.To*`
 names are `ClrConvertMethods` in this namespace. An architecture test (`ArchitectureBoundaryTests`) fails if the
 meaning layers take a `System.Linq.Expressions` or `System.Reflection` using, and holds CLR type facts to a shrinking
 per-file budget. Where the analysis builds a type reference it states the definition (`TypeDefinitionReference`), so
 `System.Type` does not enter the tree from the meaning layers; `ClrTypeReference` remains the AST's source-level
-reference until its own row removes it, and the factory that builds one is the host's (`ClrTypeReferences.To<T>()`), not
+reference until its own row removes it, and the factory that builds one is the host's internal shorthand (`ClrTypeReferences.To<T>()`), not
 the AST's: `Poly/Ast` names no `typeof`. `IsAssignableWithoutConversion` is its first half: the same type, a base type or an interface, and for .NET `Type.IsAssignableFrom`, the lift from `T` to `T?` and `object` accepting every definition (the VM boxes a modeled entity). The box into `object` is also `ClrBuiltInRules`' implicit conversion, so it is stated twice; the two agree on every CLR definition (`ObjectAcceptsEveryClrDefinition_IsAssignableFromAndResolveConversionFromAgree`) and differ for a modeled source by design. Still outside the contract, with no removing row yet: the tier sum itself (a private copy of overload resolution that keeps the first of equal candidates; it is not C# 12.6.4 better-conversion), the boxing rule stated twice, and `SyntaxTypeCompatibilityAnalyzer`'s `IsImplicitlyConvertible(Type, Type)` with its nullable lifting, `CoerceTo`, `IsIntegerType`, `ConvertMethodName` and `IsIeeeFloating`. T-23 publishes `IsAssignableWithoutConversion`. `IsCollectionShape` and `GetElementType` are stated per platform (S5/S6): the shape members are answers, and the
 root names no CLR collection. Type identity is the platform's too (I1): `ITypeDefinition.IsSameTypeAs` is each
 platform's notion (a CLR definition is its instance, a modeled collection is its kind and element, a generic parameter

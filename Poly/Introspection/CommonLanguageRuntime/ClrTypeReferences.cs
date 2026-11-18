@@ -9,7 +9,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// <see cref="OptionalTypeReference"/> over its underlying reference. No node carries a <c>System.Type</c>.
 /// The text a reference prints is unchanged, which <c>ClrReferencePrintTests</c> pins.
 /// </summary>
-public static class ClrTypeReferences {
+internal static class ClrTypeReferences {
     /// <summary>A reference to <typeparamref name="T"/>.</summary>
     public static Node To<T>() => Of(typeof(T));
 

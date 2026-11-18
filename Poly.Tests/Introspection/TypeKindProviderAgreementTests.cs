@@ -15,10 +15,10 @@ namespace Poly.Tests.Introspection;
 public class TypeKindProviderAgreementTests {
     /// <summary>The shape facts a definition states, as one comparable line.</summary>
     private static string Shape(ITypeDefinition definition) => string.Join("+", new[] {
-        definition.GetFact<Enumeration>() is not null ? "enumeration" : null,
-        definition.GetFact<ValueSemantics>() is not null ? "value" : null,
-        definition.GetFact<InterfaceContract>() is not null ? "interface" : null,
-        definition.GetFact<DelegateSignature>() is not null ? "delegate" : null,
+        definition.IsEnumeration ? "enumeration" : null,
+        definition.HasValueSemantics ? "value" : null,
+        definition.IsInterface ? "interface" : null,
+        definition.IsDelegate ? "delegate" : null,
     }.Where(static fact => fact is not null));
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
@@ -44,8 +44,8 @@ public class TypeKindProviderAgreementTests {
 
             await Assert.That(definition.GetClrPrimitive()).IsEqualTo(primitive)
                 .Because($"'{primitive}' must report its own id");
-            await Assert.That(definition.GetFact<Enumeration>()).IsNull();
-            await Assert.That(definition.GetFact<Atomic>()).IsNotNull().Because($"'{primitive}' is a ground type");
+            await Assert.That(definition.IsEnumeration).IsFalse();
+            await Assert.That(definition.IsGround()).IsTrue().Because($"'{primitive}' is a ground type");
         }
     }
 

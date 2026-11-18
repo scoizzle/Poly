@@ -32,13 +32,13 @@ Provider-based type abstraction decoupled from CLR reflection. Interfaces allow 
 
 **Why keep:** Consumed by `DomainTools.cs` (MCP server) and test files. Not dormant — actively used.
 
-### Shape facts — open, stated by the platform
+### What a type is — answered by the definition
 
-**What it is:** `ITypeDefinition.GetFact<TFact>()` returns a typed fact the platform states about a type, or null. Introspection's own shape facts are `Enumeration(Underlying)`, `ValueSemantics`, `InterfaceContract` and `DelegateSignature` (`Poly/Introspection/TypeFacts.cs`); a consumer with a question of its own declares its own fact type. Facts are not exclusive: a CLR enum states both `Enumeration` and `ValueSemantics`.
+**What it is:** `ITypeDefinition` answers what a type is through its own members: `IsEnumeration`, `HasValueSemantics`, `IsInterface`, `IsDelegate`, `IsBoolean`, `IsText`, `IsCharacter`, `IsNumber` (with `IsIntegral`, `IsSigned`, `IsDecimal`, `IsNativeSized`, `NumberBits`), `IsTemporal` (with `HasDate`, `HasTime`, `HasOffset`, `IsDuration`), `IsUniqueIdentifier`, `IsBinary` and `IsTopType`. Answers are not exclusive: a CLR enum is both an enum and a value type. No member has a default body.
 
-**Why it replaced `TypeKind`:** the closed enum (`Primitive`, `Class`, `Struct`, `Interface`, `Enum`, `Delegate`, `Union`, `Tuple`) made every platform map onto one list and every consumer switch on it; the domain's entity and value type had to pose as `Class` and `Struct`, and two members had no producer. A fact is a question a platform answers, so a new question needs no change to the contract. The form a declaration is written in (`TypeDeclarationForm`: class, interface, enum, struct) is syntax on the AST node.
+**Why it replaced `TypeKind`, `PrimitiveType` and the fact lookup:** the closed enums (`TypeKind`: `Primitive`, `Class`, `Struct`, `Interface`, `Enum`, `Delegate`, `Union`, `Tuple`; `PrimitiveType`'s ids) made every platform map onto one list and every consumer switch on it; the domain's entity and value type had to pose as `Class` and `Struct`. The interim fact lookup (`GetFact<TFact>()` over `TypeFact` records) was open to new questions, and that openness had no production consumer, so the questions it carried became plain members. A question only one host can answer goes on that host's own interface. The form a declaration is written in (`TypeDeclarationForm`: class, interface, enum, struct) is syntax on the AST node.
 
-**Where the old distinction went:** `Collection` is structural (`IsCollectionShape`), an enumeration is the `Enumeration` fact, and integer-ness is the `Numeric` fact (`IsIntegral`); `PrimitiveType` went the same way (#998): ground types are facts (`Atomic`, `Truth`, `Numeric`, `Text`, `Temporal`, `UniqueIdentifier`, `Binary`, `TopType`), and the CLR host keeps its own internal table (`ClrPrimitive`). Domain vocabulary lives in `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
+**Where the old distinction went:** `Collection` is structural (`IsCollectionShape`), an enumeration is `IsEnumeration`, and integer-ness is `IsIntegral`; ground-ness is derived (`IsGround()`), and the CLR host keeps its own internal table (`ClrPrimitive`). Domain vocabulary lives in `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
 
 ### TypeDefinitionProviderCollection ICollection surface — KEEP
 

@@ -197,15 +197,15 @@ public sealed partial class ModuleInstanceExecutor {
     private static bool IsTextLike(Parameter parameter) =>
         parameter.TypeReference switch {
             NamedTypeReference { TypeName: "Text" or "String" or "string" } => true,
-            TypeDefinitionReference stated => stated.TypeDefinition.GetFact<Text>() is { IsSingleCharacter: false },
+            TypeDefinitionReference stated => stated.TypeDefinition is { IsText: true, IsCharacter: false },
             TypeReference { TypeName: "Text" or "String" or "string" } => true,
             _ => false
         };
 
     private static string? ParameterTypeName(Parameter parameter) =>
         parameter.TypeReference switch {
-            TypeDefinitionReference stated when stated.TypeDefinition.GetFact<Text>() is { IsSingleCharacter: false } => "Text",
-            TypeDefinitionReference stated when stated.TypeDefinition.GetFact<Truth>() is not null => "Boolean",
+            TypeDefinitionReference stated when stated.TypeDefinition is { IsText: true, IsCharacter: false } => "Text",
+            TypeDefinitionReference stated when stated.TypeDefinition.IsBoolean => "Boolean",
             TypeDefinitionReference => null,
             NamedTypeReference n => n.TypeName,
             TypeReference t => t.TypeName,

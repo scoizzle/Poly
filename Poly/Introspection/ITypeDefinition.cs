@@ -119,13 +119,74 @@ public interface ITypeDefinition {
     /// </summary>
     internal ITypeDefinition? NullableOf { get; }
 
-    /// <summary>
-    /// Gets the fact of type <typeparamref name="TFact"/> this platform states about the type, or null when it states
-    /// none. This is the extension point for what a type is: a question is a fact type (Introspection's own are in
-    /// <c>TypeFacts.cs</c>; a consumer declares its own), and the platform that knows the answer gives it. No closed
-    /// list of kinds or of primitive types stands between a platform and its consumers.
-    /// </summary>
-    TFact? GetFact<TFact>() where TFact : TypeFact => null;
+    // What the type is. Each answer is the platform's; none is exclusive (an enum is also a value type), and no
+    // default answers for a host: a definition that does not state one would silently say "no". A sub-answer is false
+    // unless its parent is true (IsIntegral only when IsNumber, HasDate only when IsTemporal, IsCharacter only when
+    // IsText).
+
+    /// <summary>The type's values are named constants.</summary>
+    bool IsEnumeration { get; }
+
+    /// <summary>A value of the type is copied and compared by its content, not shared by reference.</summary>
+    bool HasValueSemantics { get; }
+
+    /// <summary>The type is a contract of members other types implement, with no state of its own.</summary>
+    bool IsInterface { get; }
+
+    /// <summary>A value of the type is called.</summary>
+    bool IsDelegate { get; }
+
+    /// <summary>The type's values are the two truth values.</summary>
+    bool IsBoolean { get; }
+
+    /// <summary>The type's values are text: a sequence of characters, or exactly one (<see cref="IsCharacter"/>).</summary>
+    bool IsText { get; }
+
+    /// <summary>The type's values are exactly one character.</summary>
+    bool IsCharacter { get; }
+
+    /// <summary>The type's values are numbers; <see cref="NumberBits"/> and the flags beside it say how the platform
+    /// represents them.</summary>
+    bool IsNumber { get; }
+
+    /// <summary>The type's numbers are whole numbers only.</summary>
+    bool IsIntegral { get; }
+
+    /// <summary>The type's numbers include negative values.</summary>
+    bool IsSigned { get; }
+
+    /// <summary>The type's numbers are base-ten fractions, exact for decimal literals (not a binary floating point).</summary>
+    bool IsDecimal { get; }
+
+    /// <summary>The type's width is the platform word's, not fixed by the type.</summary>
+    bool IsNativeSized { get; }
+
+    /// <summary>The width of the type's number representation in bits, or 0 when the type is not a number.</summary>
+    int NumberBits { get; }
+
+    /// <summary>The type's values are points or spans of time.</summary>
+    bool IsTemporal { get; }
+
+    /// <summary>A calendar date is part of the type's values.</summary>
+    bool HasDate { get; }
+
+    /// <summary>A time of day is part of the type's values.</summary>
+    bool HasTime { get; }
+
+    /// <summary>An offset from UTC is part of the type's values.</summary>
+    bool HasOffset { get; }
+
+    /// <summary>The type's values are lengths of time, not points in it.</summary>
+    bool IsDuration { get; }
+
+    /// <summary>The type's values are globally unique identifiers.</summary>
+    bool IsUniqueIdentifier { get; }
+
+    /// <summary>The type's values are sequences of bytes with no further structure.</summary>
+    bool IsBinary { get; }
+
+    /// <summary>The type is the one every value of the platform is a value of.</summary>
+    bool IsTopType { get; }
 
     /// <summary>
     /// The conversion from <paramref name="source"/> to this type that the platform defines, or null.

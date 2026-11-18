@@ -3,8 +3,8 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// <summary>
 /// The CLR host's own table of the types its built-in rules name: C#'s simple types and the handful of other types the
 /// CLR's conversion, promotion and operator rules treat as built in. Internal to the CLR host. It is not vocabulary:
-/// the neutral contract names no ground type, a consumer asks a definition for a fact
-/// (<see cref="ITypeDefinition.GetFact{TFact}"/>), and another platform has a table of its own or none.
+/// the neutral contract names no ground type, a consumer asks the definition what it is
+/// (<see cref="ITypeDefinition.IsNumber"/> and its siblings), and another platform has a table of its own or none.
 /// </summary>
 internal enum ClrPrimitive {
     Boolean,

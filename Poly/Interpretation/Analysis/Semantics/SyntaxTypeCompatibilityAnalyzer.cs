@@ -66,7 +66,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             [typeof(New)] = static (a, c, n) => a.CheckNew(c, (New)n),
             [typeof(Not)] = static (a, c, n) => {
                 var operand = DefinitionOf(c, ((Not)n).Value);
-                if (operand is not null && operand.GetFact<Truth>() is null
+                if (operand is not null && !operand.IsBoolean
                     && CategoryOf(operand) is not (Cat.Unknown or Cat.Null))
                     a.Report(c, n, $"'not' requires a Boolean operand (got '{operand.Name}')");
             },
@@ -233,8 +233,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static void StatePolicyShiftCount(
         AnalysisContext context, Node shift, Node count, ITypeDefinition countDefinition, ITypeOperator resolution) {
         var parameters = resolution.Parameters.ToArray();
-        if (parameters.Length != 2 || parameters[1].ParameterTypeDefinition.GetFact<Numeric>() is not { } countType
-            || !ClrBuiltInRules.IsPolicyShiftCount(countType))
+        if (parameters.Length != 2 || !ClrBuiltInRules.IsPolicyShiftCount(parameters[1].ParameterTypeDefinition))
             return;
         var target = countDefinition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null ? typeof(int?) : typeof(int);
         var targetDefinition = context.TypeDefinitions.GetTypeDefinition(target)
@@ -277,7 +276,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static string NameOf(ITypeDefinition definition) => definition.GetRuntimeType()?.Name ?? definition.Name;
 
-    private static bool IsEnum(ITypeDefinition definition) => definition.GetFact<Enumeration>() is not null;
 
     private static bool IsText(ITypeDefinition definition) =>
         definition.GetRuntimeType() is { } runtime && (runtime == typeof(string) || runtime == typeof(char));
@@ -288,9 +286,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// neither applies. Removed by T-25; the Text allowance by T-07.
     /// </summary>
     private static bool? EnumOperandRule(ITypeDefinition left, ITypeDefinition right) {
-        if (IsEnum(left) && IsEnum(right))
+        if (left.IsEnumeration && right.IsEnumeration)
             return TypeDefinitionExtensions.IsSameType(left, right);
-        if ((IsEnum(left) && IsText(right)) || (IsEnum(right) && IsText(left)))
+        if ((left.IsEnumeration && IsText(right)) || (right.IsEnumeration && IsText(left)))
             return true;
         return null;
     }
@@ -306,7 +304,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// </summary>
     /// <summary>A value type that is neither a primitive nor an enumeration: the struct a declared equality is asked of.</summary>
     private static bool IsPlainValueType(ITypeDefinition definition) =>
-        definition.GetFact<ValueSemantics>() is not null && definition.GetFact<Atomic>() is null && !IsEnum(definition);
+        definition.HasValueSemantics && !definition.IsGround() && !definition.IsEnumeration;
 
     private static bool UndeclaredComparisonRule(OperatorKind kind, ITypeDefinition left, ITypeDefinition right) {
         var equality = kind is OperatorKind.Equal or OperatorKind.NotEqual;
@@ -339,7 +337,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return false;
         var (l, r) = (left.NullableOf ?? left, right.NullableOf ?? right);
         return TypeDefinitionExtensions.IsSameType(l, r)
-            && (l.GetFact<Text>() is { IsSingleCharacter: false } || l.GetFact<Truth>() is not null);
+            && (l is { IsText: true, IsCharacter: false } || l.IsBoolean);
     }
 
     /// <summary>
@@ -478,7 +476,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return true;
         if (paramType.ResolveConversionFrom(argType) is { Kind: ConversionOperatorKind.Implicit })
             return true;
-        if (IsEnum(paramType) && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
+        if (paramType.IsEnumeration && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
             return true; // projected enums are string-valued consts (BuildEnumTypeDef)
         if (arg is Constant { Value: null })
             return AcceptsNull(paramType);
@@ -925,7 +923,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     /// <summary>True when a type node states the string primitive: by the shared vocabulary or by a definition.</summary>
     private static bool IsStringType(Node? node) => node switch {
-        TypeDefinitionReference stated => stated.TypeDefinition.GetFact<Text>() is { IsSingleCharacter: false },
+        TypeDefinitionReference stated => stated.TypeDefinition is { IsText: true, IsCharacter: false },
         _ => false
     };
 
@@ -1085,7 +1083,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
     private static bool IsIeeeFloating(ITypeDefinition? definition) =>
-        definition?.GetFact<Numeric>() is { IsIntegral: false, IsDecimal: false };
+        definition is { IsNumber: true, IsIntegral: false, IsDecimal: false };
 
     /// <summary>An unchecked cast between integer widths. The emitter narrows it;
     /// <see cref="Convert"/> would throw instead of wrapping.</summary>
@@ -1097,9 +1095,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// The platform names the primitive, so this is not a CLR listing.</summary>
     private static bool IsIntegerType(ITypeDefinition? definition) =>
         definition is not null
-        && (definition.GetFact<Numeric>() is { IsIntegral: true, IsNativeSized: false }
-            || definition.GetFact<Text>() is { IsSingleCharacter: true }
-            || IsEnum(definition));
+        && (definition is { IsNumber: true, IsIntegral: true, IsNativeSized: false }
+            || definition is { IsText: true, IsCharacter: true }
+            || definition.IsEnumeration);
 
     /// <summary>The Date-offset fence's amount conversion; its <c>Convert.To*</c> fallback is a private conversion rule. Removed by T-10.</summary>
     private static Node? CoerceTo(AnalysisContext context, Node value, ITypeDefinition destDef) {
@@ -1166,20 +1164,22 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// The category a definition belongs to, read from the facts its platform states (<see cref="Truth"/>,
-    /// <see cref="Text"/>, <see cref="Temporal"/>, <see cref="UniqueIdentifier"/>, <see cref="Numeric"/>,
-    /// <see cref="Enumeration"/>) and <see cref="ITypeDefinition.NullableOf"/>, not from a CLR runtime type. A type that
-    /// states none of them is <see cref="Cat.Unknown"/>: this table classifies, it does not decide what a host's type is.
+    /// The category a definition belongs to, read from what the definition answers it is
+    /// (<see cref="ITypeDefinition.IsBoolean"/>, <see cref="ITypeDefinition.IsText"/>,
+    /// <see cref="ITypeDefinition.IsTemporal"/>, <see cref="ITypeDefinition.IsUniqueIdentifier"/>,
+    /// <see cref="ITypeDefinition.IsNumber"/>, <see cref="ITypeDefinition.IsEnumeration"/>) and
+    /// <see cref="ITypeDefinition.NullableOf"/>, not from a CLR runtime type. A type that is none of them is
+    /// <see cref="Cat.Unknown"/>: this table classifies, it does not decide what a host's type is.
     /// </summary>
     internal static Cat CategoryOf(ITypeDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
         var underlying = definition.NullableOf ?? definition;
-        if (underlying.GetFact<Truth>() is not null) return Cat.Boolean;
-        if (underlying.GetFact<Text>() is not null) return Cat.Text;
-        if (underlying.GetFact<Temporal>() is not null) return Cat.Date;
-        if (underlying.GetFact<UniqueIdentifier>() is not null) return Cat.Guid;
-        if (underlying.GetFact<Numeric>() is not null) return Cat.Number;
-        return underlying.GetFact<Atomic>() is null && IsEnum(underlying) ? Cat.Enum : Cat.Unknown;
+        if (underlying.IsBoolean) return Cat.Boolean;
+        if (underlying.IsText) return Cat.Text;
+        if (underlying.IsTemporal) return Cat.Date;
+        if (underlying.IsUniqueIdentifier) return Cat.Guid;
+        if (underlying.IsNumber) return Cat.Number;
+        return underlying.IsEnumeration ? Cat.Enum : Cat.Unknown;
     }
 
     /// <summary>True for the date, time and timestamp primitives (the Date category), nullable included.</summary>
@@ -1189,12 +1189,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     /// <summary>A timestamp is exactly <c>DateTime</c> or <c>DateTimeOffset</c>; a nullable form is not one, as before.</summary>
     internal static bool IsTimestamp(ITypeDefinition definition) =>
-        definition.GetFact<Temporal>() is { HasDate: true, HasTime: true };
+        definition is { IsTemporal: true, HasDate: true, HasTime: true };
 
     /// <summary>A number for a cast: <c>char</c> is <see cref="Cat.Text"/> but converts as a number, and so does a number;
     /// a nullable <c>char</c> is not numeric, as before.</summary>
     internal static bool IsNumericLike(ITypeDefinition definition) =>
-        definition.GetFact<Text>() is { IsSingleCharacter: true } || CategoryOf(definition) is Cat.Number;
+        definition is { IsText: true, IsCharacter: true } || CategoryOf(definition) is Cat.Number;
 
     /// <summary>Member assignment by CLR-type category, as before T-18 (no provider verdict yet). Removed by T-27.</summary>
     private static bool AssignCategoryRule(Cat lc, ITypeDefinition left, Cat rc, ITypeDefinition right) {

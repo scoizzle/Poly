@@ -11,6 +11,15 @@ public enum ConversionOperatorKind {
 
 public static class TypeDefinitionExtensions {
     /// <summary>
+    /// True when the type is one of its platform's ground types: its values are truth values, text, numbers, times,
+    /// identifiers, bytes, or any value at all, not parts the model sees into. Derived from the type's own answers;
+    /// no platform states it.
+    /// </summary>
+    public static bool IsGround(this ITypeDefinition type) =>
+        type.IsBoolean || type.IsText || type.IsNumber || type.IsTemporal || type.IsUniqueIdentifier || type.IsBinary
+        || type.IsTopType;
+
+    /// <summary>
     /// The one type-identity notion, answered by the platform: <see cref="ITypeDefinition.IsSameTypeAs"/>.
     /// <see cref="IsAssignableFrom"/>, <c>GetOperator</c>, <c>GetCommonType</c> and overload scoring share it.
     /// </summary>
@@ -91,10 +100,10 @@ public static class TypeDefinitionExtensions {
                 .Select(static property => new {
                     Property = property,
                     Parameters = property.Parameters.ToArray(),
-                    ReturnsObject = property.MemberTypeDefinition.GetFact<TopType>() is not null
+                    ReturnsObject = property.MemberTypeDefinition.IsTopType
                 })
                 .Where(candidate => candidate.Parameters.All(static parameter =>
-                    parameter.ParameterTypeDefinition.GetFact<Numeric>() is { IsIntegral: true, IsNativeSized: false }))
+                    parameter.ParameterTypeDefinition is { IsNumber: true, IsIntegral: true, IsNativeSized: false }))
                 .OrderBy(candidate => candidate.Parameters.Length)
                 .ThenBy(candidate => candidate.ReturnsObject)
                 .FirstOrDefault();

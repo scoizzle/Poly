@@ -324,7 +324,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     }
 
     private static bool IsIntegerOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node)?.GetFact<Numeric>() is { IsIntegral: true, IsNativeSized: false };
+        context.GetResolvedType(node) is { IsNumber: true, IsIntegral: true, IsNativeSized: false };
 
     /// <summary>
     /// True only for an unsigned integral operand. <c>x &gt;&gt; n</c> and <c>x &amp; (2^n - 1)</c> equal
@@ -333,14 +333,14 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// complement bits, so the two disagree for every negative dividend.
     /// </summary>
     private static bool IsUnsignedOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node)?.GetFact<Numeric>() is { IsIntegral: true, IsSigned: false, IsNativeSized: false };
+        context.GetResolvedType(node) is { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false };
 
     private static Constant? BuildMaskConstant(AnalysisContext context, Node left, long mask) {
-        object? value = context.GetResolvedType(left)?.GetFact<Numeric>() switch {
-            { IsIntegral: true, IsSigned: false, IsNativeSized: false, Bits: 8 } => (byte)mask,
-            { IsIntegral: true, IsSigned: false, IsNativeSized: false, Bits: 16 } => (ushort)mask,
-            { IsIntegral: true, IsSigned: false, IsNativeSized: false, Bits: 32 } => (uint)mask,
-            { IsIntegral: true, IsSigned: false, IsNativeSized: false, Bits: 64 } => (ulong)mask,
+        object? value = context.GetResolvedType(left) switch {
+            { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false, NumberBits: 8 } => (byte)mask,
+            { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false, NumberBits: 16 } => (ushort)mask,
+            { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false, NumberBits: 32 } => (uint)mask,
+            { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false, NumberBits: 64 } => (ulong)mask,
             _ => (object?)null
         };
         return value is null ? null : new Constant(value);

@@ -137,22 +137,31 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         Nullable.GetUnderlyingType(RuntimeType) is { } underlying
             ? _provider.GetTypeDefinition(underlying)
             : null;
-    private Enumeration? _enumeration;
-
-    /// <summary>The shape facts the CLR states from the runtime type: an enum is an enumeration over its underlying
-    /// type, a value type has value semantics (an enum and a primitive included: facts are not exclusive), and an
-    /// interface and a delegate are each their own shape.</summary>
-    public TFact? GetFact<TFact>() where TFact : TypeFact {
-        if (typeof(TFact) == typeof(Enumeration))
-            return (RuntimeType.IsEnum ? _enumeration ??= new Enumeration(_provider.GetTypeDefinition(Enum.GetUnderlyingType(RuntimeType))) : null) as TFact;
-        if (typeof(TFact) == typeof(ValueSemantics))
-            return (RuntimeType.IsValueType ? ValueSemantics.Instance : null) as TFact;
-        if (typeof(TFact) == typeof(InterfaceContract))
-            return (RuntimeType.IsInterface ? InterfaceContract.Instance : null) as TFact;
-        if (typeof(TFact) == typeof(DelegateSignature))
-            return (typeof(Delegate).IsAssignableFrom(RuntimeType) ? DelegateSignature.Instance : null) as TFact;
-        return ClrGroundTypes.Fact<TFact>(RuntimeType);
-    }
+    /// <summary>The shape answers come from the runtime type; the ground answers from the CLR's own table
+    /// (<see cref="ClrGround"/>), so an enum and a nullable state no number of their own.</summary>
+    private ClrGround Ground => _ground ??= ClrGround.Of(RuntimeType);
+    private ClrGround? _ground;
+    bool ITypeDefinition.IsEnumeration => RuntimeType.IsEnum;
+    bool ITypeDefinition.HasValueSemantics => RuntimeType.IsValueType;
+    bool ITypeDefinition.IsInterface => RuntimeType.IsInterface;
+    bool ITypeDefinition.IsDelegate => typeof(Delegate).IsAssignableFrom(RuntimeType);
+    bool ITypeDefinition.IsBoolean => Ground.IsBoolean;
+    bool ITypeDefinition.IsText => Ground.IsText;
+    bool ITypeDefinition.IsCharacter => Ground.IsCharacter;
+    bool ITypeDefinition.IsNumber => Ground.IsNumber;
+    bool ITypeDefinition.IsIntegral => Ground.IsIntegral;
+    bool ITypeDefinition.IsSigned => Ground.IsSigned;
+    bool ITypeDefinition.IsDecimal => Ground.IsDecimal;
+    bool ITypeDefinition.IsNativeSized => Ground.IsNativeSized;
+    int ITypeDefinition.NumberBits => Ground.NumberBits;
+    bool ITypeDefinition.IsTemporal => Ground.IsTemporal;
+    bool ITypeDefinition.HasDate => Ground.HasDate;
+    bool ITypeDefinition.HasTime => Ground.HasTime;
+    bool ITypeDefinition.HasOffset => Ground.HasOffset;
+    bool ITypeDefinition.IsDuration => Ground.IsDuration;
+    bool ITypeDefinition.IsUniqueIdentifier => Ground.IsUniqueIdentifier;
+    bool ITypeDefinition.IsBinary => Ground.IsBinary;
+    bool ITypeDefinition.IsTopType => Ground.IsTopType;
     public override string ToString() => FullName;
 
     /// <summary>

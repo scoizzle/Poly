@@ -28,6 +28,13 @@ public class PrimitiveVocabularyTests {
     }
 
     [Test]
+    public async Task ClrReferenceShorthand_IsAnInternalTool_NotPublicSurface() {
+        // The public ClrTypeReference node was deleted for being public (I8k); its shorthand must not become the
+        // public way to state a type in its place.
+        await Assert.That(typeof(ClrTypeReferences).IsPublic).IsFalse();
+    }
+
+    [Test]
     public async Task ClrTable_IsTheClrHostsOwn() {
         await Assert.That(typeof(ClrPrimitive).IsPublic).IsFalse();
         await Assert.That(typeof(ClrPrimitive).Namespace).IsEqualTo(typeof(ClrTypeDefinitionRegistry).Namespace);
@@ -57,8 +64,9 @@ public class PrimitiveVocabularyTests {
         await Assert.That(typeof(DateTimeOffset).GetPrimitiveType()).IsEqualTo(ClrPrimitive.DateTimeOffset);
         await Assert.That(ClrPrimitive.DateTimeOffset.GetClrType()).IsEqualTo(typeof(DateTimeOffset));
         ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DateTimeOffset));
-        await Assert.That(definition.GetFact<Atomic>()).IsNotNull();
-        await Assert.That(definition.GetFact<Temporal>()).IsEqualTo(new Temporal(HasDate: true, HasTime: true, HasOffset: true));
+        await Assert.That(definition.IsGround()).IsTrue();
+        await Assert.That((definition.IsTemporal, definition.HasDate, definition.HasTime, definition.HasOffset, definition.IsDuration))
+            .IsEqualTo((true, true, true, true, false));
     }
 
     [Test]
@@ -66,43 +74,42 @@ public class PrimitiveVocabularyTests {
         // ECMAScript's `undefined`: the host names it and states what it is; its provider resolves and enumerates it,
         // and the CLR does not pretend to have a type for it.
         var provider = new SecondHostProvider();
-        provider.Add(new HostPrimitive("Undefined", new HostAbsence()));
+        provider.Add(new HostPrimitive("Undefined", hostKind: "absence"));
 
         var resolved = provider.GetTypeDefinition("Undefined");
 
         await Assert.That(resolved).IsNotNull();
-        await Assert.That(resolved!.GetFact<HostAbsence>()).IsNotNull();
-        await Assert.That(resolved.GetFact<Atomic>()).IsNull().Because("the host states only the facts it gave");
+        await Assert.That(resolved is IHostType { HostKind: "absence" }).IsTrue();
+        await Assert.That(resolved!.IsGround()).IsFalse().Because("the host answers no ground question for it");
         await Assert.That(provider.Types).Contains(resolved);
         await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("Undefined")).IsNull();
-        await Assert.That(ClrTypeDefinitionRegistry.Shared.Types.Any(static type => type.GetFact<HostAbsence>() is not null)).IsFalse();
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.Types.Any(static type => type is IHostType)).IsFalse();
     }
 
     [Test]
     public async Task SecondHost_StatesANumberNoSharedListNames_AsAFactOfItsOwn() {
-        // A 128-bit decimal float: the host states what it is as a fact of its own and as a number, its provider
-        // resolves and enumerates it, and it is not confusable with the CLR's decimal.
+        // A 128-bit decimal float: the host answers what it is as a number and in its own terms, its provider resolves
+        // and enumerates it, and it is not confusable with the CLR's decimal.
         var provider = new SecondHostProvider();
-        var decimal128 = new HostDecimal(Bits: 128);
-        provider.Add(new HostPrimitive("Decimal128", decimal128));
+        provider.Add(new HostPrimitive("Decimal128", hostKind: "decimal128", numberBits: 128));
 
         var resolved = provider.GetTypeDefinition("Decimal128");
 
         await Assert.That(resolved).IsNotNull();
-        await Assert.That(resolved!.GetFact<HostDecimal>()).IsEqualTo(decimal128);
+        await Assert.That(resolved is IHostType { HostKind: "decimal128" }).IsTrue();
+        await Assert.That((resolved!.IsNumber, resolved.IsDecimal, resolved.IsSigned, resolved.NumberBits)).IsEqualTo((true, true, true, 128));
         await Assert.That(resolved.GetClrPrimitive()).IsNull();
         ITypeDefinition clrDecimal = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(decimal));
-        await Assert.That(clrDecimal.GetFact<HostDecimal>()).IsNull()
-            .Because("the CLR's decimal is not the host's, and states nothing for the host's question");
+        await Assert.That(clrDecimal is IHostType).IsFalse()
+            .Because("the CLR's decimal is not the host's, and is never asked the host's question");
         await Assert.That(TypeDefinitionExtensions.IsSameType(resolved, clrDecimal)).IsFalse();
         await Assert.That(provider.Types).Contains(resolved);
     }
 
-    /// <summary>What the second host's decimal is, in the host's own terms.</summary>
-    private sealed record HostDecimal(int Bits) : TypeFact;
-
-    /// <summary>The second host's type of the absent value.</summary>
-    private sealed record HostAbsence : TypeFact;
+    /// <summary>A question only the second host answers: what the type is, in the host's own terms.</summary>
+    private interface IHostType : ITypeDefinition {
+        string HostKind { get; }
+    }
 
     private sealed class SecondHostProvider : ITypeDefinitionProvider {
         private readonly Dictionary<string, ITypeDefinition> _types = new(StringComparer.Ordinal);
@@ -113,8 +120,8 @@ public class PrimitiveVocabularyTests {
         public IEnumerable<ITypeDefinition> Types => _types.Values;
     }
 
-    private sealed class HostPrimitive(string name, TypeFact fact) : ITypeDefinition {
-        public TFact? GetFact<TFact>() where TFact : TypeFact => fact as TFact;
+    private sealed class HostPrimitive(string name, string hostKind, int numberBits = 0) : IHostType {
+        public string HostKind => hostKind;
         public string Name => name;
         public string? Namespace => null;
         public AccessModifier AccessModifier => AccessModifier.Public;
@@ -133,6 +140,27 @@ public class PrimitiveVocabularyTests {
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
+        bool ITypeDefinition.IsEnumeration => false;
+        bool ITypeDefinition.HasValueSemantics => false;
+        bool ITypeDefinition.IsInterface => false;
+        bool ITypeDefinition.IsDelegate => false;
+        bool ITypeDefinition.IsBoolean => false;
+        bool ITypeDefinition.IsText => false;
+        bool ITypeDefinition.IsCharacter => false;
+        bool ITypeDefinition.IsNumber => numberBits > 0;
+        bool ITypeDefinition.IsIntegral => false;
+        bool ITypeDefinition.IsSigned => numberBits > 0;
+        bool ITypeDefinition.IsDecimal => numberBits > 0;
+        bool ITypeDefinition.IsNativeSized => false;
+        int ITypeDefinition.NumberBits => numberBits;
+        bool ITypeDefinition.IsTemporal => false;
+        bool ITypeDefinition.HasDate => false;
+        bool ITypeDefinition.HasTime => false;
+        bool ITypeDefinition.HasOffset => false;
+        bool ITypeDefinition.IsDuration => false;
+        bool ITypeDefinition.IsUniqueIdentifier => false;
+        bool ITypeDefinition.IsBinary => false;
+        bool ITypeDefinition.IsTopType => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
         ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
         ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;

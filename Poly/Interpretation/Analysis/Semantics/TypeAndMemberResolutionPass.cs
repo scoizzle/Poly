@@ -1118,16 +1118,15 @@ internal static class MethodInvocationSemanticResolver {
         return true;
     }
 
-    private static Type? DeclaredParameterType(AnalysisContext context, Parameter parameter) {
-        if (ClrTypeResolution.Resolve(parameter.TypeReference, parameter, context.GetResolvedType) is { } resolved)
-            return resolved;
-        // A lambda's own parameter is not in the module the type pass walks, so the table has no
-        // entry for it: resolve its reference by name instead of treating the declared shape as absent.
-        if (parameter.TypeReference is not { } reference)
-            return null;
-        return AstTypeReferenceResolver.TryResolve(reference, context.TypeDefinitions) is { } declared
-            && declared.TryGetRuntimeType(out var runtime) ? runtime : null;
-    }
+    private static Type? DeclaredParameterType(AnalysisContext context, Parameter parameter) =>
+        ClrTypeResolution.Resolve(
+            parameter.TypeReference, parameter,
+            // A lambda's own parameter is not in the module the type pass walks, so the table has no entry for its
+            // type reference: resolve that reference through the provider instead of reading the shape as absent.
+            node => context.GetResolvedType(node)
+                ?? (ReferenceEquals(node, parameter.TypeReference)
+                    ? AstTypeReferenceResolver.TryResolve(node, context.TypeDefinitions)
+                    : null));
 }
 
 internal static class ConstructorInvocationSemanticResolver {

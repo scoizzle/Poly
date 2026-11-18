@@ -466,5 +466,5 @@ internal class Patron : Poly.Runtime.IActionScoped
             this._fines.Add(__item9);
         }
     }
-    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Patron", "Email", email);
+    public static bool ExistsWithEmail(Poly.Runtime.IStoragePort db, string email) => db.Exists("Patron", "Email", email);
 }

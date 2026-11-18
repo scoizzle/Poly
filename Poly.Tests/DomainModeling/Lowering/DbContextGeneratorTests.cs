@@ -264,9 +264,7 @@ public class DbContextGeneratorTests {
         await Assert.That(columnTypes.Any(t => t is "integer" or "INTEGER" or "int")).IsTrue();
         var conversion = omc.FindInvocations("HasConversion").Single();
         var typeArg = conversion.TypeArguments.Single();
-        await Assert.That(typeArg).IsTypeOf<PrimitiveTypeReference>();
-        await Assert.That(((PrimitiveTypeReference)typeArg).PrimitiveId)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
+        await Assert.That(ClrTypeReferences.States(typeArg, typeof(int))).IsTrue();
     }
 
     [Test]
@@ -283,12 +281,10 @@ public class DbContextGeneratorTests {
 
         var tryReserve = context.FindMethod("TryReserve");
         await Assert.That(tryReserve).IsNotNull();
-        await Assert.That(tryReserve!.ReturnType).IsTypeOf<PrimitiveTypeReference>();
-        await Assert.That(((PrimitiveTypeReference)tryReserve.ReturnType).PrimitiveId)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.Boolean);
+        await Assert.That(ClrTypeReferences.States(tryReserve.ReturnType, typeof(bool))).IsTrue();
         await Assert.That(tryReserve.Parameters!.Count).IsEqualTo(3);
         await Assert.That(tryReserve.Parameters!.All(p =>
-            p.TypeReference is PrimitiveTypeReference { PrimitiveId: Poly.Introspection.PrimitiveType.String })).IsTrue();
+            ClrTypeReferences.States(p.TypeReference, typeof(string)))).IsTrue();
 
         foreach (var name in new[] { "Exists", "Record", "Release" }) {
             var body = context.FindMethod(name)!.Body!;

@@ -1,5 +1,6 @@
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -12,12 +13,12 @@ public class ThisReferenceTests {
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Name", new PrimitiveTypeReference(PrimitiveType.String))
+                new PropertyDefinitionNode("Name", ClrTypeReferences.Of(typeof(string)))
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "GetName",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    ClrTypeReferences.Of(typeof(string)),
                     Body: memberAccess)
             ]);
 
@@ -68,7 +69,7 @@ public class ThisReferenceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    ClrTypeReferences.Of(typeof(string)),
                     Body: thisReference,
                     IsStatic: true)
             ]);
@@ -95,10 +96,10 @@ public class ThisReferenceTests {
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Name", new PrimitiveTypeReference(PrimitiveType.String)),
+                new PropertyDefinitionNode("Name", ClrTypeReferences.Of(typeof(string))),
                 new PropertyDefinitionNode(
                     "DisplayName",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    ClrTypeReferences.Of(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode(memberAccess))
             ]);
 
@@ -127,7 +128,7 @@ public class ThisReferenceTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Bad",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    ClrTypeReferences.Of(typeof(string)),
                     Initializer: new PropertyInitializerDefinitionNode(thisReference),
                     IsStatic: true)
             ]);

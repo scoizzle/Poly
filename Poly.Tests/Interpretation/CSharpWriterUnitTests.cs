@@ -1,4 +1,5 @@
 using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -45,7 +46,7 @@ public class CSharpWriterUnitTests {
             new FieldDefinitionNode(
                 "Items",
                 new NamedTypeReference("List", TypeArguments: [
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32),
+                    ClrTypeReferences.Of(typeof(int)),
                 ])),
             new FieldDefinitionNode("PlacedOn", new NamedTypeReference("DateOnly")),
         ]);
@@ -227,7 +228,7 @@ public class CSharpWriterUnitTests {
         var text = WriteCart(
             new FieldDefinitionNode("PlacedOn", new NamedTypeReference("DateOnly")),
             new FieldDefinitionNode("Items", new NamedTypeReference("List", TypeArguments: [
-                new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32),
+                ClrTypeReferences.Of(typeof(int)),
             ])));
 
         await AssertHeader(

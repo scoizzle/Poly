@@ -52,7 +52,7 @@ public class InvokeMemberInstanceTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "CurrentStage",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
+                    ClrTypeReferences.Of(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode())
             ],
             Methods: [
@@ -60,7 +60,7 @@ public class InvokeMemberInstanceTests {
                     "Notify",
                     new TypeReference("void"),
                     Parameters: [new Parameter("stageName",
-                        new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String))],
+                        ClrTypeReferences.Of(typeof(string)))],
                     Body: new Block([])),
                 new MethodDefinitionNode(
                     "Bounce",
@@ -146,7 +146,7 @@ public class InvokeMemberInstanceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Ping",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+                    ClrTypeReferences.Of(typeof(long)),
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -168,7 +168,7 @@ public class InvokeMemberInstanceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Ping",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+                    ClrTypeReferences.Of(typeof(long)),
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();

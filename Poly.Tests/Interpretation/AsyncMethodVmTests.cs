@@ -77,7 +77,7 @@ public class AsyncMethodVmTests {
     [Test]
     public async Task NonAsyncMethod_IsNotWrapped() {
         var sync = new MethodDefinitionNode(
-            "Sync", new PrimitiveTypeReference(PrimitiveType.Int64),
+            "Sync", ClrTypeReferences.Of(typeof(long)),
             Body: new Return(new Constant(9L)));
         var tda = Analyze(ItemWith(sync));
         await Assert.That(RunLong(tda, new Invoke(new Member(Item, "Sync")))).IsEqualTo(9L);

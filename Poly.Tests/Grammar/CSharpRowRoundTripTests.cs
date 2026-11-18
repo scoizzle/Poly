@@ -88,7 +88,7 @@ public class CSharpRowRoundTripTests {
     public async Task Interface_PropertyWithNoAccessors_TakesTheClassConvention() {
         var printed = CSharpLanguage.Write([new TypeDefinitionNode("I", Form: TypeDeclarationForm.Interface,
             Properties: [new PropertyDefinitionNode("P", ClrTypeReferences.To<int>())])]);
-        await Assert.That(printed).Contains("System.Int32 P { get; set; }");
+        await Assert.That(printed).Contains("int P { get; set; }");
         await Assert.That(CSharpLanguage.Read(printed).Types.Single().Properties!.Single().Setter is not null).IsTrue();
     }
 

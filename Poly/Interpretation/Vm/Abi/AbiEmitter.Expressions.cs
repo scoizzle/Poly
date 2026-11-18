@@ -417,7 +417,7 @@ public static partial class AbiEmitter {
     /// <summary>Member access via CLR reflection: resolve from analysis metadata
     /// and emit a property getter, field read, or method call.</summary>
     private static bool IsTypeNameReceiver(Node node, Context ctx) =>
-        node is NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference
+        node is NamedTypeReference or TypeReference
         || (ctx.Analysis?.GetNodeReplacement(node) is { } replaced && replaced != node
             && IsTypeNameReceiver(replaced, ctx));
 
@@ -518,7 +518,7 @@ public static partial class AbiEmitter {
     /// throws when the member is null.</summary>
     private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, Context ctx) {
         var clrType = resolved.MemberTypeDefinition.GetRuntimeType()
-            ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
+            ?? resolved.MemberTypeDefinition.GetClrPrimitive()?.GetClrType();
         if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
             return NullableMemberRead(readCall, clrType);
         // A dictionary property arrives as object. Null is unset (the bag stores

@@ -8,7 +8,7 @@ using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
 
-using Prim = Poly.Introspection.PrimitiveType;
+using Prim = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
 
 namespace Poly.Tests.Introspection;
 

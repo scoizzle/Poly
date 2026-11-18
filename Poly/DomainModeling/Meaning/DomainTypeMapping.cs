@@ -1,4 +1,3 @@
-using Prim = Poly.Introspection.PrimitiveType;
 
 namespace Poly.DomainModeling.Meaning;
 
@@ -43,49 +42,25 @@ public static class DomainTypeMapping {
         "int" or "long" or "double" or "decimal" or "float" or "bool"
         or "DateTime" or "DateOnly" or "TimeOnly" or "TimeSpan" or "Guid";
 
-    /// <summary>Maps a CLR type name (after <see cref="ToClrTypeName"/>) to an Introspection primitive.</summary>
-    public static bool TryPrimitiveType(string clrTypeName, out Prim primitive) {
-        switch (clrTypeName) {
-            case "string":
-                primitive = Prim.String;
-                return true;
-            case "long":
-                primitive = Prim.Int64;
-                return true;
-            case "int":
-                primitive = Prim.Int32;
-                return true;
-            case "bool":
-                primitive = Prim.Boolean;
-                return true;
-            case "DateTime":
-                primitive = Prim.DateTime;
-                return true;
-            case "DateOnly":
-                primitive = Prim.DateOnly;
-                return true;
-            case "TimeOnly":
-                primitive = Prim.TimeOnly;
-                return true;
-            case "TimeSpan":
-                primitive = Prim.TimeSpan;
-                return true;
-            case "Guid":
-                primitive = Prim.Guid;
-                return true;
-            case "decimal":
-                primitive = Prim.Decimal;
-                return true;
-            case "double":
-                primitive = Prim.Float64;
-                return true;
-            case "float":
-                primitive = Prim.Float32;
-                return true;
-            default:
-                primitive = default;
-                return false;
-        }
+    /// <summary>Maps a CLR type name (after <see cref="ToClrTypeName"/>) to the CLR type it names: the ground types the
+    /// domain's built-in type names lower to.</summary>
+    public static bool TryClrType(string clrTypeName, out Type type) {
+        type = clrTypeName switch {
+            "string" => typeof(string),
+            "long" => typeof(long),
+            "int" => typeof(int),
+            "bool" => typeof(bool),
+            "DateTime" => typeof(DateTime),
+            "DateOnly" => typeof(DateOnly),
+            "TimeOnly" => typeof(TimeOnly),
+            "TimeSpan" => typeof(TimeSpan),
+            "Guid" => typeof(Guid),
+            "decimal" => typeof(decimal),
+            "double" => typeof(double),
+            "float" => typeof(float),
+            _ => null!
+        };
+        return type is not null;
     }
 
     /// <summary>Static default member on a CLR value type (MinValue / Empty / Zero).</summary>

@@ -189,7 +189,7 @@ public class CSharpWriterDefectTests {
     [Test]
     public async Task TypeAs_OnAValueTypedOperand_BoxesBeforeTheTryCast() {
         var program = new TypeAs(new Constant(42), ClrTypeReferences.To<string>());
-        await Assert.That(AstParity.Print(program)).Contains("(object)42 as System.String");
+        await Assert.That(AstParity.Print(program)).Contains("(object)42 as string");
         await Assert.That(Evaluate(program)).IsNull();
     }
 

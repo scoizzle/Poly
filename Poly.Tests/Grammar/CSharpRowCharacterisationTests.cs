@@ -86,7 +86,7 @@ public class CSharpRowCharacterisationTests {
             .IsEqualTo("public interface IShape\n{\n    public int Sides { get; }\n    public long Area(long scale);\n}");
         await Assert.That(Lf(CSharpLanguage.Write([new TypeDefinitionNode("I", Form: TypeDeclarationForm.Interface,
                 Properties: [new PropertyDefinitionNode("P", ClrTypeReferences.To<int>())])])))
-            .IsEqualTo("#nullable enable\npublic interface I\n{\n    public System.Int32 P { get; set; }\n}");
+            .IsEqualTo("#nullable enable\npublic interface I\n{\n    public int P { get; set; }\n}");
     }
 
     [Test]

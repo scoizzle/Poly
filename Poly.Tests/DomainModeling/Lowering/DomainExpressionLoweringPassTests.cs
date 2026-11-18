@@ -1,6 +1,7 @@
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 using Parameter = Poly.Ast.Nodes.Parameter;
@@ -331,9 +332,7 @@ public class DomainExpressionLoweringPassTests {
         var cast = (TypeCast)arg;
         await Assert.That(cast.Operand).IsTypeOf<Constant>();
         await Assert.That(((Constant)cast.Operand).Value).IsEqualTo(14L);
-        await Assert.That(cast.TargetTypeReference).IsTypeOf<PrimitiveTypeReference>();
-        await Assert.That(((PrimitiveTypeReference)cast.TargetTypeReference).PrimitiveId)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
+        await Assert.That(ClrTypeReferences.States(cast.TargetTypeReference, typeof(int))).IsTrue();
     }
 
     [Test]

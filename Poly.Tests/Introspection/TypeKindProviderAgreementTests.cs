@@ -27,34 +27,25 @@ public class TypeKindProviderAgreementTests {
     public async Task PrimitiveType_Boolean_ReportsBooleanShape() {
         var boolean = Clr(typeof(bool));
 
-        await Assert.That(boolean.PrimitiveType).IsEqualTo(PrimitiveType.Boolean);
+        await Assert.That(boolean.GetClrPrimitive()).IsEqualTo(ClrPrimitive.Boolean);
         await Assert.That(Shape(boolean)).IsEqualTo("value");
     }
 
     [Test]
     public async Task ClrProvider_Object_IsTheStructurePrimitive() {
-        await Assert.That(typeof(object).GetPrimitiveType()).IsEqualTo(PrimitiveType.Structure);
+        await Assert.That(typeof(object).GetPrimitiveType()).IsEqualTo(ClrPrimitive.Structure);
     }
 
     [Test]
     public async Task ClrProvider_EveryPrimitiveItMaps_ReportsItself() {
-        // The vocabulary names what a host may have, so only the primitives the CLR maps are this provider's (I6);
-        // the protocol primitives are pinned as having no CLR type by the sibling test below.
-        foreach (var primitive in Enum.GetValues<PrimitiveType>().Where(static id => id.GetClrType() is not null)) {
+        // The CLR host's own table: every entry is a CLR type, and its definition is a ground type that reports it.
+        foreach (var primitive in Enum.GetValues<ClrPrimitive>()) {
             var definition = Clr(primitive.GetClrType()!);
 
-            await Assert.That(definition.PrimitiveType).IsEqualTo(primitive)
+            await Assert.That(definition.GetClrPrimitive()).IsEqualTo(primitive)
                 .Because($"'{primitive}' must report its own id");
             await Assert.That(definition.GetFact<Enumeration>()).IsNull();
-        }
-    }
-
-    [Test]
-    public async Task ClrProvider_HasNoTypeForAProtocolPrimitive() {
-        foreach (var primitive in new[] { PrimitiveType.Undefined, PrimitiveType.Null, PrimitiveType.Symbol, PrimitiveType.BigInt }) {
-            await Assert.That(primitive.GetClrType()).IsNull().Because($"'{primitive}' is not a CLR type");
-            await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(primitive)).IsNull()
-                .Because($"the CLR provider must not pretend to have '{primitive}'");
+            await Assert.That(definition.GetFact<Atomic>()).IsNotNull().Because($"'{primitive}' is a ground type");
         }
     }
 
@@ -76,8 +67,6 @@ public class TypeKindProviderAgreementTests {
         await Assert.That(Shape(Resolve(new TypeDefinitionNode("Status", Form: TypeDeclarationForm.Enum)))).IsEqualTo("enumeration");
         await Assert.That(Shape(Resolve(new TypeDefinitionNode("IWidget", Form: TypeDeclarationForm.Interface)))).IsEqualTo("interface");
         await Assert.That(Shape(Resolve(new TypeDefinitionNode("Money", Form: TypeDeclarationForm.Struct)))).IsEqualTo("value");
-        await Assert.That(Resolve(new TypeDefinitionNode("Atomic", PrimitiveTypeId: PrimitiveType.Int32)).PrimitiveType)
-            .IsEqualTo(PrimitiveType.Int32);
     }
 
     [Test]
@@ -95,9 +84,9 @@ public class TypeKindProviderAgreementTests {
             new TestParameter("T"), collection);
 
         await Assert.That(Shape(collection)).IsEqualTo("");
-        await Assert.That(collection.PrimitiveType).IsNull();
+        await Assert.That(collection.GetClrPrimitive()).IsNull();
         await Assert.That(Shape(parameter)).IsEqualTo("");
-        await Assert.That(parameter.PrimitiveType).IsNull();
+        await Assert.That(parameter.GetClrPrimitive()).IsNull();
     }
 
     [Test]

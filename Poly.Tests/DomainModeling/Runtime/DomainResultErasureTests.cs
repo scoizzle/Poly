@@ -150,7 +150,7 @@ public sealed class DomainResultErasureTests {
                 new PropertyDefinitionNode(
                     "Typed",
                     new NamedTypeReference("DomainResult", TypeArguments: [
-                        new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
+                        ClrTypeReferences.Of(typeof(string)),
                     ])),
             ]);
 

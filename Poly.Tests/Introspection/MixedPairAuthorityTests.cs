@@ -57,7 +57,6 @@ public class MixedPairAuthorityTests {
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [AddOperator];
-        public PrimitiveType? PrimitiveType => null;
         public ITypeDefinition? NullableOf => null;
 
         public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);

@@ -47,7 +47,7 @@ internal sealed class ModeledTypeSet : IClrTypeDefinitionProvider {
 
     public ITypeDefinition? GetTypeDefinition(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    public ITypeDefinition? GetTypeDefinition(Poly.Introspection.PrimitiveType primitiveTypeId) => null;
+    public ITypeDefinition? GetTypeDefinition(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive primitiveTypeId) => null;
 
     public IEnumerable<ITypeDefinition> Types => _types.Values;
 

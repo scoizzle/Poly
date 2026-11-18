@@ -86,7 +86,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     private void AnalyzeNode(AnalysisContext context, ScopeState state, Node node) {
         // A member chain rewritten to a type reference is a type name, not a value: its
         // identifier spine is not a local, so it must not be validated as one.
-        if (context.GetNodeReplacement(node) is TypeReference or NamedTypeReference or PrimitiveTypeReference)
+        if (context.GetNodeReplacement(node) is TypeReference or NamedTypeReference)
             return;
 
         switch (node) {
@@ -395,7 +395,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     private void ValidateVariableReference(AnalysisContext context, ScopeState state, Variable variable) {
         // A node rewritten to a type reference (e.g. a member chain that spelled a dotted
         // CLR type name) is a type name, not a local reference.
-        if (context.GetNodeReplacement(variable) is TypeReference or NamedTypeReference or PrimitiveTypeReference)
+        if (context.GetNodeReplacement(variable) is TypeReference or NamedTypeReference)
             return;
         if (state.VariablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0) {
             // The declaration edge is the only type source for a use; the type pass

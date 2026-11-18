@@ -1,7 +1,7 @@
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
-using PrimitiveType = Poly.Introspection.PrimitiveType;
+using PrimitiveType = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
 
 namespace Poly.Tests.Introspection;
 
@@ -112,19 +112,19 @@ public class TypeDefinitionProviderCollectionTests {
         ITypeDefinition listType = registry.GetTypeDefinition(typeof(List<int>));
 
         // int is primitive
-        await Assert.That(intType.PrimitiveType).IsEqualTo(PrimitiveType.Int32);
-        await Assert.That(intType.PrimitiveType).IsNotNull();
+        await Assert.That(intType.GetClrPrimitive()).IsEqualTo(ClrPrimitive.Int32);
+        await Assert.That(intType.GetClrPrimitive()).IsNotNull();
 
         // string is primitive
-        await Assert.That(stringType.PrimitiveType).IsEqualTo(PrimitiveType.String);
-        await Assert.That(stringType.PrimitiveType).IsNotNull();
+        await Assert.That(stringType.GetClrPrimitive()).IsEqualTo(ClrPrimitive.String);
+        await Assert.That(stringType.GetClrPrimitive()).IsNotNull();
 
         // DateTime is primitive, not a DateTime-shaped category bit
-        await Assert.That(dateTimeType.PrimitiveType).IsEqualTo(PrimitiveType.DateTime);
-        await Assert.That(dateTimeType.PrimitiveType).IsNotNull();
+        await Assert.That(dateTimeType.GetClrPrimitive()).IsEqualTo(ClrPrimitive.DateTime);
+        await Assert.That(dateTimeType.GetClrPrimitive()).IsNotNull();
 
         // List<int> is a class; its element type is structural, not a flag
-        await Assert.That(listType.PrimitiveType).IsNull();
+        await Assert.That(listType.GetClrPrimitive()).IsNull();
         await Assert.That(listType.GetFact<Poly.Introspection.ValueSemantics>()).IsNull();
         await Assert.That(listType.GetFact<Poly.Introspection.Enumeration>()).IsNull();
         await Assert.That(listType.GetFact<Poly.Introspection.InterfaceContract>()).IsNull();
@@ -141,7 +141,6 @@ public class TypeDefinitionProviderCollectionTests {
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
-        public PrimitiveType? PrimitiveType => null;
         public ITypeDefinition? NullableOf => null;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
@@ -181,11 +180,12 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_Primitive_DoesNotAssumeTheProviderHasClrTypes() {
-        // Primitive resolution is the provider's: a platform without CLR types must not inherit the CLR's answer,
-        // and must not be asked for one through a runtime Type it never mentioned.
+    public async Task GetClrTypeDefinition_DoesNotAssumeTheProviderHasClrTypes() {
+        // A platform without CLR types must not inherit the CLR's answer, and is never asked for one through a
+        // runtime Type it never mentioned: the neutral provider resolves names only.
         ITypeDefinitionProvider provider = new NoClrTypeProvider();
-        await Assert.That(provider.GetTypeDefinition(PrimitiveType.Decimal)).IsNull();
+        await Assert.That(provider.GetClrTypeDefinition(typeof(decimal))).IsNull();
+        await Assert.That(provider.GetTypeDefinition("System.Decimal")).IsNull();
     }
 
     [Test]
@@ -223,7 +223,6 @@ public class TypeDefinitionProviderCollectionTests {
         public ITypeDefinition? GetTypeDefinition(Type type) =>
             throw new NotSupportedException("This platform has no CLR types.");
 
-        public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
         public IEnumerable<ITypeDefinition> Types => [];
     }
 
@@ -242,7 +241,6 @@ public class TypeDefinitionProviderCollectionTests {
             throw new NotImplementedException();
         }
 
-        public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
         public IEnumerable<ITypeDefinition> Types => _types.Values;
     }
 }

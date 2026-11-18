@@ -27,7 +27,7 @@ public class InvokeResultConventionTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Half",
-                    new PrimitiveTypeReference(PrimitiveType.Float64),
+                    ClrTypeReferences.Of(typeof(double)),
                     Body: new Block([]))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();

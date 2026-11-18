@@ -112,9 +112,6 @@ internal sealed class AstTypeRegistry : ITypeDefinitionProvider, ITypeDefinition
         bareName = typeName;
         return null;
     }
-
-    /// <summary>A registry of declarations holds no primitives: a composed provider resolves those.</summary>
-    public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
 }
 
 /// <summary>Metadata associating a <see cref="TypeDefinitionNode"/> with its
@@ -299,8 +296,6 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     public ITypeDefinition? BaseType => _baseType.Value;
     public IEnumerable<ITypeDefinition> Interfaces => _interfaces.Value;
     public IEnumerable<IParameter> GenericParameters => _genericParameters.Value;
-
-    public PrimitiveType? PrimitiveType => _node.PrimitiveTypeId;
 
 
     /// <summary>A modeled definition states no nullable form; optionality is the caller's (T-06).</summary>
@@ -614,7 +609,6 @@ internal static class AstTypeReferenceResolver {
         var clr = ClrTypeDefinitionRegistry.Shared;
 
         return typeNode switch {
-            PrimitiveTypeReference prim => ResolvePrimitive(prim.PrimitiveId, prim.IsNullable, clr),
             NamedTypeReference named => ResolveNamed(named, provider, clr, enclosing),
             OptionalTypeReference opt => ResolveOptional(opt, provider, clr, enclosing),
             CollectionTypeReference col => ResolveCollection(col, provider, clr, enclosing),
@@ -631,42 +625,6 @@ internal static class AstTypeReferenceResolver {
         TypeReference tr => tr.TypeName,
         _ => typeNode.ToString() ?? typeNode.GetType().Name
     };
-
-    private static ClrTypeDefinition ResolvePrimitive(PrimitiveType id, bool isNullable, ClrTypeDefinitionRegistry clr) {
-        var baseType = id switch {
-            PrimitiveType.Boolean => clr.GetTypeDefinition<bool>(),
-            PrimitiveType.Int8 => clr.GetTypeDefinition<sbyte>(),
-            PrimitiveType.Int16 => clr.GetTypeDefinition<short>(),
-            PrimitiveType.Int32 => clr.GetTypeDefinition<int>(),
-            PrimitiveType.Int64 => clr.GetTypeDefinition<long>(),
-            PrimitiveType.UInt8 => clr.GetTypeDefinition<byte>(),
-            PrimitiveType.UInt16 => clr.GetTypeDefinition<ushort>(),
-            PrimitiveType.UInt32 => clr.GetTypeDefinition<uint>(),
-            PrimitiveType.UInt64 => clr.GetTypeDefinition<ulong>(),
-            PrimitiveType.Float32 => clr.GetTypeDefinition<float>(),
-            PrimitiveType.Float64 => clr.GetTypeDefinition<double>(),
-            PrimitiveType.Decimal => clr.GetTypeDefinition<decimal>(),
-            PrimitiveType.String => clr.GetTypeDefinition<string>(),
-            PrimitiveType.Char => clr.GetTypeDefinition<char>(),
-            PrimitiveType.DateTime => clr.GetTypeDefinition<DateTime>(),
-            PrimitiveType.DateOnly => clr.GetTypeDefinition<DateOnly>(),
-            PrimitiveType.TimeOnly => clr.GetTypeDefinition<TimeOnly>(),
-            PrimitiveType.TimeSpan => clr.GetTypeDefinition<TimeSpan>(),
-            PrimitiveType.Guid => clr.GetTypeDefinition<Guid>(),
-            PrimitiveType.ByteArray => clr.GetTypeDefinition<byte[]>(),
-            PrimitiveType.Structure => clr.GetTypeDefinition<object>(),
-            PrimitiveType.NInt => clr.GetTypeDefinition<nint>(),
-            PrimitiveType.NUInt => clr.GetTypeDefinition<nuint>(),
-            _ => throw new ArgumentOutOfRangeException(nameof(id), id, "no CLR definition for this primitive")
-        };
-
-        if (isNullable && baseType.RuntimeType.IsValueType) {
-            var nullableType = typeof(Nullable<>).MakeGenericType(baseType.RuntimeType);
-            return clr.GetTypeDefinition(nullableType);
-        }
-
-        return baseType;
-    }
 
     private static ITypeDefinition? ResolveNamed(
         NamedTypeReference named,
@@ -979,7 +937,6 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
         return string.Equals(ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
             && string.Equals(ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
     }
-    public PrimitiveType? PrimitiveType => null;
     ITypeDefinition? ITypeDefinition.NullableOf => null;
     public Type RuntimeType => typeof(System.Collections.IList);
 }
@@ -1075,7 +1032,6 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
             && string.Equals(Name, right.Name, StringComparison.Ordinal)
             && TypeDefinitionExtensions.IsSameType(DeclaringType, right.DeclaringType));
 
-    public PrimitiveType? PrimitiveType => null;
     ITypeDefinition? ITypeDefinition.NullableOf => null;
     public Type RuntimeType => typeof(object);
 }

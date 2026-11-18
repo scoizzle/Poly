@@ -184,5 +184,5 @@ internal class Lead : Poly.Runtime.IActionScoped
         this.Account = (Account?)__saved[3]!;
         this.CurrentStage = (LeadStage)__saved[4]!;
     }
-    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Lead", "Email", email);
+    public static bool ExistsWithEmail(Poly.Runtime.IStoragePort db, string email) => db.Exists("Lead", "Email", email);
 }

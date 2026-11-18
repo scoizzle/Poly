@@ -88,7 +88,7 @@ public class CSharpWriterFailClosedTests {
     [Test]
     public async Task NewArray_WriteRead_IsKindStable() {
         var printed = CSharpLanguage.Write(new NewArray(ClrTypeReferences.To<long>(), new Constant(4L)));
-        await Assert.That(printed).IsEqualTo("new System.Int64[4L];");
+        await Assert.That(printed).IsEqualTo("new long[4L];");
 
         var source = $"class C {{ void M() {{ var a = {printed} }} }}";
         await Assert.That(SyntaxErrors(source)).IsEmpty();

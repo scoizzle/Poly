@@ -34,8 +34,6 @@ internal sealed class UnitTypeScope(IReadOnlyList<ITypeSource> sources) : ITypeD
     public ITypeDefinition? GetTypeDefinition(string name) =>
         Candidates(name) is [var only] ? only : null;
 
-    public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
-
     public IEnumerable<ITypeDefinition> Types => [];
 }
 

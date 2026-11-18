@@ -26,7 +26,8 @@ sealed class LedgerHost : ITypeSource {
     public sealed record Money(int MinorUnits) : TypeFact;
 
     private sealed class LedgerDefinition(string name, Money? money = null) : ITypeDefinition {
-        public TFact? GetFact<TFact>() where TFact : TypeFact => money as TFact;
+        public TFact? GetFact<TFact>() where TFact : TypeFact =>
+            money as TFact ?? (money is null ? null : new Numeric(IsIntegral: false, IsSigned: true, Bits: 96, IsDecimal: true) as TFact);
         public string Name => name;
         public string? Namespace => LedgerHost.Namespace;
         public AccessModifier AccessModifier => AccessModifier.Public;
@@ -39,7 +40,6 @@ sealed class LedgerHost : ITypeSource {
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
-        public PrimitiveType? PrimitiveType => null;
         public ITypeDefinition? NullableOf => null;
         public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];

@@ -84,7 +84,6 @@ public class ClrReferenceIdentityTests {
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
-        public PrimitiveType? PrimitiveType => null;
         public ITypeDefinition? NullableOf => null;
         public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];

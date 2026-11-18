@@ -24,7 +24,7 @@ public class CastParityRegressionTests {
         var row = AstParity.Compare("cast-compound", Program([(i1, int.MaxValue), (i2, 2)], body));
 
         await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
-        await Assert.That(row.Source!).Contains("(System.Int64)(");
+        await Assert.That(row.Source!).Contains("(long)(");
     }
 
     [Test]
@@ -39,7 +39,7 @@ public class CastParityRegressionTests {
             var row = AstParity.Compare("cast-" + operand.GetType().Name,
                 Program([(i1, 3), (b1, true)], new TypeCast(operand, ClrTypeReferences.To<long>())));
             await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
-            await Assert.That(row.Source!).Contains("(System.Int64)(");
+            await Assert.That(row.Source!).Contains("(long)(");
         }
     }
 

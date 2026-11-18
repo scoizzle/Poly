@@ -1,6 +1,7 @@
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
 
@@ -16,7 +17,7 @@ public class AbiEmitterMemberAccessTests {
         // dictionary stores an int, the emitted read coerces it to long.
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+            Properties: [new PropertyDefinitionNode("Count", ClrTypeReferences.Of(typeof(long)))]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
@@ -36,7 +37,7 @@ public class AbiEmitterMemberAccessTests {
     public async Task AstProperty_EmitRead_UsesDefaultValueWhenKeyMissing() {
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64),
+            Properties: [new PropertyDefinitionNode("Count", ClrTypeReferences.Of(typeof(long)),
                 DefaultValue: new Constant(10L))]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -57,7 +58,7 @@ public class AbiEmitterMemberAccessTests {
     public async Task AstProperty_EmitRead_MissingKeyWithoutDefault_ReadsZero() {
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+            Properties: [new PropertyDefinitionNode("Count", ClrTypeReferences.Of(typeof(long)))]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
@@ -76,7 +77,7 @@ public class AbiEmitterMemberAccessTests {
     public async Task AstField_EmitRead_WritesAndReadsValue() {
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
-            Fields: [new FieldDefinitionNode("Tag", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+            Fields: [new FieldDefinitionNode("Tag", ClrTypeReferences.Of(typeof(long)))]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
@@ -96,7 +97,7 @@ public class AbiEmitterMemberAccessTests {
     public async Task AstField_EmitWrite_ModifiesDictionary() {
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
-            Fields: [new FieldDefinitionNode("Tag", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+            Fields: [new FieldDefinitionNode("Tag", ClrTypeReferences.Of(typeof(long)))]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
@@ -116,7 +117,7 @@ public class AbiEmitterMemberAccessTests {
     public async Task AstField_EmitRead_CoercesIntToLong() {
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
-            Fields: [new FieldDefinitionNode("Score", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+            Fields: [new FieldDefinitionNode("Score", ClrTypeReferences.Of(typeof(long)))]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
@@ -153,7 +154,7 @@ public class AbiEmitterMemberAccessTests {
             Fields: [
                 new FieldDefinitionNode(
                     "Active",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    ClrTypeReferences.Of(typeof(string)),
                     DefaultValue: new Constant("Active"),
                     IsStatic: true,
                     IsConst: true)

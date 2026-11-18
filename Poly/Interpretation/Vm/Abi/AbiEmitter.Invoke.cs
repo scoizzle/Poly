@@ -993,9 +993,7 @@ public static partial class AbiEmitter {
         // spells IEnumerable<T> as a concrete List<T>.
         if (method.DefinitionNode.ReturnType is NamedTypeReference { TypeArguments: { Count: 1 } args } named
             && named.FullName is "IEnumerable" or "System.Collections.Generic.IEnumerable") {
-            var element = args[0] is PrimitiveTypeReference { IsNullable: false } primitive
-                ? primitive.PrimitiveId.GetClrType()
-                : ctx.Analysis?.GetResolvedType(args[0])?.GetRuntimeType();
+            var element = (args[0] is TypeDefinitionReference stated ? stated.TypeDefinition : ctx.Analysis?.GetResolvedType(args[0]))?.GetRuntimeType();
             if (element is not null)
                 return element;
         }
@@ -1177,7 +1175,7 @@ public static partial class AbiEmitter {
         var statement = body is Block { Nodes.Count: 1 } block ? block.Nodes[0] : body;
         if (statement is Return { Value: { } value })
             statement = value;
-        return statement is Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference or PrimitiveTypeReference } };
+        return statement is Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference } };
     }
 
     /// <summary>The caller's compilation-unit analysis, narrowed to diagnostics

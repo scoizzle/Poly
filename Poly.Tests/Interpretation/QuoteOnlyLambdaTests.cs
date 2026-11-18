@@ -189,7 +189,7 @@ public class QuoteOnlyLambdaTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Apply",
-                    new PrimitiveTypeReference(PrimitiveType.Boolean),
+                    ClrTypeReferences.Of(typeof(bool)),
                     Parameters: [f, value],
                     Body: new Invoke(Static(typeof(QuoteDoorProbe), nameof(QuoteDoorProbe.Apply)), f, value),
                     IsStatic: true)
@@ -218,7 +218,7 @@ public class QuoteOnlyLambdaTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Take",
-                    new PrimitiveTypeReference(PrimitiveType.Boolean),
+                    ClrTypeReferences.Of(typeof(bool)),
                     Parameters: [f],
                     Body: new Block([new Invoke(new Lambda([], new Constant(1L))), new Constant(true)]))
             ]);

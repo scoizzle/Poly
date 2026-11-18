@@ -30,4 +30,12 @@ public static class ClrTypeReferences {
         return reference is TypeDefinitionReference { TypeDefinition: var stated }
             && ((ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)).IsAssignableWithoutConversion(stated);
     }
+
+    /// <summary>True when <paramref name="reference"/> states exactly the platform's definition of
+    /// <paramref name="type"/>: identity, where <see cref="Denotes"/> is assignability.</summary>
+    public static bool States(Node? reference, Type type) {
+        ArgumentNullException.ThrowIfNull(type);
+        return reference is TypeDefinitionReference { TypeDefinition: var stated }
+            && TypeDefinitionExtensions.IsSameType(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type), stated);
+    }
 }

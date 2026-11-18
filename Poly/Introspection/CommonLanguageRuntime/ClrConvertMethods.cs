@@ -10,20 +10,20 @@ internal static class ClrConvertMethods {
     public static string? NameOf(ITypeDefinition destination) {
         ArgumentNullException.ThrowIfNull(destination);
         var underlying = destination.NullableOf ?? destination;
-        return underlying.PrimitiveType switch {
-            PrimitiveType.Float64 => "ToDouble",
-            PrimitiveType.Float32 => "ToSingle",
-            PrimitiveType.Decimal => "ToDecimal",
-            PrimitiveType.Int32 => "ToInt32",
-            PrimitiveType.Int64 => "ToInt64",
-            PrimitiveType.Int16 => "ToInt16",
-            PrimitiveType.UInt8 => "ToByte",
-            PrimitiveType.Int8 => "ToSByte",
-            PrimitiveType.UInt32 => "ToUInt32",
-            PrimitiveType.UInt64 => "ToUInt64",
-            PrimitiveType.UInt16 => "ToUInt16",
-            PrimitiveType.Char => "ToChar",
-            PrimitiveType.Boolean => "ToBoolean",
+        return underlying.GetClrPrimitive() switch {
+            ClrPrimitive.Float64 => "ToDouble",
+            ClrPrimitive.Float32 => "ToSingle",
+            ClrPrimitive.Decimal => "ToDecimal",
+            ClrPrimitive.Int32 => "ToInt32",
+            ClrPrimitive.Int64 => "ToInt64",
+            ClrPrimitive.Int16 => "ToInt16",
+            ClrPrimitive.UInt8 => "ToByte",
+            ClrPrimitive.Int8 => "ToSByte",
+            ClrPrimitive.UInt32 => "ToUInt32",
+            ClrPrimitive.UInt64 => "ToUInt64",
+            ClrPrimitive.UInt16 => "ToUInt16",
+            ClrPrimitive.Char => "ToChar",
+            ClrPrimitive.Boolean => "ToBoolean",
             _ => null
         };
     }

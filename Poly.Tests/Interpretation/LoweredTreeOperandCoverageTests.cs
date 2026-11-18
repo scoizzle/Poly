@@ -351,7 +351,6 @@ public class LoweredTreeOperandCoverageTests {
         [typeof(MapTypeReference)] = TypeReferenceReason,
         [typeof(NamedTypeReference)] = TypeReferenceReason,
         [typeof(OptionalTypeReference)] = TypeReferenceReason,
-        [typeof(PrimitiveTypeReference)] = TypeReferenceReason,
         [typeof(ResolvedTypeReference)] = TypeReferenceReason,
         [typeof(TypeDefinitionReference)] = TypeReferenceReason,
         [typeof(TypeReference)] = TypeReferenceReason,

@@ -143,5 +143,5 @@ internal class Doctor : Poly.Runtime.IActionScoped
         this.LicenseNo = (string)__saved[1]!;
         this.Schedule = (Schedule?)__saved[2]!;
     }
-    public static System.Boolean ExistsWithLicenseNo(Poly.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
+    public static bool ExistsWithLicenseNo(Poly.Runtime.IStoragePort db, string licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
 }

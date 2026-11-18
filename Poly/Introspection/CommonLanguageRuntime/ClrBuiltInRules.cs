@@ -1,4 +1,4 @@
-using P = Poly.Introspection.PrimitiveType;
+using P = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
@@ -18,7 +18,7 @@ internal static class ClrBuiltInRules {
     /// native integers' included (C# 11: §10.2.3 as amended by the native-integer feature). Every other ordered pair of
     /// them is an explicit numeric conversion (§10.3.2).
     /// </summary>
-    private static readonly Dictionary<PrimitiveType, PrimitiveType[]> ImplicitNumeric = new() {
+    private static readonly Dictionary<ClrPrimitive, ClrPrimitive[]> ImplicitNumeric = new() {
         [P.Int8] = [P.Int16, P.Int32, P.Int64, P.NInt, P.Float32, P.Float64],
         [P.UInt8] = [P.Int16, P.UInt16, P.Int32, P.UInt32, P.Int64, P.UInt64, P.NInt, P.NUInt, P.Float32, P.Float64],
         [P.Int16] = [P.Int32, P.Int64, P.NInt, P.Float32, P.Float64],
@@ -46,7 +46,7 @@ internal static class ClrBuiltInRules {
     /// Any CLR value converts implicitly to object (§10.2.8 reference, §10.2.9 boxing). Int64 to Float64 is implicit, lossy above 2^53.
     /// Only the kind: the platform applies it, so it names no method, and the caller knows the destination type.
     /// </summary>
-    public static ConversionOperatorKind? Conversion(PrimitiveType? from, PrimitiveType? to) {
+    public static ConversionOperatorKind? Conversion(ClrPrimitive? from, ClrPrimitive? to) {
         if (from == to)
             return null;
         if (from is { } source && to is { } target && ImplicitNumeric.TryGetValue(source, out var implicitTargets) && IsNumeric(target))
@@ -59,9 +59,9 @@ internal static class ClrBuiltInRules {
         return to is P.Structure ? ConversionOperatorKind.Implicit : null;
     }
 
-    private static bool IsNumeric(PrimitiveType type) => ImplicitNumeric.ContainsKey(type);
+    private static bool IsNumeric(ClrPrimitive type) => ImplicitNumeric.ContainsKey(type);
 
-    private static bool IsIntegral(PrimitiveType type) => type is P.Int32 or P.UInt32 or P.Int64 or P.UInt64 or P.NInt or P.NUInt;
+    private static bool IsIntegral(ClrPrimitive type) => type is P.Int32 or P.UInt32 or P.Int64 or P.UInt64 or P.NInt or P.NUInt;
 
     /// <summary>
     /// The conversion from <paramref name="source"/> to <paramref name="destination"/> when a native integer
@@ -73,15 +73,15 @@ internal static class ClrBuiltInRules {
     public static ConversionOperatorKind? NativeIntegerConversionFrom(ITypeDefinition destination, ITypeDefinition source) {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
-        if (destination.PrimitiveType is not { } to || source.PrimitiveType is not { } from
+        if (destination.GetClrPrimitive() is not { } to || source.GetClrPrimitive() is not { } from
             || !(IsNativeInteger(to) || IsNativeInteger(from)) || !IsNumeric(to) || !IsNumeric(from))
             return null;
         return destination.ResolveConversionFrom(source)?.Kind;
 
-        static bool IsNativeInteger(PrimitiveType type) => type is PrimitiveType.NInt or PrimitiveType.NUInt;
+        static bool IsNativeInteger(ClrPrimitive type) => type is ClrPrimitive.NInt or ClrPrimitive.NUInt;
 
-        static bool IsNumeric(PrimitiveType type) => type.IsInteger() || IsNativeInteger(type)
-            || type is PrimitiveType.Char or PrimitiveType.Float32 or PrimitiveType.Float64 or PrimitiveType.Decimal;
+        static bool IsNumeric(ClrPrimitive type) => type.IsInteger() || IsNativeInteger(type)
+            || type is ClrPrimitive.Char or ClrPrimitive.Float32 or ClrPrimitive.Float64 or ClrPrimitive.Decimal;
     }
 
     /// <summary>
@@ -92,7 +92,12 @@ internal static class ClrBuiltInRules {
     /// unchecked, then masked by the shift: 5 bits for a 32-bit left operand, 6 for a 64-bit one. The lowered tree states the
     /// conversion as a cast.
     /// </summary>
-    public static bool IsPolicyShiftCount(PrimitiveType type) => type is P.Int64 or P.UInt32 or P.UInt64 or P.NInt or P.NUInt;
+    public static bool IsPolicyShiftCount(ClrPrimitive type) => type is P.Int64 or P.UInt32 or P.UInt64 or P.NInt or P.NUInt;
+
+    /// <summary><see cref="IsPolicyShiftCount(ClrPrimitive)"/> asked of a number's representation: an integer that is
+    /// not already an <c>int</c> or narrower.</summary>
+    public static bool IsPolicyShiftCount(Numeric count) =>
+        count.IsIntegral && (count.IsNativeSized || count.Bits == 64 || count is { Bits: 32, IsSigned: false });
 
     /// <summary>
     /// C# 12.12.7, reference type equality: <c>bool ==(object, object)</c> and <c>!=</c>, declared by <c>object</c>, when both
@@ -146,7 +151,7 @@ internal static class ClrBuiltInRules {
     /// <c>ulong</c> or <c>char</c> is <c>nuint</c>; <c>nuint</c> with a signed type, and <c>nint</c> with <c>nuint</c>, has
     /// no operator.
     /// </summary>
-    public static PrimitiveType? Promote(PrimitiveType left, PrimitiveType right) {
+    public static ClrPrimitive? Promote(ClrPrimitive left, ClrPrimitive right) {
         if (left is P.Float64 || right is P.Float64)
             return P.Float64;
         if (left is P.Float32 || right is P.Float32)
@@ -173,7 +178,7 @@ internal static class ClrBuiltInRules {
     /// so both operands of a pair reach the same operator. The definition does not know its side: a shift answers as
     /// the left operand, and a right operand answering as left yields (Int32, Int32) or nothing that applies.
     /// </summary>
-    public static IReadOnlyList<ClrTypeOperator> Operators(ClrTypeDefinition owner, PrimitiveType? other, ClrTypeDefinitionRegistry provider, OperatorKind kind) {
+    public static IReadOnlyList<ClrTypeOperator> Operators(ClrTypeDefinition owner, ClrPrimitive? other, ClrTypeDefinitionRegistry provider, OperatorKind kind) {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(provider);
         if (owner.RuntimeType.GetPrimitiveType() is not { } self)
@@ -181,10 +186,10 @@ internal static class ClrBuiltInRules {
         return [.. Signatures(self, other, kind).Select(signature =>
             new ClrTypeOperator(kind, Definition(signature.Declaring), Definition(signature.Result), [.. signature.Parameters.Select(Definition)]))];
 
-        ClrTypeDefinition Definition(PrimitiveType type) => provider.GetTypeDefinition(type.GetClrType()!);
+        ClrTypeDefinition Definition(ClrPrimitive type) => provider.GetTypeDefinition(type.GetClrType()!);
     }
 
-    private static IEnumerable<(PrimitiveType Declaring, PrimitiveType[] Parameters, PrimitiveType Result)> Signatures(PrimitiveType self, PrimitiveType? other, OperatorKind kind) {
+    private static IEnumerable<(ClrPrimitive Declaring, ClrPrimitive[] Parameters, ClrPrimitive Result)> Signatures(ClrPrimitive self, ClrPrimitive? other, OperatorKind kind) {
         if (self is P.Boolean) {
             if (kind is OperatorKind.Not)
                 yield return (P.Boolean, [P.Boolean], P.Boolean);

@@ -14,8 +14,8 @@ public class AstConstructorDefinitionTests {
             Constructors: [
                 new ConstructorDefinitionNode(),
                 new ConstructorDefinitionNode([
-                    new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
-                    new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int32), new Constant(5))
+                    new Parameter("name", ClrTypeReferences.Of(typeof(string))),
+                    new Parameter("count", ClrTypeReferences.Of(typeof(int)), new Constant(5))
                 ]),
             ]);
 
@@ -50,8 +50,8 @@ public class AstConstructorDefinitionTests {
             Constructors: [
                 new ConstructorDefinitionNode(),
                 new ConstructorDefinitionNode([
-                    new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
-                    new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int32), new Constant(2)),
+                    new Parameter("name", ClrTypeReferences.Of(typeof(string))),
+                    new Parameter("count", ClrTypeReferences.Of(typeof(int)), new Constant(2)),
                 ])
             ]);
         var newNode = new New(new TypeReference("Sample.Widget"), new Constant("alpha"));
@@ -99,7 +99,7 @@ public class AstConstructorDefinitionTests {
             "Sample",
             Constructors: [
                 new ConstructorDefinitionNode(
-                    Parameters: [new Parameter("total", new PrimitiveTypeReference(PrimitiveType.Int64))],
+                    Parameters: [new Parameter("total", ClrTypeReferences.Of(typeof(long)))],
                     AccessModifier: AccessModifier.Private)
             ]);
         // An argument whose type does not resolve (an untyped parameter is object since T-21a).

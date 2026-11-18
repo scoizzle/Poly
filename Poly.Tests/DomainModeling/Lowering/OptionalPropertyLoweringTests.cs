@@ -7,8 +7,9 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 
-using Prim = Poly.Introspection.PrimitiveType;
+using Prim = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -63,10 +64,7 @@ public class OptionalPropertyLoweringTests {
         var token = EntityType(domain, analysis, "Token");
 
         var name = Property(token, "Name");
-        await Assert.That(name.MemberType)
-            .IsTypeOf<PrimitiveTypeReference>();
-        await Assert.That(((PrimitiveTypeReference)name.MemberType!).PrimitiveId)
-            .IsEqualTo(Prim.String);
+        await Assert.That(ClrTypeReferences.States(name.MemberType!, typeof(string))).IsTrue();
         await Assert.That(name.Constraints!.Any(c => c is Constant { Value: "required" })).IsTrue();
 
         var nameParam = CtorParameter(token, "name");
@@ -103,8 +101,7 @@ public class OptionalPropertyLoweringTests {
 
         var limit = Property(counter, "Limit");
         await Assert.That(limit.MemberType).IsTypeOf<OptionalTypeReference>();
-        await Assert.That(((PrimitiveTypeReference)((OptionalTypeReference)limit.MemberType!).InnerType).PrimitiveId)
-            .IsEqualTo(Prim.Int64);
+        await Assert.That(ClrTypeReferences.States(((OptionalTypeReference)limit.MemberType!).InnerType, typeof(long))).IsTrue();
     }
 
     [Test]

@@ -504,8 +504,6 @@ public sealed class CSharpWriter {
             var runtime = td.GetRuntimeType();
             if (runtime is not null)
                 return ToCSharpTypeName(runtime);
-            if (td.PrimitiveType is { } prim)
-                return prim.GetCSharpKeyword();
             if (!string.IsNullOrEmpty(td.Name))
                 return td.Name.Replace('`', '_');
         }
@@ -556,7 +554,7 @@ public sealed class CSharpWriter {
     };
 
     private static string? TypeRefName(Node? type) => type switch {
-        PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
+        TypeDefinitionReference t when CSharpTypeNames.SpellingOf(t.TypeDefinition) is { } spelled => spelled,
         NamedTypeReference n when n.TypeArguments is { Count: > 0 } args =>
             n.TypeName + "<" + string.Join(", ", args.Select(a => TypeRefName(a) ?? "object")) + ">",
         NamedTypeReference n => n.TypeName,
@@ -1057,14 +1055,15 @@ public sealed class CSharpWriter {
                 return Render("expr-primary", "this");
             case TypeOf typeOf:
                 return Render("expr-primary", "typeof", TypeText(typeOf.Type));
+            case TypeDefinitionReference { TypeDefinition: var ground } when CSharpTypeNames.SpellingOf(ground) is { } spelled:
+                // A ground type is written as C# spells it: `string.Concat`, `long.MaxValue`, `DateTime.UtcNow`.
+                return spelled;
             case TypeDefinitionReference { TypeDefinition: IClrTypeDefinition { RuntimeType: var clr } }:
                 // The receiver of a static call: `object.Equals`, not `System.Object.Equals`.
                 return ClrTypeText(clr);
             case TypeReference typeRef:
                 // Callee position stays raw: nameof(...) and string.Concat.
                 return typeRef.TypeName;
-            case PrimitiveTypeReference prim:
-                return prim.PrimitiveId.GetCSharpKeyword() + (prim.IsNullable ? "?" : "");
             case NamedTypeReference named:
                 return EscapeTypeName(named.FullName) + (named.TypeArguments is { Count: > 0 }
                     ? "<" + string.Join(", ", named.TypeArguments.Select(TypeText)) + ">"
@@ -1181,7 +1180,7 @@ public sealed class CSharpWriter {
                 // parameter type, on the fully-qualified type the VM binds.
                 return Expr(new Invoke(
                     new Member(new NamedTypeReference("BitOperations", "System.Numerics"), "PopCount"),
-                    new TypeCast(popCount.Operand, new PrimitiveTypeReference(PrimitiveType.UInt64))));
+                    new TypeCast(popCount.Operand, ClrTypeReferences.Of(typeof(ulong)))));
             case NewArray newArray:
                 return Render("expr-primary", "new-array", Fills.Of(("open", "["), ("close", "]")),
                     TypeText(newArray.ElementType), Expr(newArray.Length));
@@ -1652,9 +1651,9 @@ public sealed class CSharpWriter {
     /// what a CLR reference prints as, so a stated definition prints the same.
     /// </summary>
     private string TypeText(Node type, bool asArgument) => type switch {
-        PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
-        // The same rule a named reference follows: an argument position spells a primitive as its C# keyword, the
-        // declaration position spells the CLR name.
+        // A ground type is written as C# spells it in every position (`int`, `string`, `DateTime`); any other CLR type
+        // follows the rule a named reference follows.
+        TypeDefinitionReference t when CSharpTypeNames.SpellingOf(t.TypeDefinition) is { } spelled => spelled,
         TypeDefinitionReference t when t.TypeDefinition is IClrTypeDefinition { RuntimeType: var clr } =>
             asArgument ? ArgumentSpelling(ClrTypeName(clr)) : ClrTypeText(clr),
         TypeDefinitionReference t => EscapeTypeName(t.TypeName),

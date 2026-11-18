@@ -5,6 +5,7 @@ using System.Text;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Packs.Product;
 
@@ -85,7 +86,7 @@ public sealed partial class MinimalApiGenerator {
             new Constant($"PRAGMA user_version = {schemaId.ToString(System.Globalization.CultureInfo.InvariantCulture)}")));
         var read = new Await(new Invoke(new Member(
             new Invoke(new Member(database, "SqlQueryRaw"), new Constant(UserVersionQuery)) {
-                TypeArguments = [new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32)]
+                TypeArguments = [ClrTypeReferences.Of(typeof(int))]
             },
             "SingleAsync")));
 

@@ -4,7 +4,7 @@ using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.Interpretation.CSharp;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Packs.Product;
 
@@ -67,9 +67,9 @@ public sealed partial class MinimalApiGenerator {
             "StatusProblem",
             new TypeReference("IResult"),
             Parameters: [
-                new Parameter("status", new PrimitiveTypeReference(ClrPrimitive.Int32)),
-                new Parameter("title", new PrimitiveTypeReference(ClrPrimitive.String)),
-                new Parameter("detail", new OptionalTypeReference(new PrimitiveTypeReference(ClrPrimitive.String)), new Constant(null!)),
+                new Parameter("status", ClrTypeReferences.Of(typeof(int))),
+                new Parameter("title", ClrTypeReferences.Of(typeof(string))),
+                new Parameter("detail", new OptionalTypeReference(ClrTypeReferences.Of(typeof(string))), new Constant(null!)),
             ],
             Body: new Block(
                 new Return(new Invoke(

@@ -31,7 +31,6 @@ public class AnalyzerBuilderTests {
     private sealed class NoOpTypeDefinitionProvider : ITypeDefinitionProvider {
         public ITypeDefinition? GetTypeDefinition(string name) => null;
         public ITypeDefinition? GetTypeDefinition(Type type) => null;
-        public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) => null;
         public IEnumerable<ITypeDefinition> Types => [];
     }
 
@@ -47,8 +46,6 @@ public class AnalyzerBuilderTests {
             return innerProvider.GetClrTypeDefinition(type);
         }
 
-        public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) =>
-            innerProvider.GetTypeDefinition(primitiveTypeId);
 
         public IEnumerable<ITypeDefinition> Types => innerProvider.Types;
     }

@@ -210,9 +210,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             NamedTypeReference named =>
                 AstTypeReferenceResolver.TryResolve(named, context.TypeDefinitions),
             OptionalTypeReference optional => ResolveOptionalType(context, optional),
-            PrimitiveTypeReference prim => prim.PrimitiveId.GetClrType() is { } clr
-                ? context.TypeDefinitions.GetTypeDefinition(clr)
-                : null,
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
             Default d => d.TargetType is null ? null : ResolveNodeType(context, d.TargetType),
@@ -1004,7 +1001,7 @@ internal static class MethodInvocationSemanticResolver {
     }
 
     private static bool IsTypeName(Node node) => node is
-        NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference;
+        NamedTypeReference or TypeReference;
 
     /// <summary>True when every lambda-shaped argument of <paramref name="method"/> is
     /// accepted by its parameter as a delegate or <c>Expression&lt;D&gt;</c>.</summary>

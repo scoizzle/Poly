@@ -232,10 +232,7 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
     }
 
     private static Type? ElementClrType(AnalysisContext context, Node element) =>
-        element switch {
-            PrimitiveTypeReference { IsNullable: false } prim => prim.PrimitiveId.GetClrType(),
-            _ => context.GetResolvedType(element)?.GetRuntimeType(),
-        };
+        (element is TypeDefinitionReference stated ? stated.TypeDefinition : context.GetResolvedType(element))?.GetRuntimeType();
 
     private static void Check(AnalysisContext context, YieldStatement yield, Scope scope) {
         if (scope.InLambda) {

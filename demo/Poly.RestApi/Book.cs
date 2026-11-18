@@ -132,5 +132,5 @@ internal class Book : Poly.Runtime.IActionScoped
         this.Pages = (long)__saved[3]!;
         this.Genre = (Genre)__saved[4]!;
     }
-    public static System.Boolean ExistsWithISBN(Poly.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "ISBN", isbn);
+    public static bool ExistsWithISBN(Poly.Runtime.IStoragePort db, string isbn) => db.Exists("Book", "ISBN", isbn);
 }

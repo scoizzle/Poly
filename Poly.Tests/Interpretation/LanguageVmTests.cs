@@ -581,8 +581,8 @@ public class LanguageVmTests {
     }
 
     [Test]
-    public async Task TypeCast_PrimitiveTypeReference_Int32() {
-        var node = new TypeCast(new Constant(42L), new PrimitiveTypeReference(PrimitiveType.Int32));
+    public async Task TypeCast_GroundTypeReference_Int32() {
+        var node = new TypeCast(new Constant(42L), ClrTypeReferences.Of(typeof(int)));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(42);
     }
@@ -834,8 +834,8 @@ public class LanguageVmTests {
     }
 
     [Test]
-    public async Task PrimitiveTypeReference_AsValue_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new Add(new PrimitiveTypeReference(PrimitiveType.Int32), new Constant(1L))))
+    public async Task GroundTypeReference_AsValue_CompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new Add(ClrTypeReferences.Of(typeof(int)), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 

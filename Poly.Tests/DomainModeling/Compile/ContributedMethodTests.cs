@@ -725,4 +725,22 @@ public class ContributedMethodTests {
         }
     }
 
+    [Test]
+    public async Task Threading_ACallOnAGroundType_NamedLikeAThreadedMethod_IsRefused() {
+        // A ground type (`string`, `int`, `object`) is never a module type, so a threaded method's name called on one
+        // cannot be threaded through it: refused, not silently left without its slot.
+        var missing = typeof(ContributedMethods).GetMethod("Missing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var parameters = missing.GetParameters();
+        TypeDefinitionNode[] module = [new("Host")];
+        var call = new Invoke(new Member(ClrTypeReferences.Of(typeof(string)), "Concat"));
+        object?[] arguments = [
+            call, 0, "Run", module, new List<List<MethodDefinitionNode>> { new() },
+            Activator.CreateInstance(parameters[5].ParameterType), new HashSet<string>(StringComparer.Ordinal) { "Concat" }
+        ];
+
+        var thrown = Assert.Throws<System.Reflection.TargetInvocationException>(() => missing.Invoke(null, arguments));
+
+        await Assert.That(thrown!.InnerException).IsTypeOf<InvalidOperationException>();
+        await Assert.That(thrown.InnerException!.Message).Contains("Cannot thread 'Concat'");
+    }
 }

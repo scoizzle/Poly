@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using Artifact = Poly.DomainModeling.Compile.Artifact;
 
@@ -161,7 +162,7 @@ public sealed class EveryConceptHasTreeTests {
             Methods: [
                 new MethodDefinitionNode(
                     "M",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32),
+                    ClrTypeReferences.Of(typeof(int)),
                     Body: new Constant(DomainExpression.Literal(1)))
             ]);
 
@@ -327,7 +328,7 @@ public sealed class EveryConceptHasTreeTests {
     }
 
     private static bool IsBoolMethod(MethodDefinitionNode method) =>
-        method.ReturnType is PrimitiveTypeReference { PrimitiveId: Poly.Introspection.PrimitiveType.Boolean };
+        ClrTypeReferences.States(method.ReturnType, typeof(bool));
 
     private static bool IsTree(Artifact artifact) =>
         artifact.Descriptor.Id.Type is "entity" or "scaffolding";

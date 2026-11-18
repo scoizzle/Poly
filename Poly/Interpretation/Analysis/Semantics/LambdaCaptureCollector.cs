@@ -65,7 +65,7 @@ internal static class LambdaCaptureCollector {
     /// <summary>A member chain rewritten to a type reference is a type name, not a value:
     /// its identifier spine is not a capture.</summary>
     private static bool IsTypeNameReplacement(Node node, Func<Node, Node?>? replacement) =>
-        replacement?.Invoke(node) is TypeReference or NamedTypeReference or PrimitiveTypeReference;
+        replacement?.Invoke(node) is TypeReference or NamedTypeReference;
 
     private static void CollectRecursive(
         Node node,

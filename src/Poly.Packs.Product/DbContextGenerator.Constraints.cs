@@ -2,7 +2,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Packs.Product;
 
@@ -41,7 +41,7 @@ public sealed partial class DbContextGenerator {
         );
         if (col.IsEnum) {
             chain = new Invoke(new Member(chain, "HasConversion")) {
-                TypeArguments = [new PrimitiveTypeReference(ClrPrimitive.Int32)]
+                TypeArguments = [ClrTypeReferences.Of(typeof(int))]
             };
         }
 

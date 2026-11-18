@@ -40,7 +40,7 @@ internal static class DictionaryBackedValue {
     private static readonly MethodInfo ConvertToChar =
         Ref.Method((Expression<Func<object, char>>)(o => Convert.ToChar(o)));
     private static readonly MethodInfo GuardCompatibleInfo =
-        Ref.Method((Expression<Func<object?, PrimitiveType, object>>)((raw, t) => GuardCompatible(raw, t)));
+        Ref.Method((Expression<Func<object?, ClrPrimitive, object>>)((raw, t) => GuardCompatible(raw, t)));
 
     /// <summary>
     /// Value used when a dictionary key is absent and the member has no constant
@@ -53,29 +53,29 @@ internal static class DictionaryBackedValue {
         // value-type zero below would not apply and Missing cannot convert to T?.
         if (targetType.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null)
             return Expression.Constant(null, typeof(object));
-        var convert = ConvertMethod(targetType.PrimitiveType);
+        var convert = ConvertMethod(targetType.GetClrPrimitive());
         if (convert is null || !convert.ReturnType.IsValueType)
             return Expression.Convert(Expression.Constant(System.Reflection.Missing.Value), typeof(object));
         var zero = Activator.CreateInstance(convert.ReturnType)!;
         return Expression.Convert(Expression.Constant(zero), typeof(object));
     }
 
-    private static MethodInfo? ConvertMethod(PrimitiveType? primitive) => primitive switch {
-        PrimitiveType.Int64 => ConvertToInt64,
-        PrimitiveType.Int32 => ConvertToInt32,
-        PrimitiveType.Int16 => ConvertToInt16,
-        PrimitiveType.Int8 => ConvertToSByte,
-        PrimitiveType.Float64 => ConvertToDouble,
-        PrimitiveType.Float32 => ConvertToSingle,
-        PrimitiveType.Decimal => ConvertToDecimal,
-        PrimitiveType.Boolean => ConvertToBoolean,
-        PrimitiveType.String => ConvertToString,
-        PrimitiveType.Char => ConvertToChar,
+    private static MethodInfo? ConvertMethod(ClrPrimitive? primitive) => primitive switch {
+        ClrPrimitive.Int64 => ConvertToInt64,
+        ClrPrimitive.Int32 => ConvertToInt32,
+        ClrPrimitive.Int16 => ConvertToInt16,
+        ClrPrimitive.Int8 => ConvertToSByte,
+        ClrPrimitive.Float64 => ConvertToDouble,
+        ClrPrimitive.Float32 => ConvertToSingle,
+        ClrPrimitive.Decimal => ConvertToDecimal,
+        ClrPrimitive.Boolean => ConvertToBoolean,
+        ClrPrimitive.String => ConvertToString,
+        ClrPrimitive.Char => ConvertToChar,
         _ => null
     };
 
     internal static Expression CoerceRead(Expression dictValue, ITypeDefinition targetType) {
-        var convertMethod = ConvertMethod(targetType.PrimitiveType);
+        var convertMethod = ConvertMethod(targetType.GetClrPrimitive());
         if (convertMethod is not null) {
             // Fail loud on fundamentally wrong-typed raw values instead of silently
             // coercing (Convert.ToInt64(true) → 1, Convert.ToString(null) → "", etc.):
@@ -84,7 +84,7 @@ internal static class DictionaryBackedValue {
             var guarded = Expression.Call(
                 GuardCompatibleInfo,
                 Expression.Convert(dictValue, typeof(object)),
-                Expression.Constant(targetType.PrimitiveType!.Value));
+                Expression.Constant(targetType.GetClrPrimitive()!.Value));
             return Expression.Convert(
                 Expression.Call(null, convertMethod, guarded),
                 typeof(object));
@@ -105,11 +105,11 @@ internal static class DictionaryBackedValue {
     /// values that Convert.* would silently mangle (bool/object → number, null → default),
     /// so the runtime fails loud instead of storing a corrupted value.
     /// </summary>
-    internal static object GuardCompatible(object? raw, PrimitiveType target) {
+    internal static object GuardCompatible(object? raw, ClrPrimitive target) {
         if (raw is null) return null!;
         switch (target) {
-            case PrimitiveType.Int64 or PrimitiveType.Int32 or PrimitiveType.Int16 or PrimitiveType.Int8
-                or PrimitiveType.Float64 or PrimitiveType.Float32 or PrimitiveType.Decimal:
+            case ClrPrimitive.Int64 or ClrPrimitive.Int32 or ClrPrimitive.Int16 or ClrPrimitive.Int8
+                or ClrPrimitive.Float64 or ClrPrimitive.Float32 or ClrPrimitive.Decimal:
                 if (raw is bool)
                     throw new InvalidOperationException(
                         $"Cannot store a Boolean value in a numeric property (got '{raw}').");
@@ -117,21 +117,21 @@ internal static class DictionaryBackedValue {
                     throw new InvalidOperationException(
                         $"Cannot store a value of type '{raw.GetType().Name}' in a numeric property.");
                 // Number is long. Convert.ToInt64 would truncate 0.25 to 0.
-                if (target == PrimitiveType.Int64 && raw is double or float or decimal && !IsIntegralNumber(raw))
+                if (target == ClrPrimitive.Int64 && raw is double or float or decimal && !IsIntegralNumber(raw))
                     throw new InvalidOperationException(
                         $"Number is integral; '{raw}' is not a valid Number. Use Decimal.");
                 return raw;
-            case PrimitiveType.Boolean:
+            case ClrPrimitive.Boolean:
                 if (raw is not bool)
                     throw new InvalidOperationException(
                         $"Cannot store a value of type '{raw.GetType().Name}' in a Boolean property.");
                 return raw;
-            case PrimitiveType.String:
+            case ClrPrimitive.String:
                 if (raw is not string)
                     throw new InvalidOperationException(
                         $"Cannot store a value of type '{raw.GetType().Name}' in a Text property.");
                 return raw;
-            case PrimitiveType.Char:
+            case ClrPrimitive.Char:
                 if (raw is not char and not string)
                     throw new InvalidOperationException(
                         $"Cannot store a value of type '{raw.GetType().Name}' in a character property.");
@@ -145,19 +145,19 @@ internal static class DictionaryBackedValue {
     /// Runtime counterpart of <see cref="CoerceRead"/>: GuardCompatible, then
     /// the same Convert.* as the member-read expression.
     /// </summary>
-    internal static object? CoerceReadValue(object? raw, PrimitiveType target) {
+    internal static object? CoerceReadValue(object? raw, ClrPrimitive target) {
         var guarded = GuardCompatible(raw, target);
         return target switch {
-            PrimitiveType.Int64 => Convert.ToInt64(guarded),
-            PrimitiveType.Int32 => Convert.ToInt32(guarded),
-            PrimitiveType.Int16 => Convert.ToInt16(guarded),
-            PrimitiveType.Int8 => Convert.ToSByte(guarded),
-            PrimitiveType.Float64 => Convert.ToDouble(guarded),
-            PrimitiveType.Float32 => Convert.ToSingle(guarded),
-            PrimitiveType.Decimal => Convert.ToDecimal(guarded),
-            PrimitiveType.Boolean => Convert.ToBoolean(guarded),
-            PrimitiveType.String => Convert.ToString(guarded),
-            PrimitiveType.Char => Convert.ToChar(guarded),
+            ClrPrimitive.Int64 => Convert.ToInt64(guarded),
+            ClrPrimitive.Int32 => Convert.ToInt32(guarded),
+            ClrPrimitive.Int16 => Convert.ToInt16(guarded),
+            ClrPrimitive.Int8 => Convert.ToSByte(guarded),
+            ClrPrimitive.Float64 => Convert.ToDouble(guarded),
+            ClrPrimitive.Float32 => Convert.ToSingle(guarded),
+            ClrPrimitive.Decimal => Convert.ToDecimal(guarded),
+            ClrPrimitive.Boolean => Convert.ToBoolean(guarded),
+            ClrPrimitive.String => Convert.ToString(guarded),
+            ClrPrimitive.Char => Convert.ToChar(guarded),
             _ => guarded
         };
     }

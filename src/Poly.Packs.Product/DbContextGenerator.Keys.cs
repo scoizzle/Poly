@@ -4,7 +4,6 @@ using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
 namespace Poly.Packs.Product;
 
@@ -22,15 +21,15 @@ public sealed partial class DbContextGenerator {
     /// </summary>
     private static FieldDefinitionNode PendingKeysField() =>
         new("_pendingKeys",
-            new NamedTypeReference("HashSet", TypeArguments: [new PrimitiveTypeReference(ClrPrimitive.String)]),
-            DefaultValue: new New(new NamedTypeReference("HashSet", TypeArguments: [new PrimitiveTypeReference(ClrPrimitive.String)])),
+            new NamedTypeReference("HashSet", TypeArguments: [ClrTypeReferences.Of(typeof(string))]),
+            DefaultValue: new New(new NamedTypeReference("HashSet", TypeArguments: [ClrTypeReferences.Of(typeof(string))])),
             IsReadOnly: true,
             AccessModifier: AccessModifier.Private);
 
     private MethodDefinitionNode ExistsMethod() {
-        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
-        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
-        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        var entityParam = new Parameter("entity", ClrTypeReferences.Of(typeof(string)));
+        var propertyParam = new Parameter("property", ClrTypeReferences.Of(typeof(string)));
+        var valueParam = new Parameter("value", ClrTypeReferences.Of(typeof(string)));
         var nodes = new List<Node> {
             new IfStatement(
                 new Invoke(
@@ -70,18 +69,18 @@ public sealed partial class DbContextGenerator {
         nodes.Add(new Return(new Constant(false)));
         return new MethodDefinitionNode(
             "Exists",
-            new PrimitiveTypeReference(ClrPrimitive.Boolean),
+            ClrTypeReferences.Of(typeof(bool)),
             Parameters: [entityParam, propertyParam, valueParam],
             Body: new Block(nodes));
     }
 
     private static MethodDefinitionNode TryReserveMethod() {
-        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
-        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
-        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        var entityParam = new Parameter("entity", ClrTypeReferences.Of(typeof(string)));
+        var propertyParam = new Parameter("property", ClrTypeReferences.Of(typeof(string)));
+        var valueParam = new Parameter("value", ClrTypeReferences.Of(typeof(string)));
         return new MethodDefinitionNode(
             "TryReserve",
-            new PrimitiveTypeReference(ClrPrimitive.Boolean),
+            ClrTypeReferences.Of(typeof(bool)),
             Parameters: [entityParam, propertyParam, valueParam],
             Body: new Block([
                 new Return(new Invoke(
@@ -91,9 +90,9 @@ public sealed partial class DbContextGenerator {
     }
 
     private static MethodDefinitionNode RecordMethod() {
-        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
-        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
-        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        var entityParam = new Parameter("entity", ClrTypeReferences.Of(typeof(string)));
+        var propertyParam = new Parameter("property", ClrTypeReferences.Of(typeof(string)));
+        var valueParam = new Parameter("value", ClrTypeReferences.Of(typeof(string)));
         return new MethodDefinitionNode(
             "Record",
             new TypeReference("void"),
@@ -106,9 +105,9 @@ public sealed partial class DbContextGenerator {
     }
 
     private static MethodDefinitionNode ReleaseMethod() {
-        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
-        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
-        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        var entityParam = new Parameter("entity", ClrTypeReferences.Of(typeof(string)));
+        var propertyParam = new Parameter("property", ClrTypeReferences.Of(typeof(string)));
+        var valueParam = new Parameter("value", ClrTypeReferences.Of(typeof(string)));
         return new MethodDefinitionNode(
             "Release",
             new TypeReference("void"),

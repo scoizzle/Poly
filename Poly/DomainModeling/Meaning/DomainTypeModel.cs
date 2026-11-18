@@ -3,7 +3,6 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.Introspection;
 
-using Prim = Poly.Introspection.PrimitiveType;
 
 namespace Poly.DomainModeling.Meaning;
 
@@ -92,11 +91,11 @@ internal sealed class DomainTypeModel {
         return model;
     }
 
-    public NumericKind KindOf(ExprType type) => type.Definition?.PrimitiveType switch {
+    public NumericKind KindOf(ExprType type) => DomainGrounds.Of(type.Definition) switch {
         // Int32 → Integer64 is a judgement V-02 may revisit (T-02 A1: Int32 bounds parse as decimal).
-        Prim.Int32 or Prim.Int64 => NumericKind.Integer64,
-        Prim.Float64 => NumericKind.Float64,
-        Prim.Decimal => NumericKind.Decimal,
+        DomainGround.Int32 or DomainGround.Int64 => NumericKind.Integer64,
+        DomainGround.Float64 => NumericKind.Float64,
+        DomainGround.Decimal => NumericKind.Decimal,
         _ => NumericKind.None
     };
 }

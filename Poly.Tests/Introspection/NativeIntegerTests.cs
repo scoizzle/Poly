@@ -331,9 +331,9 @@ public class NativeIntegerTests {
         await Assert.That(resolution is { Method: null }).IsTrue();
         await Assert.That(resolution!.ResultTypeDefinition).IsSameReferenceAs(nint);
         await Assert.That(resolution.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, nint))).IsTrue();
-        await Assert.That(nint.PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nint");
-        await Assert.That(Clr(typeof(nuint)).PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nuint");
-        await Assert.That(nint.PrimitiveType).IsNotNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(nint)).IsEqualTo("nint");
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(Clr(typeof(nuint)))).IsEqualTo("nuint");
+        await Assert.That(nint.GetClrPrimitive()).IsNotNull();
         foreach (var kind in Enum.GetValues<OperatorKind>())
             await Assert.That(nint.Operators.Where(o => o.Kind == kind).Any(static o => o.Method is not null)).IsFalse().Because($"IntPtr's reflected {kind} stands down");
     }
@@ -515,10 +515,10 @@ public class NativeIntegerTests {
     public async Task Writer_PrintsTheNativeKeyword() {
         var primitive = typeof(nint).GetPrimitiveType();
         await Assert.That(primitive).IsNotNull();
-        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), new PrimitiveTypeReference(primitive!.Value)));
+        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), ClrTypeReferences.Of(primitive!.Value.GetClrType()!)));
         await Assert.That(printed).Contains("(nint)");
         await Assert.That(printed).DoesNotContain("NInt");
-        await Assert.That(typeof(nuint).GetPrimitiveType()?.GetCSharpKeyword()).IsEqualTo("nuint");
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(typeof(nuint))).IsEqualTo("nuint");
     }
 
     // ---- fix round 1: casts, assignments and constants outside operators (review F1, F4) ----
@@ -618,8 +618,8 @@ public class NativeIntegerTests {
     public async Task TypeDefinitionNode_NativeIntegerProperty_ResolvesToTheNativeType() {
         var holder = new TypeDefinitionNode("NativeHolder",
             Properties: [
-                new PropertyDefinitionNode("Signed", new PrimitiveTypeReference(typeof(nint).GetPrimitiveType()!.Value), Getter: new PropertyGetterDefinitionNode()),
-                new PropertyDefinitionNode("Unsigned", new PrimitiveTypeReference(typeof(nuint).GetPrimitiveType()!.Value), Getter: new PropertyGetterDefinitionNode())
+                new PropertyDefinitionNode("Signed", ClrTypeReferences.Of(typeof(nint)), Getter: new PropertyGetterDefinitionNode()),
+                new PropertyDefinitionNode("Unsigned", ClrTypeReferences.Of(typeof(nuint)), Getter: new PropertyGetterDefinitionNode())
             ]);
         var context = Poly.Analysis.AnalysisContext.CreateDefault();
         new Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer().Analyze(context, holder);

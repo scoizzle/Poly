@@ -91,10 +91,10 @@ public static class TypeDefinitionExtensions {
                 .Select(static property => new {
                     Property = property,
                     Parameters = property.Parameters.ToArray(),
-                    ReturnsObject = property.MemberTypeDefinition.PrimitiveType is PrimitiveType.Structure
+                    ReturnsObject = property.MemberTypeDefinition.GetFact<TopType>() is not null
                 })
                 .Where(candidate => candidate.Parameters.All(static parameter =>
-                    parameter.ParameterTypeDefinition.PrimitiveType is { } primitive && primitive.IsInteger()))
+                    parameter.ParameterTypeDefinition.GetFact<Numeric>() is { IsIntegral: true, IsNativeSized: false }))
                 .OrderBy(candidate => candidate.Parameters.Length)
                 .ThenBy(candidate => candidate.ReturnsObject)
                 .FirstOrDefault();

@@ -1,7 +1,7 @@
 namespace Poly.Introspection;
 
 /// <summary>
-/// Provides <see cref="ITypeDefinition"/> instances by name or by <see cref="PrimitiveType"/>. A provider that has CLR
+/// Provides <see cref="ITypeDefinition"/> instances by name. A provider that has CLR
 /// types also implements <see cref="CommonLanguageRuntime.IClrTypeDefinitionProvider"/> for the runtime-type handle.
 /// Implementations may compose other providers and should be safe for concurrent use.
 /// </summary>
@@ -11,13 +11,6 @@ public interface ITypeDefinitionProvider {
     /// Returns null when not found.
     /// </summary>
     ITypeDefinition? GetTypeDefinition(string name);
-
-    /// <summary>
-    /// Resolves a type definition by <see cref="PrimitiveType"/>. Primitive resolution belongs to the provider: a
-    /// platform maps the shared vocabulary to its own, and one with no CLR types must not inherit the CLR's answer.
-    /// Returns null when the provider does not hold that primitive.
-    /// </summary>
-    ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId);
 
     /// <summary>
     /// Gets the definitions this provider holds now. Not a claim of completeness: a platform with an open universe (the

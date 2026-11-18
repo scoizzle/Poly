@@ -1,9 +1,9 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using Add = Poly.DomainModeling.Ontology.Add;
-using Prim = Poly.Introspection.PrimitiveType;
 using SN = Poly.Ast.Nodes;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
@@ -314,7 +314,7 @@ internal static class TemporalLowering {
     }
 
     private static Node Int32Offset(Node rawArg) =>
-        new TypeCast(rawArg, new PrimitiveTypeReference(Prim.Int32));
+        new TypeCast(rawArg, ClrTypeReferences.Of(typeof(int)));
 
     private static Node ScaleOffset(Node offset, int factor) => offset switch {
         Constant { Value: long n } => new Constant(n * factor),

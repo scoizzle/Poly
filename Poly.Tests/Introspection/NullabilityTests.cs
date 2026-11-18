@@ -56,7 +56,6 @@ public class NullabilityTests {
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
-        public PrimitiveType? PrimitiveType => null;
 
         public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
 

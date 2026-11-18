@@ -288,7 +288,7 @@ public static class CSharpReader {
                     : member.Children[0];
                 fields.Add(new FieldDefinitionNode(
                     Capture(target, "name"),
-                    new PrimitiveTypeReference(PrimitiveType.Int32),
+                    ClrTypeReferences.Of(typeof(int)),
                     new Constant(FoldEnumValue(target)),
                     IsStatic: true,
                     IsConst: true));
@@ -523,21 +523,21 @@ public static class CSharpReader {
             switch (match.PatternName) {
                 case "void":
                     return new TypeReference("void");
-                case "bool": return Primitive(PrimitiveType.Boolean);
-                case "byte": return Primitive(PrimitiveType.UInt8);
-                case "sbyte": return Primitive(PrimitiveType.Int8);
-                case "short": return Primitive(PrimitiveType.Int16);
-                case "ushort": return Primitive(PrimitiveType.UInt16);
-                case "int": return Primitive(PrimitiveType.Int32);
-                case "uint": return Primitive(PrimitiveType.UInt32);
-                case "long": return Primitive(PrimitiveType.Int64);
-                case "ulong": return Primitive(PrimitiveType.UInt64);
-                case "float": return Primitive(PrimitiveType.Float32);
-                case "double": return Primitive(PrimitiveType.Float64);
-                case "decimal": return Primitive(PrimitiveType.Decimal);
-                case "char": return Primitive(PrimitiveType.Char);
-                case "string": return Primitive(PrimitiveType.String);
-                case "object": return Primitive(PrimitiveType.Structure);
+                case "bool": return Primitive(typeof(bool));
+                case "byte": return Primitive(typeof(byte));
+                case "sbyte": return Primitive(typeof(sbyte));
+                case "short": return Primitive(typeof(short));
+                case "ushort": return Primitive(typeof(ushort));
+                case "int": return Primitive(typeof(int));
+                case "uint": return Primitive(typeof(uint));
+                case "long": return Primitive(typeof(long));
+                case "ulong": return Primitive(typeof(ulong));
+                case "float": return Primitive(typeof(float));
+                case "double": return Primitive(typeof(double));
+                case "decimal": return Primitive(typeof(decimal));
+                case "char": return Primitive(typeof(char));
+                case "string": return Primitive(typeof(string));
+                case "object": return Primitive(typeof(object));
                 case "named": {
                         var name = FoldName(match.Children[0]);
                         var argsMatch = MaybeChild(match, "type-args");
@@ -556,7 +556,7 @@ public static class CSharpReader {
             }
         }
 
-        private static PrimitiveTypeReference Primitive(PrimitiveType type) => new(type);
+        private static Node Primitive(Type type) => ClrTypeReferences.Of(type);
 
         // ── statements ───────────────────────────────────────────────────────
 
@@ -992,16 +992,16 @@ public static class CSharpReader {
         /// member access.
         /// </summary>
         private static Node QualifiedConstant(Node receiver, string member) {
-            if (receiver is not PrimitiveTypeReference type)
+            if (receiver is not TypeDefinitionReference { TypeDefinition: var definition } || !definition.TryGetRuntimeType(out var type))
                 return new Member(receiver, member);
-            var value = (type.PrimitiveId, member) switch {
-                (PrimitiveType.Int64, "MinValue") => (object)long.MinValue,
-                (PrimitiveType.Float64, "NaN") => double.NaN,
-                (PrimitiveType.Float64, "PositiveInfinity") => double.PositiveInfinity,
-                (PrimitiveType.Float64, "NegativeInfinity") => double.NegativeInfinity,
-                (PrimitiveType.Float32, "NaN") => float.NaN,
-                (PrimitiveType.Float32, "PositiveInfinity") => float.PositiveInfinity,
-                (PrimitiveType.Float32, "NegativeInfinity") => float.NegativeInfinity,
+            object? value = member switch {
+                "MinValue" when type == typeof(long) => long.MinValue,
+                "NaN" when type == typeof(double) => double.NaN,
+                "PositiveInfinity" when type == typeof(double) => double.PositiveInfinity,
+                "NegativeInfinity" when type == typeof(double) => double.NegativeInfinity,
+                "NaN" when type == typeof(float) => float.NaN,
+                "PositiveInfinity" when type == typeof(float) => float.PositiveInfinity,
+                "NegativeInfinity" when type == typeof(float) => float.NegativeInfinity,
                 _ => null,
             };
             return value is null ? new Member(receiver, member) : new Constant(value);

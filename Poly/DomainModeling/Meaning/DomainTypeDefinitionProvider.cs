@@ -52,12 +52,9 @@ internal sealed class DomainTypeDefinitionProvider : IClrTypeDefinitionProvider 
     /// <summary>The synthetic declarations this provider has built so far.</summary>
     public IEnumerable<ITypeDefinition> Types => _synthetic.Values;
 
-    public ITypeDefinition? GetTypeDefinition(Poly.Introspection.PrimitiveType primitiveTypeId) =>
-        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(primitiveTypeId);
-
     private ITypeDefinition? FromClrName(string name) =>
-        DomainTypeMapping.TryPrimitiveType(_typeMaps.ToClrTypeName(name), out var primitive)
-            ? Clr(primitive.GetClrType()!)
+        DomainTypeMapping.TryClrType(_typeMaps.ToClrTypeName(name), out var ground)
+            ? Clr(ground)
             : null;
 
     private static ITypeDefinition Clr(Type type) =>
@@ -83,7 +80,7 @@ internal sealed class DomainTypeDefinitionProvider : IClrTypeDefinitionProvider 
     /// </summary>
     private static MethodDefinitionNode Equality(OperatorKind kind, string typeName) =>
         new(kind.ToString(),
-            new PrimitiveTypeReference(Introspection.PrimitiveType.Boolean),
+            ClrTypeReferences.Of(typeof(bool)),
             [new Parameter("left", new NamedTypeReference(typeName)), new Parameter("right", new NamedTypeReference(typeName))],
             IsStatic: true) { Operator = kind };
 

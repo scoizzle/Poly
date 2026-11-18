@@ -143,7 +143,7 @@ public class InterpretationStabilizationTests {
         var target = new TypeDefinitionNode("Target",
             Properties: [
                 new PropertyDefinitionNode("Age",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    ClrTypeReferences.Of(typeof(long)),
                     Getter: new PropertyGetterDefinitionNode())
             ]);
         var source = new TypeDefinitionNode("Source",
@@ -184,13 +184,13 @@ public class InterpretationStabilizationTests {
         "Person",
         Properties: [
             new PropertyDefinitionNode("Age",
-                new PrimitiveTypeReference(PrimitiveType.Int64),
+                ClrTypeReferences.Of(typeof(long)),
                 Getter: new PropertyGetterDefinitionNode()),
             new PropertyDefinitionNode("Name",
-                new PrimitiveTypeReference(PrimitiveType.String),
+                ClrTypeReferences.Of(typeof(string)),
                 Getter: new PropertyGetterDefinitionNode()),
             new PropertyDefinitionNode("Ref",
-                new PrimitiveTypeReference(PrimitiveType.Structure),
+                ClrTypeReferences.Of(typeof(object)),
                 Getter: new PropertyGetterDefinitionNode())
         ]);
 

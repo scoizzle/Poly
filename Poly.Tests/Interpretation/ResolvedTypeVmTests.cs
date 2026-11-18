@@ -54,7 +54,7 @@ public class ResolvedTypeVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Cast",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    ClrTypeReferences.Of(typeof(long)),
                     Parameters: [],
                     Body: cast,
                     IsStatic: true)
@@ -76,7 +76,7 @@ public class ResolvedTypeVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Cast",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    ClrTypeReferences.Of(typeof(long)),
                     Parameters: [],
                     Body: new TypeCast(new Constant(42L), ClrTypeReferences.Of(typeof(long))),
                     IsStatic: true)

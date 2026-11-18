@@ -15,7 +15,6 @@ namespace Poly.Ast.Nodes;
 /// <param name="Interfaces">Interface types this type implements.</param>
 /// <param name="GenericParameters">Generic type parameters for generic types.</param>
 /// <param name="PrimaryConstructorParameters">Optional primary-constructor parameters for positional type declarations.</param>
-/// <param name="PrimitiveTypeId">Primitive type identifier if this is a primitive type.</param>
 /// <param name="Form">The form the declaration is written in.</param>
 /// <param name="Semantics">The intended mutability and equality semantics for the type.</param>
 public sealed record TypeDefinitionNode(
@@ -29,7 +28,6 @@ public sealed record TypeDefinitionNode(
     IReadOnlyList<Node>? Interfaces = null,
     IReadOnlyList<Parameter>? GenericParameters = null,
     IReadOnlyList<Parameter>? PrimaryConstructorParameters = null,
-    PrimitiveType? PrimitiveTypeId = null,
     TypeDeclarationForm Form = TypeDeclarationForm.Class,
     AccessModifier AccessModifier = AccessModifier.Public,
     TypeDefinitionSemantics? Semantics = null

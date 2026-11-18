@@ -5,7 +5,6 @@ using Poly.DomainModeling.Lowering;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
 namespace Poly.Packs.Product;
 
@@ -130,7 +129,7 @@ internal sealed class ActionReadsWalker {
             typeof(LabelDeclaration), typeof(YieldStatement), typeof(StridedSetBits)
         ]),
         (NodeKindClass.TypeName, [
-            typeof(TypeReference), typeof(NamedTypeReference), typeof(PrimitiveTypeReference),
+            typeof(TypeReference), typeof(NamedTypeReference),
             typeof(OptionalTypeReference), typeof(CollectionTypeReference), typeof(MapTypeReference),
             typeof(UnionTypeReference), typeof(ResolvedTypeReference), typeof(TypeDefinitionReference)
         ]),
@@ -401,7 +400,8 @@ internal sealed class ActionReadsWalker {
 
     private TypeClass Classify(Node? type) => type switch {
         OptionalTypeReference optional => Classify(optional.InnerType),
-        PrimitiveTypeReference primitive => primitive.PrimitiveId == ClrPrimitive.Structure ? UnknownType.Instance : ScalarType.Instance,
+        TypeDefinitionReference top when top.TypeDefinition.GetFact<Poly.Introspection.TopType>() is not null => UnknownType.Instance,
+        TypeDefinitionReference ground when ground.TypeDefinition.GetFact<Poly.Introspection.Atomic>() is not null => ScalarType.Instance,
         TypeDefinitionReference statesThePort when ClrTypeReferences.Denotes(statesThePort, typeof(IStoragePort)) =>
             PortType.Instance,
         TypeDefinitionReference resolved => ClassifyNamed(resolved.TypeDefinition.Name, resolved.TypeDefinition.FullName, []),
@@ -469,7 +469,6 @@ internal sealed class ActionReadsWalker {
     }
 
     private static string? TypeNameOf(Node node) => node switch {
-        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
         TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
         NamedTypeReference named => named.FullName,
         TypeReference reference => reference.TypeName,

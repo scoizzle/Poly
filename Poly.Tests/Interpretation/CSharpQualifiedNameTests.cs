@@ -2,6 +2,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -84,7 +85,7 @@ public class CSharpQualifiedNameTests {
                 new Member(new NamedTypeReference("BitOperations", "System.Numerics"), "PopCount")))
             .IsEqualTo("_ = System.Numerics.BitOperations.PopCount;");
         await Assert.That(CSharpLanguage.Write(
-                new Member(new PrimitiveTypeReference(PrimitiveType.Int32), "MaxValue")))
+                new Member(ClrTypeReferences.Of(typeof(int)), "MaxValue")))
             .IsEqualTo("_ = int.MaxValue;");
     }
 

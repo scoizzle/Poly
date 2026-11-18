@@ -28,7 +28,6 @@ public class TypeDefinitionExtensionsTests {
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
-        public PrimitiveType? PrimitiveType => null;
         public ITypeDefinition? NullableOf => null;
 
         public bool IsSameTypeAs(ITypeDefinition other) =>

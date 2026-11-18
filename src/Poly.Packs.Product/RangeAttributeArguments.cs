@@ -3,7 +3,7 @@ using System.Globalization;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Packs.Product;
 
@@ -27,7 +27,7 @@ internal static class RangeAttributeArguments {
         var max = maximum ?? openMaximum;
         if (clrType == "decimal") {
             return [
-                new TypeOf(new PrimitiveTypeReference(ClrPrimitive.Decimal)),
+                new TypeOf(ClrTypeReferences.Of(typeof(decimal))),
                 new Constant(DecimalBoundText(min)),
                 new Constant(DecimalBoundText(max)),
             ];

@@ -124,7 +124,6 @@ public static class NodeFacts {
         [typeof(Parameter)] = Inert<Parameter>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(ParameterReference)] = Inert<ParameterReference>(Producers.None, "ParameterReference is not a VM value; bind a Parameter."),
         [typeof(PopCount)] = Inert<PopCount>(Producers.Vm | Producers.WriterExpanded),
-        [typeof(PrimitiveTypeReference)] = Inert<PrimitiveTypeReference>(Producers.Writer | Producers.Reader, "Type name is not a VM value; use it as a Member/Invoke/New receiver."),
         [typeof(PropertyDefinitionNode)] = Inert<PropertyDefinitionNode>(Producers.Writer | Producers.Reader),
         [typeof(PropertyGetterDefinitionNode)] = Inert<PropertyGetterDefinitionNode>(Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(PropertyInitializerDefinitionNode)] = Inert<PropertyInitializerDefinitionNode>(Producers.Writer | Producers.Reader | Producers.Mermaid),

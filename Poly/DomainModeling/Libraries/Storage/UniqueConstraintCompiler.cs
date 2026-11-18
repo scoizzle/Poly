@@ -382,8 +382,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         string Property, Node Value, Node Destination, Invoke Failure);
 
     private static bool IsString(Node? type) => type switch {
-        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType() == typeof(string),
-        TypeDefinitionReference { TypeDefinition.PrimitiveType: Poly.Introspection.PrimitiveType.String } => true,
+        TypeDefinitionReference stated => stated.TypeDefinition.GetFact<Poly.Introspection.Text>() is { IsSingleCharacter: false },
         NamedTypeReference named => string.Equals(named.TypeName, "Text", StringComparison.Ordinal),
         _ => false
     };

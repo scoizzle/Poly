@@ -46,32 +46,32 @@ public class DomainTypeModelTests {
         var model = Model();
         var decimalType = model.Resolve("Decimal");
         var number = model.Resolve("Number");
-        await Assert.That(decimalType.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.Decimal);
-        await Assert.That(number.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.Int64);
+        await Assert.That(decimalType.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Decimal);
+        await Assert.That(number.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Int64);
         await Assert.That(ReferenceEquals(decimalType.Definition, number.Definition)).IsFalse();
     }
 
     [Test]
-    [Arguments("Number", Poly.Introspection.PrimitiveType.Int64)]
-    [Arguments("Int", Poly.Introspection.PrimitiveType.Int64)]
-    [Arguments("Int64", Poly.Introspection.PrimitiveType.Int64)]
-    [Arguments("Int32", Poly.Introspection.PrimitiveType.Int32)]
-    [Arguments("Text", Poly.Introspection.PrimitiveType.String)]
-    [Arguments("String", Poly.Introspection.PrimitiveType.String)]
-    [Arguments("Boolean", Poly.Introspection.PrimitiveType.Boolean)]
-    [Arguments("Bool", Poly.Introspection.PrimitiveType.Boolean)]
-    [Arguments("Float", Poly.Introspection.PrimitiveType.Float64)]
-    [Arguments("Double", Poly.Introspection.PrimitiveType.Float64)]
-    [Arguments("Uuid", Poly.Introspection.PrimitiveType.Guid)]
-    [Arguments("Guid", Poly.Introspection.PrimitiveType.Guid)]
-    [Arguments("Date", Poly.Introspection.PrimitiveType.DateOnly)]
-    [Arguments("Time", Poly.Introspection.PrimitiveType.TimeOnly)]
-    [Arguments("DateTime", Poly.Introspection.PrimitiveType.DateTime)]
-    [Arguments("Duration", Poly.Introspection.PrimitiveType.TimeSpan)]
-    public async Task Resolve_Aliases_MatchToClrTypeName(string name, Poly.Introspection.PrimitiveType expected) {
+    [Arguments("Number", typeof(long))]
+    [Arguments("Int", typeof(long))]
+    [Arguments("Int64", typeof(long))]
+    [Arguments("Int32", typeof(int))]
+    [Arguments("Text", typeof(string))]
+    [Arguments("String", typeof(string))]
+    [Arguments("Boolean", typeof(bool))]
+    [Arguments("Bool", typeof(bool))]
+    [Arguments("Float", typeof(double))]
+    [Arguments("Double", typeof(double))]
+    [Arguments("Uuid", typeof(Guid))]
+    [Arguments("Guid", typeof(Guid))]
+    [Arguments("Date", typeof(DateOnly))]
+    [Arguments("Time", typeof(TimeOnly))]
+    [Arguments("DateTime", typeof(DateTime))]
+    [Arguments("Duration", typeof(TimeSpan))]
+    public async Task Resolve_Aliases_MatchToClrTypeName(string name, Type expected) {
         var resolved = Model().Resolve(name);
         await Assert.That(resolved.IsResolved).IsTrue();
-        await Assert.That(resolved.Definition!.PrimitiveType).IsEqualTo(expected);
+        await Assert.That(resolved.Definition!.GetRuntimeType()).IsEqualTo(expected);
         await Assert.That(resolved.DomainName).IsEqualTo(name);
     }
 
@@ -114,29 +114,29 @@ public class DomainTypeModelTests {
     public async Task Resolve_DeclaredCustomNamedDecimalPrimitive_IsDecimal() {
         var cents = Model().Resolve("Cents");
         await Assert.That(cents.IsResolved).IsTrue();
-        await Assert.That(cents.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.Decimal);
+        await Assert.That(cents.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Decimal);
     }
 
     [Test]
     public async Task Resolve_Binary_IsResolved() {
         var blob = Model().Resolve("Blob");
         await Assert.That(blob.IsResolved).IsTrue();
-        await Assert.That(blob.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.ByteArray);
-        await Assert.That(Model().Resolve("Binary").Definition!.PrimitiveType)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.ByteArray);
+        await Assert.That(blob.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.ByteArray);
+        await Assert.That(Model().Resolve("Binary").Definition!.GetClrPrimitive())
+            .IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.ByteArray);
     }
 
     [Test]
     public async Task Resolve_PackOverrideOfDate_IsHonoured() {
         var model = Model(maps => maps.OverrideClrTypeName("Date", "DateTime"));
-        await Assert.That(model.Resolve("Date").Definition!.PrimitiveType)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.DateTime);
+        await Assert.That(model.Resolve("Date").Definition!.GetClrPrimitive())
+            .IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.DateTime);
     }
 
     [Test]
     public async Task Resolve_DeclaredTemporalPrimitive_GoesThroughSemanticsName() {
         var moment = Model().Resolve("Moment");
-        await Assert.That(moment.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.DateTime);
+        await Assert.That(moment.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.DateTime);
     }
 
     [Test]

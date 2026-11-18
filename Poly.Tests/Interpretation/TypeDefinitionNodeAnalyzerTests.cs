@@ -15,16 +15,16 @@ public class TypeDefinitionNodeAnalyzerTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Item",
-                    new PrimitiveTypeReference(PrimitiveType.Int32),
-                    IndexParameters: [new Parameter("index", new PrimitiveTypeReference(PrimitiveType.Int32))])
+                    ClrTypeReferences.Of(typeof(int)),
+                    IndexParameters: [new Parameter("index", ClrTypeReferences.Of(typeof(int)))])
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "Format",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    ClrTypeReferences.Of(typeof(string)),
                     Parameters: [
-                        new Parameter("value", new PrimitiveTypeReference(PrimitiveType.String)),
-                        new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int32), new Constant(3))
+                        new Parameter("value", ClrTypeReferences.Of(typeof(string))),
+                        new Parameter("count", ClrTypeReferences.Of(typeof(int)), new Constant(3))
                     ])
             ],
             BaseType: new NamedTypeReference("Base", "Sample"),
@@ -206,8 +206,8 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode(
                     "Value",
                     new UnionTypeReference([
-                        new PrimitiveTypeReference(PrimitiveType.Int32),
-                        new PrimitiveTypeReference(PrimitiveType.Int32)
+                        ClrTypeReferences.Of(typeof(int)),
+                        ClrTypeReferences.Of(typeof(int))
                     ]))
             ]);
 
@@ -218,8 +218,8 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode(
                     "Value",
                     new UnionTypeReference([
-                        new PrimitiveTypeReference(PrimitiveType.Int32),
-                        new PrimitiveTypeReference(PrimitiveType.String)
+                        ClrTypeReferences.Of(typeof(int)),
+                        ClrTypeReferences.Of(typeof(string))
                     ]))
             ]);
 
@@ -247,28 +247,28 @@ public class TypeDefinitionNodeAnalyzerTests {
             "BaseWidget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("BaseOnly", new PrimitiveTypeReference(PrimitiveType.String)),
-                new PropertyDefinitionNode("Shared", new PrimitiveTypeReference(PrimitiveType.String))
+                new PropertyDefinitionNode("BaseOnly", ClrTypeReferences.Of(typeof(string))),
+                new PropertyDefinitionNode("Shared", ClrTypeReferences.Of(typeof(string)))
             ],
             Methods: [
-                new MethodDefinitionNode("BaseMethod", new PrimitiveTypeReference(PrimitiveType.String)),
-                new MethodDefinitionNode("SharedMethod", new PrimitiveTypeReference(PrimitiveType.String))
+                new MethodDefinitionNode("BaseMethod", ClrTypeReferences.Of(typeof(string))),
+                new MethodDefinitionNode("SharedMethod", ClrTypeReferences.Of(typeof(string)))
             ],
             Fields: [
-                new FieldDefinitionNode("BaseField", new PrimitiveTypeReference(PrimitiveType.String)),
-                new FieldDefinitionNode("SharedField", new PrimitiveTypeReference(PrimitiveType.String))
+                new FieldDefinitionNode("BaseField", ClrTypeReferences.Of(typeof(string))),
+                new FieldDefinitionNode("SharedField", ClrTypeReferences.Of(typeof(string)))
             ]);
         var subjectType = new TypeDefinitionNode(
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Shared", new PrimitiveTypeReference(PrimitiveType.String))
+                new PropertyDefinitionNode("Shared", ClrTypeReferences.Of(typeof(string)))
             ],
             Methods: [
-                new MethodDefinitionNode("SharedMethod", new PrimitiveTypeReference(PrimitiveType.String))
+                new MethodDefinitionNode("SharedMethod", ClrTypeReferences.Of(typeof(string)))
             ],
             Fields: [
-                new FieldDefinitionNode("SharedField", new PrimitiveTypeReference(PrimitiveType.String))
+                new FieldDefinitionNode("SharedField", ClrTypeReferences.Of(typeof(string)))
             ],
             BaseType: new NamedTypeReference("BaseWidget", "Sample"));
 
@@ -294,8 +294,8 @@ public class TypeDefinitionNodeAnalyzerTests {
             "WidgetCreated",
             "Sample",
             PrimaryConstructorParameters: [
-                new Parameter("Name", new PrimitiveTypeReference(PrimitiveType.String)),
-                new Parameter("Version", new PrimitiveTypeReference(PrimitiveType.Int32))
+                new Parameter("Name", ClrTypeReferences.Of(typeof(string))),
+                new Parameter("Version", ClrTypeReferences.Of(typeof(int)))
             ],
             Semantics: TypeDefinitionSemantics.ImmutableValue);
 
@@ -320,12 +320,12 @@ public class TypeDefinitionNodeAnalyzerTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Maybe",
-                    new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.Int32))),
+                    new OptionalTypeReference(ClrTypeReferences.Of(typeof(int)))),
                 new PropertyDefinitionNode(
                     "Dict",
                     new MapTypeReference(
-                        new PrimitiveTypeReference(PrimitiveType.String),
-                        new PrimitiveTypeReference(PrimitiveType.Int32))),
+                        ClrTypeReferences.Of(typeof(string)),
+                        ClrTypeReferences.Of(typeof(int)))),
             ]);
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
@@ -366,7 +366,7 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode("Plain", new NamedTypeReference("DomainResult")),
                 new PropertyDefinitionNode(
                     "Closed",
-                    new NamedTypeReference("DomainResult", TypeArguments: [new PrimitiveTypeReference(PrimitiveType.String)]))
+                    new NamedTypeReference("DomainResult", TypeArguments: [ClrTypeReferences.Of(typeof(string))]))
             ]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();

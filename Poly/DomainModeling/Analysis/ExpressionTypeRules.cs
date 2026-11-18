@@ -7,7 +7,6 @@ using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
-using Prim = Poly.Introspection.PrimitiveType;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Analysis;
@@ -28,22 +27,22 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (type.IsNullLiteral) return TypeFamily.Null;
         if (type.Definition is not { } definition) return null;
         if (definition.GetFact<Enumeration>() is not null) return TypeFamily.Enum;
-        if (definition.PrimitiveType is null) {
+        if (definition.GetFact<Atomic>() is null) {
             // A value type is the Value family and a class the Entity family; an interface or a delegate is neither.
             if (definition.GetFact<ValueSemantics>() is not null) return TypeFamily.Value;
             return definition.GetFact<InterfaceContract>() is null && definition.GetFact<DelegateSignature>() is null
                 ? TypeFamily.Entity
                 : null;
         }
-        return definition.PrimitiveType switch {
-            Prim.String => TypeFamily.Text,
-            Prim.Int32 or Prim.Int64 or Prim.Float32 or Prim.Float64 or Prim.Decimal => TypeFamily.Number,
-            Prim.Boolean => TypeFamily.Boolean,
-            Prim.DateOnly or Prim.DateTime => TypeFamily.Date,
-            Prim.TimeOnly => TypeFamily.Time,
-            Prim.TimeSpan => TypeFamily.Duration,
-            Prim.Guid => TypeFamily.Guid,
-            Prim.ByteArray => TypeFamily.Binary,
+        return DomainGrounds.Of(definition) switch {
+            DomainGround.Text => TypeFamily.Text,
+            DomainGround.Int32 or DomainGround.Int64 or DomainGround.Float32 or DomainGround.Float64 or DomainGround.Decimal => TypeFamily.Number,
+            DomainGround.Boolean => TypeFamily.Boolean,
+            DomainGround.Date or DomainGround.DateTime => TypeFamily.Date,
+            DomainGround.Time => TypeFamily.Time,
+            DomainGround.Duration => TypeFamily.Duration,
+            DomainGround.Guid => TypeFamily.Guid,
+            DomainGround.Binary => TypeFamily.Binary,
             _ => null,
         };
     }
@@ -55,15 +54,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private static bool IsDate(ExprType type) => Family(type) is TypeFamily.Date;
 
-    private static bool IsDateOnly(ExprType type) => type.Definition?.PrimitiveType is Prim.DateOnly;
+    private static bool IsDateOnly(ExprType type) => DomainGrounds.Of(type.Definition) is DomainGround.Date;
 
-    private static bool IsDateTime(ExprType type) => type.Definition?.PrimitiveType is Prim.DateTime;
+    private static bool IsDateTime(ExprType type) => DomainGrounds.Of(type.Definition) is DomainGround.DateTime;
 
     /// <summary>A type as a message names it. Only typed values reach a message: an untyped one is DMSEM006's.</summary>
     private static string Describe(ExprType t) => Family(t) switch {
         TypeFamily.Text => "Text",
         // Only Decimal is distinct (#581); Float and Int32 keep the family name (removing row T-08).
-        TypeFamily.Number => t.Definition?.PrimitiveType is Prim.Decimal ? "Decimal" : "Number",
+        TypeFamily.Number => DomainGrounds.Of(t.Definition) is DomainGround.Decimal ? "Decimal" : "Number",
         TypeFamily.Boolean => "Boolean",
         TypeFamily.Date => $"Date ({t.DomainName ?? "date"})",
         TypeFamily.Time => $"Time ({t.DomainName ?? "time"})",

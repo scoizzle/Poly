@@ -42,7 +42,7 @@ public class SuspendResumeVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Tick",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+                    ClrTypeReferences.Of(typeof(long)),
                     Body: new Block([
                         new SuspendNode(new Constant(0L), "mid"),
                         new Constant(7L)

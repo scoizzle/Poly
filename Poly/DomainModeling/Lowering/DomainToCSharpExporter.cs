@@ -5,7 +5,6 @@ using Poly.DomainModeling.Runtime;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
@@ -227,7 +226,7 @@ public sealed partial class DomainToCSharpExporter {
                 default: {
                         if (IsOptionalSet(type, out var setType)) {
                             var enumerable = new NamedTypeReference(
-                                "IEnumerable", TypeArguments: [new PrimitiveTypeReference(PrimType.String)]);
+                                "IEnumerable", TypeArguments: [ClrTypeReferences.Of(typeof(string))]);
                             snapshot.Add(new Assignment(Slot(snapshotArray), new Syntactic.Conditional(
                                 new Equal(Field(name), new Constant(null)),
                                 new Constant(null),
@@ -284,8 +283,8 @@ public sealed partial class DomainToCSharpExporter {
         // Enum types and entity references both emit NamedTypeReference(typeName):
         // the catalog is the single source of truth and no tree scan is performed (amu-w3-1).
         var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
-        if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
-            return new PrimitiveTypeReference(prim);
+        if (DomainTypeMapping.TryClrType(clr, out var ground))
+            return ClrTypeReferences.Of(ground);
         return new NamedTypeReference(typeName);
     }
 

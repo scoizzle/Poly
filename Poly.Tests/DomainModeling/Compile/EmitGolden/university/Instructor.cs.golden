@@ -165,5 +165,5 @@ internal class Instructor : Poly.Runtime.IActionScoped
         this.Email = (string)__saved[1]!;
         this.CurrentStage = (InstructorStage)__saved[2]!;
     }
-    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Instructor", "Email", email);
+    public static bool ExistsWithEmail(Poly.Runtime.IStoragePort db, string email) => db.Exists("Instructor", "Email", email);
 }

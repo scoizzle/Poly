@@ -98,6 +98,21 @@ public class TypeSourceTests {
     }
 
     [Test]
+    public async Task ClrRegistry_BareNameThatSpellsAClrBuiltIn_IsTheInterimAlias() {
+        // Interim (#998 S2, removing row: the scope binds every bare name, including those of raw trees built with no
+        // unit): a bare name that spells a member of the CLR host's built-in table still names that type. This test is
+        // deleted with the rule; until then it pins exactly how far the alias reaches.
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("DateTime"))
+            .IsSameReferenceAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DateTime)));
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("Int32"))
+            .IsSameReferenceAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(int)));
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("StringBuilder")).IsNull()
+            .Because("the alias is the built-in table only, never a namespace lookup");
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("int")).IsNull()
+            .Because("a keyword is the C# surface's name, bound by the reader, not by the registry");
+    }
+
+    [Test]
     public async Task Declarations_TypesIn_ListsADeclarationUnderItsOwnNamespace() {
         var registry = new AstTypeRegistry();
         var order = new AstTypeDefinition(new TypeDefinitionNode("Order", Namespace: "Shop"), registry);

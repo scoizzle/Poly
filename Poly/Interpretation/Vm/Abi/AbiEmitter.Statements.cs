@@ -74,7 +74,7 @@ public static partial class AbiEmitter {
 
             var memberTypeDef = resolved.MemberTypeDefinition;
             var clrMemberType = memberTypeDef.GetRuntimeType()
-                ?? memberTypeDef.PrimitiveType?.GetClrType();
+                ?? memberTypeDef.GetClrPrimitive()?.GetClrType();
             Expression writeValue;
             if (clrMemberType is not null && Nullable.GetUnderlyingType(clrMemberType) is { } memberUnderlying) {
                 writeValue = NullableMemberWrite(a.Value, valueSlot.RingSlot, clrMemberType, memberUnderlying, ctx);

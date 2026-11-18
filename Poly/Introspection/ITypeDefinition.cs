@@ -112,12 +112,6 @@ public interface ITypeDefinition {
     internal IEnumerable<ITypeConversion> Conversions { get; }
 
     /// <summary>
-    /// Gets the primitive type identifier if this type is a primitive type, null otherwise.
-    /// Primitive types are the atomic building blocks from which all other types are composed.
-    /// </summary>
-    PrimitiveType? PrimitiveType { get; }
-
-    /// <summary>
     /// Gets the type this definition wraps when it is this platform's nullable form of another type (<c>T?</c> for
     /// <c>T</c>), or null. Nullability is the platform's relation, not the root's: a host states which definitions are
     /// its nullable forms, so a conversion into one can be stated (<see cref="ResolveConversionFrom"/>) without the

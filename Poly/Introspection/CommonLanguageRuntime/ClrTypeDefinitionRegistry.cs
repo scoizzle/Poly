@@ -36,12 +36,6 @@ internal sealed class ClrTypeDefinitionRegistry : IClrTypeDefinitionProvider, IT
     public IEnumerable<ITypeDefinition> Types => _types.Values;
 
     /// <summary>
-    /// Gets the definition a primitive id names in the CLR, or null when it names no CLR type.
-    /// </summary>
-    public ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) =>
-        primitiveTypeId.GetClrType() is { } clrType ? GetTypeDefinition(clrType) : null;
-
-    /// <summary>
     /// Gets or creates a definition for a runtime <see cref="Type"/>.
     /// </summary>
     public ClrTypeDefinition GetTypeDefinition(Type type) {
@@ -81,9 +75,9 @@ internal sealed class ClrTypeDefinitionRegistry : IClrTypeDefinitionProvider, IT
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         // A bare name is a scope's to bind (#998 S2): only a qualified name is looked up, in the cache or across the
         // loaded assemblies, so what a name means never depends on which type another caller happened to resolve or
-        // load. Interim until S5: a bare name that spells a PrimitiveType member still names that primitive's type.
+        // load. Interim until S5: a bare name that spells a ClrPrimitive member still names that primitive's type.
         if (!name.Contains('.', StringComparison.Ordinal))
-            return Enum.TryParse<PrimitiveType>(name, ignoreCase: false, out var primitive) && primitive.GetClrType() is { } named
+            return Enum.TryParse<ClrPrimitive>(name, ignoreCase: false, out var primitive) && primitive.GetClrType() is { } named
                 ? GetTypeDefinition(named)
                 : null;
         if (_types.TryGetValue(name, out var existing)) {

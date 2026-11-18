@@ -240,16 +240,16 @@ public class InterpreterBranchVmTests {
     public async Task AstMethod_NonConstantDefault_OmittedArgumentIsZero() {
         var extra = new Parameter(
             "extra",
-            new PrimitiveTypeReference(PrimitiveType.Int64),
+            ClrTypeReferences.Of(typeof(long)),
             DefaultValue: new Add(new Constant(1L), new Constant(1L)));
         var tda = Analyze(new TypeDefinitionNode(
             "OpenLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Pick",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    ClrTypeReferences.Of(typeof(long)),
                     Parameters: [
-                        new Parameter("written", new PrimitiveTypeReference(PrimitiveType.Int64)),
+                        new Parameter("written", ClrTypeReferences.Of(typeof(long))),
                         extra
                     ],
                     Body: new Return(extra),
@@ -473,18 +473,18 @@ public class InterpreterBranchVmTests {
     private static (ITypeDefinitionProvider Types, Invoke Call) Pick(int arguments) {
         var written = new Parameter(
             "written",
-            new PrimitiveTypeReference(PrimitiveType.Int64),
+            ClrTypeReferences.Of(typeof(long)),
             DefaultValue: new Constant(1L));
         var extra = new Parameter(
             "extra",
-            new PrimitiveTypeReference(PrimitiveType.Int64),
+            ClrTypeReferences.Of(typeof(long)),
             DefaultValue: new Constant(7L));
         var tda = Analyze(new TypeDefinitionNode(
             "PickLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Pick",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    ClrTypeReferences.Of(typeof(long)),
                     Parameters: [written, extra],
                     Body: new Return(new Add(written, extra)),
                     IsStatic: true)

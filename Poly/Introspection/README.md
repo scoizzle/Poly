@@ -28,8 +28,7 @@ Common members include:
 - `Namespace`
 - `FullName`
 - `RuntimeType` (via `IClrTypeDefinition`)
-- `Kind`
-- `PrimitiveType`
+- `GetFact<TFact>()` (what the type is: see below)
 - `Members`
 - `Operators` (`ITypeOperator`, see below)
 - `GetMembers(string name)`
@@ -69,9 +68,6 @@ nothing in the Root-adjacent contract says how a platform spells one.
 Resolves type definitions:
 
 - `GetTypeDefinition(string name)`
-- `GetTypeDefinition(PrimitiveType primitiveTypeId)` — the provider answers for its own primitives. There is no
-  default body: a platform with no CLR types must not inherit the CLR's answer, and the shared `PrimitiveType`
-  vocabulary is not a CLR map.
 - `Types` — the definitions the provider holds now. Not a claim of completeness: the CLR registry lists what it has
   resolved so far (its universe is open), a declaration registry lists what it declares, and a composed provider lists
   each definition once by identity. A consumer that needs "every type this session knows" enumerates the composed
@@ -84,22 +80,26 @@ answers null for a host with no CLR types. The neutral contract therefore asks o
 answer, and `TypeDefinitionRuntimeTypeExtensions` (the `ITypeDefinition -> Type?` view) lives in
 `CommonLanguageRuntime/` with it.
 
-`PrimitiveType.DateTimeOffset` is a temporal primitive the CLR has and the vocabulary had no id for; it exists so a
-category or conversion rule can name it without `typeof`. The vocabulary is a list of what a host *may* have, not a
-CLR list: `Undefined`, `Null`, `Symbol` and `BigInt` name
-primitives no CLR runtime type exists for, and a platform maps only the subset it has. A primitive the shared
-vocabulary does not name at all is stated by its platform as a fact of its own (`ITypeDefinition.GetFact<TFact>()`):
-the provider resolves it by name and enumerates it through `Types`. What a type is (an enumeration, a value type, an
-interface, a delegate) is likewise a fact the platform states (`TypeFacts.cs`), not a closed `TypeKind`. Which platform
-answers a mixed operator/conversion pair is fixed by the door's shape — the left operand for an operator, the
-destination for a conversion — and `MixedPairAuthorityTests` pins both sides rather than relying on the CLR agreeing. Which platform answers a mixed
-operator/conversion pair is fixed by the door's shape: operators are asked of the left operand, conversions of the
-destination.
+**What a type is, is a fact its platform states.** `ITypeDefinition.GetFact<TFact>()` returns the typed fact a
+platform states about one of its types, or null; a fact type derives from `TypeFact`. The set is open: a consumer
+with a question of its own declares its own fact, and the platform that knows the answer states it. There is no
+shared list of kinds (`TypeKind` is gone) and no shared list of primitive types (`PrimitiveType`, `PrimitiveAtom` and
+the `PrimitiveTypeReference` node are gone). Introspection ships the facts its own consumers ask (`TypeFacts.cs`):
 
-Platform encodings of the primitive vocabulary live with the platform, not on the enum: the CLR's `Type` maps are
-`CommonLanguageRuntime/ClrPrimitiveTypes` (`GetClrType`, `GetPrimitiveType`), and C#'s keywords are
-`Poly.Interpretation.CSharp/CSharpKeywords` (`GetCSharpKeyword`). `PrimitiveType` itself keeps only facts every
-platform shares: `IsInteger` and `GetDisplayName`.
+- shape: `Enumeration(Underlying)`, `ValueSemantics`, `InterfaceContract`, `DelegateSignature`;
+- ground types: `Atomic`, `Truth`, `Numeric(IsIntegral, IsSigned, Bits, IsDecimal, IsNativeSized)`,
+  `Text(IsSingleCharacter)`, `Temporal(HasDate, HasTime, HasOffset, IsDuration)`, `UniqueIdentifier`, `Binary`,
+  `TopType`.
+
+The CLR states them in `CommonLanguageRuntime/` (`ClrGroundTypes`, `ClrTypeDefinition.GetFact`). A host with no CLR
+types states its own, including facts no other platform has heard of (the test-only `LedgerHost`). The CLR's own table
+of the types its built-in rules name is `ClrPrimitive`, internal to the CLR host and used only by it and the VM; C#'s
+keywords are the C# surface's names for CLR definitions (`Poly.Interpretation.CSharp/CSharpTypeNames`). A type
+position in a tree is a definition reference (`TypeDefinitionReference`), which the writer spells as its language does.
+
+Which platform answers a mixed operator/conversion pair is fixed by the door's shape — the left operand for an
+operator, the destination for a conversion — and `MixedPairAuthorityTests` pins both sides rather than relying on the
+CLR agreeing.
 
 ## Conversions and operators (T-03b, T-24)
 
@@ -133,7 +133,7 @@ stated by each platform (the CLR's from its representation, a modeled collection
 the host's nullable form (the CLR answers `Nullable<T>`; a modeled definition answers null, where optionality is the
 caller's, T-06), so the lift into a nullable destination is that platform's answer rather than a rule outside the
 contract. The analysis keeps no CLR type table of its own: implicit conversion, integer-ness, IEEE-ness and the type category
-(Text/Number/Boolean/Date/Enum/Guid) are asked of the platform (`IsAssignableWithoutConversion`, `ResolveConversionFrom`, `PrimitiveType`), and the CLR-only `Convert.To*`
+(Text/Number/Boolean/Date/Enum/Guid) are asked of the platform (`IsAssignableWithoutConversion`, `ResolveConversionFrom`, `GetFact`), and the CLR-only `Convert.To*`
 names are `ClrConvertMethods` in this namespace. An architecture test (`ArchitectureBoundaryTests`) fails if the
 meaning layers take a `System.Linq.Expressions` or `System.Reflection` using, and holds CLR type facts to a shrinking
 per-file budget. Where the analysis builds a type reference it states the definition (`TypeDefinitionReference`), so

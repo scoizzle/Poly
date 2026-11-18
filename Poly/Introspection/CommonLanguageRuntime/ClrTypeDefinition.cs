@@ -16,7 +16,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private readonly Lazy<IReadOnlyList<ClrTypeMember>> _members;
 
     private readonly ClrTypeDefinitionRegistry _provider;
-    private readonly ConcurrentDictionary<(OperatorKind Kind, PrimitiveType? Other), IReadOnlyList<ClrTypeOperator>> _operatorsBeside = new();
+    private readonly ConcurrentDictionary<(OperatorKind Kind, ClrPrimitive? Other), IReadOnlyList<ClrTypeOperator>> _operatorsBeside = new();
     private readonly Lazy<IReadOnlyList<ClrTypeOperator>> _operators;
     private readonly Lazy<IReadOnlyList<ITypeConversion>> _conversions;
 
@@ -89,7 +89,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// <c>byte[]</c> stays binary).
     /// </summary>
     bool ITypeDefinition.IsCollectionShape =>
-        ((ITypeDefinition)this).PrimitiveType is null
+        GetPrimitiveTypeId(RuntimeType) is null
         && (RuntimeType.IsArray
             || RuntimeType.GetInterfaces().Any(static i =>
                 i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)));
@@ -131,8 +131,6 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => Conversions;
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
-    PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
-
 
     /// <summary>A CLR nullable form is <c>Nullable&lt;T&gt;</c>; every other definition wraps nothing.</summary>
     ITypeDefinition? ITypeDefinition.NullableOf =>
@@ -153,7 +151,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             return (RuntimeType.IsInterface ? InterfaceContract.Instance : null) as TFact;
         if (typeof(TFact) == typeof(DelegateSignature))
             return (typeof(Delegate).IsAssignableFrom(RuntimeType) ? DelegateSignature.Instance : null) as TFact;
-        return null;
+        return ClrGroundTypes.Fact<TFact>(RuntimeType);
     }
     public override string ToString() => FullName;
 
@@ -253,7 +251,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// </summary>
     internal IReadOnlyList<ClrTypeOperator> OperatorsBeside(OperatorKind kind, ITypeDefinition? other) {
         OperatorShape.ArityOf(kind);
-        var otherPrimitive = other is null ? GetPrimitiveTypeId(RuntimeType) : other.PrimitiveType;
+        var otherPrimitive = other is null ? GetPrimitiveTypeId(RuntimeType) : other.GetClrPrimitive();
         var offered = _operatorsBeside.GetOrAdd((kind, otherPrimitive), key => {
             var intrinsic = ClrBuiltInRules.Operators(this, key.Other, _provider, key.Kind);
             var reflected = (ClrBuiltInRules.IsNativeInteger(RuntimeType) ? [] : FindOperators(key.Kind))
@@ -298,11 +296,12 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             stated.Add(ClrTypeConversion.Declared(kind, CreateMethod(method)));
         }
         var from = GetPrimitiveTypeId(RuntimeType);
-        foreach (var primitive in Enum.GetValues<PrimitiveType>()) {
+        foreach (var primitive in Enum.GetValues<ClrPrimitive>()) {
             if (primitive == from || ClrBuiltInRules.Conversion(from, primitive) is not { } kind)
                 continue;
-            if (((ITypeDefinitionProvider)_provider).GetTypeDefinition(primitive) is not { } target)
+            if (primitive.GetClrType() is not { } targetType)
                 continue;
+            var target = _provider.GetTypeDefinition(targetType);
             Add(ClrTypeConversion.Intrinsic(kind, this, target));
         }
         return stated;
@@ -584,11 +583,11 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     }
 
     /// <summary>
-    /// Delegates to the canonical <see cref="PrimitiveType.GetPrimitiveType(Type)"/>
+    /// Delegates to the canonical <see cref="ClrPrimitive.GetPrimitiveType(Type)"/>
     /// mapping. This private wrapper exists only to keep call sites unchanged; new
     /// code should call <c>type.GetPrimitiveType()</c> directly.
     /// </summary>
-    private static PrimitiveType? GetPrimitiveTypeId(Type type) =>
+    private static ClrPrimitive? GetPrimitiveTypeId(Type type) =>
         type.GetPrimitiveType();
 
 }

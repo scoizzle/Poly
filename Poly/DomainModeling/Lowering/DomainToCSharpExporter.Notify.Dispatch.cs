@@ -2,7 +2,6 @@ using Poly.DomainModeling.Ontology;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
@@ -80,13 +79,13 @@ public sealed partial class DomainToCSharpExporter {
         Entity entity, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
         fields.Add(new FieldDefinitionNode(
             "_notifyDepth",
-            new PrimitiveTypeReference(PrimType.Int32),
+            ClrTypeReferences.Of(typeof(int)),
             AccessModifier: AccessModifier.Private));
         var depth = new Member(new ThisReference(), "_notifyDepth");
         methods.Add(new MethodDefinitionNode(
             "EnterNotifyCascade",
-            new PrimitiveTypeReference(PrimType.Int32),
-            Parameters: [new Parameter("stageName", new PrimitiveTypeReference(PrimType.String))],
+            ClrTypeReferences.Of(typeof(int)),
+            Parameters: [new Parameter("stageName", ClrTypeReferences.Of(typeof(string)))],
             Body: new Block([
                 new IfStatement(
                     new GreaterThanOrEqual(
@@ -95,7 +94,7 @@ public sealed partial class DomainToCSharpExporter {
                     new ThrowStatement(new New(
                         new NamedTypeReference("System.InvalidOperationException"),
                         new Invoke(
-                            new Member(new PrimitiveTypeReference(PrimType.String), "Concat"),
+                            new Member(ClrTypeReferences.Of(typeof(string)), "Concat"),
                             new Constant($"Subscription cascade on entity '{entity.Name}' exceeded max depth ({MaxNotifyDepth}) while notifying '"),
                             new Parameter("stageName"),
                             new Constant("'."))))),
@@ -103,7 +102,7 @@ public sealed partial class DomainToCSharpExporter {
                 new Return(new Syntactic.Subtract(depth, new Constant(1)))
             ]),
             AccessModifier: AccessModifier.Private));
-        var entered = new Parameter("depth", new PrimitiveTypeReference(PrimType.Int32));
+        var entered = new Parameter("depth", ClrTypeReferences.Of(typeof(int)));
         methods.Add(new MethodDefinitionNode(
             "ExitNotifyCascade",
             new TypeReference("void"),

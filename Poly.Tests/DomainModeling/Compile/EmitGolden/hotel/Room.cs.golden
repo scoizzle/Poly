@@ -361,5 +361,5 @@ internal class Room : Poly.Runtime.IActionScoped
             this._stays.Add(__item10);
         }
     }
-    public static System.Boolean ExistsWithNumber(Poly.Runtime.IStoragePort db, System.String number) => db.Exists("Room", "Number", number);
+    public static bool ExistsWithNumber(Poly.Runtime.IStoragePort db, string number) => db.Exists("Room", "Number", number);
 }

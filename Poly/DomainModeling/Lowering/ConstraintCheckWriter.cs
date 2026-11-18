@@ -6,7 +6,6 @@ using Poly.DomainModeling.Ontology;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
@@ -77,7 +76,7 @@ internal static class ConstraintCheckWriter {
         PresencePolicy Presence,
         CheckOrder Order) {
         internal static readonly ConstraintCheckStyle Create = new(
-            () => new PrimitiveTypeReference(PrimType.String),
+            () => ClrTypeReferences.Of(typeof(string)),
             () => new NamedTypeReference("System.Text.RegularExpressions.Regex"),
             NamesEnumValue: true,
             Presence: PresencePolicy.CreateSlot,

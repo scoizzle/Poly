@@ -58,13 +58,13 @@ public class ArchitectureBoundaryTests {
     private static readonly Dictionary<string, (string RemovingRow, Dictionary<string, int> Max)> Budget = new(StringComparer.Ordinal) {
         ["Poly/Interpretation/Analysis/ConstantFolding/ConstantFoldingPass.cs"] = ("analysis-time invocation and CLR primitives (#954); removing row: I9 (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["typeof("] = 66 }),
         ["Poly/Interpretation/Analysis/Semantics/AwaitPattern.cs"] = ("awaiter reflection and CLR members; removing row: I9 (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 7 }),
-        ["Poly/Interpretation/Analysis/Semantics/ClrTypeResolution.cs"] = ("resolves a CLR type reference; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 2 }),
+        ["Poly/Interpretation/Analysis/Semantics/ClrTypeResolution.cs"] = ("resolves a CLR type reference; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1 }),
         ["Poly/Interpretation/Analysis/Semantics/ConstantOperandRule.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["typeof("] = 4 }),
         ["Poly/Interpretation/Analysis/Semantics/IteratorLegalityAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 2 }),
         ["Poly/Interpretation/Analysis/Semantics/LambdaReturnTypeAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 1 }),
         ["Poly/Interpretation/Analysis/Semantics/SyntaxTypeCompatibilityAnalyzer.cs"] = ("the CLR category table and its type references (T-28); removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 5, ["GetRuntimeType"] = 15, ["Nullable.GetUnderlyingType"] = 8, ["RuntimeType"] = 3, ["typeof("] = 57 }),
         ["Poly/Interpretation/Analysis/Semantics/TypeAndMemberResolutionPass.cs"] = ("CLR type statements the pass still makes; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 17, ["Nullable.GetUnderlyingType"] = 5, ["RuntimeType"] = 1, ["typeof("] = 31 }),
-        ["Poly/Interpretation/Analysis/Semantics/TypeDefinitionNodeAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 2, ["GetRuntimeType"] = 1, ["Nullable.GetUnderlyingType"] = 1, ["RuntimeType"] = 7, ["typeof("] = 15 }),
+        ["Poly/Interpretation/Analysis/Semantics/TypeDefinitionNodeAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 1, ["Nullable.GetUnderlyingType"] = 1, ["RuntimeType"] = 5, ["typeof("] = 14 }),
         ["Poly/Introspection/TypeDefinitionProviderCollection.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["typeof("] = 1 }),
     };
 

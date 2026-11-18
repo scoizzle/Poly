@@ -6,7 +6,7 @@ using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
-using Prim = Poly.Introspection.PrimitiveType;
+using Prim = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
 
 namespace Poly.DomainModeling.Runtime;
 
@@ -196,17 +196,17 @@ public sealed partial class ModuleInstanceExecutor {
 
     private static bool IsTextLike(Parameter parameter) =>
         parameter.TypeReference switch {
-            PrimitiveTypeReference { PrimitiveId: Prim.String } => true,
             NamedTypeReference { TypeName: "Text" or "String" or "string" } => true,
-            TypeDefinitionReference { TypeDefinition.PrimitiveType: Prim.String } => true,
+            TypeDefinitionReference stated => stated.TypeDefinition.GetFact<Text>() is { IsSingleCharacter: false },
             TypeReference { TypeName: "Text" or "String" or "string" } => true,
             _ => false
         };
 
     private static string? ParameterTypeName(Parameter parameter) =>
         parameter.TypeReference switch {
-            PrimitiveTypeReference { PrimitiveId: Prim.String } => "Text",
-            PrimitiveTypeReference { PrimitiveId: Prim.Boolean } => "Boolean",
+            TypeDefinitionReference stated when stated.TypeDefinition.GetFact<Text>() is { IsSingleCharacter: false } => "Text",
+            TypeDefinitionReference stated when stated.TypeDefinition.GetFact<Truth>() is not null => "Boolean",
+            TypeDefinitionReference => null,
             NamedTypeReference n => n.TypeName,
             TypeReference t => t.TypeName,
             _ => null
@@ -214,14 +214,14 @@ public sealed partial class ModuleInstanceExecutor {
 
     private static Prim? PrimitiveForParameter(Parameter parameter) =>
         parameter.TypeReference switch {
-            PrimitiveTypeReference p => p.PrimitiveId,
+            TypeDefinitionReference stated => stated.TypeDefinition.GetRuntimeType()?.GetPrimitiveType(),
             NamedTypeReference n => DomainPrimitive(n.TypeName),
             TypeReference t => DomainPrimitive(t.TypeName),
             _ => null
         };
 
     private static Prim? DomainPrimitive(string typeName) =>
-        DomainTypeMapping.TryPrimitiveType(
-            DomainTypeMapping.ToClrTypeName(typeName), out var prim)
-            ? prim : null;
+        DomainTypeMapping.TryClrType(
+            DomainTypeMapping.ToClrTypeName(typeName), out var ground)
+            ? ground.GetPrimitiveType() : null;
 }

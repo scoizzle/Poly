@@ -63,12 +63,12 @@ public class CallFrameArgumentTests {
         var typeNode = new TypeDefinitionNode(
             "Widget",
             "Sample",
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))],
+            Properties: [new PropertyDefinitionNode("Count", ClrTypeReferences.Of(typeof(long)))],
             Constructors: [
                 new ConstructorDefinitionNode(
                     [
-                        new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
-                        new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int64)),
+                        new Parameter("name", ClrTypeReferences.Of(typeof(string))),
+                        new Parameter("count", ClrTypeReferences.Of(typeof(long))),
                     ],
                     new Block([new Assignment(new Member(new ThisReference(), "Count"), new Constant(1L))])),
             ]);
@@ -136,13 +136,13 @@ public class CallFrameArgumentTests {
         var typeNode = new TypeDefinitionNode(
             "Boom",
             "Sample",
-            Properties: [new PropertyDefinitionNode("Last", new PrimitiveTypeReference(PrimitiveType.Int64))],
+            Properties: [new PropertyDefinitionNode("Last", ClrTypeReferences.Of(typeof(long)))],
             Constructors: [new ConstructorDefinitionNode()],
             Methods: [
                 new MethodDefinitionNode(
                     "Blow",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
-                    [new Parameter("v", new PrimitiveTypeReference(PrimitiveType.Int64))],
+                    ClrTypeReferences.Of(typeof(long)),
+                    [new Parameter("v", ClrTypeReferences.Of(typeof(long)))],
                     new Block([
                         new ThrowStatement(new New(ClrTypeReferences.Of(typeof(InvalidOperationException)))),
                     ]),

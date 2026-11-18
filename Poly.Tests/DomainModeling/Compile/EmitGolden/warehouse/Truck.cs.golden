@@ -238,5 +238,5 @@ internal class Truck : Poly.Runtime.IActionScoped
             this._deliveries.Add(__item6);
         }
     }
-    public static System.Boolean ExistsWithVin(Poly.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
+    public static bool ExistsWithVin(Poly.Runtime.IStoragePort db, string vin) => db.Exists("Truck", "Vin", vin);
 }

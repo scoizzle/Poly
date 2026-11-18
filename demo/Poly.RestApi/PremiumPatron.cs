@@ -119,5 +119,5 @@ internal class PremiumPatron : Poly.Runtime.IActionScoped
         this.Tier = (PremiumTier)__saved[3]!;
         this.PriorityAccess = (bool)__saved[4]!;
     }
-    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("PremiumPatron", "Email", email);
+    public static bool ExistsWithEmail(Poly.Runtime.IStoragePort db, string email) => db.Exists("PremiumPatron", "Email", email);
 }

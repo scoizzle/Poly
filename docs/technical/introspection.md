@@ -38,7 +38,7 @@ Provider-based type abstraction decoupled from CLR reflection. Interfaces allow 
 
 **Why it replaced `TypeKind`:** the closed enum (`Primitive`, `Class`, `Struct`, `Interface`, `Enum`, `Delegate`, `Union`, `Tuple`) made every platform map onto one list and every consumer switch on it; the domain's entity and value type had to pose as `Class` and `Struct`, and two members had no producer. A fact is a question a platform answers, so a new question needs no change to the contract. The form a declaration is written in (`TypeDeclarationForm`: class, interface, enum, struct) is syntax on the AST node.
 
-**Where the old distinction went:** `Collection` is structural (`IsCollectionShape`), an enumeration is the `Enumeration` fact, and integer-ness is still the exact `PrimitiveType.IsInteger()` until `PrimitiveType` is replaced the same way (#998). Domain vocabulary lives in `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
+**Where the old distinction went:** `Collection` is structural (`IsCollectionShape`), an enumeration is the `Enumeration` fact, and integer-ness is the `Numeric` fact (`IsIntegral`); `PrimitiveType` went the same way (#998): ground types are facts (`Atomic`, `Truth`, `Numeric`, `Text`, `Temporal`, `UniqueIdentifier`, `Binary`, `TopType`), and the CLR host keeps its own internal table (`ClrPrimitive`). Domain vocabulary lives in `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
 
 ### TypeDefinitionProviderCollection ICollection surface — KEEP
 

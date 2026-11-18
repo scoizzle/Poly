@@ -181,6 +181,8 @@ Expand to **generic** Syntax (no domain opcodes). StageTransition / self-invoke 
 
 Host-neutral types/members (`Poly/Introspection/`); CLR is first provider. Consumers use `ITypeDefinition` / providers — not ad-hoc reflection or a second registry. Adapt missing shapes via analysis replacement, not emitter special cases. Detail: `Poly/Introspection/README.md`, `docs/technical/introspection.md`.
 
+**A source states what it contains (#998 S1).** `ITypeSource.TypesIn(namespace)` lists the definitions a source declares directly in a namespace (null is the global one; a nested type is not listed, and how one is reached is S2's). A source never answers what a name means: which sources a scope sees, and under which names, is the analysis' decision, and binding moves there in S2. `ClrAssemblySource` (`CommonLanguageRuntime/`) lists one assembly's namespace-level types as the CLR registry's own definitions, the analysis' declaration registry (`AstTypeRegistry`) is the source of a unit's declarations, and the test-only `LedgerHost` is a source with no CLR type behind it. Name lookup through `ITypeDefinitionProvider.GetTypeDefinition(string)`, including the CLR registry's scan of loaded assemblies, is unchanged until S2 replaces it.
+
 ### 3.6 MCP and extensions
 
 | Piece | Location |

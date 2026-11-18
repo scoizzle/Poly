@@ -50,7 +50,7 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer {
 /// shared <see cref="Interpreter.Analyzer"/> instance cannot leak or clear
 /// types across concurrent analyses.
 /// </summary>
-internal sealed class AstTypeRegistry : ITypeDefinitionProvider, ITypeDefinitionNodeProvider, IAnalysisMetadata {
+internal sealed class AstTypeRegistry : ITypeDefinitionProvider, ITypeDefinitionNodeProvider, ITypeSource, IAnalysisMetadata {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
     /// <summary>CLR arity suffix so <c>DomainResult</c> and <c>DomainResult&lt;T&gt;</c> both stay registered.</summary>
@@ -65,6 +65,10 @@ internal sealed class AstTypeRegistry : ITypeDefinitionProvider, ITypeDefinition
 
     /// <summary>The declarations this registry holds.</summary>
     public IEnumerable<ITypeDefinition> Types => _types.Values;
+
+    /// <summary>The declarations stated in <paramref name="namespace"/>: this registry as a type source.</summary>
+    public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) =>
+        _types.Values.Where(type => string.Equals(type.Namespace, @namespace, StringComparison.Ordinal));
 
     /// <summary>The declarations this analysis registered, so a compile can put
     /// them and the root in one unit.</summary>

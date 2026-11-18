@@ -189,8 +189,7 @@ public static class ModuleScopeOnly {
         var callArgs = new object?[parameters.Count];
         for (var i = 0; i < parameters.Count; i++) {
             var parameter = parameters[i];
-            if (parameter.TypeReference is Poly.Ast.Nodes.ClrTypeReference clr
-                && typeof(IStoragePort).IsAssignableFrom(clr.RuntimeType)) {
+            if (string.Equals(TypeNameOf(parameter.TypeReference), typeof(IStoragePort).FullName, StringComparison.Ordinal)) {
                 callArgs[i] = port;
                 continue;
             }
@@ -217,6 +216,14 @@ public static class ModuleScopeOnly {
             throw;
         }
     }
+
+    /// <summary>The type a reference node names, whatever node states it.</summary>
+    static string? TypeNameOf(Poly.Ast.Node? reference) => reference switch {
+        Poly.Ast.Nodes.TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
+        Poly.Ast.Nodes.NamedTypeReference named => named.FullName,
+        Poly.Ast.Nodes.TypeReference name => name.TypeName,
+        _ => null
+    };
 
     static object? Field(ModuleInstanceExecutor executor, string name) =>
         (typeof(ModuleInstanceExecutor).GetField(name, Private)

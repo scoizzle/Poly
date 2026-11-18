@@ -130,7 +130,7 @@ internal sealed class ActionReadsWalker {
             typeof(LabelDeclaration), typeof(YieldStatement), typeof(StridedSetBits)
         ]),
         (NodeKindClass.TypeName, [
-            typeof(TypeReference), typeof(ClrTypeReference), typeof(NamedTypeReference), typeof(PrimitiveTypeReference),
+            typeof(TypeReference), typeof(NamedTypeReference), typeof(PrimitiveTypeReference),
             typeof(OptionalTypeReference), typeof(CollectionTypeReference), typeof(MapTypeReference),
             typeof(UnionTypeReference), typeof(ResolvedTypeReference), typeof(TypeDefinitionReference)
         ]),
@@ -402,7 +402,6 @@ internal sealed class ActionReadsWalker {
     private TypeClass Classify(Node? type) => type switch {
         OptionalTypeReference optional => Classify(optional.InnerType),
         PrimitiveTypeReference primitive => primitive.PrimitiveId == ClrPrimitive.Structure ? UnknownType.Instance : ScalarType.Instance,
-        ClrTypeReference clr => ClassifyClr(clr.RuntimeType),
         TypeDefinitionReference resolved => ClassifyNamed(resolved.TypeDefinition.Name, resolved.TypeDefinition.FullName, []),
         NamedTypeReference named => ClassifyNamed(named.TypeName, named.FullName, named.TypeArguments ?? []),
         TypeReference reference => ClassifyNamed(reference.TypeName, reference.TypeName, []),
@@ -468,7 +467,6 @@ internal sealed class ActionReadsWalker {
     }
 
     private static string? TypeNameOf(Node node) => node switch {
-        ClrTypeReference clr => clr.RuntimeType.FullName,
         PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
         TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
         NamedTypeReference named => named.FullName,

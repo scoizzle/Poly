@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -47,7 +48,7 @@ public class ResolvedTypeVmTests {
     public async Task Analyze_ProviderTypes_ShareTheCompilationUnit() {
         // The provider's type declarations are part of the analyzed unit, so a
         // member body carries resolved facts before emit runs.
-        var cast = new TypeCast(new Constant(42L), new ClrTypeReference(typeof(long)));
+        var cast = new TypeCast(new Constant(42L), ClrTypeReferences.Of(typeof(long)));
         var typeNode = new TypeDefinitionNode(
             "Caster", "Sample",
             Methods: [
@@ -77,7 +78,7 @@ public class ResolvedTypeVmTests {
                     "Cast",
                     new PrimitiveTypeReference(PrimitiveType.Int64),
                     Parameters: [],
-                    Body: new TypeCast(new Constant(42L), new ClrTypeReference(typeof(long))),
+                    Body: new TypeCast(new Constant(42L), ClrTypeReferences.Of(typeof(long))),
                     IsStatic: true)
             ]);
         var tda = Analyze(typeNode);
@@ -91,7 +92,7 @@ public class ResolvedTypeVmTests {
 
     [Test]
     public async Task Constructor_NullableParameter_KeepsScalar() {
-        var value = new Parameter("value", new ClrTypeReference(typeof(int?)));
+        var value = new Parameter("value", ClrTypeReferences.Of(typeof(int?)));
         var typeNode = new TypeDefinitionNode(
             "Box", "Sample",
             Constructors: [
@@ -101,7 +102,7 @@ public class ResolvedTypeVmTests {
                         new Assignment(new Member(new ThisReference(), "Value"), value)
                     ]))
             ],
-            Properties: [new PropertyDefinitionNode("Value", new ClrTypeReference(typeof(int?)))]);
+            Properties: [new PropertyDefinitionNode("Value", ClrTypeReferences.Of(typeof(int?)))]);
         var tda = Analyze(typeNode);
         var program = Interpreter.Compile(new New(new TypeReference("Sample.Box"), new Constant(42)), tda);
 
@@ -113,7 +114,7 @@ public class ResolvedTypeVmTests {
 
     [Test]
     public async Task Constructor_OmittedObjectDefault_StoresTheDefault() {
-        var value = new Parameter("value", new ClrTypeReference(typeof(object)), new Constant(5L));
+        var value = new Parameter("value", ClrTypeReferences.Of(typeof(object)), new Constant(5L));
         var typeNode = new TypeDefinitionNode(
             "Holder", "Sample",
             Constructors: [
@@ -123,7 +124,7 @@ public class ResolvedTypeVmTests {
                         new Assignment(new Member(new ThisReference(), "Value"), value)
                     ]))
             ],
-            Properties: [new PropertyDefinitionNode("Value", new ClrTypeReference(typeof(object)))]);
+            Properties: [new PropertyDefinitionNode("Value", ClrTypeReferences.Of(typeof(object)))]);
         var tda = Analyze(typeNode);
         var program = Interpreter.Compile(new New(new TypeReference("Sample.Holder")), tda);
 

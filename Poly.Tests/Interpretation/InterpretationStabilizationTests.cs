@@ -493,7 +493,7 @@ public class InterpretationStabilizationTests {
     private static async Task AssertSlot0(object? arg, long expectedRaw) {
         var program = Interpreter.Compile(arg is null
             ? new ThisReference()
-            : new Parameter("p", new ClrTypeReference(arg.GetType())));
+            : new Parameter("p", ClrTypeReferences.Of(arg.GetType())));
         using var exec = Interpreter.Execute(program, s => s.SetArgs(arg));
         await Assert.That(exec.RawValue).IsEqualTo(expectedRaw);
     }

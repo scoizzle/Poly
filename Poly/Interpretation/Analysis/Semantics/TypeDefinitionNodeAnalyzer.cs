@@ -612,7 +612,6 @@ internal static class AstTypeReferenceResolver {
             MapTypeReference map => ResolveMap(map, provider, clr, enclosing),
             UnionTypeReference union => ResolveUnion(union, provider, clr, enclosing),
             TypeDefinitionReference tdr => tdr.TypeDefinition,
-            ClrTypeReference clrRef => provider.GetClrTypeDefinition(clrRef.RuntimeType) ?? clr.GetTypeDefinition<object>(),
             TypeReference tr => ResolveByName(tr.TypeName, provider, clr),
             _ => clr.GetTypeDefinition<object>()
         };

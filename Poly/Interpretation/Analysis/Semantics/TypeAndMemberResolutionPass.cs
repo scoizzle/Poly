@@ -207,7 +207,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             NewArray newArr => ResolveNewArrayType(context, newArr),
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
-            ClrTypeReference clrTypeRef => context.TypeDefinitions.GetTypeDefinition(clrTypeRef.RuntimeType),
             NamedTypeReference named =>
                 AstTypeReferenceResolver.TryResolve(named, context.TypeDefinitions),
             OptionalTypeReference optional => ResolveOptionalType(context, optional),
@@ -1119,9 +1118,16 @@ internal static class MethodInvocationSemanticResolver {
         return true;
     }
 
-    private static Type? DeclaredParameterType(AnalysisContext context, Parameter parameter) =>
-        ClrTypeResolution.Resolve(
-            parameter.TypeReference, parameter, context.GetResolvedType);
+    private static Type? DeclaredParameterType(AnalysisContext context, Parameter parameter) {
+        if (ClrTypeResolution.Resolve(parameter.TypeReference, parameter, context.GetResolvedType) is { } resolved)
+            return resolved;
+        // A lambda's own parameter is not in the module the type pass walks, so the table has no
+        // entry for it: resolve its reference by name instead of treating the declared shape as absent.
+        if (parameter.TypeReference is not { } reference)
+            return null;
+        return AstTypeReferenceResolver.TryResolve(reference, context.TypeDefinitions) is { } declared
+            && declared.TryGetRuntimeType(out var runtime) ? runtime : null;
+    }
 }
 
 internal static class ConstructorInvocationSemanticResolver {

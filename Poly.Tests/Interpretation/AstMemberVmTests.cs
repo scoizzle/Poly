@@ -191,7 +191,7 @@ public class AstMemberVmTests {
         Methods: [
             new MethodDefinitionNode(
                 "Set",
-                new ClrTypeReference(typeof(void)),
+                ClrTypeReferences.Of(typeof(void)),
                 Parameters: [ObjectValue],
                 Body: new Block([new Assignment(new Member(new ThisReference(), "V"), ObjectValue)]))
         ]);
@@ -236,7 +236,7 @@ public class AstMemberVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Spin",
-                    new ClrTypeReference(typeof(void)),
+                    ClrTypeReferences.Of(typeof(void)),
                     Body: new WhileLoop(
                         new LessThan(count, new Constant(50L)),
                         new Assignment(count, new Add(count, new Constant(1L)))))
@@ -268,7 +268,7 @@ public class AstMemberVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Create",
-                    new ClrTypeReference(typeof(void)),
+                    ClrTypeReferences.Of(typeof(void)),
                     Body: new Block([new Variable("f"), new Assignment(new Variable("f"), LambdaArgument())]))
             ]));
         var shop = new Parameter("shop", new TypeReference("Sample.Shop"));
@@ -313,9 +313,9 @@ public class AstMemberVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Run",
-                    new ClrTypeReference(typeof(void)),
+                    ClrTypeReferences.Of(typeof(void)),
                     Body: new Block([new Invoke(
-                        new Member(new ClrTypeReference(typeof(HostJobProbe)), nameof(HostJobProbe.Take)),
+                        new Member(ClrTypeReferences.Of(typeof(HostJobProbe)), nameof(HostJobProbe.Take)),
                         new ThisReference(), LambdaArgument())]))
             ]));
         var shop = new Parameter("shop", new TypeReference("Sample.Shop"));

@@ -67,7 +67,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Variable v => v.Name,
             Parameter p => p.Name,
             Member m => m.MemberName,
-            ClrTypeReference c => c.RuntimeType.Name,
             NamedTypeReference n => LastNameSegment(n.FullName),
             TypeReference t => LastNameSegment(t.TypeName),
             PrimitiveTypeReference prim => prim.PrimitiveId.GetCSharpKeyword(),

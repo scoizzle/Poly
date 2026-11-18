@@ -9,7 +9,7 @@ namespace Poly.DomainModeling.Lowering;
 /// <c>DomainResult.Failure("…")</c> string by hand: it asks this seam for the
 /// <c>Poly.Runtime.DomainFailure.&lt;Kind&gt;(message[, path[, guard]])</c> call, so the kind,
 /// the element path and the guard travel with the message.
-/// The receiver is a <see cref="ClrTypeReference"/>, so it prints fully qualified and
+/// The receiver is a resolved CLR type reference, so it prints fully qualified and
 /// needs no using, but the leading <c>Poly</c> is a simple name in expression position, so a
 /// member named <c>Poly</c> would shadow it: <c>ReservedNames</c> reserves <c>Poly</c> as a
 /// generated-reference member name. Trailing null arguments are omitted: the VM and

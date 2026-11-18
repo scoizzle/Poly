@@ -6,6 +6,7 @@ using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Packs.Sqlite;
 using Poly.Runtime;
 using Poly.Tests.TestHelpers;
@@ -249,7 +250,6 @@ public class ActionScopeTouchShapeTests {
 
     /// <summary>An <c>ActionScope</c> receiver, however the tree names it: the CLR type or a neutral reference.</summary>
     private static bool IsActionScope(Node? receiver) => receiver switch {
-        ClrTypeReference { RuntimeType: var type } => type == typeof(ActionScope),
         NamedTypeReference reference => string.Equals(reference.FullName, typeof(ActionScope).FullName, StringComparison.Ordinal),
         TypeDefinitionReference reference => string.Equals(reference.TypeDefinition.FullName, typeof(ActionScope).FullName, StringComparison.Ordinal),
         _ => false
@@ -341,7 +341,7 @@ public class ActionScopeTouchShapeTests {
 
     [Test]
     public async Task Tripwire_WhenAMethodWritesAPeerOrThroughAnAlias_NamesIt() {
-        static MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
+        static MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(ClrTypeReferences.Of(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
         var peer = Method("PeerWrite", new Assignment(new Member(new Parameter("peer"), "X"), new Constant(1)));
         var alias = Method("AliasWrite", new Block([
             new Assignment(new Variable("self"), new ThisReference()),

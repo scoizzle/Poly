@@ -83,7 +83,6 @@ public static class NodeFacts {
         [typeof(BitwiseXor)] = Fact<BitwiseXor>(Producers.Vm | Producers.Writer | Producers.Reader, NodeEffect.Throws),
         [typeof(Block)] = Inert<Block>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(BreakStatement)] = Fact<BreakStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.Write),
-        [typeof(ClrTypeReference)] = Inert<ClrTypeReference>(Producers.None, "Type name is not a VM value; use it as a Member/Invoke/New receiver."),
         [typeof(Coalesce)] = Inert<Coalesce>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(CollectionTypeReference)] = Inert<CollectionTypeReference>(Producers.Writer | Producers.Reader),
         [typeof(CompilationUnitNode)] = Inert<CompilationUnitNode>(Producers.Writer | Producers.Reader),

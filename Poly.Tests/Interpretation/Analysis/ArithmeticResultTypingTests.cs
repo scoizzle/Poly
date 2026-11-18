@@ -27,7 +27,7 @@ public class ArithmeticResultTypingTests {
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    private static Parameter Param(string name, Type type) => new(name, new ClrTypeReference(type));
+    private static Parameter Param(string name, Type type) => new(name, ClrTypeReferences.Of(type));
 
     private static Type? Stamp(OperatorKind kind, Node left, Node? right, out Poly.Analysis.AnalysisResult analysis) {
         var node = NativeIntegerGrid.Build(kind, left, right);
@@ -270,7 +270,7 @@ public class ArithmeticResultTypingTests {
     [Arguments(typeof(KeyValuePair<int, int>), "KeyValuePair`2")]
     public async Task UndefinedArithmetic_IsRefusedAtTheNode_InEveryPosition(Type operand, string name) {
         Node Sum() => new Add(Param("o", operand), new Constant(1));
-        Node Call(string method) => new Invoke(new Member(new ClrTypeReference(typeof(TypedCalls)), method), Sum());
+        Node Call(string method) => new Invoke(new Member(ClrTypeReferences.Of(typeof(TypedCalls)), method), Sum());
         foreach (var node in new[] { Sum(), Call(nameof(TypedCalls.TakesInt)), Call(nameof(TypedCalls.TakesObject)), new Block([new Return(Sum())]) }) {
             var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
             await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray())

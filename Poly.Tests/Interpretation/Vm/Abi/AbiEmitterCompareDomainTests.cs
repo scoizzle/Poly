@@ -662,8 +662,8 @@ internal static class EnumComparisonOracle {
     }
 
     private static Node Side(Type type, string side, string name) => side switch {
-        "E" => new Parameter(name, new ClrTypeReference(type)),
-        "E?" => new Parameter(name, new OptionalTypeReference(new ClrTypeReference(type))),
+        "E" => new Parameter(name, ClrTypeReferences.Of(type)),
+        "E?" => new Parameter(name, new OptionalTypeReference(ClrTypeReferences.Of(type))),
         "null" => new Constant(null),
         _ => new Constant(Enum.Parse(type, side))
     };

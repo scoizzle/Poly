@@ -13,8 +13,8 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// and compiled by Roslyn with warnings as errors.
 /// </summary>
 public class ActionScopeSpikeTests {
-    private static readonly TypeReference Scope = new ClrTypeReference(typeof(ActionScope));
-    private static readonly TypeReference BagType = new ClrTypeReference(typeof(Dictionary<string, object?>));
+    private static readonly Node Scope = ClrTypeReferences.Of(typeof(ActionScope));
+    private static readonly Node BagType = ClrTypeReferences.Of(typeof(Dictionary<string, object?>));
 
     private static Node ScopeCall(string name, params Node[] arguments) =>
         new Invoke(new Member(Scope, name), arguments);
@@ -98,7 +98,7 @@ public class ActionScopeSpikeTests {
             new TryCatchFinally(
                 new Block([
                     new Invoke(new Member(bag, "Clear")),
-                    new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)), new Constant("boom")))
+                    new ThrowStatement(new New(ClrTypeReferences.Of(typeof(InvalidOperationException)), new Constant("boom")))
                 ]),
                 FinallyBlock: new Block([
                     ScopeCall("Rollback", scope),

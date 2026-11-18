@@ -72,7 +72,7 @@ internal static class NullableCharGrid {
                             continue;
                         if (!Arithmetic(kind) && (Unwrap(left).IsEnum || Unwrap(right).IsEnum))
                             continue;
-                        var node = ExtraOperandGrid.Build(kind, new Parameter("a", new ClrTypeReference(left)), new Parameter("b", new ClrTypeReference(right)));
+                        var node = ExtraOperandGrid.Build(kind, new Parameter("a", ClrTypeReferences.Of(left)), new Parameter("b", ClrTypeReferences.Of(right)));
                         var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
                         cells.Add(new Cell(left, kind, right, Classify(kind, left, right, node, analysis, resolution)));
                     }

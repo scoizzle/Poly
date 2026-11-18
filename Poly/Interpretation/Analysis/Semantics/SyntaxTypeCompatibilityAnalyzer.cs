@@ -348,8 +348,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         || (resolution.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
 
     private void CheckTypeAs(AnalysisContext context, TypeAs typeAs) {
-        var target = ClrTypeOf(context, typeAs)
-            ?? (typeAs.TargetTypeReference is ClrTypeReference ctr ? ctr.RuntimeType : null);
+        var target = ClrTypeOf(context, typeAs);
         if (target is null)
             return;
         if (target.IsValueType)
@@ -704,9 +703,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private void CheckTypeCast(AnalysisContext context, TypeCast typeCast) {
         var source = ClrTypeOf(context, typeCast.Operand);
         var dest = ClrTypeOf(context, typeCast);
-        var destDef = typeCast.TargetTypeReference is ClrTypeReference destClr
-                ? context.TypeDefinitions.GetTypeDefinition(destClr.RuntimeType)
-                : typeCast.TargetTypeReference is PrimitiveTypeReference primRef
+        var destDef = typeCast.TargetTypeReference is PrimitiveTypeReference primRef
                     && primRef.PrimitiveId.GetClrType() is { } primClr
                     ? context.TypeDefinitions.GetTypeDefinition(primClr)
                 : context.GetResolvedType(typeCast.TargetTypeReference)
@@ -924,8 +921,18 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
     private static bool IsStringConcatInvoke(Node node) =>
-        node is Invoke { Delegate: Member { MemberName: "Concat", Value: ClrTypeReference { RuntimeType: var t } } }
-        && t == typeof(string);
+        node is Invoke { Delegate: Member { MemberName: "Concat", Value: var receiver } }
+        && IsStringType(receiver);
+
+    /// <summary>True when a type node names <see cref="string"/>, however the tree states it.</summary>
+    private static bool IsStringType(Node? node) => node switch {
+        PrimitiveTypeReference primitive => primitive.PrimitiveId == PrimitiveType.String,
+        NamedTypeReference named => string.Equals(named.FullName, "System.String", StringComparison.Ordinal),
+        TypeDefinitionReference resolved => string.Equals(
+            resolved.TypeDefinition.FullName, "System.String", StringComparison.Ordinal),
+        TypeReference reference => string.Equals(reference.TypeName, "System.String", StringComparison.Ordinal),
+        _ => false
+    };
 
     private static ITypeMethod? FindConcatEnumerable(ITypeDefinition stringDef, Type elementType) {
         var arrayType = elementType.MakeArrayType();

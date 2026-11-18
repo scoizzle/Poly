@@ -66,7 +66,6 @@ public sealed class CatalogIndex {
     /// <summary>The type a reference node names, whatever node states it: a CLR reference, a resolved definition, a name,
     /// or a primitive.</summary>
     private static string? TypeNameOf(Node? reference) => reference switch {
-        ClrTypeReference clr => clr.RuntimeType.FullName,
         TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
         PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
         NamedTypeReference named => named.FullName,

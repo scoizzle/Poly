@@ -272,8 +272,8 @@ internal static class OperatorOracle {
 
     private static (string Lowered, string Abi) RunVm(
         OracleOperand left, OperatorKind kind, OracleOperand? right, ITypeOperator? resolution, List<OracleDivergence> divergences) {
-        var a = new Parameter("a", new ClrTypeReference(left.Clr!));
-        var b = right is null ? null : new Parameter("b", new ClrTypeReference(right.Clr!));
+        var a = new Parameter("a", ClrTypeReferences.Of(left.Clr!));
+        var b = right is null ? null : new Parameter("b", ClrTypeReferences.Of(right.Clr!));
         var node = Build(kind, a, b);
         var expectedType = resolution is { } found && found.ResultTypeDefinition.TryGetRuntimeType(out var tree) ? tree : null;
 

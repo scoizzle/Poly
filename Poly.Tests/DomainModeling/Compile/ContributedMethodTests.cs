@@ -533,8 +533,8 @@ public class ContributedMethodTests {
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var storage = _requireStorage ? request.RequireStorage() : null;
-            var dbType = new ClrTypeReference(typeof(IStoragePort));
-            var text = new ClrTypeReference(typeof(string));
+            var dbType = ClrTypeReferences.Of(typeof(IStoragePort));
+            var text = ClrTypeReferences.Of(typeof(string));
             var existsDb = new Parameter("db", dbType);
             var existsCode = new Parameter("code", text);
             var methodName = "ExistsWith" + request.Property.Name;
@@ -542,7 +542,7 @@ public class ContributedMethodTests {
             var propertyName = request.Property.Name;
             var exists = new MethodDefinitionNode(
                 methodName,
-                new ClrTypeReference(typeof(bool)),
+                ClrTypeReferences.Of(typeof(bool)),
                 Parameters: [existsDb, existsCode],
                 Body: new Block([
                     new Return(new Invoke(
@@ -605,7 +605,7 @@ public class ContributedMethodTests {
         public bool Applies(Constraint constraint) => constraint is RangeConstraint;
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
-            var scale = new ClrTypeReference(typeof(int));
+            var scale = ClrTypeReferences.Of(typeof(int));
             var parameter = new Parameter("scale", scale);
             return new ConstraintContribution(
                 LibraryId,
@@ -675,11 +675,11 @@ public class ContributedMethodTests {
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var type = request.Property.Name == "Code"
-                ? new ClrTypeReference(typeof(IStoragePort))
-                : new ClrTypeReference(typeof(string));
+                ? ClrTypeReferences.Of(typeof(IStoragePort))
+                : ClrTypeReferences.Of(typeof(string));
             var db = new Parameter("db", type);
             var value = request.ParameterOn("Create")
-                ?? new Parameter("value", new ClrTypeReference(typeof(string)));
+                ?? new Parameter("value", ClrTypeReferences.Of(typeof(string)));
             return new ConstraintContribution(
                 LibraryId,
                 request.Entity.Name,
@@ -710,7 +710,7 @@ public class ContributedMethodTests {
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var method = new MethodDefinitionNode(
                 "ExistsWithAnything",
-                new ClrTypeReference(typeof(bool)),
+                ClrTypeReferences.Of(typeof(bool)),
                 Parameters: [],
                 Body: new Block([new Return(new Constant(true))]),
                 IsStatic: true);
@@ -727,7 +727,6 @@ public class ContributedMethodTests {
 
     /// <summary>The type a reference node names, whatever node states it.</summary>
     private static string? TypeNameOf(Node? reference) => reference switch {
-        ClrTypeReference clr => clr.RuntimeType.FullName,
         TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
         PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
         NamedTypeReference named => named.FullName,

@@ -578,7 +578,7 @@ public static partial class AbiEmitter {
         var ring = ctx.OpenRing();
         var resultSlot = ring.AddValue(CompileNode(t.Operand, ctx));
 
-        // The reader folds `x is T` to a primitive/named reference, not a ClrTypeReference,
+        // The reader folds `x is T` to a primitive or named reference,
         // and analysis resolves the TypeIs node itself to bool — so resolve the target from
         // the type reference, never from the node. An unresolvable target (an array or map
         // reference, an unknown name, `void`) fails closed instead of testing against bool.

@@ -261,7 +261,6 @@ public sealed class CreateDeclarationOrderTests {
 
     /// <summary>The type a reference node names, whatever node states it.</summary>
     private static string? TypeNameOf(Node? reference) => reference switch {
-        ClrTypeReference clr => clr.RuntimeType.FullName,
         TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
         PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
         NamedTypeReference named => named.FullName,

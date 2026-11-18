@@ -5,6 +5,7 @@ using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -143,7 +144,7 @@ public class CallFrameArgumentTests {
                     new PrimitiveTypeReference(PrimitiveType.Int64),
                     [new Parameter("v", new PrimitiveTypeReference(PrimitiveType.Int64))],
                     new Block([
-                        new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)))),
+                        new ThrowStatement(new New(ClrTypeReferences.Of(typeof(InvalidOperationException)))),
                     ]),
                     IsStatic: false),
             ]);
@@ -160,7 +161,7 @@ public class CallFrameArgumentTests {
                 new Invoke(new Member(boom, "Blow"), new Constant(1L)),
                 CatchClauses: [
                     new CatchClause(
-                        new ClrTypeReference(typeof(InvalidOperationException)),
+                        ClrTypeReferences.Of(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(caught, new Constant(1L)))
                 ]),

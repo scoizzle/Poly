@@ -24,7 +24,7 @@ internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : 
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(Poly.Runtime.DomainResult<object>));
         if (string.Equals(name, "ConstraintFailureException", StringComparison.Ordinal))
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(ConstraintFailureException));
-        // Factory Create Ifs name string / Regex; assign lowering uses ClrTypeReference.
+        // Factory Create Ifs name string / Regex; assign lowering uses a resolved CLR type.
         if (string.Equals(name, "string", StringComparison.Ordinal))
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string));
         if (string.Equals(name, "System.Text.RegularExpressions.Regex", StringComparison.Ordinal))

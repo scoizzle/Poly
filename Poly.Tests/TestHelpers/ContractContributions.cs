@@ -54,7 +54,7 @@ public static class ContractContributions {
     /// </summary>
     public static Func<Block> TraceBody(string endpointName) => () => new Block([
         new Invoke(
-            new Member(new ClrTypeReference(typeof(System.Diagnostics.Debug)), "WriteLine"),
+            new Member(ClrTypeReferences.Of(typeof(System.Diagnostics.Debug)), "WriteLine"),
             [
                 new Invoke(
                     new Member(ClrTypeReferences.To<string>(), "Concat"),

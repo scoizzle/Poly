@@ -307,7 +307,7 @@ internal static class BridgeGrid {
             }
             foreach (var method in new[] { nameof(BridgeProbeTargets.TakeUInt32), nameof(BridgeProbeTargets.TakeUInt64) }) {
                 yield return new("constant-parameter", $"{method}({ConstantName(constant)})", null, int32, null, typeof(object),
-                    (_, _) => new Invoke(new Member(new ClrTypeReference(typeof(BridgeProbeTargets)), method), new Constant(constant)),
+                    (_, _) => new Invoke(new Member(ClrTypeReferences.Of(typeof(BridgeProbeTargets)), method), new Constant(constant)),
                     [new("S1", 7, null)]);
             }
         }
@@ -448,10 +448,10 @@ internal static class BridgeGrid {
     /// body is a function-table entry the main emitter compiles; the positive control of the stage harness.
     /// </summary>
     public static BridgeOutcome Evaluate(BridgeCase c, bool asDelegate = false) {
-        var a = new Parameter("a", new ClrTypeReference(c.Left.Clr));
-        var b = c.Right is null ? null : new Parameter("b", new ClrTypeReference(c.Right.Clr));
-        var x = new Parameter("x", new ClrTypeReference(c.Left.Clr));
-        var y = c.Right is null ? null : new Parameter("y", new ClrTypeReference(c.Right.Clr));
+        var a = new Parameter("a", ClrTypeReferences.Of(c.Left.Clr));
+        var b = c.Right is null ? null : new Parameter("b", ClrTypeReferences.Of(c.Right.Clr));
+        var x = new Parameter("x", ClrTypeReferences.Of(c.Left.Clr));
+        var y = c.Right is null ? null : new Parameter("y", ClrTypeReferences.Of(c.Right.Clr));
         var body = c.Body(x, y);
         var lambda = new Lambda(y is null ? [x] : [x, y], body);
         if (asDelegate && y is null)
@@ -461,7 +461,7 @@ internal static class BridgeGrid {
             : y is null
                 ? typeof(BridgeProbe<,>).MakeGenericType(c.Left.Clr, c.Return)
                 : typeof(BridgeProbe<,,>).MakeGenericType(c.Left.Clr, c.Right!.Clr, c.Return);
-        var apply = new Member(new ClrTypeReference(probe), "Apply");
+        var apply = new Member(ClrTypeReferences.Of(probe), "Apply");
         Node call = b is null ? new Invoke(apply, lambda, a) : new Invoke(apply, lambda, a, b);
 
         AnalysisResult analysis;
@@ -1224,7 +1224,7 @@ public class LambdaBridgeProviderTests {
             static (_, _) => new Constant(null), [new("S1", 5, null)]);
         await Assert.That(BridgeGrid.Evaluate(ret).Observed).IsEqualTo("ran; Int32?; S1=null");
         var argument = new BridgeCase("named", "Echo(null)", null, int32, null, typeof(object),
-            static (_, _) => new Invoke(new Member(new ClrTypeReference(typeof(BridgeProbeTargets)), nameof(BridgeProbeTargets.Echo)), new Constant(null)),
+            static (_, _) => new Invoke(new Member(ClrTypeReferences.Of(typeof(BridgeProbeTargets)), nameof(BridgeProbeTargets.Echo)), new Constant(null)),
             [new("S1", 5, null)]);
         await Assert.That(BridgeGrid.Evaluate(argument).Observed).IsEqualTo("ran; Int32?; S1=null");
         var coalesce = new BridgeCase("named", "Int32? ?? null", null, nullable, null, typeof(object),

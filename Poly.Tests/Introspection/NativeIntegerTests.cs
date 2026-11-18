@@ -172,8 +172,8 @@ internal static class NativeIntegerGrid {
 
     public static Cell Evaluate(OperatorKind kind, Type left, Type? right) {
         var oracle = CSharpOperatorOracle.Answer(kind, left, right);
-        var a = new Parameter("a", new ClrTypeReference(left));
-        var b = right is null ? null : new Parameter("b", new ClrTypeReference(right));
+        var a = new Parameter("a", ClrTypeReferences.Of(left));
+        var b = right is null ? null : new Parameter("b", ClrTypeReferences.Of(right));
         var node = Build(kind, a, b);
         AnalysisResult analysis;
         try {
@@ -241,7 +241,7 @@ internal static class NativeIntegerGrid {
 public class NativeIntegerTests {
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    private static Parameter Param(string name, Type type) => new(name, new ClrTypeReference(type));
+    private static Parameter Param(string name, Type type) => new(name, ClrTypeReferences.Of(type));
 
     private static string PreT18aPath() =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "Introspection", "NativeIntegerPreT18a.txt");
@@ -687,7 +687,7 @@ internal static class NativeConversionGrid {
         public string Line => $"{Key} | {Class} | {Detail}";
     }
 
-    private static Parameter Param(string name, Type type) => new(name, new ClrTypeReference(type));
+    private static Parameter Param(string name, Type type) => new(name, ClrTypeReferences.Of(type));
 
     private static string Errors(AnalysisResult analysis) =>
         string.Join("; ", analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message));
@@ -735,7 +735,7 @@ internal static class NativeConversionGrid {
     private static object[] ValuesOf(Type type) => [NativeIntegerGrid.Values[type].Stress, NativeIntegerGrid.Values[type].Plain];
 
     public static Cell EvaluateCast(Type from, Type to) {
-        var node = new TypeCast(Param("a", from), new ClrTypeReference(to));
+        var node = new TypeCast(Param("a", from), ClrTypeReferences.Of(to));
         var (cls, detail) = Run(node, ValuesOf(from).Select(v => (new object?[] { v }, Expected(CSharpOperatorOracle.ConversionValue(from, to, v, implicitOnly: false)))), to);
         return new($"({CSharpOperatorOracle.Keyword(to)}){CSharpOperatorOracle.Keyword(from)}", from, to, cls, detail);
     }

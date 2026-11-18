@@ -56,7 +56,7 @@ internal static class ExtraOperandGrid {
     });
 
     private static GridCell Evaluate(Type left, OperatorKind kind, Type right) {
-        var node = Build(kind, new Parameter("a", new ClrTypeReference(left)), new Parameter("b", new ClrTypeReference(right)));
+        var node = Build(kind, new Parameter("a", ClrTypeReferences.Of(left)), new Parameter("b", ClrTypeReferences.Of(right)));
         string verdict;
         try {
             var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
@@ -361,7 +361,7 @@ public class CompatibilityProviderTests {
         var sources = new (string Name, Func<Node> Operand, object?[] Args)[] {
             ("parameter", static () => new Parameter("f", ClrTypeReferences.To<bool?>()), [flag]),
             ("property", static () => new Member(new Parameter("b", ClrTypeReferences.To<NullableFlagBox>()), nameof(NullableFlagBox.Flag)), [new NullableFlagBox { Flag = flag }]),
-            ("call", () => new Invoke(new Member(new ClrTypeReference(typeof(NullableFlagBox)), nameof(NullableFlagBox.Of)), new Constant(NullableFlagBox.Code(flag))), []),
+            ("call", () => new Invoke(new Member(ClrTypeReferences.Of(typeof(NullableFlagBox)), nameof(NullableFlagBox.Of)), new Constant(NullableFlagBox.Code(flag))), []),
         };
         var answers = new List<string>();
         foreach (var (name, operand, args) in sources) {
@@ -389,7 +389,7 @@ public class CompatibilityProviderTests {
     /// <summary>Short-circuit over a <c>bool?</c> right operand: <c>false and X</c> and <c>true or X</c> never run X.</summary>
     [Test]
     public async Task AndOr_OverNullableBool_DoNotRunTheRightOperand_WhenTheLeftDecides() {
-        static Node Explode() => new Invoke(new Member(new ClrTypeReference(typeof(NullableFlagBox)), nameof(NullableFlagBox.Explode)));
+        static Node Explode() => new Invoke(new Member(ClrTypeReferences.Of(typeof(NullableFlagBox)), nameof(NullableFlagBox.Explode)));
         using (var and = Interpreter.Execute(Interpreter.Compile(new And(new Constant(false), Explode()))))
             await Assert.That(and.RawValue).IsEqualTo(0L);
         using (var or = Interpreter.Execute(Interpreter.Compile(new Or(new Constant(true), Explode()))))

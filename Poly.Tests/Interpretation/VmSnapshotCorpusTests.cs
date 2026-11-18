@@ -144,10 +144,10 @@ public class VmSnapshotCorpusTests {
         return new Block([
             new Assignment(caught, new Constant(0L)),
             new TryCatchFinally(
-                new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)))),
+                new ThrowStatement(new New(ClrTypeReferences.Of(typeof(InvalidOperationException)))),
                 CatchClauses: [
                     new CatchClause(
-                        new ClrTypeReference(typeof(InvalidOperationException)),
+                        ClrTypeReferences.Of(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(caught, new Constant(1L))),
                 ]),

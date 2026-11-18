@@ -309,7 +309,7 @@ public sealed partial class EffectLoweringPass {
     /// Emits assign-time constraint guards matching Create factory /
     /// <c>ValidateConstraints</c> messages. Enum-typed properties get a
     /// not-any-member guard. An <c>optional</c> length skips empty values.
-    /// Uses <see cref="ClrTypeReference"/> for string/Regex statics so the VM
+    /// Uses a resolved CLR type reference for string/Regex statics so the VM
     /// resolves MethodInfo (NamedTypeReference is export-shaped only).
     /// Void export contexts (ctor / OnEntry, no ActionResultType) throw like create-in.
     /// </summary>

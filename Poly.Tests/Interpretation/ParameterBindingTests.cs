@@ -14,7 +14,7 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class ParameterBindingTests {
     private static Member Probe(string name) =>
-        new(new ClrTypeReference(typeof(ParameterBindingTests)), name);
+        new(ClrTypeReferences.Of(typeof(ParameterBindingTests)), name);
 
     public static int CountIf(Func<int, bool> predicate, int value) =>
         predicate(value) ? 1 : 0;

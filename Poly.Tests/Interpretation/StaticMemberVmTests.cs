@@ -38,9 +38,9 @@ public class StaticMemberVmTests {
     }
 
     [Test]
-    public async Task Member_ClrTypeReferenceUtcNow_ReturnsUtcClock() {
+    public async Task Member_NeutralTypeReferenceUtcNow_ReturnsUtcClock() {
         using var exec = Interpreter.Execute(Interpreter.Compile(
-            new Member(new ClrTypeReference(typeof(DateTime)), "UtcNow")));
+            new Member(ClrTypeReferences.Of(typeof(DateTime)), "UtcNow")));
         await Assert.That(exec.GetValue<DateTime>().Kind).IsEqualTo(DateTimeKind.Utc);
     }
 

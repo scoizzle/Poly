@@ -557,8 +557,6 @@ public sealed class CSharpWriter {
 
     private static string? TypeRefName(Node? type) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
-        ClrTypeReference c when c.RuntimeType.IsGenericType || c.RuntimeType == typeof(object) =>
-            ToCSharpTypeName(c.RuntimeType),
         NamedTypeReference n when n.TypeArguments is { Count: > 0 } args =>
             n.TypeName + "<" + string.Join(", ", args.Select(a => TypeRefName(a) ?? "object")) + ">",
         NamedTypeReference n => n.TypeName,
@@ -606,12 +604,12 @@ public sealed class CSharpWriter {
         };
     }
 
-    /// <summary>A CLR type's own name with the reflection nesting separator written as the dot
-    /// C# requires: <c>Outer+Inner</c> is <c>Outer.Inner</c>.</summary>
-    /// <summary>The text a CLR type reference prints as: a C# spelling for a generic or <c>object</c>, a full name otherwise.</summary>
-    private static string ClrTypeReferenceText(Type type) =>
+    /// <summary>The text a CLR type prints as: a C# spelling for a generic or <c>object</c>, a full name otherwise.</summary>
+    private static string ClrTypeText(Type type) =>
         type.IsGenericType || type == typeof(object) ? ToCSharpTypeName(type) : EscapeTypeName(ClrTypeName(type));
 
+    /// <summary>A CLR type's own name with the reflection nesting separator written as the dot
+    /// C# requires: <c>Outer+Inner</c> is <c>Outer.Inner</c>.</summary>
     private static string ClrTypeName(Type type) => (type.FullName ?? type.Name).Replace('+', '.');
 
     private string IfText(IfStatement ifStmt, int indent) {
@@ -1059,10 +1057,6 @@ public sealed class CSharpWriter {
                 return Render("expr-primary", "this");
             case TypeOf typeOf:
                 return Render("expr-primary", "typeof", TypeText(typeOf.Type));
-            case ClrTypeReference clr when clr.RuntimeType.IsGenericType || clr.RuntimeType == typeof(object):
-                return ToCSharpTypeName(clr.RuntimeType);
-            case ClrTypeReference clr:
-                return EscapeTypeName(ClrTypeName(clr.RuntimeType));
             case TypeReference typeRef:
                 // Callee position stays raw: nameof(...) and string.Concat.
                 return typeRef.TypeName;
@@ -1652,12 +1646,11 @@ public sealed class CSharpWriter {
     /// <summary>
     /// <paramref name="type"/> as C# text. <paramref name="asArgument"/> is the spelling a type gets inside a nullable,
     /// a collection or a generic's arguments: a keyword or short name there, the full name at the top level. Both are
-    /// what a <see cref="ClrTypeReference"/> prints today, so a neutral reference prints the same.
+    /// what a CLR type prints as, so a neutral reference prints the same.
     /// </summary>
     private string TypeText(Node type, bool asArgument) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
-        ClrTypeReference c => ClrTypeReferenceText(c.RuntimeType),
-        TypeDefinitionReference t when t.TypeDefinition is IClrTypeDefinition { RuntimeType: var clr } => ClrTypeReferenceText(clr),
+        TypeDefinitionReference t when t.TypeDefinition is IClrTypeDefinition { RuntimeType: var clr } => ClrTypeText(clr),
         TypeDefinitionReference t => EscapeTypeName(t.TypeName),
         TypeReference t => EscapeTypeName(t.TypeName),
         NamedTypeReference n => NamedTypeText(n, asArgument),

@@ -196,7 +196,6 @@ public sealed partial class ModuleInstanceExecutor {
 
     private static bool IsTextLike(Parameter parameter) =>
         parameter.TypeReference switch {
-            ClrTypeReference { RuntimeType: var rt } when rt == typeof(string) => true,
             PrimitiveTypeReference { PrimitiveId: Prim.String } => true,
             NamedTypeReference { TypeName: "Text" or "String" or "string" } => true,
             NamedTypeReference { FullName: "System.String" } => true,
@@ -207,8 +206,6 @@ public sealed partial class ModuleInstanceExecutor {
 
     private static string? ParameterTypeName(Parameter parameter) =>
         parameter.TypeReference switch {
-            ClrTypeReference { RuntimeType: var rt } when rt == typeof(string) => "Text",
-            ClrTypeReference { RuntimeType: var rt } when rt == typeof(bool) => "Boolean",
             PrimitiveTypeReference { PrimitiveId: Prim.String } => "Text",
             PrimitiveTypeReference { PrimitiveId: Prim.Boolean } => "Boolean",
             NamedTypeReference n => n.TypeName,
@@ -219,7 +216,6 @@ public sealed partial class ModuleInstanceExecutor {
     private static Prim? PrimitiveForParameter(Parameter parameter) =>
         parameter.TypeReference switch {
             PrimitiveTypeReference p => p.PrimitiveId,
-            ClrTypeReference { RuntimeType: var rt } => rt.GetPrimitiveType(),
             NamedTypeReference n => DomainPrimitive(n.TypeName),
             TypeReference t => DomainPrimitive(t.TypeName),
             _ => null

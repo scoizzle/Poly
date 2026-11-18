@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -338,7 +339,7 @@ public static class AstParity {
     /// lambda becomes the method's parameters and body, and any other statement is the body itself.
     /// </summary>
     private static (Node ReturnType, Node Body, IReadOnlyList<Parameter>? Parameters) EntryShape(Node node) {
-        var objectType = new ClrTypeReference(typeof(object));
+        var objectType = ClrTypeReferences.Of(typeof(object));
         var voidType = new TypeReference("void");
         return node switch {
             Return => (objectType, node, null),
@@ -355,9 +356,9 @@ public static class AstParity {
     /// a block body keeps its statements with its trailing value returned.</summary>
     static (Node ReturnType, Node Body, IReadOnlyList<Parameter>? Parameters) LambdaEntry(Lambda lambda) =>
         lambda.Body switch {
-            Block block when Yields(block) => (new ClrTypeReference(typeof(object)), Hoisted(block), lambda.Parameters),
+            Block block when Yields(block) => (ClrTypeReferences.Of(typeof(object)), Hoisted(block), lambda.Parameters),
             Block => (new TypeReference("void"), lambda.Body, lambda.Parameters),
-            _ => (new ClrTypeReference(typeof(object)), new Return(lambda.Body), lambda.Parameters),
+            _ => (ClrTypeReferences.Of(typeof(object)), new Return(lambda.Body), lambda.Parameters),
         };
 
     /// <summary>True when the block's value reaches a consumer: its last node is a value

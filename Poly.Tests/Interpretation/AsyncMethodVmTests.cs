@@ -2,6 +2,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -26,7 +27,7 @@ public class AsyncMethodVmTests {
     }
 
     private static MethodDefinitionNode AsyncReturning(string name, Type task, Node body) => new(
-        name, new ClrTypeReference(task), Body: body, IsAsync: true);
+        name, ClrTypeReferences.Of(task), Body: body, IsAsync: true);
 
     private static TypeDefinitionNode ItemWith(params MethodDefinitionNode[] methods) =>
         new("Item", "Sample", Methods: methods);
@@ -86,9 +87,9 @@ public class AsyncMethodVmTests {
     public async Task NonAsyncTaskReturningMethod_IsNotWrapped() {
         // IsAsync false: the body's own Task<long> is the method's value, not a wrapped result.
         var raw = new MethodDefinitionNode(
-            "Raw", new ClrTypeReference(typeof(Task<long>)),
+            "Raw", ClrTypeReferences.Of(typeof(Task<long>)),
             Body: new Return(new Invoke(
-                new Member(new ClrTypeReference(typeof(Host)), "Completed"))));
+                new Member(ClrTypeReferences.Of(typeof(Host)), "Completed"))));
         var tda = Analyze(ItemWith(raw));
         using var exec = Execute(Compile(tda, new Invoke(new Member(Item, "Raw"))));
         var task = exec.GetValue<Task<long>>();
@@ -108,7 +109,7 @@ public class AsyncMethodVmTests {
     [Test]
     public async Task AwaitInNonAsyncMethod_IsRejected() {
         var bad = new MethodDefinitionNode(
-            "Bad", new ClrTypeReference(typeof(Task<long>)),
+            "Bad", ClrTypeReferences.Of(typeof(Task<long>)),
             Body: new Return(new Await(new Constant(1L))));
         var tda = Analyze(ItemWith(bad));
         await Assert.That(() => Compile(tda, new Await(new Invoke(new Member(Item, "Bad")))))

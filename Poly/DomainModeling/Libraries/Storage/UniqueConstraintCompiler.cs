@@ -381,7 +381,6 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         string Property, Node Value, Node Destination, Invoke Failure);
 
     private static bool IsString(Node? type) => type switch {
-        ClrTypeReference clr => clr.RuntimeType == typeof(string),
         PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType() == typeof(string),
         NamedTypeReference named => string.Equals(named.TypeName, "Text", StringComparison.Ordinal),
         _ => false

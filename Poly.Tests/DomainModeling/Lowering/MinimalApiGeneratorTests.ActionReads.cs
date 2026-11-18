@@ -1,6 +1,7 @@
 using Poly.Compile;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Packs.Product;
 using Poly.Tests.Docs;
 using Poly.Tests.DomainModeling.Analysis;
@@ -763,18 +764,18 @@ public partial class MinimalApiGeneratorTests {
     [MethodDataSource(nameof(WhitelistEntries))]
     public async Task ActionReads_WhitelistEntry_IsTheOnlyReasonTheCallIsFollowed(string entry) {
         var customer = new Member(new ThisReference(), "Customer");
-        var policy = new Invoke(new Member(new ClrTypeReference(typeof(DomainFailure)), "Policy"), new Constant("m"), customer);
+        var policy = new Invoke(new Member(ClrTypeReferences.Of(typeof(DomainFailure)), "Policy"), new Constant("m"), customer);
         var resultOfCustomer = new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("Customer")]);
         var (call, expected) = entry switch {
-            "Poly.Runtime.ActionScope.*" => ((Node)new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), "Touch"), customer), "this{Customer}"),
-            "System.Object.ReferenceEquals" => (new Invoke(new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"), customer, customer), "this{Customer}"),
+            "Poly.Runtime.ActionScope.*" => ((Node)new Invoke(new Member(ClrTypeReferences.Of(typeof(ActionScope)), "Touch"), customer), "this{Customer}"),
+            "System.Object.ReferenceEquals" => (new Invoke(new Member(ClrTypeReferences.Of(typeof(object)), "ReferenceEquals"), customer, customer), "this{Customer}"),
             "Poly.Runtime.DomainResult.Success" => (new Assignment(new Variable("n"),
                 new Member(new Member(new Member(new Invoke(new Member(resultOfCustomer, "Success"), customer), "Value"), "Region"), "Name")),
                 "this{Customer{Region}}"),
             "Poly.Runtime.DomainResult.Failure" => (new Invoke(new Member(resultOfCustomer, "Failure"), customer), "this{Customer}"),
             "Poly.Runtime.DomainFailure.*" => (policy, "this{Customer}"),
             "Poly.Runtime.DomainFailure.At" => (new Invoke(new Member(
-                new Invoke(new Member(new ClrTypeReference(typeof(DomainFailure)), "Policy"), new Constant("m"), new Constant("p")), "At"), customer),
+                new Invoke(new Member(ClrTypeReferences.Of(typeof(DomainFailure)), "Policy"), new Constant("m"), new Constant("p")), "At"), customer),
                 "this{Customer}"),
             "Poly.Runtime.IStoragePort.*" => (new Invoke(new Member(new Parameter("db"), "Exists"), new Constant("Widget"), new Constant("Code"), new Constant("x")), "this{}"),
             _ => throw new InvalidOperationException($"No test for whitelist entry '{entry}'."),

@@ -403,6 +403,7 @@ internal sealed class ActionReadsWalker {
         OptionalTypeReference optional => Classify(optional.InnerType),
         PrimitiveTypeReference primitive => primitive.PrimitiveId == ClrPrimitive.Structure ? UnknownType.Instance : ScalarType.Instance,
         ClrTypeReference clr => ClassifyClr(clr.RuntimeType),
+        TypeDefinitionReference resolved => ClassifyNamed(resolved.TypeDefinition.Name, resolved.TypeDefinition.FullName, []),
         NamedTypeReference named => ClassifyNamed(named.TypeName, named.FullName, named.TypeArguments ?? []),
         TypeReference reference => ClassifyNamed(reference.TypeName, reference.TypeName, []),
         CollectionTypeReference collection => Classify(collection.ElementType) switch {

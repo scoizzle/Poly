@@ -1,4 +1,5 @@
 using Poly.Ast.Nodes;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 namespace Poly.DomainModeling.Compile;
@@ -62,6 +63,17 @@ public sealed class CatalogIndex {
         return null;
     }
 
+    /// <summary>The type a reference node names, whatever node states it: a CLR reference, a resolved definition, a name,
+    /// or a primitive.</summary>
+    private static string? TypeNameOf(Node? reference) => reference switch {
+        ClrTypeReference clr => clr.RuntimeType.FullName,
+        TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
+        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
+        NamedTypeReference named => named.FullName,
+        TypeReference name => name.TypeName,
+        _ => null
+    };
+
     /// <summary>
     /// True when any lowered method in this catalog depends on the in-process
     /// storage port. The host context implements the port only for those domains.
@@ -74,8 +86,8 @@ public sealed class CatalogIndex {
                 foreach (var type in types) {
                     foreach (var method in type.Methods ?? []) {
                         foreach (var parameter in method.Parameters ?? []) {
-                            if (parameter.TypeReference is ClrTypeReference reference
-                                && typeof(IStoragePort).IsAssignableFrom(reference.RuntimeType))
+                            if (TypeNameOf(parameter.TypeReference) is { } portName
+                                && string.Equals(portName, typeof(IStoragePort).FullName, StringComparison.Ordinal))
                                 return true;
                         }
                     }

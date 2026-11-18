@@ -4,6 +4,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 namespace Poly.Packs.Product;
@@ -105,7 +106,7 @@ public sealed partial class DbContextGenerator {
             methods.Add(TryReserveMethod());
             methods.Add(RecordMethod());
             methods.Add(ReleaseMethod());
-            interfaces = [new ClrTypeReference(typeof(IStoragePort))];
+            interfaces = [ClrTypeReferences.Of(typeof(IStoragePort))];
         }
 
         var contextType = new TypeDefinitionNode(

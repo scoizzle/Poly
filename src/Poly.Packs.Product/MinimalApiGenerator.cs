@@ -5,6 +5,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
@@ -239,7 +240,7 @@ public sealed partial class MinimalApiGenerator {
                     new Member(new TypeReference(BuilderVar), "Services"),
                     "AddScoped")) {
                 TypeArguments = [
-                    new ClrTypeReference(typeof(IStoragePort)),
+                    ClrTypeReferences.Of(typeof(IStoragePort)),
                     new TypeReference(dbContextName)
                 ]
             });

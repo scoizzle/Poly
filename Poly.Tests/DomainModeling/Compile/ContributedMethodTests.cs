@@ -8,6 +8,7 @@ using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Runtime;
 using Poly.DslCompiler;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Packs.Product;
 using Poly.Tests.TestHelpers;
 
@@ -260,8 +261,8 @@ public class ContributedMethodTests {
         var unit = new DbContextGenerator(domain, storage, implementsStoragePort: true)
             .GenerateCompilationUnit();
         var context = unit.FindType("LabDbContext")!;
-        var contract = context.Interfaces!.OfType<ClrTypeReference>().Single();
-        await Assert.That(contract.RuntimeType).IsEqualTo(typeof(IStoragePort));
+        var contract = context.Interfaces!.Single();
+        await Assert.That(TypeNameOf(contract)).IsEqualTo(typeof(IStoragePort).FullName);
 
         var exists = context.FindMethod("Exists")!;
         await Assert.That(exists.Body).IsNotNull();
@@ -723,4 +724,15 @@ public class ContributedMethodTests {
                 [method, method]);
         }
     }
+
+    /// <summary>The type a reference node names, whatever node states it.</summary>
+    private static string? TypeNameOf(Node? reference) => reference switch {
+        ClrTypeReference clr => clr.RuntimeType.FullName,
+        TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
+        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
+        NamedTypeReference named => named.FullName,
+        TypeReference name => name.TypeName,
+        _ => null
+    };
+
 }

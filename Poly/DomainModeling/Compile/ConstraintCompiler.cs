@@ -1,6 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -60,7 +61,8 @@ public interface IConstraintCompiler {
     /// Rewrites the module after contributions are installed. The default
     /// returns <paramref name="module"/> unchanged.
     /// </summary>
-    ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module) =>
+    /// <param name="types">The analysis' type provider, so a rewrite that mints nodes can state a resolved definition.</param>
+    ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module, ITypeDefinitionProvider? types = null) =>
         new(module, []);
 }
 
@@ -88,12 +90,26 @@ public sealed class ConstraintCompileRequest {
         Property property,
         Constraint constraint,
         IReadOnlyDictionary<string, Parameter> parameters,
-        StorageModel? storage) {
+        StorageModel? storage,
+        ITypeDefinitionProvider? types = null) {
         Entity = entity;
         Property = property;
         Constraint = constraint;
         _parameters = parameters;
         StorageModel = storage;
+        Types = types;
+    }
+
+    /// <summary>The analysis' type provider, so a compiler states a resolved definition instead of a CLR type.</summary>
+    public ITypeDefinitionProvider? Types { get; }
+
+    /// <summary>A tree reference to <paramref name="type"/>: the resolved definition when the provider has one, else the
+    /// CLR host's neutral reference.</summary>
+    public Node TypeReference(Type type) {
+        ArgumentNullException.ThrowIfNull(type);
+        return Types?.GetClrTypeDefinition(type) is { } definition
+            ? new TypeDefinitionReference(definition)
+            : ClrTypeReferences.Of(type);
     }
 
     public Entity Entity { get; }

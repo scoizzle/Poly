@@ -29,8 +29,8 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     public ConstraintContribution Compile(ConstraintCompileRequest request) {
         ArgumentNullException.ThrowIfNull(request);
         var storage = request.RequireStorage();
-        var portType = new ClrTypeReference(typeof(IStoragePort));
-        var text = new ClrTypeReference(typeof(string));
+        var portType = request.TypeReference(typeof(IStoragePort));
+        var text = request.TypeReference(typeof(string));
 
         var entityName = storage.Name;
         var propertyName = request.Property.Name;
@@ -52,7 +52,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         var existsValue = new Parameter(parameterName, text);
         var exists = new MethodDefinitionNode(
             methodName,
-            new ClrTypeReference(typeof(bool)),
+            request.TypeReference(typeof(bool)),
             Parameters: [existsDb, existsValue],
             Body: new Block([
                 new Return(new Invoke(
@@ -103,17 +103,17 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
                 new ConstraintAnchor.Named(method.Name),
                 [],
                 [],
-                [new ImpliedParameter("db", PortType, ThreadToCallers: true)]));
+                [new ImpliedParameter("db", request.TypeReference(typeof(IStoragePort)), ThreadToCallers: true)]));
         }
         return obligations ?? [];
     }
 
-    public ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module) {
+    public ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module, ITypeDefinitionProvider? provider) {
         ArgumentNullException.ThrowIfNull(module);
         var replaced = new List<(Node From, Node To)>();
         List<TypeDefinitionNode>? types = null;
         for (var i = 0; i < module.Count; i++) {
-            var next = RewriteType(module[i], replaced);
+            var next = RewriteType(module[i], replaced, provider);
             if (ReferenceEquals(next, module[i]))
                 continue;
             types ??= [.. module];
@@ -123,7 +123,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     }
 
     private static TypeDefinitionNode RewriteType(
-        TypeDefinitionNode type, List<(Node From, Node To)> replaced) {
+        TypeDefinitionNode type, List<(Node From, Node To)> replaced, ITypeDefinitionProvider? provider) {
         if (type.Constructors is not null) {
             foreach (var ctor in type.Constructors) {
                 if (ContainsEnsureUnique(ctor.Body))
@@ -138,7 +138,9 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
             var method = type.Methods[i];
             if (method.Body is null)
                 continue;
-            var walk = new AssignWalk(type.Name, method.Name, replaced);
+            var walk = new AssignWalk(
+                type.Name, method.Name, replaced,
+                TypeReferenceOf(provider, typeof(IStoragePort)), TypeReferenceOf(provider, typeof(object)));
             var body = walk.Rewrite(method.Body);
             RejectRemaining(body, $"{type.Name}.{method.Name}");
             if (ReferenceEquals(body, method.Body))
@@ -200,18 +202,25 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private static string Violation(string entity, string property) =>
         $"Unique constraint violated: '{property}' value is already used on another '{entity}'.";
 
-    private static readonly ClrTypeReference PortType = new(typeof(IStoragePort));
+    /// <summary>A reference the analysis can resolve, or the CLR host's neutral reference when it has no provider.</summary>
+    private static Node TypeReferenceOf(ITypeDefinitionProvider? provider, Type type) =>
+        provider?.GetClrTypeDefinition(type) is { } definition
+            ? new TypeDefinitionReference(definition)
+            : ClrTypeReferences.Of(type);
 
     private sealed class AssignWalk {
         private readonly string _typeName;
         private readonly string _methodName;
-        private readonly Parameter _db = new("db", PortType);
+        private readonly Parameter _db;
+        private readonly Node _objectType;
         private readonly List<(Node From, Node To)> _replaced;
 
-        public AssignWalk(string typeName, string methodName, List<(Node From, Node To)> replaced) {
+        public AssignWalk(string typeName, string methodName, List<(Node From, Node To)> replaced, Node portType, Node objectType) {
             _typeName = typeName;
             _methodName = methodName;
             _replaced = replaced;
+            _db = new("db", portType);
+            _objectType = objectType;
         }
 
         public Node Rewrite(Node node) => node switch {
@@ -332,8 +341,8 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
                     new Invoke(new Member(argument, "ToString")));
         }
 
-        private static Invoke ObjectEquals(Node left, Node right) =>
-            new(new Member(new ClrTypeReference(typeof(object)), "Equals"), left, right);
+        private Invoke ObjectEquals(Node left, Node right) =>
+            new(new Member(_objectType, "Equals"), left, right);
 
         private Return FailureReturn(Invoke failure, string property) {
             var call = new Invoke(failure.Delegate, FailureLowering.Call(UniqueFailure(_typeName, property)));

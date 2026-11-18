@@ -6,6 +6,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 using TUnit.Assertions.Enums;
@@ -229,7 +230,8 @@ public sealed class CreateDeclarationOrderTests {
             foreach (var entity in result.Domain.Types.OfType<Entity>()) {
                 var create = module.Single(t => t.Name == entity.Name).Methods!.Single(m => m.Name == "Create");
                 var lowered = (create.Parameters ?? [])
-                    .Where(p => p.TypeReference is not ClrTypeReference { RuntimeType: var t } || t != typeof(Poly.Runtime.IStoragePort))
+                    .Where(p => !string.Equals(
+                        TypeNameOf(p.TypeReference), typeof(Poly.Runtime.IStoragePort).FullName, StringComparison.Ordinal))
                     .Select(p => p.Name);
                 var slots = result.Analysis.GetStructure(entity)!.CreateSlots.Select(s => DomainToCSharpExporter.ToCamelCase(s.Name));
                 if (!lowered.SequenceEqual(slots))
@@ -256,4 +258,15 @@ public sealed class CreateDeclarationOrderTests {
             .Where(m => m.Name == "Create")
             .OrderByDescending(m => m.GetParameters().Length)
             .First();
+
+    /// <summary>The type a reference node names, whatever node states it.</summary>
+    private static string? TypeNameOf(Node? reference) => reference switch {
+        ClrTypeReference clr => clr.RuntimeType.FullName,
+        TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
+        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
+        NamedTypeReference named => named.FullName,
+        TypeReference name => name.TypeName,
+        _ => null
+    };
+
 }

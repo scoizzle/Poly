@@ -506,6 +506,8 @@ public sealed partial class ModuleInstanceExecutor {
     private static bool IsStoragePort(Parameter parameter) =>
         parameter.TypeReference switch {
             ClrTypeReference reference => typeof(IStoragePort).IsAssignableFrom(reference.RuntimeType),
+            TypeDefinitionReference resolved => string.Equals(
+                resolved.TypeDefinition.FullName, typeof(IStoragePort).FullName, StringComparison.Ordinal),
             TypeReference type => string.Equals(
                 type.TypeName, typeof(IStoragePort).FullName, StringComparison.Ordinal),
             _ => false

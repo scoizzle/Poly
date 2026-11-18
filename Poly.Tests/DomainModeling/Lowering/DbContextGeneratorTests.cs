@@ -3,6 +3,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.DslCompiler;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Packs.Product;
 using Poly.Runtime;
 using Poly.Tests.TestHelpers;
@@ -292,8 +293,8 @@ public class DbContextGeneratorTests {
         foreach (var name in new[] { "Exists", "Record", "Release" }) {
             var body = context.FindMethod(name)!.Body!;
             var canonical = Descendants(body).OfType<Invoke>().Where(i =>
-                i.Delegate is Member { MemberName: "Canonical", Value: ClrTypeReference reference }
-                && reference.RuntimeType == typeof(KeyCodec)).ToList();
+                i.Delegate is Member { MemberName: "Canonical", Value: var receiver }
+                && string.Equals(TypeNameOf(receiver), typeof(KeyCodec).FullName, StringComparison.Ordinal)).ToList();
             await Assert.That(canonical.Count).IsEqualTo(1).Because(name);
 
             var separators = Descendants(body).OfType<Constant>()
@@ -392,4 +393,15 @@ public class DbContextGeneratorTests {
                 yield return descendant;
         }
     }
+
+    /// <summary>The type a reference node names, whatever node states it.</summary>
+    private static string? TypeNameOf(Node? reference) => reference switch {
+        ClrTypeReference clr => clr.RuntimeType.FullName,
+        TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
+        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
+        NamedTypeReference named => named.FullName,
+        TypeReference name => name.TypeName,
+        _ => null
+    };
+
 }

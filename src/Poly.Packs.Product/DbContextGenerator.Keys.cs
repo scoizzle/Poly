@@ -1,6 +1,7 @@
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
@@ -122,6 +123,6 @@ public sealed partial class DbContextGenerator {
     // One encoding for the host and the simulator: the length-prefixed KeyCodec key.
     private static Node PendingKey(Node entity, Node property, Node value) =>
         new Invoke(
-            new Member(new ClrTypeReference(typeof(KeyCodec)), "Canonical"),
+            new Member(ClrTypeReferences.Of(typeof(KeyCodec)), "Canonical"),
             entity, property, value);
 }

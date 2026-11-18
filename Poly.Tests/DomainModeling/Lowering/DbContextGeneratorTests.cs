@@ -294,7 +294,7 @@ public class DbContextGeneratorTests {
             var body = context.FindMethod(name)!.Body!;
             var canonical = Descendants(body).OfType<Invoke>().Where(i =>
                 i.Delegate is Member { MemberName: "Canonical", Value: var receiver }
-                && string.Equals(TypeNameOf(receiver), typeof(KeyCodec).FullName, StringComparison.Ordinal)).ToList();
+                && ClrTypeReferences.Denotes(receiver, typeof(KeyCodec))).ToList();
             await Assert.That(canonical.Count).IsEqualTo(1).Because(name);
 
             var separators = Descendants(body).OfType<Constant>()
@@ -393,14 +393,5 @@ public class DbContextGeneratorTests {
                 yield return descendant;
         }
     }
-
-    /// <summary>The type a reference node names, whatever node states it.</summary>
-    private static string? TypeNameOf(Node? reference) => reference switch {
-        TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
-        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
-        NamedTypeReference named => named.FullName,
-        TypeReference name => name.TypeName,
-        _ => null
-    };
 
 }

@@ -262,7 +262,7 @@ public class ContributedMethodTests {
             .GenerateCompilationUnit();
         var context = unit.FindType("LabDbContext")!;
         var contract = context.Interfaces!.Single();
-        await Assert.That(TypeNameOf(contract)).IsEqualTo(typeof(IStoragePort).FullName);
+        await Assert.That(ClrTypeReferences.Denotes(contract, typeof(IStoragePort))).IsTrue();
 
         var exists = context.FindMethod("Exists")!;
         await Assert.That(exists.Body).IsNotNull();
@@ -724,14 +724,5 @@ public class ContributedMethodTests {
                 [method, method]);
         }
     }
-
-    /// <summary>The type a reference node names, whatever node states it.</summary>
-    private static string? TypeNameOf(Node? reference) => reference switch {
-        TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
-        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType()?.FullName,
-        NamedTypeReference named => named.FullName,
-        TypeReference name => name.TypeName,
-        _ => null
-    };
 
 }

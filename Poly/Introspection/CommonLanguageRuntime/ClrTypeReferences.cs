@@ -21,4 +21,13 @@ public static class ClrTypeReferences {
             return new OptionalTypeReference(Of(underlying));
         return new TypeDefinitionReference(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type));
     }
+
+    /// <summary>True when <paramref name="reference"/> states a definition the platform's <paramref name="type"/>
+    /// accepts without a conversion: the type itself, a subtype or an implementer. A name is not a type, so a
+    /// reference that only spells one denotes nothing.</summary>
+    public static bool Denotes(Node? reference, Type type) {
+        ArgumentNullException.ThrowIfNull(type);
+        return reference is TypeDefinitionReference { TypeDefinition: var stated }
+            && ((ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)).IsAssignableWithoutConversion(stated);
+    }
 }

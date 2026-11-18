@@ -924,13 +924,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         node is Invoke { Delegate: Member { MemberName: "Concat", Value: var receiver } }
         && IsStringType(receiver);
 
-    /// <summary>True when a type node names <see cref="string"/>, however the tree states it.</summary>
+    /// <summary>True when a type node states the string primitive: by the shared vocabulary or by a definition.</summary>
     private static bool IsStringType(Node? node) => node switch {
         PrimitiveTypeReference primitive => primitive.PrimitiveId == PrimitiveType.String,
-        NamedTypeReference named => string.Equals(named.FullName, "System.String", StringComparison.Ordinal),
-        TypeDefinitionReference resolved => string.Equals(
-            resolved.TypeDefinition.FullName, "System.String", StringComparison.Ordinal),
-        TypeReference reference => string.Equals(reference.TypeName, "System.String", StringComparison.Ordinal),
+        TypeDefinitionReference { TypeDefinition.PrimitiveType: PrimitiveType.String } => true,
         _ => false
     };
 

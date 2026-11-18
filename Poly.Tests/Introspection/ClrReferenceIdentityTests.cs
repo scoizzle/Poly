@@ -1,6 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Runtime;
 
 namespace Poly.Tests.Introspection;
 
@@ -49,6 +50,22 @@ public class ClrReferenceIdentityTests {
         ITypeDefinition implementer = new NamedType("App", "AppDbContext", [port]);
         await Assert.That(TypeDefinitionExtensions.IsAssignableByHierarchy(port, implementer)).IsTrue()
             .Because("an implementer of the port is the port's shape, which a name comparison cannot see");
+    }
+
+    [Test]
+    public async Task Denotes_AnImplementer_IsThePort() {
+        var implementer = ClrTypeReferences.Of(typeof(Poly.DomainModeling.Runtime.ModuleStoragePort));
+        await Assert.That(ClrTypeReferences.Denotes(implementer, typeof(IStoragePort))).IsTrue()
+            .Because("a parameter typed as an implementer of the port takes the port");
+    }
+
+    [Test]
+    public async Task Denotes_ASpelledName_IsNotTheType() {
+        var spelled = new NamedTypeReference("IStoragePort", "Poly.Runtime");
+        await Assert.That(ClrTypeReferences.Denotes(spelled, typeof(IStoragePort))).IsFalse()
+            .Because("a name is not a type: only a stated definition denotes one");
+        await Assert.That(ClrTypeReferences.Denotes(ClrTypeReferences.To<string>(), typeof(IStoragePort))).IsFalse();
+        await Assert.That(ClrTypeReferences.Denotes(ClrTypeReferences.To<IStoragePort>(), typeof(IStoragePort))).IsTrue();
     }
 
     /// <summary>A definition with no platform behind it: the second-platform case in miniature. Identity is its own

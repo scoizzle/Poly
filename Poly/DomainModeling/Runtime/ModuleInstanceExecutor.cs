@@ -504,13 +504,7 @@ public sealed partial class ModuleInstanceExecutor {
     }
 
     private static bool IsStoragePort(Parameter parameter) =>
-        parameter.TypeReference switch {
-            TypeDefinitionReference resolved => string.Equals(
-                resolved.TypeDefinition.FullName, typeof(IStoragePort).FullName, StringComparison.Ordinal),
-            TypeReference type => string.Equals(
-                type.TypeName, typeof(IStoragePort).FullName, StringComparison.Ordinal),
-            _ => false
-        };
+        ClrTypeReferences.Denotes(parameter.TypeReference, typeof(IStoragePort));
 
     private static bool TryValue(
         IReadOnlyDictionary<string, object?> values, string parameterName, out object? value) {

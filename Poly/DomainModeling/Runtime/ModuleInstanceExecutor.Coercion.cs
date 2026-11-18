@@ -198,7 +198,6 @@ public sealed partial class ModuleInstanceExecutor {
         parameter.TypeReference switch {
             PrimitiveTypeReference { PrimitiveId: Prim.String } => true,
             NamedTypeReference { TypeName: "Text" or "String" or "string" } => true,
-            NamedTypeReference { FullName: "System.String" } => true,
             TypeDefinitionReference { TypeDefinition.PrimitiveType: Prim.String } => true,
             TypeReference { TypeName: "Text" or "String" or "string" } => true,
             _ => false

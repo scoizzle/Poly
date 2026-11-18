@@ -246,14 +246,7 @@ public class ActionScopeTouchShapeTests {
 
     private static bool IsTouchOfThis(Node node) =>
         node is Invoke { Delegate: Member { MemberName: "Touch", Value: var receiver }, Arguments: [ThisReference] }
-        && IsActionScope(receiver);
-
-    /// <summary>An <c>ActionScope</c> receiver, however the tree names it: the CLR type or a neutral reference.</summary>
-    private static bool IsActionScope(Node? receiver) => receiver switch {
-        NamedTypeReference reference => string.Equals(reference.FullName, typeof(ActionScope).FullName, StringComparison.Ordinal),
-        TypeDefinitionReference reference => string.Equals(reference.TypeDefinition.FullName, typeof(ActionScope).FullName, StringComparison.Ordinal),
-        _ => false
-    };
+        && ClrTypeReferences.Denotes(receiver, typeof(ActionScope));
 
     /// <summary>Every method that writes <c>this</c> before (or without) touching it, as <c>Type.Method</c>.</summary>
     internal static List<string> Violations(IEnumerable<TypeDefinitionNode> types) {

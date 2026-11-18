@@ -39,8 +39,8 @@ public class ClrReferencePrintTests {
         Cast("nested", ClrTypeReferences.To<AstParityTests.ParityWidget>(), "_ = (Poly.Tests.Interpretation.AstParityTests.ParityWidget)1;"),
         Cast("void", ClrTypeReferences.Of(typeof(void)), "_ = (System.Void)1;"),
         Cast("int[][]", ClrTypeReferences.To<int[][]>(), "_ = (System.Int32[][])1;"),
-        // The old printer answered int? here (TypeCode reports an enum as its underlying integer); the neutral
-        // reference spells the type it was given.
+        // The old printer answered int? here (TypeCode reports an enum as its underlying integer); the reference
+        // spells the type it was given.
         Cast("DayOfWeek?", ClrTypeReferences.To<DayOfWeek?>(), "_ = (System.DayOfWeek?)1;"),
         ("typeof(int)", new TypeOf(ClrTypeReferences.To<int>()), "_ = typeof(System.Int32);")
     ];

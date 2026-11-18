@@ -285,8 +285,8 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     bool ITypeDefinition.IsCollectionShape => false;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
 
-    /// <summary>A modeled definition is its instance: each declaration builds one, and a closed generic is a closure
-    /// of it, a distinct definition.</summary>
+    /// <summary>Each declaration builds one definition, so a declaration and its definition are one instance; a closed
+    /// generic is that definition closed, a distinct instance.</summary>
     bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
 
     // AST-based types are dictionary-backed at runtime

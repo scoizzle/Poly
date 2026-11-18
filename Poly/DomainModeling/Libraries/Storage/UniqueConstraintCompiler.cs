@@ -140,7 +140,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
                 continue;
             var walk = new AssignWalk(
                 type.Name, method.Name, replaced,
-                TypeReferenceOf(provider, typeof(IStoragePort)), TypeReferenceOf(provider, typeof(object)));
+                TypeReferenceTo(provider, typeof(IStoragePort)), TypeReferenceTo(provider, typeof(object)));
             var body = walk.Rewrite(method.Body);
             RejectRemaining(body, $"{type.Name}.{method.Name}");
             if (ReferenceEquals(body, method.Body))
@@ -202,8 +202,9 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private static string Violation(string entity, string property) =>
         $"Unique constraint violated: '{property}' value is already used on another '{entity}'.";
 
-    /// <summary>A reference the analysis can resolve, or the CLR host's neutral reference when it has no provider.</summary>
-    private static Node TypeReferenceOf(ITypeDefinitionProvider? provider, Type type) =>
+    /// <summary>A reference to <paramref name="type"/> the analysis can resolve: the provider's definition when it has
+    /// the type, else the CLR host's own.</summary>
+    private static Node TypeReferenceTo(ITypeDefinitionProvider? provider, Type type) =>
         provider?.GetClrTypeDefinition(type) is { } definition
             ? new TypeDefinitionReference(definition)
             : ClrTypeReferences.Of(type);

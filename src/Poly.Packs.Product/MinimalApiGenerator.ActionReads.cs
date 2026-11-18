@@ -402,7 +402,8 @@ internal sealed class ActionReadsWalker {
     private TypeClass Classify(Node? type) => type switch {
         OptionalTypeReference optional => Classify(optional.InnerType),
         PrimitiveTypeReference primitive => primitive.PrimitiveId == ClrPrimitive.Structure ? UnknownType.Instance : ScalarType.Instance,
-        TypeDefinitionReference port when ClrTypeReferences.Denotes(port, typeof(IStoragePort)) => PortType.Instance,
+        TypeDefinitionReference statesThePort when ClrTypeReferences.Denotes(statesThePort, typeof(IStoragePort)) =>
+            PortType.Instance,
         TypeDefinitionReference resolved => ClassifyNamed(resolved.TypeDefinition.Name, resolved.TypeDefinition.FullName, []),
         NamedTypeReference named => ClassifyNamed(named.TypeName, named.FullName, named.TypeArguments ?? []),
         TypeReference reference => ClassifyNamed(reference.TypeName, reference.TypeName, []),

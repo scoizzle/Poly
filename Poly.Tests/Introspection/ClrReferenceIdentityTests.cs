@@ -43,24 +43,24 @@ public class ClrReferenceIdentityTests {
     public async Task Assignability_AsksTheDefinition_NotTheName() {
         var port = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(IStoragePort));
 
-        ITypeDefinition sameName = new NamedType("Poly.Runtime", "IStoragePort");
+        ITypeDefinition sameName = new ForeignDefinition("Poly.Runtime", "IStoragePort");
         await Assert.That(TypeDefinitionExtensions.IsAssignableByHierarchy(port, sameName)).IsFalse()
             .Because("a definition from another platform with the same full name is not the port");
 
-        ITypeDefinition implementer = new NamedType("App", "AppDbContext", [port]);
+        ITypeDefinition implementer = new ForeignDefinition("App", "AppDbContext", [port]);
         await Assert.That(TypeDefinitionExtensions.IsAssignableByHierarchy(port, implementer)).IsTrue()
             .Because("an implementer of the port is the port's shape, which a name comparison cannot see");
     }
 
     [Test]
-    public async Task Denotes_AnImplementer_IsThePort() {
+    public async Task Denotes_AnImplementerOfThePort_IsTrue() {
         var implementer = ClrTypeReferences.Of(typeof(Poly.DomainModeling.Runtime.ModuleStoragePort));
         await Assert.That(ClrTypeReferences.Denotes(implementer, typeof(IStoragePort))).IsTrue()
             .Because("a parameter typed as an implementer of the port takes the port");
     }
 
     [Test]
-    public async Task Denotes_ASpelledName_IsNotTheType() {
+    public async Task Denotes_ASpelledName_IsFalse() {
         var spelled = new NamedTypeReference("IStoragePort", "Poly.Runtime");
         await Assert.That(ClrTypeReferences.Denotes(spelled, typeof(IStoragePort))).IsFalse()
             .Because("a name is not a type: only a stated definition denotes one");
@@ -68,9 +68,9 @@ public class ClrReferenceIdentityTests {
         await Assert.That(ClrTypeReferences.Denotes(ClrTypeReferences.To<IStoragePort>(), typeof(IStoragePort))).IsTrue();
     }
 
-    /// <summary>A definition with no platform behind it: the second-platform case in miniature. Identity is its own
-    /// reference, so a same-named definition from elsewhere is a different type.</summary>
-    private sealed class NamedType(
+    /// <summary>A definition from another platform: identity is its own reference, so a same-named definition from
+    /// elsewhere is a different type.</summary>
+    private sealed class ForeignDefinition(
         string ns, string name, IReadOnlyList<ITypeDefinition>? interfaces = null) : ITypeDefinition {
         public string Name => name;
         public string? Namespace => ns;

@@ -103,8 +103,8 @@ public sealed class ConstraintCompileRequest {
     /// <summary>The analysis' type provider, so a compiler states a resolved definition instead of a CLR type.</summary>
     public ITypeDefinitionProvider? Types { get; }
 
-    /// <summary>A tree reference to <paramref name="type"/>: the resolved definition when the provider has one, else the
-    /// CLR host's neutral reference.</summary>
+    /// <summary>A tree reference to <paramref name="type"/>: the provider's definition when it has the type, else the
+    /// CLR host's own.</summary>
     public Node TypeReference(Type type) {
         ArgumentNullException.ThrowIfNull(type);
         return Types?.GetClrTypeDefinition(type) is { } definition

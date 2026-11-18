@@ -1649,7 +1649,7 @@ public sealed class CSharpWriter {
     /// <summary>
     /// <paramref name="type"/> as C# text. <paramref name="asArgument"/> is the spelling a type gets inside a nullable,
     /// a collection or a generic's arguments: a keyword or short name there, the full name at the top level. Both are
-    /// what a CLR type prints as, so a neutral reference prints the same.
+    /// what a CLR reference prints as, so a stated definition prints the same.
     /// </summary>
     private string TypeText(Node type, bool asArgument) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),

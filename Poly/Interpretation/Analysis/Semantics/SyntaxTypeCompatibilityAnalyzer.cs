@@ -237,9 +237,14 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             || !ClrBuiltInRules.IsPolicyShiftCount(countType))
             return;
         var target = countDefinition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null ? typeof(int?) : typeof(int);
-        var cast = new TypeCast(count, new ClrTypeReference(target));
-        context.SetResolvedType(cast, context.TypeDefinitions.GetTypeDefinition(target)
-            ?? throw new InvalidOperationException($"the type provider has no definition for '{target}'"));
+        var targetDefinition = context.TypeDefinitions.GetTypeDefinition(target)
+            ?? throw new InvalidOperationException($"the type provider has no definition for '{target}'");
+        // The target node is minted here, so it carries its resolved type with it: a neutral reference has no Type of
+        // its own, and the emitter reads a type node's CLR type from the analysis.
+        var targetNode = ClrTypeReferences.Of(target);
+        context.SetResolvedType(targetNode, targetDefinition);
+        var cast = new TypeCast(count, targetNode);
+        context.SetResolvedType(cast, targetDefinition);
         Node stated = shift switch {
             ShiftLeft left => left with { RightHandValue = cast },
             ShiftRight right => right with { RightHandValue = cast },

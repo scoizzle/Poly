@@ -130,7 +130,7 @@ static bool Applies(Constraint constraint, ITypeDefinition propertyType, DomainP
 ```
 
 The type is not asked anything. A user alias (`Price: Number`) resolves to the same definition, so it passes. A
-platform type the domain never bound is outside every constraint's domain, and refused with a positioned error.
+platform type the domain never bound is outside every constraint's domain.
 
 ### 3.3 Constant folding's integer width
 

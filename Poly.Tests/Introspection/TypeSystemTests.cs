@@ -41,19 +41,19 @@ public class TypeSystemTests {
         var answered = 0;
         foreach (var source in types) {
             foreach (var destination in types) {
-                var door = Describe(destination.ResolveConversionFrom(source));
+                var door = Describe(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(source, destination));
                 answered += door == "none" ? 0 : 1;
                 if (Describe(csharp.Conversion(source, destination)) != door)
                     mismatches.Add($"conversion {source.Name} -> {destination.Name}");
                 foreach (var kind in Enum.GetValues<OperatorKind>().Where(static kind => OperatorShape.ArityOf(kind) == 2)) {
-                    var op = Describe(source.GetOperator(kind, destination));
+                    var op = Describe(source.GetOperator(kind, destination, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared));
                     answered += op == "none" ? 0 : 1;
                     if (Describe(csharp.Operator(kind, source, destination)) != op)
                         mismatches.Add($"operator {kind} {source.Name} {destination.Name}");
                 }
             }
             foreach (var kind in Enum.GetValues<OperatorKind>().Where(static kind => OperatorShape.ArityOf(kind) == 1)) {
-                if (Describe(csharp.Operator(kind, source, null)) != Describe(source.GetOperator(kind, null)))
+                if (Describe(csharp.Operator(kind, source, null)) != Describe(source.GetOperator(kind, null, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)))
                     mismatches.Add($"operator {kind} {source.Name}");
             }
         }

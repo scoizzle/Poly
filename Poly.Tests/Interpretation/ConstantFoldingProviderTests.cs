@@ -185,8 +185,7 @@ internal static class ConstantFoldGrid {
     }
 
     public static ITypeOperator? Resolution(FoldGridRow row) =>
-        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Left.Clr!).GetOperator(row.Op,
-            row.Right is null ? null : ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Right.Clr!));
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Left.Clr!).GetOperator(row.Op, row.Right is null ? null : ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Right.Clr!), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
     /// <summary>
     /// The C# value through the runtime binder: each operand converted to the parameter type of the operator the provider
@@ -688,7 +687,7 @@ public class ConstantFoldingProviderTests {
     // ---- the delta: folds that stop (provider-undefined) and the named new folds ----
 
     private static ITypeOperator? Operator<TLeft, TRight>(OperatorKind kind) =>
-        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TLeft)).GetOperator(kind, ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TRight)));
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TLeft)).GetOperator(kind, ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TRight)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
     [Test]
     public async Task DecimalWithInt32OrInt64_Folds() {

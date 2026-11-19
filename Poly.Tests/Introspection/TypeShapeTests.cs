@@ -83,8 +83,7 @@ public class TypeShapeTests {
     private static readonly string[] DecidedMembers = [
         "System", "Name", "Namespace", "AccessModifier", "FullName", "BaseType", "Interfaces", "GenericParameters", "Members",
         "Fields", "Properties", "Methods", "Constructors", "Operators", "IsCollectionShape",
-        "SequenceElementType", "Conversions", "NullableOf", "ResolveConversionFrom", "IsAssignableWithoutConversion",
-        "ResolveOperator",
+        "SequenceElementType", "Conversions", "NullableOf",
     ];
 
     private static readonly string[] RemainingClassificationProperties = ["AccessModifier", "IsCollectionShape"];

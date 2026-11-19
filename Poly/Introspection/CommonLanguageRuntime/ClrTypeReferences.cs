@@ -28,7 +28,7 @@ internal static class ClrTypeReferences {
     public static bool Denotes(Node? reference, Type type) {
         ArgumentNullException.ThrowIfNull(type);
         return reference is TypeDefinitionReference { TypeDefinition: var stated }
-            && ((ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)).IsAssignableWithoutConversion(stated);
+            && Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type), stated);
     }
 
     /// <summary>True when <paramref name="reference"/> states exactly the platform's definition of

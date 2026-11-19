@@ -509,7 +509,7 @@ public class LoweredTreeOperandCoverageTests {
                 problems.Add($"{row}: an operand has no type");
                 continue;
             }
-            var common = operands.Cast<ITypeDefinition>().GetCommonType()?.GetRuntimeType();
+            var common = operands.Cast<ITypeDefinition>().GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)?.GetRuntimeType();
             if (common != row.OperandCommonType)
                 problems.Add($"{row}: GetCommonType {common?.Name ?? "none"}, literal {row.OperandCommonType?.Name ?? "none"}");
         }

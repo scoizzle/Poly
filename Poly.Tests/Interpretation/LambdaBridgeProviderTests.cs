@@ -392,19 +392,19 @@ internal static class BridgeGrid {
             var right = c.Right is null ? null : registry.GetTypeDefinition(c.Right.Underlying);
             if (c.Right is not null && right is null)
                 return null;
-            return left.GetOperator(kind, right) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var result) ? result : null;
+            return left.GetOperator(kind, right, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var result) ? result : null;
         }
         if (c.Right is { } armType) {
             if (armType.Clr == c.Left.Clr)
                 return c.Left.Clr;
             return registry.GetTypeDefinition(armType.Underlying) is { } arm
-                && new[] { left, arm }.GetCommonType() is { } common && common.TryGetRuntimeType(out var commonType) ? commonType : null;
+                && new[] { left, arm }.GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { } common && common.TryGetRuntimeType(out var commonType) ? commonType : null;
         }
         if (c.Return == c.Left.Clr)
             return c.Return;
         ITypeDefinition? target = registry.GetTypeDefinition(c.Return);
         return target is not null
-            && target.ResolveConversionFrom(left) is { Kind: ConversionOperatorKind.Implicit } ? c.Return : null;
+            && Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(left, target) is { Kind: ConversionOperatorKind.Implicit } ? c.Return : null;
     }
 
     /// <summary>
@@ -863,7 +863,7 @@ internal static class BridgeGrid {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var left = registry.GetTypeDefinition(c.Left.Underlying)!;
         var right = c.Right is null ? null : registry.GetTypeDefinition(c.Right.Underlying)!;
-        return left.GetOperator(c.Op!.Value, right) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var type) ? type : null;
+        return left.GetOperator(c.Op!.Value, right, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var type) ? type : null;
     }
 
     /// <summary>

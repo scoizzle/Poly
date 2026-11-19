@@ -30,22 +30,22 @@ public class GenericParameterIdentityTests {
     public async Task NestedCollections_OfElementsInDifferentNamespaces_AreDifferentTypes() {
         var left = ListOf(ListOf(Declared("A", "ns1")));
         var right = ListOf(ListOf(Declared("A", "ns2")));
-        await Assert.That(left.IsAssignableFrom(right)).IsFalse();
-        await Assert.That(right.IsAssignableFrom(left)).IsFalse();
+        await Assert.That(left.IsAssignableFrom(right, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
+        await Assert.That(right.IsAssignableFrom(left, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
     public async Task NestedCollections_OfOneElement_AreTheSameType_EvenWhenBuiltTwice() {
         var left = ListOf(ListOf(Declared("A", "ns1")));
         var right = ListOf(ListOf(Declared("A", "ns1")));
-        await Assert.That(left.IsAssignableFrom(right)).IsTrue();
-        await Assert.That(left.IsAssignableFrom(ListOf(ListOf(Declared("B", "ns1"))))).IsFalse();
+        await Assert.That(left.IsAssignableFrom(right, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(left.IsAssignableFrom(ListOf(ListOf(Declared("B", "ns1"))), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
     public async Task FlatCollections_StayComparedByElementNameAndNamespace() {
-        await Assert.That(ListOf(Declared("A", "ns1")).IsAssignableFrom(ListOf(Declared("A", "ns1")))).IsTrue();
-        await Assert.That(ListOf(Declared("A", "ns1")).IsAssignableFrom(ListOf(Declared("A", "ns2")))).IsFalse();
+        await Assert.That(ListOf(Declared("A", "ns1")).IsAssignableFrom(ListOf(Declared("A", "ns1")), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(ListOf(Declared("A", "ns1")).IsAssignableFrom(ListOf(Declared("A", "ns2")), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     // ---- row (c): generic parameters ----
@@ -53,19 +53,19 @@ public class GenericParameterIdentityTests {
     [Test]
     public async Task GenericParameter_ResolvedTwice_IsTheSameType() {
         var owner = Declared("Box");
-        await Assert.That(Parameter("T", owner).IsAssignableFrom(Parameter("T", owner))).IsTrue();
+        await Assert.That(Parameter("T", owner).IsAssignableFrom(Parameter("T", owner), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
     public async Task GenericParameters_WithDifferentNamesOnOneType_AreDifferentTypes() {
         var owner = Declared("Pair");
-        await Assert.That(Parameter("K", owner).IsAssignableFrom(Parameter("V", owner))).IsFalse();
-        await Assert.That(Parameter("V", owner).IsAssignableFrom(Parameter("K", owner))).IsFalse();
+        await Assert.That(Parameter("K", owner).IsAssignableFrom(Parameter("V", owner), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
+        await Assert.That(Parameter("V", owner).IsAssignableFrom(Parameter("K", owner), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
     public async Task GenericParameters_OfOneNameOnDifferentTypes_AreDifferentTypes() {
-        await Assert.That(Parameter("T", Declared("Box")).IsAssignableFrom(Parameter("T", Declared("Bag")))).IsFalse();
+        await Assert.That(Parameter("T", Declared("Box")).IsAssignableFrom(Parameter("T", Declared("Bag")), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
@@ -74,6 +74,6 @@ public class GenericParameterIdentityTests {
         // same type compare equal; telling them apart needs the declaring member, which the definition does not hold.
         // Stated, not fixed: no DSL construct declares a method-level type parameter.
         var owner = Declared("Sequence");
-        await Assert.That(Parameter("T", owner).IsAssignableFrom(Parameter("T", owner))).IsTrue();
+        await Assert.That(Parameter("T", owner).IsAssignableFrom(Parameter("T", owner), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 }

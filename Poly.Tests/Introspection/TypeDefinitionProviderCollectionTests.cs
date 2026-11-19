@@ -73,7 +73,7 @@ public class TypeDefinitionProviderCollectionTests {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
-        var methods = stringType.FindMatchingMethodOverloads("ToString", []);
+        var methods = stringType.FindMatchingMethodOverloads("ToString", [], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(methods).HasSingleItem();
         await Assert.That(methods.Single().Name).IsEqualTo("ToString");
@@ -85,7 +85,7 @@ public class TypeDefinitionProviderCollectionTests {
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
 
-        var methods = stringType.FindMatchingMethodOverloads("IndexOf", [charType]);
+        var methods = stringType.FindMatchingMethodOverloads("IndexOf", [charType], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(methods).HasSingleItem();
         await Assert.That(methods.Single().Name).IsEqualTo("IndexOf");
@@ -96,7 +96,7 @@ public class TypeDefinitionProviderCollectionTests {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
-        var methods = stringType.FindMatchingMethodOverloads("NonExistentMethod", []);
+        var methods = stringType.FindMatchingMethodOverloads("NonExistentMethod", [], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(methods).IsEmpty();
     }
@@ -159,8 +159,6 @@ public class TypeDefinitionProviderCollectionTests {
         bool ITypeDefinition.IsCollectionShape => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
         public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
-        ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
-        ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
     }
 
     [Test]

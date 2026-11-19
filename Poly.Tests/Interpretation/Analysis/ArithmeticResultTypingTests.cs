@@ -50,7 +50,7 @@ public class ArithmeticResultTypingTests {
             foreach (var left in Operands)
                 foreach (var right in Operands) {
                     cells++;
-                    var expected = Clr(left).GetOperator(kind, Clr(right))?.ResultTypeDefinition.GetRuntimeType();
+                    var expected = Clr(left).GetOperator(kind, Clr(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)?.ResultTypeDefinition.GetRuntimeType();
                     answered += expected is null ? 0 : 1;
                     var actual = Stamp(kind, Param("a", left), Param("b", right));
                     if (actual != expected)
@@ -180,7 +180,7 @@ public class ArithmeticResultTypingTests {
         foreach (var kind in ComparisonKinds)
             foreach (var left in Operands)
                 foreach (var right in Operands) {
-                    var resolution = Clr(left).GetOperator(kind, Clr(right));
+                    var resolution = Clr(left).GetOperator(kind, Clr(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
                     if (resolution is null)
                         continue;
                     answered++;

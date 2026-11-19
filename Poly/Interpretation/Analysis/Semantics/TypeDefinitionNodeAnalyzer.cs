@@ -271,7 +271,6 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
             && method.Parameters.Count() == OperatorShape.ArityOf(kind))
         .Select(static method => new AstOperatorDefinition(method.DefinitionNode.Operator!.Value, method));
 
-    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
 
     /// <summary>
     /// The conversions this type states: its static methods marked <see cref="MethodDefinitionNode.Conversion"/> with
@@ -285,7 +284,6 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
         .Select(static method => (ITypeConversion)new AstConversionDefinition(
             method.DefinitionNode.Conversion!.Value, method));
 
-    ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
 
     bool ITypeDefinition.IsCollectionShape => false;
     // A declaration answers the shape its form declares; it is never a ground type.
@@ -914,8 +912,6 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public IEnumerable<ITypeConstructor> Constructors => [_ctor, _copy];
     public IEnumerable<ITypeOperator> Operators => [];
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
-    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
-    ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
     bool ITypeDefinition.IsCollectionShape => true;
     ITypeDefinition? ITypeDefinition.SequenceElementType => _item.MemberTypeDefinition;
 
@@ -1007,8 +1003,6 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     public IEnumerable<ITypeConstructor> Constructors => [];
     public IEnumerable<ITypeOperator> Operators => [];
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
-    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
-    ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
     bool ITypeDefinition.IsCollectionShape => false;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
 

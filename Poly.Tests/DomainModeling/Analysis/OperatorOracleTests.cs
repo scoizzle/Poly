@@ -117,7 +117,7 @@ internal static class OperatorOracle {
 
     private static OracleCell Evaluate(OracleOperand left, OperatorKind kind, OracleOperand? right) {
         var divergences = new List<OracleDivergence>();
-        var resolution = Def(left).GetOperator(kind, right is null ? null : Def(right));
+        var resolution = Def(left).GetOperator(kind, right is null ? null : Def(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         var tree = DescribeTree(left, right, resolution);
 
         // Poly's shift-count policy (ClrBuiltInRules.IsPolicyShiftCount): the tree defines the cell, and C# (Roslyn for a
@@ -178,7 +178,7 @@ internal static class OperatorOracle {
             var parameter = parameters[i];
             conversions.Add(ReferenceEquals(parameter, operand)
                 ? "id"
-                : parameter.ResolveConversionFrom(operand) is { } c ? $"{c.Kind}{(c.Method is null ? "/intrinsic" : "/declared")}" : "?");
+                : Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(operand, parameter) is { } c ? $"{c.Kind}{(c.Method is null ? "/intrinsic" : "/declared")}" : "?");
         }
         return $"{found.ResultTypeDefinition.Name}{(found.Method is null ? " [platform]" : " [declared]")} conv({string.Join(",", conversions)})";
     }

@@ -64,7 +64,7 @@ internal static class NullableCharGrid {
                     foreach (var right in ExtraOperandGrid.Operands) {
                         if (!RuleApplies(kind, left, right))
                             continue;
-                        var resolution = Clr(Unwrap(left)).GetOperator(kind, Clr(Unwrap(right)));
+                        var resolution = Clr(Unwrap(left)).GetOperator(kind, Clr(Unwrap(right)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
                         if (resolution is null)
                             continue;
                         // String concatenation and enum comparisons were judged before the rule, and still are.

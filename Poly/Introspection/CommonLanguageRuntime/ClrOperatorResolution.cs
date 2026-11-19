@@ -14,12 +14,11 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// </remarks>
 internal static class ClrOperatorResolution {
     /// <param name="convert">The conversion rule that decides whether an operand applies to a parameter
-    /// (source, destination): a type system passes its own (#998 T3), so a foreign parameter type's door never decides.
-    /// Null is each parameter type's own door, as the definition doors ask until T9.</param>
+    /// (source, destination): a type system passes its own (#998 T3), so a foreign parameter type's door never decides.</param>
     public static ITypeOperator? Resolve(ITypeDefinition left, OperatorKind kind, ITypeDefinition? right,
-        Func<ITypeDefinition, ITypeDefinition, ITypeConversion?>? convert = null) {
+        Func<ITypeDefinition, ITypeDefinition, ITypeConversion?> convert) {
         ArgumentNullException.ThrowIfNull(left);
-        convert ??= static (source, destination) => destination.ResolveConversionFrom(source);
+        ArgumentNullException.ThrowIfNull(convert);
         var arity = OperatorShape.ArityOf(kind);
         var operands = arity == 1 ? new[] { left } : new[] { left, right ?? throw new ArgumentNullException(nameof(right)) };
 

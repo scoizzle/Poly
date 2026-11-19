@@ -104,7 +104,8 @@ public interface ITypeDefinition {
     /// <summary>
     /// Gets the conversions this type states: the operators it declares (either end, which is why an item names both
     /// types) and the ones the platform applies with this type as the source (no method). A conversion into this type
-    /// that the other end declares, and what a type defined later may add, are <see cref="ResolveConversionFrom"/>.
+    /// that the other end declares, and what a type defined later may add, are the type system's
+    /// <see cref="ITypeSystem.Conversion"/>.
     /// Optionality is the caller's (T-06), so the lift into a nullable target is not listed, and reference conversions
     /// are assignability, not conversion.
     /// </summary>
@@ -117,29 +118,4 @@ public interface ITypeDefinition {
     /// root knowing the host's model. Where optionality applies stays the caller's (T-06).
     /// </summary>
     internal ITypeDefinition? NullableOf { get; }
-
-    /// <summary>
-    /// The conversion from <paramref name="source"/> to this type that the platform defines, or null.
-    /// Declared operators and built-in rules both answer here: a conversion that states a method is a declared
-    /// operator, one with no method is applied by the platform itself. Which conversions are candidates and how one is
-    /// chosen is the platform's rule.
-    /// </summary>
-    internal ITypeConversion? ResolveConversionFrom(ITypeDefinition source);
-
-    /// <summary>
-    /// True when a value of <paramref name="source"/> is a value of this type with no conversion applied:
-    /// the same type, a base type or an interface, or whatever the platform adds on top of that (for .NET variance,
-    /// array covariance, the lift from <c>T</c> to <c>T?</c> and the box into <c>object</c>). A declared conversion
-    /// operator is not in this set, and neither is a built-in numeric conversion: those are
-    /// <see cref="ResolveConversionFrom"/>. Assignment, casts, type tests and the emitter read this through
-    /// <see cref="TypeDefinitionExtensions.IsAssignableFrom"/>, which widening would loosen.
-    /// </summary>
-    internal bool IsAssignableWithoutConversion(ITypeDefinition source) => TypeDefinitionExtensions.IsAssignableByHierarchy(this, source);
-
-    /// <summary>
-    /// The operator <paramref name="kind"/> applied to this type and <paramref name="right"/> (null for a unary kind),
-    /// or null when none applies or several do. Which operators are candidates and how one is chosen is the platform's
-    /// rule; consumers ask through <see cref="TypeDefinitionOperatorExtensions.GetOperator"/>.
-    /// </summary>
-    internal ITypeOperator? ResolveOperator(OperatorKind kind, ITypeDefinition? right);
 }

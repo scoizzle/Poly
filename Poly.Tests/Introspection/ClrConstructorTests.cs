@@ -53,7 +53,7 @@ public class ClrConstructorTests {
         var type = registry.GetTypeDefinition<ConstructorTarget>();
         var stringType = registry.GetTypeDefinition<string>();
 
-        var constructors = type.FindMatchingConstructors([stringType]).ToList();
+        var constructors = type.FindMatchingConstructors([stringType], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared).ToList();
 
         await Assert.That(constructors).HasSingleItem();
         await Assert.That(constructors[0].Parameters.Count()).IsEqualTo(2);

@@ -9,9 +9,8 @@ namespace Poly.Interpretation.CSharp;
 /// C# over the CLR: the CLR supplies the definitions (reflection), C# supplies the words (its type keywords) and the
 /// rules (the C# standard's conversions, promotion and operators). One shared instance backs every CLR definition.
 /// It decides every pair it is asked about, whichever system an operand comes from (#998 T3): it reads what both types
-/// declare and applies C#'s rules; a foreign definition's own answer never decides. Interim (removed by T9b, ruling 10):
-/// a definition is C#'s own when it is an <see cref="IClrTypeDefinition"/>, and for its own definitions the conversion,
-/// assignability and operator rules still delegate to their doors.
+/// declare and applies C#'s rules; a foreign definition's own answer never decides. Its rules for its own definitions
+/// live here or in the CLR host's internals it calls (#998 T9: the definitions answer none of them).
 /// </summary>
 internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
     public static CSharpTypeSystem Shared { get; } = new();
@@ -89,15 +88,20 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
         return definition.SequenceElementType;
     }
 
+    /// <summary>C#'s identity and reference conversions without a conversion applied: the CLR host's body for its own
+    /// definitions (variance, array covariance, the lift into <c>T?</c>, the box into <c>object</c>), else the declared
+    /// hierarchy (#998 T9).</summary>
     public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) =>
-        destination.IsAssignableWithoutConversion(source);
+        destination is ClrTypeDefinition clr
+            ? clr.AssignsWithoutConversion(source)
+            : TypeDefinitionExtensions.IsAssignableByHierarchy(destination, source);
 
     /// <summary>Into C#'s own definition, its door (built-in rules plus both ends' declared conversions). Into a foreign
     /// definition, only a conversion either end declares with a method: a foreign system's own built-in conversion is not
     /// a C# conversion.</summary>
     public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) =>
-        destination is IClrTypeDefinition
-            ? destination.ResolveConversionFrom(source)
+        destination is ClrTypeDefinition clr
+            ? clr.ConversionFrom(source)
             : Poly.Interpretation.Analysis.Semantics.ModeledConversions.Find(source, destination);
 
     /// <summary>C#'s operator selection over the operators both operands declare, with applicability decided by this

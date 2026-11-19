@@ -238,8 +238,6 @@ public sealed class ForeignUnsignedWord : ITypeDefinition {
     ITypeDefinition? ITypeDefinition.NullableOf => null;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
     bool ITypeDefinition.IsCollectionShape => false;
-    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
-    ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
 }
 
 /// <summary>A type whose only indexer takes a long (not a collection).</summary>
@@ -266,8 +264,6 @@ public sealed class ForeignIndexed(ITypeDefinition index, ITypeDefinition elemen
     ITypeDefinition? ITypeDefinition.NullableOf => null;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
     bool ITypeDefinition.IsCollectionShape => true;
-    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
-    ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
 
     private sealed class Indexer(ITypeDefinition declaring, ITypeDefinition index, ITypeDefinition element) : ITypeProperty {
         public MemberKind Kind => MemberKind.Indexer;

@@ -53,8 +53,6 @@ public class TypeDefinitionExtensionsTests {
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
-        ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
-        ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
     }
 
 
@@ -87,7 +85,7 @@ public class TypeDefinitionExtensionsTests {
         var stringType = registry.GetTypeDefinition<string>();
         ITypeDefinition[] keyTypes = [stringType];
 
-        var elementType = dictionaryType.GetElementType(keyTypes);
+        var elementType = dictionaryType.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, keyTypes);
 
         await Assert.That(elementType).IsNotNull();
         await Assert.That(elementType!.GetRuntimeType()).IsEqualTo(typeof(int));
@@ -100,7 +98,7 @@ public class TypeDefinitionExtensionsTests {
         var intType = registry.GetTypeDefinition<int>();
         ITypeDefinition[] indexTypes = [intType, intType];
 
-        var elementType = indexerType.GetElementType(indexTypes);
+        var elementType = indexerType.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, indexTypes);
 
         await Assert.That(elementType).IsNotNull();
         await Assert.That(elementType!.GetRuntimeType()).IsEqualTo(typeof(int));

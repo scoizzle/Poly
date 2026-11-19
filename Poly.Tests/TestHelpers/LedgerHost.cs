@@ -93,7 +93,5 @@ sealed class LedgerHost : ITypeSource, ITypeSystem, LedgerHost.ILedgerRules {
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
-        ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
-        ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
     }
 }

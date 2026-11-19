@@ -131,7 +131,6 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members;
     IEnumerable<ITypeOperator> ITypeDefinition.Operators => Operators;
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => Conversions;
-    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
 
     /// <summary>A CLR nullable form is <c>Nullable&lt;T&gt;</c>; every other definition wraps nothing.</summary>
@@ -147,7 +146,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// conversion answers first: C# 11 makes <c>nint</c> to <c>long</c> implicit where IntPtr declares an explicit
     /// <c>op_Explicit</c>; an explicit one keeps IntPtr's declared method (<c>(int)nint</c>).
     /// </summary>
-    ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) {
+    /// <remarks>The CLR host's own conversion body; C#'s system asks it (#998 T9: no longer a door on the contract).</remarks>
+    internal ITypeConversion? ConversionFrom(ITypeDefinition source) {
         ArgumentNullException.ThrowIfNull(source);
         var clrSource = source as ClrTypeDefinition;
         ConversionOperatorKind? builtInKind = null;
@@ -197,8 +197,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         var sourceUnderlying = Nullable.GetUnderlyingType(source.RuntimeType) ?? source.RuntimeType;
         if (sourceUnderlying == underlying)
             return null;
-        var underlyingConversion = ((ITypeDefinition)_provider.GetTypeDefinition(underlying))
-            .ResolveConversionFrom(_provider.GetTypeDefinition(sourceUnderlying));
+        var underlyingConversion = _provider.GetTypeDefinition(underlying)
+            .ConversionFrom(_provider.GetTypeDefinition(sourceUnderlying));
         return underlyingConversion is { Kind: ConversionOperatorKind.Implicit }
             ? ClrTypeConversion.Intrinsic(ConversionOperatorKind.Implicit, source, this)
             : null;
@@ -214,7 +214,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// <c>F(object)</c> against <c>F(long)</c> differently and change which overload wins; the two statements agree on
     /// every CLR definition (<c>ObjectAcceptsEveryClrDefinition_IsAssignableFromAndResolveConversionFromAgree</c>).
     /// </summary>
-    bool ITypeDefinition.IsAssignableWithoutConversion(ITypeDefinition source) {
+    /// <remarks>The CLR host's own assignability body; C#'s system asks it (#998 T9).</remarks>
+    internal bool AssignsWithoutConversion(ITypeDefinition source) {
         ArgumentNullException.ThrowIfNull(source);
         if (RuntimeType == typeof(object))
             return true;

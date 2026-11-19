@@ -65,7 +65,7 @@ internal static class ExtraOperandGrid {
         catch (Exception ex) {
             verdict = $"throws {ex.GetType().Name}";
         }
-        var defined = OperatorOperands.Clr(Unwrap(left)).GetOperator(kind, OperatorOperands.Clr(Unwrap(right))) is not null;
+        var defined = OperatorOperands.Clr(Unwrap(left)).GetOperator(kind, OperatorOperands.Clr(Unwrap(right)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is not null;
         return new GridCell(left, kind, right, verdict, defined, FamilyOf(left, kind, right));
     }
 
@@ -176,12 +176,12 @@ public class CompatibilityProviderTests {
 
     [Test]
     public async Task DeclaredComparisons_ProviderAnswersDeclaredOrPlatform() {
-        await Assert.That(OperatorOperands.Clr(typeof(string)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(string))) is { Method: not null }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(Guid)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(Guid))) is { Method: not null }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(DateTime)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(DateTime))) is { Method: not null }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(TimeSpan)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(TimeSpan))) is { Method: not null }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(double)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(double))) is { Method: null }).IsTrue();
-        await Assert.That(OperatorOperands.Clr(typeof(float)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(float))) is { Method: null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(string)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(string)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { Method: not null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(Guid)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(Guid)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { Method: not null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(DateTime)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(DateTime)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { Method: not null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(TimeSpan)).GetOperator(OperatorKind.Equal, OperatorOperands.Clr(typeof(TimeSpan)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { Method: not null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(double)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(double)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { Method: null }).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(float)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(float)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { Method: null }).IsTrue();
     }
 
     // ---- a nullable char beside a number (lock amendment 4): rejected on master, accepted since the VM is shown correct ----
@@ -197,7 +197,7 @@ public class CompatibilityProviderTests {
     public async Task NullableChar_BesideAChar_AndCharBesideANumber_AreAccepted() {
         await Assert.That(Run(new Equal(Param<char?>("c"), Param<char>("d")), 'a', 'a')).IsEqualTo(1L);
         await Assert.That(Run(new GreaterThan(Param<char>("c"), Param<int>("n")), 'a', 96)).IsEqualTo(1L);
-        await Assert.That(OperatorOperands.Clr(typeof(char)).GetOperator(OperatorKind.GreaterThan, OperatorOperands.Clr(typeof(int))) is not null).IsTrue();
+        await Assert.That(OperatorOperands.Clr(typeof(char)).GetOperator(OperatorKind.GreaterThan, OperatorOperands.Clr(typeof(int)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is not null).IsTrue();
     }
 
     // ---- a non-negative signed integral constant beside a ulong (owner ruling 6842272727, lock amendment 5) ----
@@ -216,8 +216,8 @@ public class CompatibilityProviderTests {
     [Test]
     public async Task SignedBesideULong_ProviderAnswersNone() {
         foreach (var signed in new[] { typeof(sbyte), typeof(short), typeof(int), typeof(long) }) {
-            await Assert.That(OperatorOperands.Clr(typeof(ulong)).GetOperator(OperatorKind.GreaterThan, OperatorOperands.Clr(signed))).IsNull();
-            await Assert.That(OperatorOperands.Clr(signed).GetOperator(OperatorKind.Add, OperatorOperands.Clr(typeof(ulong)))).IsNull();
+            await Assert.That(OperatorOperands.Clr(typeof(ulong)).GetOperator(OperatorKind.GreaterThan, OperatorOperands.Clr(signed), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
+            await Assert.That(OperatorOperands.Clr(signed).GetOperator(OperatorKind.Add, OperatorOperands.Clr(typeof(ulong)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
         }
     }
 

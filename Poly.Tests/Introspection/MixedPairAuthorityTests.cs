@@ -27,8 +27,8 @@ public class MixedPairAuthorityTests {
         var third = new ThirdPlatformDefinition("Third");
         var clrLong = (ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(long));
 
-        await Assert.That(third.ResolveOperatorForAnything(OperatorKind.Add)).IsSameReferenceAs(third.AddOperator)
-            .Because("the foreign definition's own door answers any Add; that must not decide");
+        await Assert.That(third.System.Operator(OperatorKind.Add, third, clrLong)).IsSameReferenceAs(third.AddOperator)
+            .Because("the foreign platform's own system answers any Add; that must not decide (#998 T9: no door on the definition)");
         await Assert.That(Target.Operator(OperatorKind.Add, third, clrLong)).IsNull()
             .Because("+(long, Third) does not apply to (Third, long), and C# has no other candidate");
     }
@@ -68,15 +68,15 @@ public class MixedPairAuthorityTests {
         var third = new ThirdPlatformDefinition("Third");
         var clrLong = (ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(long));
 
-        await Assert.That(((ITypeDefinition)third).ResolveConversionFrom(clrLong)).IsSameReferenceAs(third.ImplicitConversion)
-            .Because("the foreign destination's own door answers any source; that must not decide");
+        await Assert.That(third.System.Conversion(clrLong, third)).IsSameReferenceAs(third.ImplicitConversion)
+            .Because("the foreign platform's own system answers any source; that must not decide (#998 T9)");
         await Assert.That(Target.Conversion(clrLong, third)).IsNull()
             .Because("Third declares no conversion C# can apply (a C# user-defined conversion is a method)");
         await Assert.That(Target.Conversion(third, clrLong)).IsNull();
     }
 
-    /// <summary>A definition from a platform the root knows nothing about: it answers its own identity, operator and
-    /// conversion, which is what makes the answering side observable.</summary>
+    /// <summary>A definition from a platform the root knows nothing about; its own system answers its identity,
+    /// operator and conversion.</summary>
     private sealed class ThirdPlatformDefinition : ITypeDefinition {
         public ThirdPlatformDefinition(string name, bool declaresSelfAddition = false) {
             Name = name;
@@ -89,7 +89,6 @@ public class MixedPairAuthorityTests {
 
         public ITypeOperator AddOperator { get; }
 
-        public ITypeOperator? ResolveOperatorForAnything(OperatorKind kind) => ((ITypeDefinition)this).ResolveOperator(kind, null);
         public ITypeConversion ImplicitConversion { get; }
 
         public string Name { get; }
@@ -106,16 +105,31 @@ public class MixedPairAuthorityTests {
         public IEnumerable<ITypeOperator> Operators => SelfAddition is null ? [AddOperator] : [AddOperator, SelfAddition];
         public ITypeDefinition? NullableOf => null;
 
-        public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
+        public ITypeSystem System => ThirdPlatform.Instance;
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [ImplicitConversion];
         bool ITypeDefinition.IsCollectionShape => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
+    }
 
-        ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) =>
-            kind == OperatorKind.Add ? AddOperator : null;
-
-        ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ImplicitConversion;
+    /// <summary>The third platform's own system: it answers any Add with the left operand's operator and turns any
+    /// source into one of its definitions with no method, which is what makes the deciding side observable.</summary>
+    private sealed class ThirdPlatform : ITypeSystem {
+        public static readonly ThirdPlatform Instance = new();
+        public ITypeSystem? Target => null;
+        public IReadOnlyList<ITypeSource> Sources => [];
+        public ITypeDefinition? Resolve(string qualifiedName) => null;
+        public ITypeDefinition? Bind(string word) => null;
+        public string? Spell(ITypeDefinition definition) => null;
+        public bool IsSame(ITypeDefinition a, ITypeDefinition b) => ReferenceEquals(a, b);
+        public ITypeDefinition? NullableOf(ITypeDefinition definition) => null;
+        public ITypeDefinition? ElementType(ITypeDefinition definition) => null;
+        public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) => IsSame(destination, source);
+        public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) =>
+            destination is ThirdPlatformDefinition third ? third.ImplicitConversion : null;
+        public ITypeOperator? Operator(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right) =>
+            kind == OperatorKind.Add && left is ThirdPlatformDefinition third ? third.AddOperator : null;
+        public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule => null;
     }
 
     // +(long, Third) -> Third: the right operand's type declares it.

@@ -327,7 +327,7 @@ public class NativeIntegerTests {
     [Test]
     public async Task Provider_NintPlusInt_IsTheBuiltInOperator_AndNintIsAPrimitive() {
         var nint = Clr(typeof(nint));
-        var resolution = nint.GetOperator(OperatorKind.Add, Clr(typeof(int)));
+        var resolution = nint.GetOperator(OperatorKind.Add, Clr(typeof(int)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(resolution is { Method: null }).IsTrue();
         await Assert.That(resolution!.ResultTypeDefinition).IsSameReferenceAs(nint);
         await Assert.That(resolution.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, nint))).IsTrue();
@@ -344,13 +344,13 @@ public class NativeIntegerTests {
     /// </summary>
     [Test]
     public async Task Provider_NintToLongIsImplicitBuiltIn_IntFromNintKeepsTheDeclaredExplicit() {
-        var toLong = Clr(typeof(long)).ResolveConversionFrom(Clr(typeof(nint)));
+        var toLong = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(nint)), Clr(typeof(long)));
         await Assert.That(toLong?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toLong!.Method).IsNull();
-        var toInt = Clr(typeof(int)).ResolveConversionFrom(Clr(typeof(nint)));
+        var toInt = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(nint)), Clr(typeof(int)));
         await Assert.That(toInt?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(toInt!.Method?.Name).IsEqualTo("op_Explicit");
-        var toDecimal = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(nuint)));
+        var toDecimal = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(nuint)), Clr(typeof(decimal)));
         await Assert.That(toDecimal?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }
 
@@ -364,7 +364,7 @@ public class NativeIntegerTests {
             var expected = CSharpOperatorOracle.Conversion(from, to);
             implicitCount += expected is ConversionOperatorKind.Implicit ? 1 : 0;
             explicitCount += expected is ConversionOperatorKind.Explicit ? 1 : 0;
-            var actual = Clr(to).ResolveConversionFrom(Clr(from));
+            var actual = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(from), Clr(to));
             if (actual?.Kind != expected)
                 mismatches.Add($"{CSharpOperatorOracle.Keyword(from)} -> {CSharpOperatorOracle.Keyword(to)}: C# {expected?.ToString() ?? "none"}, provider {actual?.Kind.ToString() ?? "none"}");
             else if (actual is { Kind: ConversionOperatorKind.Implicit, Method: not null })
@@ -392,13 +392,13 @@ public class NativeIntegerTests {
             if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight && right!.GetPrimitiveType() is { } count
                 && ClrBuiltInRules.IsPolicyShiftCount(count) && IntCountShift(kind, left) is { } shifted) {
                 policy++;
-                var typed = Clr(left).GetOperator(kind, Clr(right!))?.ResultTypeDefinition.GetRuntimeType();
+                var typed = Clr(left).GetOperator(kind, Clr(right!), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)?.ResultTypeDefinition.GetRuntimeType();
                 if (oracle.Defined || typed != shifted)
                     mismatches.Add($"{CSharpOperatorOracle.Key(kind, left, right)}: policy, C# {(oracle.Defined ? "defines it" : oracle.Errors)}, provider {(typed is null ? "none" : CSharpOperatorOracle.Keyword(typed))}, int count {CSharpOperatorOracle.Keyword(shifted)}");
                 continue;
             }
             defined += oracle.Defined ? 1 : 0;
-            var resolution = Clr(left).GetOperator(kind, right is null ? null : Clr(right));
+            var resolution = Clr(left).GetOperator(kind, right is null ? null : Clr(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
             var actual = resolution?.ResultTypeDefinition.GetRuntimeType();
             if (actual != oracle.Type)
                 mismatches.Add($"{CSharpOperatorOracle.Key(kind, left, right)}: C# {(oracle.Defined ? CSharpOperatorOracle.Keyword(oracle.Type!) : oracle.Errors)}, provider {(actual is null ? "none" : CSharpOperatorOracle.Keyword(actual))}");

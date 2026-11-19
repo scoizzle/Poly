@@ -208,7 +208,7 @@ public class DomainTypeModelTests {
     [Test]
     public async Task Assign_NumberToDecimal_IsWidening() {
         var model = Model();
-        var door = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(long)));
+        var door = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(long)), Clr(typeof(decimal)));
         await Assert.That(door?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(model.Assign(model.Resolve("Number"), model.Resolve("Decimal"))).IsEqualTo(Assignability.Widening);
     }
@@ -249,7 +249,7 @@ public class DomainTypeModelTests {
         var decimalType = model.Resolve("Decimal");
         // The first assertion used to pin the rank table's disagreement (it called Float64 -> Decimal widening). The
         // member is gone; the provider's own answer is stronger: explicit, through the declared decimal.op_Explicit(double).
-        var conversion = decimalType.Definition!.ResolveConversionFrom(floatType.Definition!);
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(floatType.Definition!, decimalType.Definition!);
         await Assert.That(conversion?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(conversion?.Method?.Name).IsEqualTo("op_Explicit");
         await Assert.That(model.Assign(floatType, decimalType)).IsEqualTo(Assignability.RoundingNarrowing);

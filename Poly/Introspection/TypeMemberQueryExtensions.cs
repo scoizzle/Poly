@@ -17,19 +17,10 @@ public static class TypeMemberQueryExtensions {
         }
 
         /// <summary>
-        /// Filters the given members to those whose parameter types best match the specified argument types.
+        /// Filters the given members to those whose parameter types best match the specified argument types, ranked by
+        /// <paramref name="system"/>'s assignability and conversions (#998 T4b, T9).
         /// </summary>
-        /// <typeparam name="T">The type of the type member.</typeparam>
-        /// <param name="members">The members to filter.</param>
-        /// <param name="parameterTypes">The parameter types to match against.</param>
-        /// <returns>The best-matching members, or an empty set if none found.</returns
-        public IEnumerable<T> WithParameterTypes(
-            params IEnumerable<ITypeDefinition> parameterTypes) => members.WithParameterTypes(null, parameterTypes);
-
-        /// <summary>As <see cref="WithParameterTypes(IEnumerable{ITypeDefinition})"/>, ranked by
-        /// <paramref name="system"/>'s assignability and conversions (#998 T4b); null asks each parameter type's own
-        /// doors (interim, removed by T9).</summary>
-        public IEnumerable<T> WithParameterTypes(ITypeSystem? system, IEnumerable<ITypeDefinition> parameterTypes) {
+        public IEnumerable<T> WithParameterTypes(ITypeSystem system, IEnumerable<ITypeDefinition> parameterTypes) {
             ArgumentNullException.ThrowIfNull(members);
             ArgumentNullException.ThrowIfNull(parameterTypes);
 
@@ -65,7 +56,7 @@ public static class TypeMemberQueryExtensions {
         /// <param name="arguments">The argument types to match against.</param>
         /// <param name="score">The calculated score if compatible.</param>
         /// <returns>True if the member is compatible; otherwise, false.</returns>
-        private static int? CalculateParameterScore(T member, List<ITypeDefinition> arguments, ITypeSystem? system) {
+        private static int? CalculateParameterScore(T member, List<ITypeDefinition> arguments, ITypeSystem system) {
             var score = 0;
             var parameters = member.Parameters ?? [];
 

@@ -25,7 +25,7 @@ public class NullabilityTests {
         await Assert.That(longType.NullableOf).IsNull();
 
         // The stated relation agrees with the conversion: Int32 -> Int64? is implicit and the platform applies it.
-        var conversion = nullableLong.ResolveConversionFrom(registry.GetTypeDefinition(typeof(int)));
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(registry.GetTypeDefinition(typeof(int)), nullableLong);
 
         await Assert.That(conversion).IsNotNull();
         await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
@@ -62,7 +62,5 @@ public class NullabilityTests {
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
-        ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
-        ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
     }
 }

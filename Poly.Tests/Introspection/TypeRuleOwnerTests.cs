@@ -6,6 +6,7 @@ using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Introspection;
 
@@ -78,8 +79,8 @@ public class TypeRuleOwnerTests {
     [Test]
     public async Task Clr_EveryGroundType_HasARow() {
         var rows = ClrRows().Select(static row => row.Type).ToHashSet();
-        foreach (var primitive in Enum.GetValues<ClrPrimitive>())
-            await Assert.That(rows).Contains(primitive.GetClrType()!);
+        foreach (var type in ClrBuiltInTypes.All)
+            await Assert.That(rows).Contains(type);
     }
 
     [Test]

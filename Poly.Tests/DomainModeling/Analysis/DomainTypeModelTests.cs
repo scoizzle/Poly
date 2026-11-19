@@ -46,8 +46,8 @@ public class DomainTypeModelTests {
         var model = Model();
         var decimalType = model.Resolve("Decimal");
         var number = model.Resolve("Number");
-        await Assert.That(decimalType.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Decimal);
-        await Assert.That(number.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Int64);
+        await Assert.That(decimalType.Definition!.GetRuntimeType()).IsEqualTo(typeof(decimal));
+        await Assert.That(number.Definition!.GetRuntimeType()).IsEqualTo(typeof(long));
         await Assert.That(ReferenceEquals(decimalType.Definition, number.Definition)).IsFalse();
     }
 
@@ -114,29 +114,29 @@ public class DomainTypeModelTests {
     public async Task Resolve_DeclaredCustomNamedDecimalPrimitive_IsDecimal() {
         var cents = Model().Resolve("Cents");
         await Assert.That(cents.IsResolved).IsTrue();
-        await Assert.That(cents.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Decimal);
+        await Assert.That(cents.Definition!.GetRuntimeType()).IsEqualTo(typeof(decimal));
     }
 
     [Test]
     public async Task Resolve_Binary_IsResolved() {
         var blob = Model().Resolve("Blob");
         await Assert.That(blob.IsResolved).IsTrue();
-        await Assert.That(blob.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.ByteArray);
-        await Assert.That(Model().Resolve("Binary").Definition!.GetClrPrimitive())
-            .IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.ByteArray);
+        await Assert.That(blob.Definition!.GetRuntimeType()).IsEqualTo(typeof(byte[]));
+        await Assert.That(Model().Resolve("Binary").Definition!.GetRuntimeType())
+            .IsEqualTo(typeof(byte[]));
     }
 
     [Test]
     public async Task Resolve_PackOverrideOfDate_IsHonoured() {
         var model = Model(maps => maps.OverrideClrTypeName("Date", "DateTime"));
-        await Assert.That(model.Resolve("Date").Definition!.GetClrPrimitive())
-            .IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.DateTime);
+        await Assert.That(model.Resolve("Date").Definition!.GetRuntimeType())
+            .IsEqualTo(typeof(DateTime));
     }
 
     [Test]
     public async Task Resolve_DeclaredTemporalPrimitive_GoesThroughSemanticsName() {
         var moment = Model().Resolve("Moment");
-        await Assert.That(moment.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.DateTime);
+        await Assert.That(moment.Definition!.GetRuntimeType()).IsEqualTo(typeof(DateTime));
     }
 
     [Test]

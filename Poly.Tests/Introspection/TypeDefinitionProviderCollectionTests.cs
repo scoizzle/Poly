@@ -1,8 +1,6 @@
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
-using PrimitiveType = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
-
 namespace Poly.Tests.Introspection;
 
 public class TypeDefinitionProviderCollectionTests {
@@ -102,7 +100,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task PrimitiveTypeIdAndKind_AreExposedForClrTypes() {
+    public async Task GroundTypeFacts_AreExposedForClrTypes() {
         var registry = new ClrTypeDefinitionRegistry();
 
         // Test primitive types
@@ -112,19 +110,19 @@ public class TypeDefinitionProviderCollectionTests {
         ITypeDefinition listType = registry.GetTypeDefinition(typeof(List<int>));
 
         // int is primitive
-        await Assert.That(intType.GetClrPrimitive()).IsEqualTo(ClrPrimitive.Int32);
-        await Assert.That(intType.GetClrPrimitive()).IsNotNull();
+        await Assert.That(intType.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(int));
+        await Assert.That(ClrBuiltInRules.IsPrimitive(intType)).IsTrue();
 
         // string is primitive
-        await Assert.That(stringType.GetClrPrimitive()).IsEqualTo(ClrPrimitive.String);
-        await Assert.That(stringType.GetClrPrimitive()).IsNotNull();
+        await Assert.That(stringType.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(string));
+        await Assert.That(ClrBuiltInRules.IsPrimitive(stringType)).IsTrue();
 
         // DateTime is primitive, not a DateTime-shaped category bit
-        await Assert.That(dateTimeType.GetClrPrimitive()).IsEqualTo(ClrPrimitive.DateTime);
-        await Assert.That(dateTimeType.GetClrPrimitive()).IsNotNull();
+        await Assert.That(dateTimeType.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTime));
+        await Assert.That(ClrBuiltInRules.IsPrimitive(dateTimeType)).IsTrue();
 
         // List<int> is a class; its element type is structural, not a flag
-        await Assert.That(listType.GetClrPrimitive()).IsNull();
+        await Assert.That(ClrBuiltInRules.IsPrimitive(listType)).IsFalse();
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.HasValueSemantics(listType)).IsFalse();
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(listType)).IsFalse();
         await Assert.That(listType.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)!.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(int));

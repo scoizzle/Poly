@@ -6,8 +6,6 @@ using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
-using Prim = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
-
 namespace Poly.DomainModeling.Runtime;
 
 public sealed partial class ModuleInstanceExecutor {
@@ -212,16 +210,16 @@ public sealed partial class ModuleInstanceExecutor {
             _ => null
         };
 
-    private static Prim? PrimitiveForParameter(Parameter parameter) =>
+    private static Type? PrimitiveForParameter(Parameter parameter) =>
         parameter.TypeReference switch {
-            TypeDefinitionReference stated => stated.TypeDefinition.GetRuntimeType()?.GetPrimitiveType(),
+            TypeDefinitionReference stated => stated.TypeDefinition.GetRuntimeType(),
             NamedTypeReference n => DomainPrimitive(n.TypeName),
             TypeReference t => DomainPrimitive(t.TypeName),
             _ => null
         };
 
-    private static Prim? DomainPrimitive(string typeName) =>
+    private static Type? DomainPrimitive(string typeName) =>
         DomainTypeMapping.TryClrType(
             DomainTypeMapping.ToClrTypeName(typeName), out var ground)
-            ? ground.GetPrimitiveType() : null;
+            ? ground : null;
 }

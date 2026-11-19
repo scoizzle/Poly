@@ -1,5 +1,7 @@
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Introspection;
 
@@ -10,13 +12,7 @@ namespace Poly.Tests.Introspection;
 public class GroundTypeTests {
     [Test]
     public async Task ClrPrimitives_AreTheHostsOwnTable_AndComposedTypesAreNot() {
-        Type[] ground = [
-            typeof(bool), typeof(sbyte), typeof(short), typeof(int), typeof(long), typeof(byte), typeof(ushort), typeof(uint),
-            typeof(ulong), typeof(float), typeof(double), typeof(decimal), typeof(string), typeof(char), typeof(DateTime),
-            typeof(DateOnly), typeof(TimeOnly), typeof(TimeSpan), typeof(Guid), typeof(DateTimeOffset), typeof(byte[]),
-            typeof(object), typeof(nint), typeof(nuint),
-        ];
-        foreach (var type in ground)
+        foreach (var type in ClrBuiltInTypes.All)
             await Assert.That(ClrBuiltInRules.IsPrimitive(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type))).IsTrue().Because($"'{type}' is one of the CLR host's primitives");
 
         Type[] composed = [typeof(Uri), typeof(int?), typeof(DayOfWeek), typeof(List<int>), typeof(KeyValuePair<int, int>), typeof(Action), typeof(int[])];
@@ -25,29 +21,34 @@ public class GroundTypeTests {
     }
 
     [Test]
-    public async Task ShiftCountPolicy_AskedOfTheCSharpRule_AgreesWithTheClrTable_ForEveryClrGroundType() {
-        foreach (var primitive in Enum.GetValues<ClrPrimitive>()) {
-            ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(primitive.GetClrType()!);
-            var byFact = Poly.Interpretation.Analysis.Semantics.SyntaxTypeCompatibilityAnalyzer.IsPolicyShiftCount(
-                Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.SimpleTypeOf(definition));
+    public async Task ShiftCountPolicy_AskedOfTheCSharpRule_AgreesWithTheRuntimeTypes_ForEveryClrGroundType() {
+        foreach (var type in ClrBuiltInTypes.All) {
+            ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
+            var byFact = CSharpBuiltIns.IsPolicyShiftCount(CSharpTypeSystem.Shared.SimpleTypeOf(definition));
+            var byRepresentation = type == typeof(long) || type == typeof(uint) || type == typeof(ulong)
+                || type == typeof(nint) || type == typeof(nuint);
 
-            await Assert.That(byFact).IsEqualTo(ClrBuiltInRules.IsPolicyShiftCount(primitive))
-                .Because($"'{primitive}' is a policy shift count by its representation exactly when the CLR table says so");
+            await Assert.That(byFact).IsEqualTo(byRepresentation)
+                .Because($"'{type}' is a policy shift count by its representation exactly when the runtime type says so");
         }
     }
 
     [Test]
     public async Task IntegerFolding_AskedOfTheCSharpRule_IsExactlyTheFixedWidthIntegers() {
-        foreach (var primitive in Enum.GetValues<ClrPrimitive>()) {
-            ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(primitive.GetClrType()!);
-            var byFact = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.SimpleTypeOf(definition) is
-                Poly.Interpretation.CSharp.SimpleType.SByte or Poly.Interpretation.CSharp.SimpleType.Byte
-                or Poly.Interpretation.CSharp.SimpleType.Short or Poly.Interpretation.CSharp.SimpleType.UShort
-                or Poly.Interpretation.CSharp.SimpleType.Int or Poly.Interpretation.CSharp.SimpleType.UInt
-                or Poly.Interpretation.CSharp.SimpleType.Long or Poly.Interpretation.CSharp.SimpleType.ULong;
+        foreach (var type in ClrBuiltInTypes.All) {
+            ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
+            var byFact = CSharpTypeSystem.Shared.SimpleTypeOf(definition) is
+                SimpleType.SByte or SimpleType.Byte
+                or SimpleType.Short or SimpleType.UShort
+                or SimpleType.Int or SimpleType.UInt
+                or SimpleType.Long or SimpleType.ULong;
+            var byRepresentation = type == typeof(sbyte) || type == typeof(byte)
+                || type == typeof(short) || type == typeof(ushort)
+                || type == typeof(int) || type == typeof(uint)
+                || type == typeof(long) || type == typeof(ulong);
 
-            await Assert.That(byFact).IsEqualTo(primitive.IsInteger())
-                .Because($"'{primitive}': the fixed-width integers, never a native-sized one, a float, a decimal or a char");
+            await Assert.That(byFact).IsEqualTo(byRepresentation)
+                .Because($"'{type}': the fixed-width integers, never a native-sized one, a float, a decimal or a char");
         }
     }
 
@@ -75,10 +76,9 @@ public class GroundTypeTests {
         ];
 
         await Assert.That(table.Select(static row => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Type)).Count(ClrBuiltInRules.IsPrimitive))
-            .IsEqualTo(Enum.GetValues<ClrPrimitive>().Length).Because("every CLR ground type has a row");
+            .IsEqualTo(ClrBuiltInTypes.All.Length).Because("every CLR ground type has a row");
         foreach (var (type, ground) in table)
             await Assert.That(Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)))
                 .IsEqualTo(ground).Because($"'{type}'");
     }
-
 }

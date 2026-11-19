@@ -4,6 +4,7 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Introspection;
 
@@ -26,25 +27,27 @@ public class TypeKindProviderAgreementTests {
     public async Task PrimitiveType_Boolean_ReportsBooleanShape() {
         var boolean = Clr(typeof(bool));
 
-        await Assert.That(boolean.GetClrPrimitive()).IsEqualTo(ClrPrimitive.Boolean);
+        await Assert.That(CSharpTypeSystem.Shared.SimpleTypeOf(boolean)).IsEqualTo(SimpleType.Bool);
         await Assert.That(Shape(boolean)).IsEqualTo("value");
     }
 
     [Test]
     public async Task ClrProvider_Object_IsTheStructurePrimitive() {
-        await Assert.That(typeof(object).GetPrimitiveType()).IsEqualTo(ClrPrimitive.Structure);
+        await Assert.That(ClrBuiltInRules.IsPrimitive(Clr(typeof(object)))).IsTrue();
+        await Assert.That(CSharpTypeSystem.Shared.SimpleTypeOf(Clr(typeof(object)))).IsNull()
+            .Because("object is no C# simple type; identity is what C# names it by");
     }
 
     [Test]
     public async Task ClrProvider_EveryPrimitiveItMaps_ReportsItself() {
         // The CLR host's own table: every entry is a CLR type, and its definition is a ground type that reports it.
-        foreach (var primitive in Enum.GetValues<ClrPrimitive>()) {
-            var definition = Clr(primitive.GetClrType()!);
+        foreach (var type in ClrBuiltInTypes.All) {
+            var definition = Clr(type);
 
-            await Assert.That(definition.GetClrPrimitive()).IsEqualTo(primitive)
-                .Because($"'{primitive}' must report its own id");
+            await Assert.That(definition.GetRuntimeTypeOrThrow()).IsEqualTo(type)
+                .Because($"'{type}' must be its own definition");
             await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(definition)).IsFalse();
-            await Assert.That(ClrBuiltInRules.IsPrimitive(definition)).IsTrue().Because($"'{primitive}' is one of the CLR host's primitives");
+            await Assert.That(ClrBuiltInRules.IsPrimitive(definition)).IsTrue().Because($"'{type}' is one of the CLR host's primitives");
         }
     }
 
@@ -83,9 +86,9 @@ public class TypeKindProviderAgreementTests {
             new TestParameter("T"), collection);
 
         await Assert.That(Shape(collection)).IsEqualTo("");
-        await Assert.That(collection.GetClrPrimitive()).IsNull();
+        await Assert.That(ClrBuiltInRules.IsPrimitive(collection)).IsFalse();
         await Assert.That(Shape(parameter)).IsEqualTo("");
-        await Assert.That(parameter.GetClrPrimitive()).IsNull();
+        await Assert.That(ClrBuiltInRules.IsPrimitive(parameter)).IsFalse();
     }
 
     [Test]

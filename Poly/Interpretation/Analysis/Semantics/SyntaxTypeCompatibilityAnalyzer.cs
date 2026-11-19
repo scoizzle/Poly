@@ -225,15 +225,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         Report(context, operandNode, $"operator {kind} is not defined for '{NameOf(definition)}': no {kind} operator for this type");
     }
 
-    /// <summary>Poly's shift-count policy over C#'s simple types: an integer count that is not already an <c>int</c>
-    /// or narrower (#998 T6a; the CLR host's table keeps its own copy for operator resolution).</summary>
-    internal static bool IsPolicyShiftCount(Poly.Interpretation.CSharp.SimpleType? count) =>
-        count is Poly.Interpretation.CSharp.SimpleType.Long or Poly.Interpretation.CSharp.SimpleType.UInt
-            or Poly.Interpretation.CSharp.SimpleType.ULong or Poly.Interpretation.CSharp.SimpleType.NInt
-            or Poly.Interpretation.CSharp.SimpleType.NUInt;
-
     /// <summary>
-    /// Poly's shift-count policy (<see cref="IsPolicyShiftCount"/>): a count of a wider integer type is converted to
+    /// Poly's shift-count policy (<see cref="Poly.Interpretation.CSharp.CSharpBuiltIns.IsPolicyShiftCount"/>): a count of a wider integer type is converted to
     /// <c>int</c> unchecked, and the tree states it. The shift node is replaced by one whose count is that cast (lifted to
     /// <c>int?</c> for a nullable count), so the emitter shifts by an <c>int</c> and decides nothing.
     /// </summary>
@@ -241,7 +234,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         AnalysisContext context, Node shift, Node count, ITypeDefinition countDefinition, ITypeOperator resolution) {
         var parameters = resolution.Parameters.ToArray();
         if (parameters.Length != 2
-            || !IsPolicyShiftCount(context.TypeSystem.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>()?.SimpleTypeOf(parameters[1].ParameterTypeDefinition)))
+            || !Poly.Interpretation.CSharp.CSharpBuiltIns.IsPolicyShiftCount(
+                context.TypeSystem.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>()?.SimpleTypeOf(parameters[1].ParameterTypeDefinition)))
             return;
         var target = countDefinition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null ? typeof(int?) : typeof(int);
         var targetDefinition = context.TypeDefinitions.GetTypeDefinition(target)
@@ -683,7 +677,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         // An implicit native-integer conversion has no method: the tree states it as a cast, which the emitter executes
         // through the word type (a nuint widening to double or decimal is unsigned; a decimal store is a handle).
         if (destDef is not null && srcDef is not null && !destDef.IsAssignableFrom(srcDef, context.TypeSystem)
-            && ClrBuiltInRules.NativeIntegerConversionFrom(destDef, srcDef, context.TypeSystem) is ConversionOperatorKind.Implicit) {
+            && Poly.Interpretation.CSharp.CSharpBuiltIns.NativeIntegerConversionFrom(destDef, srcDef, context.TypeSystem) is ConversionOperatorKind.Implicit) {
             var cast = new TypeCast(assignment.Value, new TypeDefinitionReference(destDef));
             context.SetResolvedType(cast, destDef);
             var stated = assignment with { Value = cast };
@@ -737,7 +731,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (destDef is not null && srcDef is not null) {
             // A native-integer cast is the platform's own conversion: the emitter converts through the word type, never
             // through IntPtr's declared operator or a Convert.To* overload pick.
-            if (ClrBuiltInRules.NativeIntegerConversionFrom(destDef, srcDef, context.TypeSystem) is not null)
+            if (Poly.Interpretation.CSharp.CSharpBuiltIns.NativeIntegerConversionFrom(destDef, srcDef, context.TypeSystem) is not null)
                 return;
             if (RewriteOperatorConversion(context, typeCast, typeCast.Operand, destDef, srcDef, implicitOnly: false))
                 return;

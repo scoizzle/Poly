@@ -824,7 +824,8 @@ internal static class BridgeGrid {
     /// <summary>A shift whose count is a wider integer type: Poly's shift-count policy (C# rejects it, Poly defines it).</summary>
     public static bool IsPolicyShift(BridgeCase c) =>
         c.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
-        && c.Right?.Underlying.GetPrimitiveType() is { } count && ClrBuiltInRules.IsPolicyShiftCount(count);
+        && Poly.Interpretation.CSharp.CSharpBuiltIns.IsPolicyShiftCount(
+            Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(c.Right?.Underlying));
 
     /// <summary>Every cell of the shift-count policy: a policy shift, or an int constant shifted by a uint <c>x</c>.</summary>
     public static bool IsPolicyCell(BridgeCase c) =>

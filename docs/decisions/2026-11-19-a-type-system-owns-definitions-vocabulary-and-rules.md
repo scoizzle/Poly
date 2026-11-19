@@ -60,7 +60,7 @@ Owner, during T10 (2026-11-19):
     C#'s system in the same slice that makes a CLR type's lists declared-only (else the resolver keeps a back door);
     T10b deletes `ClrPrimitive` and re-keys C#'s tables on `SimpleType` in `Interpretation/CSharp`. Interim, removed by
     T10b: in T10a the tables are still the CLR host's, keyed on `ClrPrimitive`. Its pin is T10b's guard
-    `PrimitiveVocabularyTests.ClrPrimitive_IsGone_FromEverySourceFile`, which fails while the interim stands.
+    `PrimitiveVocabularyTests.ClrPrimitive_IsGone_FromEverySourceFile`, which fails while the interim stands. T10b removed it.
 
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.

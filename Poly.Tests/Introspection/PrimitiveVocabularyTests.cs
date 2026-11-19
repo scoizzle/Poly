@@ -35,38 +35,38 @@ public class PrimitiveVocabularyTests {
     }
 
     [Test]
-    public async Task ClrTable_IsTheClrHostsOwn() {
-        await Assert.That(typeof(ClrPrimitive).IsPublic).IsFalse();
-        await Assert.That(typeof(ClrPrimitive).Namespace).IsEqualTo(typeof(ClrTypeDefinitionRegistry).Namespace);
-        foreach (var primitive in Enum.GetValues<ClrPrimitive>())
-            await Assert.That(primitive.GetClrType()).IsNotNull().Because($"the CLR table lists only types the CLR has; '{primitive}'");
+    public async Task ClrPrimitive_IsGone() {
+        // #998 T10b: the CLR host keeps identity facts only; C#'s rules key on C#'s SimpleType and runtime identity.
+        var host = typeof(ClrTypeDefinitionRegistry).Assembly;
+        await Assert.That(host.GetTypes().Where(static type => type.Name is "ClrPrimitive" or "ClrPrimitiveExtensions" or "ClrPrimitiveTypes"))
+            .IsEmpty().Because("no CLR primitive enum or its type table remains");
+        await Assert.That(host.GetType("Poly.Introspection.CommonLanguageRuntime.ClrPrimitive")).IsNull();
     }
 
     [Test]
-    public async Task ClrTable_IsNamedOnlyByTheClrHostTheVmAndTheRuntimeExecutor() {
-        string[] hosts = ["Poly/Introspection/CommonLanguageRuntime/", "Poly/Interpretation/Vm/", "Poly/DomainModeling/Runtime/"];
+    public async Task ClrPrimitive_IsGone_FromEverySourceFile() {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         var word = new System.Text.RegularExpressions.Regex(@"\bClrPrimitive\b");
-        var outside = new[] { "Poly", "src", "Poly.Mcp" }
+        var named = new[] { "Poly", "src", "Poly.Mcp" }
             .SelectMany(folder => Directory.EnumerateFiles(Path.Combine(root, folder), "*.cs", SearchOption.AllDirectories))
             .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
             .Where(static file => !file.Contains("/obj/", StringComparison.Ordinal) && !file.Contains("/bin/", StringComparison.Ordinal))
-            .Where(file => !hosts.Any(host => file.StartsWith(host, StringComparison.Ordinal)))
             .Where(file => word.IsMatch(File.ReadAllText(Path.Combine(root, file))))
             .ToList();
 
-        await Assert.That(outside).IsEmpty()
-            .Because("the CLR's table of built-in types is the CLR host's; a meaning layer asks a definition for a fact");
+        await Assert.That(named).IsEmpty()
+            .Because("the CLR's primitive enum is deleted (#998 T10b): C# keys on its own simple types and runtime identity");
     }
 
     [Test]
-    public async Task ClrRoundTrip_DateTimeOffset_IsItsOwnGroundType() {
-        await Assert.That(typeof(DateTimeOffset).GetPrimitiveType()).IsEqualTo(ClrPrimitive.DateTimeOffset);
-        await Assert.That(ClrPrimitive.DateTimeOffset.GetClrType()).IsEqualTo(typeof(DateTimeOffset));
+    public async Task DateTimeOffset_IsItsOwnGroundType_ByRuntimeIdentity() {
         ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DateTimeOffset));
+        await Assert.That(definition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTimeOffset));
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.SimpleTypeOf(definition)).IsNull()
+            .Because("it is no C# simple type");
         await Assert.That(ClrBuiltInRules.IsPrimitive(definition)).IsTrue();
         await Assert.That((ClrBuiltInRules.IsCalendarType(definition), ClrBuiltInRules.IsTimestamp(definition))).IsEqualTo((true, true))
-            .Because("the CLR host's own table states it (#998 T8)");
+            .Because("the CLR host's own identity facts state it (#998 T8)");
     }
 
     [Test]
@@ -98,7 +98,7 @@ public class PrimitiveVocabularyTests {
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved is IHostType { HostKind: "decimal128", HostNumberBits: 128 }).IsTrue()
             .Because("the host states what the number is in its own terms (#998 T8a)");
-        await Assert.That(resolved!.GetClrPrimitive()).IsNull();
+        await Assert.That(ClrBuiltInRules.IsPrimitive(resolved!)).IsFalse().Because("it is none of the CLR host's primitives");
         ITypeDefinition clrDecimal = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(decimal));
         await Assert.That(clrDecimal is IHostType).IsFalse()
             .Because("the CLR's decimal is not the host's, and is never asked the host's question");

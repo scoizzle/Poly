@@ -10,22 +10,7 @@ internal static class ClrConvertMethods {
     public static string? NameOf(ITypeDefinition destination) {
         ArgumentNullException.ThrowIfNull(destination);
         var underlying = (destination as ClrTypeDefinition)?.NullableOf ?? destination;
-        return underlying.GetClrPrimitive() switch {
-            ClrPrimitive.Float64 => "ToDouble",
-            ClrPrimitive.Float32 => "ToSingle",
-            ClrPrimitive.Decimal => "ToDecimal",
-            ClrPrimitive.Int32 => "ToInt32",
-            ClrPrimitive.Int64 => "ToInt64",
-            ClrPrimitive.Int16 => "ToInt16",
-            ClrPrimitive.UInt8 => "ToByte",
-            ClrPrimitive.Int8 => "ToSByte",
-            ClrPrimitive.UInt32 => "ToUInt32",
-            ClrPrimitive.UInt64 => "ToUInt64",
-            ClrPrimitive.UInt16 => "ToUInt16",
-            ClrPrimitive.Char => "ToChar",
-            ClrPrimitive.Boolean => "ToBoolean",
-            _ => null
-        };
+        return underlying is ClrTypeDefinition clr ? NameOf(clr.RuntimeType) : null;
     }
 
     /// <summary>The <c>Convert.To*</c> method name for <paramref name="destination"/>, or null when none converts to it.</summary>

@@ -517,8 +517,7 @@ public static partial class AbiEmitter {
     /// stays nullable: converting it through <c>FromClr</c> reads <c>.Value</c> and
     /// throws when the member is null.</summary>
     private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, Context ctx) {
-        var clrType = resolved.MemberTypeDefinition.GetRuntimeType()
-            ?? resolved.MemberTypeDefinition.GetClrPrimitive()?.GetClrType();
+        var clrType = resolved.MemberTypeDefinition.GetRuntimeType();
         if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
             return NullableMemberRead(readCall, clrType);
         // A dictionary property arrives as object. Null is unset (the bag stores

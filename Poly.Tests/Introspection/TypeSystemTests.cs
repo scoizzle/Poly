@@ -3,6 +3,7 @@ using System.Reflection;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Introspection;
 

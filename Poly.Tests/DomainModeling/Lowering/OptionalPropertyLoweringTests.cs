@@ -9,8 +9,6 @@ using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection.CommonLanguageRuntime;
 
-using Prim = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
-
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>

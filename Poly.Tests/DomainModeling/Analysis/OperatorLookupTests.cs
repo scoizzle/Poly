@@ -6,6 +6,7 @@ using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -46,8 +47,6 @@ internal sealed class ModeledTypeSet : IClrTypeDefinitionProvider {
     public ITypeDefinition? GetTypeDefinition(string name) => _types.GetValueOrDefault(name);
 
     public ITypeDefinition? GetTypeDefinition(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
-
-    public ITypeDefinition? GetTypeDefinition(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive primitiveTypeId) => null;
 
     public IEnumerable<ITypeDefinition> Types => _types.Values;
 
@@ -431,7 +430,7 @@ public class OperatorLookupTests {
         typeof(long), typeof(ulong), typeof(char), typeof(float), typeof(double), typeof(decimal), typeof(string)
     ];
 
-    private static string NameOf(Type type) => type.GetPrimitiveType()?.GetDisplayName() ?? type.Name;
+    private static string NameOf(Type type) => type.Name;
 
     /// <summary>A boxed value of <paramref name="type"/>. Boolean is false for Or and true otherwise, so neither conditional operator short-circuits.</summary>
     private static object One(Type type, OperatorKind kind) =>
@@ -517,7 +516,7 @@ public class OperatorLookupTests {
 
     private static bool IsPolicyShift(OperatorKind kind, Type? count) =>
         kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
-        && count?.GetPrimitiveType() is { } primitive && ClrBuiltInRules.IsPolicyShiftCount(primitive);
+        && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(count));
 
     private static ITypeOperator? ClrOp(Type left, OperatorKind kind, Type? right) =>
         OperatorOperands.Clr(left).GetOperator(kind, right is null ? null : OperatorOperands.Clr(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
@@ -647,7 +646,7 @@ public class OperatorLookupTests {
         ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", ClrTypeReferences.Of(typeof(long)),
             [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true) { Conversion = ConversionOperatorKind.Implicit });
         var number = OperatorOperands.Clr(typeof(long));
-        var offered = ClrBuiltInRules.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, cents).Single();
+        var offered = CSharpBuiltIns.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, cents).Single();
         await Assert.That(offered.Method).IsNull();
         await Assert.That(offered.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, number))).IsTrue();
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(cents, number)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
@@ -657,7 +656,7 @@ public class OperatorLookupTests {
         await AssertResult(cents.GetOperator(OperatorKind.Add, number, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), number);
         // The sibling: without the conversion the same operator is offered and does not apply.
         ITypeDefinition plain = set.Add("Plain");
-        await Assert.That(ClrBuiltInRules.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, plain).Count).IsEqualTo(1);
+        await Assert.That(CSharpBuiltIns.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, plain).Count).IsEqualTo(1);
         await Assert.That(number.GetOperator(OperatorKind.Add, plain, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
     }
 

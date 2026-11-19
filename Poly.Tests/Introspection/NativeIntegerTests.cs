@@ -333,7 +333,9 @@ public class NativeIntegerTests {
         await Assert.That(resolution.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, nint))).IsTrue();
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(nint)).IsEqualTo("nint");
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(Clr(typeof(nuint)))).IsEqualTo("nuint");
-        await Assert.That(nint.GetClrPrimitive()).IsNotNull();
+        await Assert.That(nint.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(nint));
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.SimpleTypeOf(nint))
+            .IsEqualTo(Poly.Interpretation.CSharp.SimpleType.NInt);
         foreach (var kind in Enum.GetValues<OperatorKind>())
             await Assert.That(nint.Operators.Where(o => o.Kind == kind).Any(static o => o.Method is not null)).IsFalse().Because($"IntPtr's reflected {kind} stands down");
     }
@@ -389,8 +391,9 @@ public class NativeIntegerTests {
             var oracle = CSharpOperatorOracle.Answer(kind, left, right);
             // Poly's shift-count policy (C# rejects, Poly defines): Roslyn rejects the cell, and the provider types it as C#
             // types the shift by an int count.
-            if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight && right!.GetPrimitiveType() is { } count
-                && ClrBuiltInRules.IsPolicyShiftCount(count) && IntCountShift(kind, left) is { } shifted) {
+            if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
+                && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(right))
+                && IntCountShift(kind, left) is { } shifted) {
                 policy++;
                 var typed = Clr(left).GetOperator(kind, Clr(right!), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)?.ResultTypeDefinition.GetRuntimeType();
                 if (oracle.Defined || typed != shifted)
@@ -513,9 +516,7 @@ public class NativeIntegerTests {
     /// <summary>The writer prints the C# keyword for a native-integer type reference, never the enum member name.</summary>
     [Test]
     public async Task Writer_PrintsTheNativeKeyword() {
-        var primitive = typeof(nint).GetPrimitiveType();
-        await Assert.That(primitive).IsNotNull();
-        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), ClrTypeReferences.Of(primitive!.Value.GetClrType()!)));
+        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), ClrTypeReferences.Of(typeof(nint))));
         await Assert.That(printed).Contains("(nint)");
         await Assert.That(printed).DoesNotContain("NInt");
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(typeof(nuint))).IsEqualTo("nuint");

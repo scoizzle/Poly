@@ -2,11 +2,11 @@ using System.Reflection;
 
 using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
-
-using Prim = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Introspection;
 
@@ -16,33 +16,33 @@ namespace Poly.Tests.Introspection;
 public class TypeRulesTests {
     /// <summary>
     /// B7: the public conversion door as it stood on master before T-03b, over every CLR primitive pair.
-    /// One row per destination, one cell per source in <see cref="Prim"/> order. A cell is three letters:
+    /// One row per destination, one cell per source in <see cref="ClrBuiltInTypes.All"/> order. A cell is three letters:
     /// GetConversionFrom (N none, I implicit, E explicit), IsAssignableFrom (T/F), IsNumericWideningFrom (T/F).
     /// Both of those members are gone (T-16); <see cref="ConversionDoor_ProviderReproducesTheMasterMatrix_ExceptTheRemovedWidenings"/>
     /// reads this text through the provider. Captured from origin/master 51b9453e; never regenerate it from the code under test.
     /// </summary>
-    private static readonly Dictionary<Prim, string> MasterDoorMatrix = new() {
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Boolean] = "NTF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Int8] = "NFF NTT NFF NFF NFF NFT NFF NFF NFF NFF NFF EFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Int16] = "NFF NFT NTT NFF NFF NFT NFT NFF NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Int32] = "NFF NFT NFT NTT NFF NFT NFT NFT NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Int64] = "NFF NFT NFT NFT NTT NFT NFT NFT NFT NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.UInt8] = "NFF NFT NFF NFF NFF NTT NFF NFF NFF NFF NFF EFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.UInt16] = "NFF NFT NFT NFF NFF NFT NTT NFF NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.UInt32] = "NFF NFT NFT NFT NFF NFT NFT NTT NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.UInt64] = "NFF NFT NFT NFT NFT NFT NFT NFT NTT NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Float32] = "NFF NFT NFT NFT NFT NFT NFT NFT NFT NTT NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Float64] = "NFF NFT NFT NFT NFT NFT NFT NFT NFT NFT NTT EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Decimal] = "NFF ITT ITT ITT ITT ITT ITT ITT ITT EFT EFT NTT NFF ITT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.String] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Char] = "NFF NFT NFT NFF NFF NFT NFT NFF NFF NFF NFF EFF NFF NTT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.DateTime] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.DateOnly] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.TimeOnly] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.TimeSpan] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Guid] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.ByteArray] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF",
-        [Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Structure] = "NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF",
+    private static readonly Dictionary<Type, string> MasterDoorMatrix = new() {
+        [typeof(bool)] = "NTF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(sbyte)] = "NFF NTT NFF NFF NFF NFT NFF NFF NFF NFF NFF EFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(short)] = "NFF NFT NTT NFF NFF NFT NFT NFF NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(int)] = "NFF NFT NFT NTT NFF NFT NFT NFT NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(long)] = "NFF NFT NFT NFT NTT NFT NFT NFT NFT NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(byte)] = "NFF NFT NFF NFF NFF NTT NFF NFF NFF NFF NFF EFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(ushort)] = "NFF NFT NFT NFF NFF NFT NTT NFF NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(uint)] = "NFF NFT NFT NFT NFF NFT NFT NTT NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(ulong)] = "NFF NFT NFT NFT NFT NFT NFT NFT NTT NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(float)] = "NFF NFT NFT NFT NFT NFT NFT NFT NFT NTT NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(double)] = "NFF NFT NFT NFT NFT NFT NFT NFT NFT NFT NTT EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(decimal)] = "NFF ITT ITT ITT ITT ITT ITT ITT ITT EFT EFT NTT NFF ITT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(string)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(char)] = "NFF NFT NFT NFF NFF NFT NFT NFF NFF NFF NFF EFF NFF NTT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(DateTime)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF NFF",
+        [typeof(DateOnly)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF",
+        [typeof(TimeOnly)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF",
+        [typeof(TimeSpan)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF",
+        [typeof(Guid)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF",
+        [typeof(byte[])] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF",
+        [typeof(object)] = "NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF",
     };
 
     /// <summary>
@@ -50,18 +50,17 @@ public class TypeRulesTests {
     /// a signed integral to an unsigned one, an unsigned one to its signed sibling, anything into Char, and
     /// Float32 or Float64 into Decimal (explicit). The provider answers none, so overload scoring stops counting them.
     /// </summary>
-    internal static readonly (Prim From, Prim To)[] RemovedWidenings = [
-        (Prim.UInt8, Prim.Int8), (Prim.UInt16, Prim.Int16), (Prim.UInt32, Prim.Int32), (Prim.UInt64, Prim.Int64), (Prim.Char, Prim.Int16),
-        (Prim.Int8, Prim.UInt8), (Prim.Int8, Prim.UInt16), (Prim.Int8, Prim.UInt32), (Prim.Int8, Prim.UInt64),
-        (Prim.Int16, Prim.UInt16), (Prim.Int16, Prim.UInt32), (Prim.Int16, Prim.UInt64),
-        (Prim.Int32, Prim.UInt32), (Prim.Int32, Prim.UInt64), (Prim.Int64, Prim.UInt64),
-        (Prim.Int8, Prim.Char), (Prim.Int16, Prim.Char), (Prim.UInt8, Prim.Char), (Prim.UInt16, Prim.Char),
-        (Prim.Float32, Prim.Decimal), (Prim.Float64, Prim.Decimal),
+    internal static readonly (Type From, Type To)[] RemovedWidenings = [
+        (typeof(byte), typeof(sbyte)), (typeof(ushort), typeof(short)), (typeof(uint), typeof(int)), (typeof(ulong), typeof(long)), (typeof(char), typeof(short)),
+        (typeof(sbyte), typeof(byte)), (typeof(sbyte), typeof(ushort)), (typeof(sbyte), typeof(uint)), (typeof(sbyte), typeof(ulong)),
+        (typeof(short), typeof(ushort)), (typeof(short), typeof(uint)), (typeof(short), typeof(ulong)),
+        (typeof(int), typeof(uint)), (typeof(int), typeof(ulong)), (typeof(long), typeof(ulong)),
+        (typeof(sbyte), typeof(char)), (typeof(short), typeof(char)), (typeof(byte), typeof(char)), (typeof(ushort), typeof(char)),
+        (typeof(float), typeof(decimal)), (typeof(double), typeof(decimal)),
     ];
 
-    private static bool IsRankedNumber(Prim primitive) => primitive is
-        Prim.Int8 or Prim.Int16 or Prim.Int32 or Prim.Int64 or Prim.UInt8 or Prim.UInt16 or Prim.UInt32 or Prim.UInt64
-        or Prim.Float32 or Prim.Float64 or Prim.Decimal or Prim.Char;
+    private static bool IsRankedNumber(Type type) => CSharpTypeSystem.SimpleTypeOf(type) is { } simple
+        && simple is not (SimpleType.Bool or SimpleType.NInt or SimpleType.NUInt);
 
     /// <summary>
     /// The matrix captured from master is the oracle; this reads it through the provider alone. Letter 1 is a declared
@@ -72,23 +71,23 @@ public class TypeRulesTests {
     [Test]
     public async Task ConversionDoor_ProviderReproducesTheMasterMatrix_ExceptTheRemovedWidenings() {
         // The 21 members the matrix was captured over, by ordinal; members appended later (T-18b's native integers) are not in it.
-        var prims = Enum.GetValues<Prim>().Where(MasterDoorMatrix.ContainsKey).ToArray();
+        var prims = ClrBuiltInTypes.All.Where(MasterDoorMatrix.ContainsKey).ToArray();
         await Assert.That(prims.Length).IsEqualTo(21);
-        await Assert.That(prims.Select(static p => (int)p).ToArray()).IsEquivalentTo(Enumerable.Range(0, 21).ToArray());
+        await Assert.That(prims).IsEquivalentTo(ClrBuiltInTypes.All.Take(21).ToArray());
         var removed = RemovedWidenings.ToHashSet();
         await Assert.That(removed.Count).IsEqualTo(21);
         var mismatches = new List<string>();
         foreach (var to in prims) {
             var cells = MasterDoorMatrix[to].Split(' ');
-            var target = Clr(to.GetClrType()!);
+            var target = Clr(to);
             for (var i = 0; i < prims.Length; i++) {
                 var from = prims[i];
-                var source = Clr(from.GetClrType()!);
+                var source = Clr(from);
                 var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(source, target);
                 var declared = conversion is { Method: not null } stated
                     ? (stated.Kind == ConversionOperatorKind.Implicit ? 'I' : 'E')
                     : 'N';
-                var convertible = to != Prim.Structure && ((from == to && IsRankedNumber(from)) || conversion is { Kind: ConversionOperatorKind.Implicit });
+                var convertible = to != typeof(object) && ((from == to && IsRankedNumber(from)) || conversion is { Kind: ConversionOperatorKind.Implicit });
                 var actual = string.Concat(declared, target.IsAssignableFrom(source, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) ? 'T' : 'F', convertible ? 'T' : 'F');
                 var expected = string.Concat(cells[i][0], cells[i][1], cells[i][2] == 'T' && !removed.Contains((from, to)) ? 'T' : 'F');
                 if (actual != expected)
@@ -106,7 +105,7 @@ public class TypeRulesTests {
     // What C# offers for a CLR type beside itself: its built-ins and the type's declared operators (#998 T10; before
     // T10 the definition's own Operators list carried the built-ins).
     private static ITypeOperator[] OperatorsOf(ITypeDefinition definition, OperatorKind kind) => definition is ClrTypeDefinition clr
-        ? [.. ClrBuiltInRules.OperatorsBeside(clr, kind, null)]
+        ? [.. CSharpBuiltIns.OperatorsBeside(clr, kind, null)]
         : [.. definition.Operators.Where(o => o.Kind == kind)];
 
     // ---- ResolveConversionFrom: intrinsic conversions are reds on the stub, reflected ones are pins ----
@@ -165,7 +164,7 @@ public class TypeRulesTests {
         typeof(long), typeof(ulong), typeof(char), typeof(float), typeof(double), typeof(decimal)
     ];
 
-    private static string NameOf(Type type) => type.GetPrimitiveType()?.GetDisplayName() ?? type.Name;
+    private static string NameOf(Type type) => type.Name;
 
     private static T ImplicitTo<T>(object value) {
         dynamic operand = value;

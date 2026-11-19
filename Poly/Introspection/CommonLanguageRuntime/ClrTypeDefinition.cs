@@ -58,7 +58,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         _members = new(() => BuildMemberCollection(Fields, Properties, Methods));
         // Declared only (owner ruling 1, #998 T10): the reflected op_* members; C#'s built-ins are its type system's, and
         // C# 11 does not consult a native integer's own members.
-        _operators = new(() => ClrBuiltInRules.IsNativeInteger(RuntimeType)
+        _operators = new(() => Poly.Interpretation.CSharp.CSharpBuiltIns.IsNativeInteger(RuntimeType)
             ? []
             : [.. Enum.GetValues<OperatorKind>().SelectMany(kind => FindOperators(kind).Select(method => new ClrTypeOperator(kind, method)))]);
         _conversions = new(ReadConversions);
@@ -94,7 +94,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// <c>byte[]</c> stays binary).
     /// </summary>
     internal bool IsCollectionShape =>
-        GetPrimitiveTypeId(RuntimeType) is null
+        RuntimeType != typeof(string) && RuntimeType != typeof(byte[])
         && (RuntimeType.IsArray
             || RuntimeType.GetInterfaces().Any(static i =>
                 i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)));
@@ -479,13 +479,4 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             ? string.Empty
             : string.Join(",", parameters.Select(static parameter => parameter.ParameterTypeDefinition.FullName));
     }
-
-    /// <summary>
-    /// Delegates to the canonical <see cref="ClrPrimitive.GetPrimitiveType(Type)"/>
-    /// mapping. This private wrapper exists only to keep call sites unchanged; new
-    /// code should call <c>type.GetPrimitiveType()</c> directly.
-    /// </summary>
-    internal static ClrPrimitive? GetPrimitiveTypeId(Type type) =>
-        type.GetPrimitiveType();
-
 }

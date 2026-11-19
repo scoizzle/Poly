@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
@@ -298,7 +299,7 @@ public class ConstantFoldingProviderTests {
 
     private static bool IsPolicyShift(FoldGridRow row) =>
         row.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
-        && row.Right?.Clr?.GetPrimitiveType() is { } count && ClrBuiltInRules.IsPolicyShiftCount(count);
+        && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(row.Right?.Clr));
 
     private static string[] MasterUndefinedRowsAsOnMaster() =>
         [.. ConstantFoldGrid.Rows.Where(IsMasterUndefinedFold).Select(static row => IsMismatchedEquality(row)

@@ -7,8 +7,7 @@ using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
-
-using Prim = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Introspection;
 
@@ -85,7 +84,7 @@ public class OverloadScoringTests {
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
     /// <summary>The 21 primitives the master matrices were captured over; T-18b's native integers are pinned apart (lock amendment 9).</summary>
-    private static readonly Type[] Primitives = [.. Enum.GetValues<Prim>().Where(static p => p <= Prim.Structure).Select(static p => p.GetClrType()!)];
+    private static readonly Type[] Primitives = [.. ClrBuiltInTypes.All.Take(21)];
 
     private static readonly Type[] Natives = [typeof(nint), typeof(nuint)];
 
@@ -448,7 +447,7 @@ public class OverloadScoringTests {
     /// Everything else stays, cell for cell.
     /// </summary>
     internal static string AfterT16(string masterMatrix) {
-        var removed = TypeRulesTests.RemovedWidenings.Select(static pair => (From: pair.From.ToString(), To: pair.To.ToString())).ToHashSet();
+        var removed = TypeRulesTests.RemovedWidenings.Select(static pair => (From: ParameterName(pair.From), To: ParameterName(pair.To))).ToHashSet();
         var arguments = Array.Empty<string>();
         var output = new List<string>();
         foreach (var line in masterMatrix.Split('\n')) {

@@ -78,7 +78,7 @@ public class TypedExpressionMetadataTests {
         var binary = analysis.GetMetadata<TypedExpressionMetadata>(node)?.Binary;
         await Assert.That(binary).IsNotNull();
         await Assert.That(binary!.Kind).IsEqualTo(NumericKind.Decimal);
-        await Assert.That(binary.Result.Definition!.GetClrPrimitive()).IsEqualTo(Poly.Introspection.CommonLanguageRuntime.ClrPrimitive.Decimal);
+        await Assert.That(binary.Result.Definition!.GetRuntimeType()).IsEqualTo(typeof(decimal));
         await Assert.That(binary.MayOverflow).IsFalse();
         await Assert.That(AnalyzerBehaviourPinTests.Verdict(analysis)).IsEqualTo(BaselineReferenceError);
     }

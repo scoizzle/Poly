@@ -68,6 +68,38 @@ internal sealed class ClrTypeDefinitionRegistry : IClrTypeDefinitionProvider, IT
     }
 
     /// <summary>
+    /// A bare name that spells one of the CLR host's ground types, in the order its former primitive enum listed them.
+    /// Interim (#998 S2, its removing row): a scope binds a bare name, so only a qualified name is looked up here; this
+    /// alias keeps the names the old table answered.
+    /// </summary>
+    private static readonly Dictionary<string, Type> BareNameAliases = new(StringComparer.Ordinal) {
+        ["Boolean"] = typeof(bool),
+        ["Int8"] = typeof(sbyte),
+        ["Int16"] = typeof(short),
+        ["Int32"] = typeof(int),
+        ["Int64"] = typeof(long),
+        ["UInt8"] = typeof(byte),
+        ["UInt16"] = typeof(ushort),
+        ["UInt32"] = typeof(uint),
+        ["UInt64"] = typeof(ulong),
+        ["Float32"] = typeof(float),
+        ["Float64"] = typeof(double),
+        ["Decimal"] = typeof(decimal),
+        ["String"] = typeof(string),
+        ["Char"] = typeof(char),
+        ["DateTime"] = typeof(DateTime),
+        ["DateOnly"] = typeof(DateOnly),
+        ["TimeOnly"] = typeof(TimeOnly),
+        ["TimeSpan"] = typeof(TimeSpan),
+        ["Guid"] = typeof(Guid),
+        ["DateTimeOffset"] = typeof(DateTimeOffset),
+        ["ByteArray"] = typeof(byte[]),
+        ["Structure"] = typeof(object),
+        ["NInt"] = typeof(nint),
+        ["NUInt"] = typeof(nuint),
+    };
+
+    /// <summary>
     /// Resolves by fully-qualified name using cache, falling back to <see cref="Type.GetType(string)"/>.
     /// Returns null if the type cannot be resolved.
     /// </summary>
@@ -75,11 +107,9 @@ internal sealed class ClrTypeDefinitionRegistry : IClrTypeDefinitionProvider, IT
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         // A bare name is a scope's to bind (#998 S2): only a qualified name is looked up, in the cache or across the
         // loaded assemblies, so what a name means never depends on which type another caller happened to resolve or
-        // load. Interim until S5: a bare name that spells a ClrPrimitive member still names that primitive's type.
+        // load. Interim until S5: a bare name that spells a CLR ground type still names that type.
         if (!name.Contains('.', StringComparison.Ordinal))
-            return Enum.TryParse<ClrPrimitive>(name, ignoreCase: false, out var primitive) && primitive.GetClrType() is { } named
-                ? GetTypeDefinition(named)
-                : null;
+            return BareNameAliases.TryGetValue(name, out var named) ? GetTypeDefinition(named) : null;
         if (_types.TryGetValue(name, out var existing)) {
             return existing;
         }

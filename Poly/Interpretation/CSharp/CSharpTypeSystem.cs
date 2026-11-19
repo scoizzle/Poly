@@ -119,7 +119,7 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
     /// a C# conversion.</summary>
     public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) =>
         destination is ClrTypeDefinition clr
-            ? ClrBuiltInRules.ConversionInto(clr, source)
+            ? CSharpBuiltIns.ConversionInto(clr, source)
             : Poly.Interpretation.Analysis.Semantics.ModeledConversions.Find(source, destination);
 
     /// <summary>C#'s operator selection over the operators both operands declare, with applicability decided by this
@@ -138,7 +138,7 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
     /// CLR definition, C#'s built-ins and its declared operators; for any other, the operators it declares.</summary>
     private static IEnumerable<ITypeOperator> OfferedBy(ITypeDefinition definition, OperatorKind kind, ITypeDefinition? other) =>
         definition is ClrTypeDefinition clr
-            ? ClrBuiltInRules.OperatorsBeside(clr, kind, other)
+            ? CSharpBuiltIns.OperatorsBeside(clr, kind, other)
             : definition.Operators.Where(o => o.Kind == kind);
 
     public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule =>
@@ -166,7 +166,11 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
 
     /// <summary>The C# simple type of a CLR definition; a declared or foreign definition is none.</summary>
     public SimpleType? SimpleTypeOf(ITypeDefinition definition) =>
-        definition is ClrTypeDefinition clr && SimpleTypes.TryGetValue(clr.RuntimeType, out var simple) ? simple : null;
+        definition is ClrTypeDefinition clr ? SimpleTypeOf(clr.RuntimeType) : null;
+
+    /// <summary>The C# simple type a CLR runtime type denotes; any other type is none.</summary>
+    internal static SimpleType? SimpleTypeOf(Type? type) =>
+        type is not null && SimpleTypes.TryGetValue(type, out var simple) ? simple : null;
 
     /// <summary>A CLR enum, or a declaration written as an enum.</summary>
     public bool IsEnumType(ITypeDefinition definition) => definition switch {

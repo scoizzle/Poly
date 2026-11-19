@@ -6,7 +6,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// </summary>
 /// <remarks>
 /// Candidates are the operators either operand offers beside the other: a CLR definition's are pair-aware
-/// (<see cref="ClrBuiltInRules.OperatorsBeside"/>: <c>UInt32 + Int32</c> is <c>Int64</c>, which neither operand
+/// (<see cref="Poly.Interpretation.CSharp.CSharpBuiltIns.OperatorsBeside"/>: <c>UInt32 + Int32</c> is <c>Int64</c>, which neither operand
 /// declares), any other definition's are its <see cref="ITypeDefinition.Operators"/> of the kind. A candidate applies when
 /// each operand is identical to its parameter type or converts to it implicitly. A candidate whose parameters are all
 /// identical wins; otherwise exactly one applicable candidate is returned. Zero, or two or more of either, is none: fail

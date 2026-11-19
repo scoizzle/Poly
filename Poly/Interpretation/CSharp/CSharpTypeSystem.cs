@@ -6,7 +6,10 @@ namespace Poly.Interpretation.CSharp;
 /// <summary>
 /// C# over the CLR: the CLR supplies the definitions (reflection), C# supplies the words (its type keywords) and the
 /// rules (the C# standard's conversions, promotion and operators). One shared instance backs every CLR definition.
-/// Interim (#998 T1, removed by T9): the rules still delegate to the definitions' own doors.
+/// It decides every pair it is asked about, whichever system an operand comes from (#998 T3): it reads what both types
+/// declare and applies C#'s rules; a foreign definition's own answer never decides. Interim (removed by T9, when a
+/// definition names its system): a definition is C#'s own when it is an <see cref="IClrTypeDefinition"/>, and for its
+/// own definitions the rules still delegate to their doors.
 /// </summary>
 internal sealed class CSharpTypeSystem : ITypeSystem {
     public static CSharpTypeSystem Shared { get; } = new();
@@ -38,11 +41,25 @@ internal sealed class CSharpTypeSystem : ITypeSystem {
     public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) =>
         destination.IsAssignableWithoutConversion(source);
 
+    /// <summary>Into C#'s own definition, its door (built-in rules plus both ends' declared conversions). Into a foreign
+    /// definition, only a conversion either end declares with a method: a foreign system's own built-in conversion is not
+    /// a C# conversion.</summary>
     public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) =>
-        destination.ResolveConversionFrom(source);
+        destination is IClrTypeDefinition
+            ? destination.ResolveConversionFrom(source)
+            : Poly.Interpretation.Analysis.Semantics.ModeledConversions.Find(source, destination);
 
-    public ITypeOperator? Operator(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right) =>
-        left.GetOperator(kind, right);
+    /// <summary>C#'s operator selection over the operators both operands declare, with applicability decided by this
+    /// system's <see cref="Conversion"/>.</summary>
+    public ITypeOperator? Operator(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right) {
+        ArgumentNullException.ThrowIfNull(left);
+        var arity = OperatorShape.ArityOf(kind);
+        if (arity == 2)
+            ArgumentNullException.ThrowIfNull(right);
+        else if (right is not null)
+            throw new ArgumentException($"Operator '{kind}' is unary; a right operand was given.", nameof(right));
+        return ClrOperatorResolution.Resolve(left, kind, right, Conversion);
+    }
 
     public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule =>
         Rules.Find<TRule>() ?? this as TRule ?? Target?.Rule<TRule>();

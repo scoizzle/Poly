@@ -13,8 +13,13 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// closed. This is not C# 12.6.4 better-conversion: the pair-aware built-in set leaves nothing for it to rank.
 /// </remarks>
 internal static class ClrOperatorResolution {
-    public static ITypeOperator? Resolve(ITypeDefinition left, OperatorKind kind, ITypeDefinition? right) {
+    /// <param name="convert">The conversion rule that decides whether an operand applies to a parameter
+    /// (source, destination): a type system passes its own (#998 T3), so a foreign parameter type's door never decides.
+    /// Null is each parameter type's own door, as the definition doors ask until T9.</param>
+    public static ITypeOperator? Resolve(ITypeDefinition left, OperatorKind kind, ITypeDefinition? right,
+        Func<ITypeDefinition, ITypeDefinition, ITypeConversion?>? convert = null) {
         ArgumentNullException.ThrowIfNull(left);
+        convert ??= static (source, destination) => destination.ResolveConversionFrom(source);
         var arity = OperatorShape.ArityOf(kind);
         var operands = arity == 1 ? new[] { left } : new[] { left, right ?? throw new ArgumentNullException(nameof(right)) };
 
@@ -34,7 +39,7 @@ internal static class ClrOperatorResolution {
                 if (TypeDefinitionExtensions.IsSameType(parameterType, operands[i]))
                     continue;
                 allIdentical = false;
-                applies = parameterType.ResolveConversionFrom(operands[i]) is { Kind: ConversionOperatorKind.Implicit };
+                applies = convert(operands[i], parameterType) is { Kind: ConversionOperatorKind.Implicit };
             }
             if (applies)
                 applicable.Add((candidate, allIdentical));

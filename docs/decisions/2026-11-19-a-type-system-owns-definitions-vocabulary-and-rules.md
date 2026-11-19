@@ -154,9 +154,11 @@ system**. It is never the left operand's.
 - The ledger's built-in arithmetic applies only if the ledger system is the target, or is layered under it.
 - If no candidate is chosen, there is no operator, and analysis fails closed with a positioned error.
 
-So the answer is the same in either operand order. Today's "left operand's platform answers" (I4) gives
-different answers for `a + b` and `b + a` once two platforms differ. Owner ruling 2 approves retargeting
-`MixedPairAuthorityTests` in row T3; the advisor consult for retargeting a test still runs there.
+So the same system decides in either operand order. A declared operator still applies only in its own parameter
+order, and whether an operand applies to a parameter is the target's own `Conversion`, never the parameter type's
+door: otherwise a foreign system would decide one level down (advisor, T3). Today's "left operand's platform answers"
+(I4) let a foreign left operand, or a foreign destination, decide its pair. Owner ruling 2 approves retargeting
+`MixedPairAuthorityTests` in row T3.
 
 ### 2.4 How a definition reaches its system: a back-reference
 
@@ -306,7 +308,7 @@ Each row begins with a failing test, run red and recorded. Each ends with the fu
 | T0 | The `ITypeDefinition` ratchet and no-classification guards, pinned at 42. | A scratch 43rd member fails the ratchet (recorded, then removed). |
 | T1 | `ITypeSystem`, `ITypeSystemRule`, `TypeSystemRules` and their guards. The shared C# system wraps today's pieces (keyword table, registry, `ClrBuiltInRules`, `ClrOperatorResolution`, `ModeledConversions`). **Interim:** its `Conversion`/`Operator` delegate to today's definition doors. Removed by T9. | `csharp.Bind("int")` is `Int32`, `Spell` round-trips every keyword, and `Conversion`/`Operator` agree with today's doors on the full numeric matrix. |
 | T2 | `LedgerHost` becomes a system with its own operator and its own rule. | `ledger.Rule<ILedgerRules>()` answers; `csharp.Rule<ILedgerRules>()` is null. |
-| T3 | The target system decides mixed pairs (§2.3, owner ruling 2); `MixedPairAuthorityTests` is retargeted after the advisor consult. | `clrInt + ledgerAmount` and `ledgerAmount + clrInt` resolve the same way (they differ today). |
+| T3 | The target system decides mixed pairs (§2.3, owner ruling 2); `MixedPairAuthorityTests` is retargeted after the advisor consult. | A foreign definition whose own door answers any `Add` or any conversion does not decide `third + long` or `long → third`; the target does (they differ today). The planned `clrInt + ledgerAmount` case was already symmetric, since the ledger declares no operators. |
 | T4 | Analysis, the VM and the domain type model ask the target system's `Conversion`/`Operator`/`IsAssignableWithoutConversion` instead of the definition. | An analysis whose target is the ledger system refuses `int + int` (today the CLR definition answers). |
 | T5 | The domain system is layered on C#. `Bind` uses `DomainTypeMapping`'s table, `DomainGround` is deleted, and families come from §3.1. **Interim:** that table stands in for the prelude. Removed by #998 S3. | A 64-bit integral definition that no domain word binds is not in the Number family (today it is `Int64`). |
 | T6 | `ICSharpTypeRules : ITypeSystemRule` (`SimpleTypeOf`, `IsEnum`, `IsValueType`). The analyzer, constant folding, `DateOffsetRule`, the shift policy and `Classify` ask it. | A ledger definition is not folded and is `Cat.Unknown` (today `IsNumber` makes it `Cat.Number`). |

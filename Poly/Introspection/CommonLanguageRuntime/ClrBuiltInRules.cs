@@ -70,13 +70,15 @@ internal static class ClrBuiltInRules {
     /// converts through the platform and never through a method the platform type declares beside them (IntPtr's
     /// <c>op_Explicit</c> to <c>int</c> is checked; C#'s native conversion is not). A C# rule, so it lives here.
     /// </summary>
-    public static ConversionOperatorKind? NativeIntegerConversionFrom(ITypeDefinition destination, ITypeDefinition source) {
+    /// <param name="system">The type system that decides whether the conversion exists (#998 T4b); null asks the
+    /// destination's door (interim, removed by T9).</param>
+    public static ConversionOperatorKind? NativeIntegerConversionFrom(ITypeDefinition destination, ITypeDefinition source, ITypeSystem? system = null) {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
         if (destination.GetClrPrimitive() is not { } to || source.GetClrPrimitive() is not { } from
             || !(IsNativeInteger(to) || IsNativeInteger(from)) || !IsNumeric(to) || !IsNumeric(from))
             return null;
-        return destination.ResolveConversionFrom(source)?.Kind;
+        return TypeDefinitionExtensions.ConversionInto(destination, source, system)?.Kind;
 
         static bool IsNativeInteger(ClrPrimitive type) => type is ClrPrimitive.NInt or ClrPrimitive.NUInt;
 

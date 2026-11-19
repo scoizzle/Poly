@@ -11,7 +11,7 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     public static AnalysisContext CreateDefault() => new();
 
     /// <summary>The type system the analysis decides by: the <see cref="ITypeSystem"/> setting, else C# over the CLR. Every
-    /// analysis-time operator lookup asks it (#998 T4a); conversions follow in T4b.</summary>
+    /// analysis-time operator lookup (#998 T4a), conversion and assignability check, and overload ranking (T4b) asks it.</summary>
     public ITypeSystem TypeSystem { get; }
 
     public AnalysisContext() : this(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, AnalysisSettings.Default) { }

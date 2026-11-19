@@ -29,7 +29,9 @@ internal static class TypeDefinitionOperatorExtensions {
         /// The unique member every other member is identical to or implicitly converts to, or null.
         /// An empty set, no such member, or several (mutually convertible) is none. A single member is itself.
         /// </summary>
-        public ITypeDefinition? GetCommonType() {
+        /// <param name="system">The type system whose conversions decide (#998 T4c); null asks each candidate's door
+        /// (interim, removed by T9).</param>
+        public ITypeDefinition? GetCommonType(ITypeSystem? system = null) {
             ArgumentNullException.ThrowIfNull(types);
             var distinct = new List<ITypeDefinition>();
             foreach (var type in types) {
@@ -43,7 +45,7 @@ internal static class TypeDefinitionOperatorExtensions {
             foreach (var candidate in distinct) {
                 var everyoneConverts = distinct.TrueForAll(other =>
                     TypeDefinitionExtensions.IsSameType(other, candidate)
-                    || candidate.ResolveConversionFrom(other) is { Kind: ConversionOperatorKind.Implicit });
+                    || TypeDefinitionExtensions.ConversionInto(candidate, other, system) is { Kind: ConversionOperatorKind.Implicit });
                 if (!everyoneConverts)
                     continue;
                 if (common is not null)

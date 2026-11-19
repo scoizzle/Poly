@@ -504,19 +504,19 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         // Also store the resolved indexer member (merged from MemberResolver)
         if (argumentTypes.All(static type => type is not null)) {
-            var matchedIndexer = instanceType.FindMatchingIndexers(argumentTypes!).FirstOrDefault();
+            var matchedIndexer = instanceType.FindMatchingIndexers(argumentTypes!, context.TypeSystem).FirstOrDefault();
             if (matchedIndexer is not null)
                 context.SetResolvedMember(indexAccess, matchedIndexer);
             // An array's synthetic indexer takes Int32, but C# accepts any integral
-            // index; fall back to the element type when no indexer signature matches.
-            return instanceType.GetElementType(argumentTypes!) ?? instanceType.GetElementType();
+            // index; fall back to the target's element type when no indexer signature matches.
+            return instanceType.GetElementType(context.TypeSystem, argumentTypes!) ?? context.TypeSystem.ElementType(instanceType);
         }
 
         var fallbackIndexer = instanceType.Properties
             .FirstOrDefault(static property => property.Parameters is { } parameters && parameters.Any());
         if (fallbackIndexer is not null)
             context.SetResolvedMember(indexAccess, fallbackIndexer);
-        return instanceType.GetElementType();
+        return context.TypeSystem.ElementType(instanceType);
     }
 
     /// <summary>
@@ -971,7 +971,7 @@ internal static class MethodInvocationSemanticResolver {
         }
 
         var matches = targetType
-            .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes)
+            .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes, context.TypeSystem)
             .ToList();
         // A lambda argument's natural type is its Func/Action shape, not the
         // delegate or Expression<D> the parameter declares. Ordinary matching may
@@ -1078,7 +1078,7 @@ internal static class MethodInvocationSemanticResolver {
             var argumentType = context.GetResolvedType(argument);
             if (argumentType is not null
                 && (ReferenceEquals(parameterType, argumentType)
-                    || parameterType.IsAssignableFrom(argumentType))) {
+                    || parameterType.IsAssignableFrom(argumentType, context.TypeSystem))) {
                 if (!ReferenceEquals(parameterType, argumentType))
                     score++;
                 continue;
@@ -1154,10 +1154,10 @@ internal static class ConstructorInvocationSemanticResolver {
             var complete = new ITypeDefinition[argumentTypes.Length];
             for (var i = 0; i < argumentTypes.Length; i++)
                 complete[i] = argumentTypes[i]!;
-            return targetType.FindMatchingConstructors(complete).FirstOrDefault();
+            return targetType.FindMatchingConstructors(complete, context.TypeSystem).FirstOrDefault();
         }
 
-        return MatchIncompleteConstructor(targetType, @new, argumentTypes);
+        return MatchIncompleteConstructor(context.TypeSystem, targetType, @new, argumentTypes);
     }
 
     /// <summary>
@@ -1166,12 +1166,12 @@ internal static class ConstructorInvocationSemanticResolver {
     /// and whose null literals fit a reference or <c>Nullable&lt;T&gt;</c> parameter.
     /// </summary>
     private static ITypeConstructor? MatchIncompleteConstructor(
-        ITypeDefinition targetType, New @new, ITypeDefinition?[] argumentTypes) {
+        ITypeSystem system, ITypeDefinition targetType, New @new, ITypeDefinition?[] argumentTypes) {
         ITypeConstructor? best = null;
         var bestScore = int.MaxValue;
         var ties = 0;
         foreach (var constructor in targetType.Constructors) {
-            if (!TryScoreConstructor(constructor, @new, argumentTypes, out var score))
+            if (!TryScoreConstructor(system, constructor, @new, argumentTypes, out var score))
                 continue;
             if (score < bestScore) {
                 bestScore = score;
@@ -1187,7 +1187,7 @@ internal static class ConstructorInvocationSemanticResolver {
     }
 
     private static bool TryScoreConstructor(
-        ITypeConstructor constructor, New @new, ITypeDefinition?[] argumentTypes, out int score) {
+        ITypeSystem system, ITypeConstructor constructor, New @new, ITypeDefinition?[] argumentTypes, out int score) {
         score = 0;
         var parameters = constructor.Parameters?.ToArray() ?? [];
         if (!SyntaxTypeCompatibilityAnalyzer.CallFits(parameters, argumentTypes.Length))
@@ -1214,7 +1214,7 @@ internal static class ConstructorInvocationSemanticResolver {
                 continue;
             if (paramType == argType)
                 continue;
-            if (paramType.IsAssignableFrom(argType)) {
+            if (paramType.IsAssignableFrom(argType, system)) {
                 score++;
                 continue;
             }

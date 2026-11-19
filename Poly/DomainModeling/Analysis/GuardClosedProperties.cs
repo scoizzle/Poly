@@ -1,5 +1,7 @@
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
+using Poly.Introspection;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -40,6 +42,8 @@ internal static class GuardClosedProperties {
     internal static Result Compute(Entity entity, Domain domain) {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(domain);
+        // The same system the emitted guards ask (ConstraintCheckWriter), so this mirror and the guards agree.
+        var system = RuntimeAnalysisCache.Session(domain).TargetTypeSystem;
 
         var assigns = new Dictionary<string, List<AssignWriter>>(StringComparer.Ordinal);
         string? entityWide = null;
@@ -112,7 +116,7 @@ internal static class GuardClosedProperties {
                 if (closed.Contains(property.Name))
                     continue;
                 var blocker = entityWide
-                    ?? Blocker(property, entryAssigned.Contains(property.Name),
+                    ?? Blocker(system, property, entryAssigned.Contains(property.Name),
                         assigns.GetValueOrDefault(property.Name), entity, closed);
                 if (blocker is null) {
                     closed.Add(property.Name);
@@ -128,12 +132,12 @@ internal static class GuardClosedProperties {
     private static IReadOnlySet<string> ParameterNames(Poly.DomainModeling.Ontology.Action action) =>
         new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
 
-    private static string? Blocker(
+    private static string? Blocker(ITypeSystem system,
         Property property, bool isEntryAssigned, List<AssignWriter>? assigns, Entity entity, IReadOnlySet<string> closed) {
         var typeName = property.Type.TypeName;
-        var isText = typeName is "Text" or "String";
-        var isNumber = typeName is "Number" or "Int" or "Decimal";
-        var isBoolean = typeName is "Boolean";
+        var isText = system.LengthApplies(typeName);
+        var isNumber = system.RangeApplies(typeName);
+        var isBoolean = system.IsBooleanWord(typeName);
         if (!isText && !isNumber && !isBoolean)
             return $"type '{typeName}' has no constraint guard coverage";
 
@@ -160,7 +164,7 @@ internal static class GuardClosedProperties {
 
         foreach (var writer in assigns ?? []) {
             var assign = writer.Assign;
-            if (IsProvenCopy(property, writer, entity, closed))
+            if (IsProvenCopy(system, property, writer, entity, closed))
                 continue;
             if (assign.Value is not Literal literal)
                 return $"an assign writes {assign.Value.GetType().Name}, which is not a proven in-range literal";
@@ -176,7 +180,7 @@ internal static class GuardClosedProperties {
     /// closed set, and Source's constraints imply <paramref name="target"/>'s. Every value Source can hold is
     /// then already within Source's constraints, hence within the target's.
     /// </summary>
-    private static bool IsProvenCopy(Property target, AssignWriter writer, Entity entity, IReadOnlySet<string> closed) {
+    private static bool IsProvenCopy(ITypeSystem system, Property target, AssignWriter writer, Entity entity, IReadOnlySet<string> closed) {
         if (writer.Assign.Value is not PropertyAccess access
             || writer.ActionParameters is null
             || writer.ActionParameters.Contains(access.Name)
@@ -184,7 +188,7 @@ internal static class GuardClosedProperties {
             || !closed.Contains(access.Name))
             return false;
         var source = entity.Properties.FirstOrDefault(p => string.Equals(p.Name, access.Name, StringComparison.Ordinal));
-        return source is not null && SourceConstraintsImplyTarget(source, target);
+        return source is not null && SourceConstraintsImplyTarget(system, source, target);
     }
 
     /// <summary>
@@ -193,13 +197,13 @@ internal static class GuardClosedProperties {
     /// pattern/equality constraint on the target matched by an at-least-as-strong one on the source; a range
     /// union on the target, a relational or any unmodelled constraint refuses.
     /// </summary>
-    private static bool SourceConstraintsImplyTarget(Property source, Property target) {
+    private static bool SourceConstraintsImplyTarget(ITypeSystem system, Property source, Property target) {
         var typeName = target.Type.TypeName;
         if (!string.Equals(source.Type.TypeName, typeName, StringComparison.Ordinal))
             return false;
-        var isText = typeName is "Text" or "String";
-        var isNumber = typeName is "Number" or "Int" or "Decimal";
-        var isBoolean = typeName is "Boolean";
+        var isText = system.LengthApplies(typeName);
+        var isNumber = system.RangeApplies(typeName);
+        var isBoolean = system.IsBooleanWord(typeName);
         if (!isText && !isNumber && !isBoolean)
             return false;
         if (target.Constraints.OfType<UniqueConstraint>().Any()

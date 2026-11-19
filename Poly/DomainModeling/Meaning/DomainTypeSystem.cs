@@ -22,7 +22,16 @@ internal sealed class DomainTypeSystem(TypeMappingRegistry typeMaps, ITypeSystem
         (Clr(typeof(byte[])), "Binary"),
     ];
 
-    public TypeSystemRules Rules { get; } = new();
+    // The domain language's own rules: core's constraint applicability (#998 T7). The system is the one asked, so the
+    // rule spells a definition by this system's words.
+    public TypeSystemRules Rules => _rules ??= CoreRules(this);
+    private TypeSystemRules? _rules;
+
+    private static TypeSystemRules CoreRules(DomainTypeSystem domain) {
+        var rules = new TypeSystemRules();
+        rules.Add<IConstraintApplicability>(new CoreConstraintApplicability(domain));
+        return rules;
+    }
 
     public ITypeSystem? Target => target;
     public IReadOnlyList<ITypeSource> Sources => target.Sources;

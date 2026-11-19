@@ -119,4 +119,41 @@ public class DomainTargetTypeSystemTests {
         var temporal = core.WithDomain(new Domain("T", []) { Extensions = ["temporal"] });
         await Assert.That(temporal.TargetTypeSystem.Bind("Date")).IsNotNull().Because("the temporal library binds Date");
     }
+
+    [Test]
+    public async Task ConstraintApplicability_IsTheDomainsRegisteredRule_KeyedByWhatTheWordBinds() {
+        // A range applies to a property whose type a domain number word binds, whatever the spelling (Number, Int,
+        // Int64, Decimal); a length to one Text binds; neither to a type no domain word binds (#998 T7, decision §3.2).
+        var domain = new DomainTypeSystem(new TypeMappingRegistry(), CSharpTypeSystem.Shared);
+        var rule = domain.Rule<IConstraintApplicability>();
+        var range = new RangeConstraint(0L, 10L);
+        var length = new LengthConstraint(1, 5);
+        var clr = Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+
+        await Assert.That(rule).IsNotNull();
+        foreach (var word in new[] { "Number", "Int", "Int64", "Int32", "Decimal", "Float" })
+            await Assert.That(rule!.Applies(range, domain.Bind(word)!)).IsTrue().Because($"'{word}'");
+        await Assert.That(rule!.Applies(range, domain.Bind("Text")!)).IsFalse();
+        await Assert.That(rule.Applies(length, domain.Bind("String")!)).IsTrue();
+        await Assert.That(rule.Applies(length, domain.Bind("Number")!)).IsFalse();
+        await Assert.That(rule.Applies(range, clr.GetTypeDefinition(typeof(nint)))).IsFalse().Because("no domain word binds nint");
+        await Assert.That(rule.Applies(range, new LedgerHost().Amount)).IsFalse();
+        await Assert.That(CSharpTypeSystem.Shared.Rule<IConstraintApplicability>()).IsNull().Because("the rule is the domain's");
+    }
+
+    [Test]
+    public async Task GuardCoverage_AsksTheDomainsRule_NotTheSpelling() {
+        // Int64 is a domain number word; its range is guard-covered like Number's. Before #998 T7 only the spellings
+        // Number, Int and Decimal were.
+        static Entity Host(string typeName) => new("H",
+            [new Property("X", new DomainTypeReference(typeName), [new RangeConstraint(0L, 10L)])], [], [], []);
+
+        foreach (var spelling in new[] { "Number", "Int64" }) {
+            var entity = Host(spelling);
+            var result = GuardClosedProperties.Compute(entity, new Domain("T", [entity]));
+            await Assert.That(result.Blockers.GetValueOrDefault("X") ?? "").DoesNotContain("has no constraint guard coverage")
+                .Because($"'{spelling}' is a domain number word");
+            await Assert.That(result.Closed).Contains("X").Because($"'{spelling}': its range is guarded at create");
+        }
+    }
 }

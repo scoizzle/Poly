@@ -37,7 +37,8 @@ Owner, during T6 and T7 (2026-11-19):
 7. Constraint applicability follows what the domain word binds, for the analysis and the emitted guards together:
    every domain number word (Number, Int, Int64, Int32, Decimal, Float, Double) enforces its range and every text
    word its length and pattern. Today Int64, Int32, Float and Double ranges are not enforced at run time; after
-   T7 they are, and a write outside them fails.
+   T7 they are, and a write outside them fails. (Found during T7: the DSL's number keywords are Number and Decimal,
+   so these words reach a domain that declares them as primitives through the API or an MCP change.)
 
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.
@@ -237,9 +238,9 @@ question is the constraint owner's:
 
 ```csharp
 // Declared in DomainModeling, registered by each library that contributes a constraint.
-interface IConstraintApplicability : ITypeSystemRule { bool? Applies(Constraint constraint, ITypeDefinition propertyType); }
+interface IConstraintApplicability : ITypeSystemRule { bool Applies(Constraint constraint, ITypeDefinition propertyType); }
 
-rules.Add<IConstraintApplicability>(new CoreApplicability(domain));   // range → numbers, length → Text
+rules.Add<IConstraintApplicability>(new CoreConstraintApplicability(domain));   // range → number words, length and pattern → Text
 bool applies = domain.Rule<IConstraintApplicability>()?.Applies(range, propertyType) ?? false;
 ```
 

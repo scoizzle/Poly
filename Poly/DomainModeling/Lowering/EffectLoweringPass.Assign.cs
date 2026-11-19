@@ -107,7 +107,7 @@ public sealed partial class EffectLoweringPass {
         // means non-null, so any string constant, "" included, satisfies it; a length or
         // pattern that refuses "" was checked in the loop above.
         if (NeedsRequiredValueCheck(prop)) {
-            if (prop.Type.TypeName is "Text" or "String") {
+            if (ApplicabilityTarget.LengthApplies(prop.Type.TypeName)) {
                 if (value is not Constant { Value: string })
                     return false;
             }
@@ -180,13 +180,16 @@ public sealed partial class EffectLoweringPass {
     /// <item>excluded, never elided: unique, relational, any unmodelled constraint record, enum types.</item>
     /// </list>
     /// </summary>
+    // The domain's session target decides which constraints apply (#998 T7), as for the guards ConstraintCheckWriter emits.
+    private Poly.Introspection.ITypeSystem ApplicabilityTarget => RuntimeAnalysisCache.Session(_domain).TargetTypeSystem;
+
     private bool SourceConstraintsImplyTarget(Property source, Property target) {
         var typeName = target.Type.TypeName;
         if (!string.Equals(source.Type.TypeName, typeName, StringComparison.Ordinal))
             return false;
-        var isText = typeName is "Text" or "String";
-        var isNumber = typeName is "Number" or "Int" or "Decimal";
-        var isBoolean = typeName is "Boolean";
+        var isText = ApplicabilityTarget.LengthApplies(typeName);
+        var isNumber = ApplicabilityTarget.RangeApplies(typeName);
+        var isBoolean = ApplicabilityTarget.IsBooleanWord(typeName);
         if (!isText && !isNumber && !isBoolean)
             return false;
         if (IsUniqueProperty(target.Name)

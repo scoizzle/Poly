@@ -36,7 +36,7 @@ public class DomainTypeModelTests {
         var maps = new TypeMappingRegistry();
         TemporalTypeMaps.Apply(maps);
         configure?.Invoke(maps);
-        return new DomainTypeModel(BuildDomain(), maps);
+        return new DomainTypeModel(BuildDomain(), maps, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
     }
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)!;
@@ -199,7 +199,7 @@ public class DomainTypeModelTests {
     [Test]
     public async Task Resolve_UnknownDomainTypeSubclass_Throws() {
         var domain = DomainTestFactory.Create("Odd", [new UnknownDomainType()], []);
-        var model = new DomainTypeModel(domain, new TypeMappingRegistry());
+        var model = new DomainTypeModel(domain, new TypeMappingRegistry(), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(() => model.Resolve("Odd")).ThrowsExactly<InvalidOperationException>();
         // The sibling: the four known shapes still resolve.
         await Assert.That(Model().Resolve("Order").IsResolved).IsTrue();

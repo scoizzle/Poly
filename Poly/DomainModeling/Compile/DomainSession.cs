@@ -154,8 +154,10 @@ public sealed partial class DomainSession {
         IReadOnlyList<IConstraintCompiler>? constraintCompilers = null,
         IReadOnlyList<ObservedFlow>? observedFlows = null,
         IReadOnlyList<DiagnosticAllowance>? diagnosticAllowances = null,
-        IReadOnlyList<ContractContribution>? contractContributions = null) {
+        IReadOnlyList<ContractContribution>? contractContributions = null,
+        Poly.Introspection.ITypeSystem? targetTypeSystem = null) {
         Domain = domain;
+        TargetTypeSystem = targetTypeSystem ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
         Extensions = extensions;
         Language = language;
         Annotations = annotations;
@@ -198,7 +200,7 @@ public sealed partial class DomainSession {
     private DomainSession Clone(Domain? domain, SessionOptions options) =>
         new(domain, Extensions, options, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions,
             Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers,
-            ObservedFlows, DiagnosticAllowances, ContractContributions);
+            ObservedFlows, DiagnosticAllowances, ContractContributions, TargetTypeSystem);
 
     /// <summary>The contract the library with <paramref name="libraryId"/> contributed, or null.</summary>
     public ContractContribution? FindContractContribution(string libraryId) =>
@@ -243,11 +245,15 @@ public sealed partial class DomainSession {
         if (SameExtensions(Extensions, domain.Extensions))
             return Clone(domain, Options);
         var reloaded = LibrarySelection.Load(domain.Extensions, Options);
-        return new DomainSession(domain, reloaded.Extensions, Options, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions);
+        return new DomainSession(domain, reloaded.Extensions, Options, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions, TargetTypeSystem);
     }
 
+    /// <summary>The type system the session's analysis decides by (<see cref="SessionBuilder.WithTargetTypeSystem"/>),
+    /// else C# over the CLR (#998 T4d).</summary>
+    public Poly.Introspection.ITypeSystem TargetTypeSystem { get; }
+
     /// <summary>
-    /// Analyzes <paramref name="domain"/> with this session's pipeline (type maps included).
+    /// Analyzes <paramref name="domain"/> with this session's pipeline (type maps included) and its target type system.
     /// The session is bound before the pipeline so passes that ask the cache for maps
     /// see this compilation, not a second session built from <see cref="ExtensionCatalog.Core"/>.
     /// </summary>
@@ -255,7 +261,7 @@ public sealed partial class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         RequireCoreLoaded();
         RuntimeAnalysisCache.Bind(domain, this);
-        var analysis = Analyzer.Analyze(domain);
+        var analysis = Analyzer.Analyze(domain, settings: AnalysisSettingsFor());
         RuntimeAnalysisCache.Bind(domain, this, analysis);
         return analysis;
     }
@@ -266,8 +272,10 @@ public sealed partial class DomainSession {
     /// </summary>
     internal AnalysisResult AnalyzeWithoutBind(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
-        return Analyzer.Analyze(domain);
+        return Analyzer.Analyze(domain, settings: AnalysisSettingsFor());
     }
+
+    private AnalysisSettings AnalysisSettingsFor() => AnalysisSettings.Default.With(TargetTypeSystem);
 
     /// <summary>
     /// Stage 3: one operation module (type definitions, action bodies,

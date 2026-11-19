@@ -13,9 +13,13 @@ namespace Poly.DomainModeling.Meaning;
 /// </summary>
 internal sealed class DomainTypeModel {
     private readonly DomainTypeDefinitionProvider _provider;
+    private readonly ITypeSystem _system;
 
-    public DomainTypeModel(Domain domain, TypeMappingRegistry typeMaps) {
+    /// <param name="system">The type system that decides assignment (#998 T4d): the analysis' target.</param>
+    public DomainTypeModel(Domain domain, TypeMappingRegistry typeMaps, ITypeSystem system) {
+        ArgumentNullException.ThrowIfNull(system);
         _provider = new DomainTypeDefinitionProvider(domain, typeMaps);
+        _system = system;
     }
 
     public ExprType Resolve(string domainName) =>
@@ -41,8 +45,8 @@ internal sealed class DomainTypeModel {
         if (ReferenceEquals(source, target))
             return Assignability.Identity;
 
-        // ResolveConversionFrom is the door: Float64 to Decimal is explicit there, as the C# specification has it.
-        if (target.ResolveConversionFrom(source) is { } conversion) {
+        // The target system decides: Float64 to Decimal is explicit in C#, as the C# specification has it.
+        if (_system.Conversion(source, target) is { } conversion) {
             return conversion.Kind is ConversionOperatorKind.Implicit
                 ? Assignability.Widening
                 : Assignability.RoundingNarrowing;
@@ -86,7 +90,7 @@ internal sealed class DomainTypeModel {
     /// </summary>
     internal static DomainTypeModel Of(AnalysisContext context, Domain domain) {
         if (context.GetMetadata<DomainTypeModelMetadata>(domain) is { } stamped) return stamped.Model;
-        var model = new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps);
+        var model = new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps, context.TypeSystem);
         context.SetMetadata(domain, new DomainTypeModelMetadata(model));
         return model;
     }

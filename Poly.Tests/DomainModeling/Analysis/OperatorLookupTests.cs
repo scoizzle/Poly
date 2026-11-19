@@ -27,7 +27,7 @@ internal static class OperatorOperands {
     public static DomainTypeModel Model() {
         var maps = new TypeMappingRegistry();
         TemporalTypeMaps.Apply(maps);
-        return new DomainTypeModel(BuildDomain(), maps);
+        return new DomainTypeModel(BuildDomain(), maps, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
     }
 
     public static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);

@@ -427,7 +427,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             // The model resolves a name first-wins, so an entity declared before an enum of the same name
             // hides it; the declared enum is still the enum (as it was before the move).
             if (context.GetTypeLookup()?.Domain is { } domain
-                && new DomainTypeModel(new Domain(domain.Name, [declaredEnum]), RuntimeAnalysisCache.Session(domain).TypeMaps)
+                && new DomainTypeModel(new Domain(domain.Name, [declaredEnum]), RuntimeAnalysisCache.Session(domain).TypeMaps, context.TypeSystem)
                     .Resolve(name) is { IsResolved: true } own)
                 return own;
             return new ExprType(null, false, name);

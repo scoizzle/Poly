@@ -59,7 +59,7 @@ public sealed partial class DomainExpressionLoweringPass {
             .FirstOrDefault(e => string.Equals(e.Name, target, StringComparison.Ordinal))?
             .Properties.FirstOrDefault(p => string.Equals(p.Name, sum.PropertyName, StringComparison.Ordinal));
         if (property is null) return 0L;
-        var model = new DomainTypeModel(_domain, RuntimeAnalysisCache.Session(_domain).TypeMaps);
+        var model = new DomainTypeModel(_domain, RuntimeAnalysisCache.Session(_domain).TypeMaps, RuntimeAnalysisCache.Session(_domain).TargetTypeSystem);
         return model.KindOf(model.SumResult(model.OfProperty(property))) switch {
             NumericKind.Decimal => 0m,
             NumericKind.Float64 => 0.0,

@@ -9,7 +9,7 @@ internal static class ClrConvertMethods {
     /// through a nullable form; null when the platform applies the conversion itself or the type has no method.</summary>
     public static string? NameOf(ITypeDefinition destination) {
         ArgumentNullException.ThrowIfNull(destination);
-        var underlying = destination.NullableOf ?? destination;
+        var underlying = (destination as ClrTypeDefinition)?.NullableOf ?? destination;
         return underlying.GetClrPrimitive() switch {
             ClrPrimitive.Float64 => "ToDouble",
             ClrPrimitive.Float32 => "ToSingle",

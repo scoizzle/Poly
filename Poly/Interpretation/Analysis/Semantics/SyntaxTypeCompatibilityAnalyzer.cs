@@ -348,10 +348,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// </summary>
     private static bool NullableDateRule(ITypeSystem system, ITypeDefinition left, ITypeDefinition right) =>
         (IsNullableDate(system, left) || IsNullableDate(system, right))
-        && !TypeDefinitionExtensions.IsSameType(left.NullableOf ?? left, right.NullableOf ?? right);
+        && !TypeDefinitionExtensions.IsSameType(system.NullableOf(left) ?? left, system.NullableOf(right) ?? right);
 
     private static bool IsNullableDate(ITypeSystem system, ITypeDefinition definition) =>
-        definition.NullableOf is { } underlying && CategoryOf(system, underlying) is Cat.Date;
+        system.NullableOf(definition) is { } underlying && CategoryOf(system, underlying) is Cat.Date;
 
     /// <summary>
     /// Ordering of two exact <c>string</c> or two exact <c>bool</c> operands: the DSL accepts it and the interpreter
@@ -360,7 +360,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static bool TextAndBooleanOrderingRule(ITypeSystem system, OperatorKind kind, ITypeDefinition left, ITypeDefinition right) {
         if (kind is not (OperatorKind.LessThan or OperatorKind.LessThanOrEqual or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual))
             return false;
-        var (l, r) = (left.NullableOf ?? left, right.NullableOf ?? right);
+        var (l, r) = (system.NullableOf(left) ?? left, system.NullableOf(right) ?? right);
         return TypeDefinitionExtensions.IsSameType(l, r)
             && (IsString(system, l) || IsBool(system, l));
     }
@@ -547,7 +547,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return collection.ElementType;
         if (type.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(string))
             return null;
-        if (!type.IsCollectionShape)
+        // byte[] is binary, not a collection (owner ruling 9); string was excluded above.
+        if (ClrBuiltInRules.IsByteArray(type))
             return null;
         var element = system.ElementType(type);
         return element is not null && !IsUniversalObject(element) ? element : null;
@@ -1063,7 +1064,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return false;
         Node source = value;
         var sourceDef = srcDef;
-        var underlyingDefinition = destDef.NullableOf ?? destDef;
+        var underlyingDefinition = context.TypeSystem.NullableOf(destDef) ?? destDef;
         if (srcClr is not null && IsIeeeFloating(context.TypeSystem, srcDef) && IsIntegerType(context.TypeSystem, underlyingDefinition)) {
             var doubleDef = context.TypeDefinitions.GetTypeDefinition(typeof(double));
             var mathDef = context.TypeDefinitions.GetTypeDefinition(typeof(Math));
@@ -1192,13 +1193,13 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// <summary>
     /// The category a definition belongs to, asked of the target's C# rule (simple types, enums), the target's word
     /// <c>string</c>, and the CLR host's own calendar and Guid definitions (#998 T6b), through
-    /// <see cref="ITypeDefinition.NullableOf"/>; never what the definition answers about itself. A type that is none of
+    /// <see cref="ITypeSystem.NullableOf"/>; never what the definition answers about itself. A type that is none of
     /// them, or any type under a target with no C# rule, is <see cref="Cat.Unknown"/>.
     /// </summary>
     internal static Cat CategoryOf(ITypeSystem system, ITypeDefinition definition) {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(definition);
-        var underlying = definition.NullableOf ?? definition;
+        var underlying = system.NullableOf(definition) ?? definition;
         if (CSharpRules(system) is null) return Cat.Unknown;
         var simple = SimpleTypeOf(system, underlying);
         if (simple is Poly.Interpretation.CSharp.SimpleType.Bool) return Cat.Boolean;

@@ -87,35 +87,11 @@ public interface ITypeDefinition {
     /// </summary>
     IEnumerable<ITypeOperator> Operators { get; }
 
-
     /// <summary>
-    /// True when this type exposes a sequence shape: a platform's own collection definition, or a type whose
-    /// representation is an array or a closed <c>IEnumerable&lt;&gt;</c>. A shape is structural, so the platform answers,
-    /// and the root names no collection type.
-    /// </summary>
-    internal bool IsCollectionShape { get; }
-
-    /// <summary>
-    /// The element type a sequence-shaped type yields when it exposes no indexer, or null. A representation fact, so
-    /// the platform answers it; <see cref="TypeDefinitionExtensions"/>'s <c>GetElementType</c> prefers an indexer.
-    /// </summary>
-    internal ITypeDefinition? SequenceElementType { get; }
-
-    /// <summary>
-    /// Gets the conversions this type states: the operators it declares (either end, which is why an item names both
-    /// types) and the ones the platform applies with this type as the source (no method). A conversion into this type
-    /// that the other end declares, and what a type defined later may add, are the type system's
-    /// <see cref="ITypeSystem.Conversion"/>.
-    /// Optionality is the caller's (T-06), so the lift into a nullable target is not listed, and reference conversions
-    /// are assignability, not conversion.
+    /// Gets the conversions this type declares: the operators it declares (either end, which is why an item names both
+    /// types) and, until T10, the ones the platform applies with this type as the source (no method). Which conversion
+    /// applies is the type system's <see cref="ITypeSystem.Conversion"/>. Optionality is the caller's (T-06), so the lift
+    /// into a nullable target is not listed, and reference conversions are assignability, not conversion.
     /// </summary>
     internal IEnumerable<ITypeConversion> Conversions { get; }
-
-    /// <summary>
-    /// Gets the type this definition wraps when it is this platform's nullable form of another type (<c>T?</c> for
-    /// <c>T</c>), or null. Nullability is the platform's relation, not the root's: a host states which definitions are
-    /// its nullable forms, so a conversion into one can be stated (<see cref="ResolveConversionFrom"/>) without the
-    /// root knowing the host's model. Where optionality applies stays the caller's (T-06).
-    /// </summary>
-    internal ITypeDefinition? NullableOf { get; }
 }

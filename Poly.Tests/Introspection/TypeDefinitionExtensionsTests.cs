@@ -46,13 +46,10 @@ public class TypeDefinitionExtensionsTests {
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
-        public ITypeDefinition? NullableOf => null;
 
         public ITypeSystem System => NamedPlatform.Instance;
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
-        bool ITypeDefinition.IsCollectionShape => false;
-        ITypeDefinition? ITypeDefinition.SequenceElementType => null;
     }
 
 

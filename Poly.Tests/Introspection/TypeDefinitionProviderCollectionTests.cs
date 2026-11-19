@@ -139,7 +139,6 @@ public class TypeDefinitionProviderCollectionTests {
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
-        public ITypeDefinition? NullableOf => null;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public bool IsAssignableTo(ITypeDefinition targetType) => false;
@@ -156,8 +155,6 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
-        bool ITypeDefinition.IsCollectionShape => false;
-        ITypeDefinition? ITypeDefinition.SequenceElementType => null;
         public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
     }
 

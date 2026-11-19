@@ -60,7 +60,10 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
         };
     }
 
-    public ITypeDefinition? NullableOf(ITypeDefinition definition) => definition.NullableOf;
+    /// <summary>The CLR's nullable form wraps its underlying type; C#'s declarations and foreign definitions wrap nothing
+    /// (#998 T9).</summary>
+    public ITypeDefinition? NullableOf(ITypeDefinition definition) =>
+        definition is ClrTypeDefinition clr ? clr.NullableOf : null;
 
     /// <summary>
     /// C#'s element type of a sequence: a collection's positional indexer (an <c>Item</c> whose parameters are all C#'s
@@ -83,14 +86,29 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
             .OrderBy(static candidate => candidate.Parameters.Length)
             .ThenBy(static candidate => candidate.ReturnsObject)
             .FirstOrDefault();
-        if (positional is not null && definition.IsCollectionShape)
+        if (positional is not null && IsCollectionShape(definition))
             return positional.Property.MemberTypeDefinition;
-        return definition.SequenceElementType;
+        return SequenceElementType(definition);
     }
 
     /// <summary>C#'s identity and reference conversions without a conversion applied: the CLR host's body for its own
     /// definitions (variance, array covariance, the lift into <c>T?</c>, the box into <c>object</c>), else the declared
     /// hierarchy (#998 T9).</summary>
+    // A sequence shape (#998 T9, merged into ElementType): the CLR host's own (an array or a closed IEnumerable<>, not a
+    // primitive, so byte[] stays binary) or a declared synthetic collection; anything else, a foreign definition
+    // included, is no C# sequence.
+    private static bool IsCollectionShape(ITypeDefinition definition) => definition switch {
+        ClrTypeDefinition clr => clr.IsCollectionShape,
+        Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition => true,
+        _ => false,
+    };
+
+    private static ITypeDefinition? SequenceElementType(ITypeDefinition definition) => definition switch {
+        ClrTypeDefinition clr => clr.SequenceElementType,
+        Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition collection => collection.ElementType,
+        _ => null,
+    };
+
     public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) =>
         destination is ClrTypeDefinition clr
             ? clr.AssignsWithoutConversion(source)

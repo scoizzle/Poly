@@ -38,7 +38,7 @@ Provider-based type abstraction decoupled from CLR reflection. Interfaces allow 
 
 **Why it replaced `TypeKind`, `PrimitiveType`, the fact lookup and the definition's own answers:** the closed enums (`TypeKind`, `PrimitiveType`'s ids) made every platform map onto one list and every consumer switch on it. The answers that replaced them (`IsNumber`, `IsEnumeration`, …) still let a foreign definition decide what C# or the domain would do with it by answering a question it did not own; T8 removed them. The form a declaration is written in (`TypeDeclarationForm`: class, interface, enum, struct) is syntax on the AST node.
 
-**Where the old distinction went:** `Collection` is structural (`IsCollectionShape`, until T9 merges it into the system's `ElementType`); an enumeration and value semantics are C#'s rule; integer-ness is C#'s simple types; ground-ness is the CLR host's own table (`ClrPrimitive`, internal). Domain vocabulary lives in the domain's type system (`DomainTypeSystem`) and `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
+**Where the old distinction went:** `Collection` is structural (the type system's `ElementType`, which merged `IsCollectionShape` and `SequenceElementType` in T9c); an enumeration and value semantics are C#'s rule; integer-ness is C#'s simple types; ground-ness is the CLR host's own table (`ClrPrimitive`, internal). Domain vocabulary lives in the domain's type system (`DomainTypeSystem`) and `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
 
 ### TypeDefinitionProviderCollection ICollection surface — KEEP
 

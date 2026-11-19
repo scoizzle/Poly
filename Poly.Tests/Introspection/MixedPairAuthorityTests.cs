@@ -103,13 +103,10 @@ public class MixedPairAuthorityTests {
         public IEnumerable<ITypeMethod> Methods => [];
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => SelfAddition is null ? [AddOperator] : [AddOperator, SelfAddition];
-        public ITypeDefinition? NullableOf => null;
 
         public ITypeSystem System => ThirdPlatform.Instance;
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [ImplicitConversion];
-        bool ITypeDefinition.IsCollectionShape => false;
-        ITypeDefinition? ITypeDefinition.SequenceElementType => null;
     }
 
     /// <summary>The third platform's own system: it answers any Add with the left operand's operator and turns any

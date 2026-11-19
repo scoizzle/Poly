@@ -90,7 +90,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// A CLR sequence shape: an array or a closed <c>IEnumerable&lt;&gt;</c>, and not itself a primitive (so
     /// <c>byte[]</c> stays binary).
     /// </summary>
-    bool ITypeDefinition.IsCollectionShape =>
+    internal bool IsCollectionShape =>
         GetPrimitiveTypeId(RuntimeType) is null
         && (RuntimeType.IsArray
             || RuntimeType.GetInterfaces().Any(static i =>
@@ -98,7 +98,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
 
     /// <summary>The element a CLR sequence yields: the array's element, the closed <c>IEnumerable&lt;&gt;</c>'s argument,
     /// or <c>object</c> for a non-generic sequence.</summary>
-    ITypeDefinition? ITypeDefinition.SequenceElementType {
+    internal ITypeDefinition? SequenceElementType {
         get {
             var enumerableType = RuntimeType.IsArray
                 ? null
@@ -133,8 +133,9 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => Conversions;
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
 
-    /// <summary>A CLR nullable form is <c>Nullable&lt;T&gt;</c>; every other definition wraps nothing.</summary>
-    ITypeDefinition? ITypeDefinition.NullableOf =>
+    /// <summary>A CLR nullable form is <c>Nullable&lt;T&gt;</c>; every other definition wraps nothing. C#'s system asks
+    /// it (#998 T9: the CLR host's own relation, not a member of the contract).</summary>
+    internal ITypeDefinition? NullableOf =>
         Nullable.GetUnderlyingType(RuntimeType) is { } underlying
             ? _provider.GetTypeDefinition(underlying)
             : null;

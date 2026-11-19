@@ -285,9 +285,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
             method.DefinitionNode.Conversion!.Value, method));
 
 
-    bool ITypeDefinition.IsCollectionShape => false;
     // A declaration answers the shape its form declares; it is never a ground type.
-    ITypeDefinition? ITypeDefinition.SequenceElementType => null;
 
     /// <summary>Each declaration builds one definition, so a declaration and its definition are one instance; a closed
     /// generic is that definition closed, a distinct instance.</summary>
@@ -305,7 +303,6 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
 
     /// <summary>A modeled definition states no nullable form; optionality is the caller's (T-06).</summary>
-    ITypeDefinition? ITypeDefinition.NullableOf => null;
 
     private List<AstPropertyDefinition> BuildDeclaredProperties() {
         var properties = new List<PropertyDefinitionNode>();
@@ -912,8 +909,6 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public IEnumerable<ITypeConstructor> Constructors => [_ctor, _copy];
     public IEnumerable<ITypeOperator> Operators => [];
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
-    bool ITypeDefinition.IsCollectionShape => true;
-    ITypeDefinition? ITypeDefinition.SequenceElementType => _item.MemberTypeDefinition;
 
     /// <summary>
     /// Two synthetic collections of one kind and element are the same type: each resolve builds a fresh instance, so
@@ -924,7 +919,6 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     /// (the analysis holds a target system): a unit's declarations belong to the shared C# system, not a layer of their
     /// own.</summary>
     public ITypeSystem System => Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
-    ITypeDefinition? ITypeDefinition.NullableOf => null;
     public Type RuntimeType => typeof(System.Collections.IList);
 }
 
@@ -1003,8 +997,6 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     public IEnumerable<ITypeConstructor> Constructors => [];
     public IEnumerable<ITypeOperator> Operators => [];
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
-    bool ITypeDefinition.IsCollectionShape => false;
-    ITypeDefinition? ITypeDefinition.SequenceElementType => null;
 
     /// <summary>
     /// A generic parameter is its name on its declaring type. The definition holds no declaring member, so two
@@ -1016,7 +1008,6 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     /// own.</summary>
     public ITypeSystem System => Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
 
-    ITypeDefinition? ITypeDefinition.NullableOf => null;
     public Type RuntimeType => typeof(object);
 }
 

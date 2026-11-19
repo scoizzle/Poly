@@ -82,11 +82,10 @@ public class TypeShapeTests {
     // classification property.
     private static readonly string[] DecidedMembers = [
         "System", "Name", "Namespace", "AccessModifier", "FullName", "BaseType", "Interfaces", "GenericParameters", "Members",
-        "Fields", "Properties", "Methods", "Constructors", "Operators", "IsCollectionShape",
-        "SequenceElementType", "Conversions", "NullableOf",
+        "Fields", "Properties", "Methods", "Constructors", "Operators", "Conversions",
     ];
 
-    private static readonly string[] RemainingClassificationProperties = ["AccessModifier", "IsCollectionShape"];
+    private static readonly string[] RemainingClassificationProperties = ["AccessModifier"];
 
     private const System.Reflection.BindingFlags Declared = System.Reflection.BindingFlags.Instance
         | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public

@@ -204,13 +204,14 @@ public class TargetTypeSystemTests {
     [Test]
     public async Task ElementType_PositionalIndexer_IsCSharpsRule_NotWhatAForeignIndexAnswers() {
         // C#'s element type of a collection is its positional indexer's: an Item whose parameters are C#'s fixed-width
-        // integers (#998 T6c). An index typed by a foreign word that answers "integral" is no C# integer, so the pick
-        // falls to the sequence element (none here).
+        // integers (#998 T6c). A foreign definition's collection shape is its own system's rule (T9), so C# states no
+        // element type for one, whatever its indexer takes.
         var clr = Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
         var csharp = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
         var text = clr.GetTypeDefinition(typeof(string));
 
-        await Assert.That(csharp.ElementType(new ForeignIndexed(clr.GetTypeDefinition(typeof(int)), text))).IsSameReferenceAs(text);
+        await Assert.That(csharp.ElementType(new ForeignIndexed(clr.GetTypeDefinition(typeof(int)), text))).IsNull()
+            .Because("a foreign collection is no C# sequence, even with C#'s int as its index (#998 T9)");
         await Assert.That(csharp.ElementType(new ForeignIndexed(new ForeignUnsignedWord(), text))).IsNull()
             .Because("the foreign word answers that it is an integer, but it is none of C#'s");
         await Assert.That(csharp.ElementType(clr.GetTypeDefinition(typeof(List<int>)))?.Name).IsEqualTo("Int32");
@@ -235,9 +236,6 @@ public sealed class ForeignUnsignedWord : ITypeDefinition {
     public IEnumerable<ITypeOperator> Operators => [];
     public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
-    ITypeDefinition? ITypeDefinition.NullableOf => null;
-    ITypeDefinition? ITypeDefinition.SequenceElementType => null;
-    bool ITypeDefinition.IsCollectionShape => false;
 }
 
 /// <summary>A type whose only indexer takes a long (not a collection).</summary>
@@ -261,9 +259,6 @@ public sealed class ForeignIndexed(ITypeDefinition index, ITypeDefinition elemen
     public IEnumerable<ITypeOperator> Operators => [];
     public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
-    ITypeDefinition? ITypeDefinition.NullableOf => null;
-    ITypeDefinition? ITypeDefinition.SequenceElementType => null;
-    bool ITypeDefinition.IsCollectionShape => true;
 
     private sealed class Indexer(ITypeDefinition declaring, ITypeDefinition index, ITypeDefinition element) : ITypeProperty {
         public MemberKind Kind => MemberKind.Indexer;

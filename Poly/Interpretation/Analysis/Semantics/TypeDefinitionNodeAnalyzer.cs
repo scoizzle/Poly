@@ -667,9 +667,7 @@ internal static class AstTypeReferenceResolver {
         }
 
         return provider.GetTypeDefinition(named.FullName)
-            ?? (named.Namespace is not null ? provider.GetTypeDefinition(named.TypeName) : null)
-            ?? clr.GetTypeDefinition(named.FullName)
-            ?? (named.FullName != named.TypeName ? clr.GetTypeDefinition(named.TypeName) : null);
+            ?? (named.Namespace is not null ? provider.GetTypeDefinition(named.TypeName) : null);
     }
 
     private static ITypeDefinition? CloseNamed(
@@ -825,7 +823,7 @@ internal static class AstTypeReferenceResolver {
         string name, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         if (string.Equals(name, "void", StringComparison.OrdinalIgnoreCase))
             return clr.GetTypeDefinition(typeof(void));
-        return provider.GetTypeDefinition(name) ?? clr.GetTypeDefinition(name);
+        return provider.GetTypeDefinition(name);
     }
 
     private static ITypeDefinition ResolveCollection(

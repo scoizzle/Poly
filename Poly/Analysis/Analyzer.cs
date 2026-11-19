@@ -38,7 +38,8 @@ public sealed class Analyzer(
             context.Settings,
             Options,
             context.HasErrors) {
-            TypeDefinitions = context.TypeDefinitions
+            TypeDefinitions = context.TypeDefinitions,
+            TypeSystem = context.TypeSystem
         };
     }
 

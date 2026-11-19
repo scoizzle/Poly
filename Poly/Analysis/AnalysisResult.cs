@@ -13,15 +13,15 @@ public sealed record AnalysisResult(
 ) : INodeMetadataProvider {
     /// <summary>
     /// The type provider of this analysis: its AST type table over the caller's
-    /// providers and the CLR fallback. Belongs to one analysis, so concurrent or
+    /// providers; a name it cannot answer is its type system's target chain's (#998 T12a). Belongs to one analysis, so concurrent or
     /// sequential analyses never answer for each other.
     /// </summary>
     public ITypeDefinitionProvider TypeDefinitions { get; init; } =
         Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
 
-    /// <summary>The type system the analysis decided by, which emit asks too: the <see cref="ITypeSystem"/> setting, else
-    /// C# over the CLR (#998 T4c).</summary>
-    public ITypeSystem TypeSystem => Settings.Get<ITypeSystem>() ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+    /// <summary>The type system the analysis decided by, which emit asks too: this analysis' own layer over its target
+    /// (#998 T12a, T4c). It is the same instance the analysis used, never recomputed from settings.</summary>
+    public ITypeSystem TypeSystem { get; init; } = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
 
     /// <summary>
     /// Gets metadata of the specified type for the given node.

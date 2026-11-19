@@ -10,8 +10,10 @@ public sealed class AnalysisContext : INodeMetadataProvider {
 
     public static AnalysisContext CreateDefault() => new();
 
-    /// <summary>The type system the analysis decides by: the <see cref="ITypeSystem"/> setting, else C# over the CLR. Every
-    /// analysis-time operator lookup (#998 T4a), conversion and assignability check, and overload ranking (T4b) asks it.</summary>
+    /// <summary>The type system the analysis decides by: this analysis' own layer over the <see cref="ITypeSystem"/>
+    /// setting, else over C# (#998 T12a). Its own sources answer a name first; its <see cref="ITypeSystem.Target"/> answers
+    /// the rest. Every analysis-time operator lookup (#998 T4a), conversion and assignability check, and overload ranking
+    /// (T4b) asks it.</summary>
     public ITypeSystem TypeSystem { get; }
 
     public AnalysisContext() : this(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, AnalysisSettings.Default) { }
@@ -25,19 +27,20 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisSettings settings) {
         ArgumentNullException.ThrowIfNull(typeDefinitions);
         ArgumentNullException.ThrowIfNull(settings);
-        var clr = Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+        // The CLR is reached only as the target chain's answer (#998 T12a), never as a provider the analysis adds: a
+        // direct CLR registry passed here is the default provider, not an own source.
         if (typeDefinitions is TypeDefinitionProviderCollection tpc) {
             TypeDefinitions = tpc;
-            tpc.AddFallback(clr);
         }
-        else if (ReferenceEquals(typeDefinitions, clr)) {
-            TypeDefinitions = new TypeDefinitionProviderCollection(clr);
+        else if (ReferenceEquals(typeDefinitions, Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared)) {
+            TypeDefinitions = new TypeDefinitionProviderCollection();
         }
         else {
-            TypeDefinitions = new TypeDefinitionProviderCollection(typeDefinitions, clr);
+            TypeDefinitions = new TypeDefinitionProviderCollection(typeDefinitions);
         }
         Settings = settings;
-        TypeSystem = settings.Get<ITypeSystem>() ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+        TypeSystem = new AnalysisTypeSystem(TypeDefinitions, settings.Get<ITypeSystem>() ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+        TypeDefinitions.Layer = TypeSystem;
         AnalysisDiagnosticConfiguration = Settings.Get<AnalysisDiagnosticConfiguration>() ?? AnalysisDiagnosticConfiguration.Default;
     }
 
@@ -65,7 +68,9 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// Gets the type definition provider used for resolving type information.
     /// This is always a <see cref="TypeDefinitionProviderCollection"/> — providers
     /// registered during analysis (e.g. AST type definitions from
-    /// <c>TypeDefinitionNodeAnalyzer</c>) are added to this collection.
+    /// <c>TypeDefinitionNodeAnalyzer</c>) are added to this collection. It is the analysis layer's own sources; its
+    /// name lookup answers exactly what <see cref="TypeSystem"/> answers, and its by-<see cref="Type"/> lookup asks the
+    /// target chain's CLR source (null when the chain has none).
     /// </summary>
     public TypeDefinitionProviderCollection TypeDefinitions { get; }
 

@@ -1,5 +1,3 @@
-using Poly.Introspection.CommonLanguageRuntime;
-
 namespace Poly.Interpretation.Analysis.Semantics;
 
 /// <summary>
@@ -49,9 +47,11 @@ public sealed class UnitTypeScopeAnalyzer : INodeAnalyzer {
         if (node is CompilationUnitNode { Usings.Count: > 0 } unit) {
             var scope = context.GetMetadata<UnitTypeScope>(default);
             if (scope is null) {
+                // A unit's sources are its declarations, then the analysis' target chain (#998 T12a): the CLR is the C#
+                // target's source, never one every analysis appends.
                 ITypeSource[] sources = context.GetMetadata<AstTypeRegistry>(default) is { } declarations
-                    ? [declarations, ClrTypeDefinitionRegistry.Shared]
-                    : [ClrTypeDefinitionRegistry.Shared];
+                    ? [declarations, .. (context.TypeSystem.Target ?? context.TypeSystem).Sources]
+                    : [.. (context.TypeSystem.Target ?? context.TypeSystem).Sources];
                 scope = new UnitTypeScope(sources);
                 context.SetMetadata(default, scope);
                 context.TypeDefinitions.AddFallback(scope);

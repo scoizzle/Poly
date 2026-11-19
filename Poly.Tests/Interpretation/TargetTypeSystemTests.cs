@@ -28,7 +28,14 @@ public class TargetTypeSystemTests {
         .Build();
 
     private static AnalysisResult Analyze(Node node, ITypeSystem? target = null) =>
-        Analyzer.Analyze(node, settings: target is null ? null : AnalysisSettings.Default.With<ITypeSystem>(target));
+        // A target that is not C# supplies no definitions of its own (#998 T12a): the ledger cases below give the analysis
+        // the CLR definitions the operators and conversions are asked about, and keep the target's rules.
+        Analyzer.Analyze(
+            node,
+            typeDefinitions: target is null
+                ? null
+                : new TypeDefinitionProviderCollection(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared),
+            settings: target is null ? null : AnalysisSettings.Default.With<ITypeSystem>(target));
 
     [Test]
     public async Task BinaryOperator_TheTargetDecides() {
@@ -53,9 +60,9 @@ public class TargetTypeSystemTests {
     [Test]
     public async Task Context_TargetIsTheSetting_ElseCSharp() {
         var ledger = new LedgerHost();
-        await Assert.That(new AnalysisContext().TypeSystem).IsSameReferenceAs(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+        await Assert.That(new AnalysisContext().TypeSystem.Target).IsSameReferenceAs(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared,
-            AnalysisSettings.Default.With<ITypeSystem>(ledger)).TypeSystem).IsSameReferenceAs(ledger);
+            AnalysisSettings.Default.With<ITypeSystem>(ledger)).TypeSystem.Target).IsSameReferenceAs(ledger);
     }
 
     [Test]
@@ -122,12 +129,14 @@ public class TargetTypeSystemTests {
             new Lambda([x, y], new Add(x, y)), new Constant(1), new Constant(2));
         var analysis = Poly.Interpretation.Interpreter.Analyze(call, Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
         await Assert.That(analysis.HasErrors).IsFalse();
-        await Assert.That(analysis.TypeSystem).IsSameReferenceAs(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+        await Assert.That(analysis.TypeSystem.Target).IsSameReferenceAs(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(() => Poly.Interpretation.Interpreter.Compile(call, analysis)).ThrowsNothing();
 
-        var underLedger = analysis with { Settings = analysis.Settings.With<ITypeSystem>(new LedgerHost()) };
-        await Assert.That(underLedger.TypeSystem).IsTypeOf<LedgerHost>();
+        // The analysis is clean under C#; emit then asks the result's system, so a result whose system is the ledger makes
+        // the bridge itself refuse the body (its own message, not the analysis' diagnostic).
+        var underLedger = analysis with { TypeSystem = new LedgerHost() };
+        await Assert.That(underLedger.HasErrors).IsFalse();
         await Assert.That(() => Poly.Interpretation.Interpreter.Compile(call, underLedger)).Throws<InvalidOperationException>()
             .WithMessageContaining("defines no Add operator");
     }

@@ -66,7 +66,7 @@ public class DomainTargetTypeSystemTests {
 
         (domain, sum) = Build();
         var underLedger = SessionBuilder.CreateEmpty().LoadCore().WithTargetTypeSystem(new LedgerHost()).Build().Analyze(domain);
-        await Assert.That(underLedger.TypeSystem).IsTypeOf<LedgerHost>();
+        await Assert.That(underLedger.TypeSystem.Target).IsTypeOf<LedgerHost>();
         await Assert.That(underLedger.GetMetadata<TypedExpressionMetadata>(sum)?.Binary).IsNull()
             .Because("the ledger has no operator for two CLR numbers, so nothing is stamped");
     }

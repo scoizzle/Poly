@@ -6,9 +6,15 @@ using Poly.Introspection.CommonLanguageRuntime;
 /// <summary>
 /// A LIFO stack of <see cref="ITypeDefinitionProvider"/> instances that resolves types by
 /// querying the most recently added provider first. Useful for layering overrides above defaults.
+/// It holds no fallback stack of its own (#998 T12a): attached to an analysis it is that layer's own sources, and a
+/// name it cannot answer goes to the layer's target chain, never to a provider it appended.
 /// </summary>
 public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDefinitionProvider> providers) : IClrTypeDefinitionProvider, ITypeDefinitionNodeProvider, ICollection<ITypeDefinitionProvider> {
     private readonly List<ITypeDefinitionProvider> _providers = [.. providers];
+
+    /// <summary>The analysis layer this collection is the own sources of, or null when it stands alone. Set by
+    /// <see cref="Poly.Analysis.AnalysisContext"/>; a name lookup then answers exactly what the layer resolves.</summary>
+    internal ITypeSystem? Layer { get; set; }
 
     /// <summary>
     /// Adds a provider to the top of the stack.
@@ -64,9 +70,13 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     public bool IsReadOnly => false;
 
     /// <summary>
-    /// Resolves by name, querying providers from top to bottom. Returns null when not found.
+    /// Resolves by name. Attached to an analysis layer, it answers exactly what the layer resolves: the layer's own
+    /// providers, then its target chain. A standalone collection queries its providers from top to bottom.
+    /// Returns null when not found.
     /// </summary>
     public ITypeDefinition? GetTypeDefinition(string name) {
+        if (Layer is { } layer)
+            return layer.Resolve(name);
         foreach (var provider in _providers.AsReadOnly()) {
             var typeDef = provider.GetTypeDefinition(name);
             if (typeDef is not null) {
@@ -77,7 +87,9 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     }
 
     /// <summary>
-    /// Resolves by runtime type, querying providers from top to bottom. Returns null when not found.
+    /// Resolves by runtime type through this collection's own providers, then the target chain's CLR source (#998 T12a):
+    /// the CLR is the C# target's source, and a chain with no CLR beneath it answers null. A standalone collection
+    /// queries its own providers' CLR handles.
     /// </summary>
     public ITypeDefinition? GetTypeDefinition(Type type) {
         foreach (var provider in _providers.AsReadOnly()) {
@@ -86,6 +98,14 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
             var typeDef = clr.GetTypeDefinition(type);
             if (typeDef is not null) {
                 return typeDef;
+            }
+        }
+        if (Layer is { } layer) {
+            for (var system = layer.Target; system is not null; system = system.Target) {
+                foreach (var source in system.Sources) {
+                    if (source is IClrTypeDefinitionProvider clr && clr.GetTypeDefinition(type) is { } definition)
+                        return definition;
+                }
             }
         }
         return null;

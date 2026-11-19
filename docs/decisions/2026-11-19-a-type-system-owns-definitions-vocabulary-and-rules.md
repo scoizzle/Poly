@@ -62,6 +62,20 @@ Owner, during T10 (2026-11-19):
     T10b: in T10a the tables are still the CLR host's, keyed on `ClrPrimitive`. Its pin is T10b's guard
     `PrimitiveVocabularyTests.ClrPrimitive_IsGone_FromEverySourceFile`, which fails while the interim stands. T10b removed it.
 
+Owner, before T12 (2026-11-19):
+
+12. T12 is split (advisor) so each slice is green with one resolution path: T12a gives each analysis its own layered
+    type system (its own sources, then its target) that replaces the provider stack's CLR fallback, and the analysis
+    result carries the same instance; T12b retires `ITypeDefinitionProvider` and `TypeDefinitionProviderCollection` at
+    their call sites; T12c gives C#'s own declarations to the analysis layer (removing ruling 10's interim).
+13. In T12c, a synthetic collection or generic parameter belongs to the analysis layer only when one of its arguments
+    is a declared (AST) type; a collection of CLR types (`List<int>`) stays the shared C# system's, so it is the same
+    type across analyses. Declared types themselves are per analysis.
+14. Under a target that is not C#, a declared type with no base takes the target's own top type (the definition its
+    word for `object` binds), else none.
+15. Retiring the provider removes the public `AnalysisContext(ITypeDefinitionProvider)` constructors and `Analyzer`'s
+    `typeDefinitions` parameter; callers pass a type system as the `ITypeSystem` analysis setting.
+
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.
 

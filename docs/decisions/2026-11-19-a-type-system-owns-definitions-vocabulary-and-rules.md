@@ -24,6 +24,21 @@ Owner, approving revision 2:
    registration are constrained to it. Guards check that every rule implements it, that Introspection declares no
    rule (owners live outside Introspection), and that the base adds no classification member.
 
+Owner, during T6 and T7 (2026-11-19):
+
+4. The compatibility analyzer's Date, Guid and byte[] categories match the CLR's own definitions (the CLR host's
+   table), not a C# rule; the category table keeps its removing row, I8b (#972). `ICSharpTypeRules` keeps three
+   members: `SimpleTypeOf`, and `IsEnumType`/`HasValueSemantics` (named so the architecture gate's text match on
+   `System.Type`'s `IsEnum`/`IsValueType` does not count them).
+5. `string` and `object` are found by keyword identity: the definition the target's word `string`/`object` binds.
+6. T6 is split into T6a (the rule, constant folding, `DateOffsetRule`, the shift policy), T6b (the category table)
+   and T6c (the product pack's scalar rule and the indexer pick). C#'s `SimpleType` (§8.3.5 plus `nint`/`nuint`)
+   overlaps the CLR host's own table for numbers: an interim rule removed by T10.
+7. Constraint applicability follows what the domain word binds, for the analysis and the emitted guards together:
+   every domain number word (Number, Int, Int64, Int32, Decimal, Float, Double) enforces its range and every text
+   word its length and pattern. Today Int64, Int32, Float and Double ranges are not enforced at run time; after
+   T7 they are, and a write outside them fails.
+
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.
 
@@ -314,7 +329,7 @@ Each row begins with a failing test, run red and recorded. Each ends with the fu
 | T4c | The VM asks the analysis' target system (`AnalysisResult.TypeSystem`): the lambda bridge's operators, conversions and common type. A run-time store's implicit conversion (`LocalType.ConvertImplicitly`) is C#'s: a `VmProgram` carries no analysis and every value it stores is a CLR value. | A pure lambda over a ledger-target analysis gets no CLR operator. |
 | T4d | The domain type model (`DomainTypeModel.Assign`) asks the session's target system. | The domain's assignment verdict changes with the target system, and so do its operator stamps (T4a migrated them; T4a's review asked for their target-system test here, where the domain session gets its target). |
 | T5 | The domain system is layered on C#. `Bind` uses `DomainTypeMapping`'s table, `DomainGround` is deleted, and families come from §3.1. **Interim:** that table stands in for the prelude. Removed by #998 S3. | A 64-bit integral definition that no domain word binds is not in the Number family (today it is `Int64`). |
-| T6 | `ICSharpTypeRules : ITypeSystemRule` (`SimpleTypeOf`, `IsEnum`, `IsValueType`). The analyzer, constant folding, `DateOffsetRule`, the shift policy and `Classify` ask it. | A ledger definition is not folded and is `Cat.Unknown` (today `IsNumber` makes it `Cat.Number`). |
+| T6 | `ICSharpTypeRules : ITypeSystemRule` (`SimpleTypeOf`, `IsEnumType`, `HasValueSemantics`; ruling 4). The analyzer, constant folding, `DateOffsetRule`, the shift policy and `Classify` ask it. Split into T6a, T6b and T6c (ruling 6). | A ledger definition is not folded and is `Cat.Unknown` (today `IsNumber` makes it `Cat.Number`). |
 | T7 | `IConstraintApplicability` is registered; `GuardClosedProperties` and the domain's `Family` ask the domain system. | `range` on a property bound to `Number` applies, and on one bound to `nint` does not, whatever the spelling. |
 | T8 | Delete `IsGround()`, the 21 answers and `ClrGround`. Ratchet 42 → 21. | The ratchet is lowered first (red). |
 | T9 | `ITypeDefinition.System` is added (§2.4); `IsSameTypeAs`, `NullableOf`, `ElementType` (merging `IsCollectionShape` and `SequenceElementType`) and the three doors leave the definition. The T1 interim is removed. Ratchet 21 + 1 − 7 = 15. | Pins first: `byte[]` element type is null and `List<int>` is `int`. Then the ratchet. |

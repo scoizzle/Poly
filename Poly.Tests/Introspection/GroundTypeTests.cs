@@ -89,10 +89,11 @@ public class GroundTypeTests {
     }
 
     [Test]
-    public async Task ShiftCountPolicy_AskedOfTheFact_AgreesWithTheClrTable_ForEveryClrGroundType() {
+    public async Task ShiftCountPolicy_AskedOfTheCSharpRule_AgreesWithTheClrTable_ForEveryClrGroundType() {
         foreach (var primitive in Enum.GetValues<ClrPrimitive>()) {
             ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(primitive.GetClrType()!);
-            var byFact = ClrBuiltInRules.IsPolicyShiftCount(definition);
+            var byFact = Poly.Interpretation.Analysis.Semantics.SyntaxTypeCompatibilityAnalyzer.IsPolicyShiftCount(
+                Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.SimpleTypeOf(definition));
 
             await Assert.That(byFact).IsEqualTo(ClrBuiltInRules.IsPolicyShiftCount(primitive))
                 .Because($"'{primitive}' is a policy shift count by its representation exactly when the CLR table says so");

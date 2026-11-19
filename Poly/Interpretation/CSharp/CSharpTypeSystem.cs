@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -11,7 +13,7 @@ namespace Poly.Interpretation.CSharp;
 /// definition names its system): a definition is C#'s own when it is an <see cref="IClrTypeDefinition"/>, and for its
 /// own definitions the rules still delegate to their doors.
 /// </summary>
-internal sealed class CSharpTypeSystem : ITypeSystem {
+internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
     public static CSharpTypeSystem Shared { get; } = new();
 
     internal CSharpTypeSystem() { }
@@ -63,4 +65,43 @@ internal sealed class CSharpTypeSystem : ITypeSystem {
 
     public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule =>
         Rules.Find<TRule>() ?? this as TRule ?? Target?.Rule<TRule>();
+
+    // ── C#'s own rules (ICSharpTypeRules, #998 T6a) ──
+
+    private static readonly FrozenDictionary<Type, SimpleType> SimpleTypes = new Dictionary<Type, SimpleType> {
+        [typeof(bool)] = SimpleType.Bool,
+        [typeof(char)] = SimpleType.Char,
+        [typeof(sbyte)] = SimpleType.SByte,
+        [typeof(byte)] = SimpleType.Byte,
+        [typeof(short)] = SimpleType.Short,
+        [typeof(ushort)] = SimpleType.UShort,
+        [typeof(int)] = SimpleType.Int,
+        [typeof(uint)] = SimpleType.UInt,
+        [typeof(long)] = SimpleType.Long,
+        [typeof(ulong)] = SimpleType.ULong,
+        [typeof(nint)] = SimpleType.NInt,
+        [typeof(nuint)] = SimpleType.NUInt,
+        [typeof(float)] = SimpleType.Float,
+        [typeof(double)] = SimpleType.Double,
+        [typeof(decimal)] = SimpleType.Decimal,
+    }.ToFrozenDictionary();
+
+    /// <summary>The C# simple type of a CLR definition; a declared or foreign definition is none.</summary>
+    public SimpleType? SimpleTypeOf(ITypeDefinition definition) =>
+        definition is ClrTypeDefinition clr && SimpleTypes.TryGetValue(clr.RuntimeType, out var simple) ? simple : null;
+
+    /// <summary>A CLR enum, or a declaration written as an enum.</summary>
+    public bool IsEnumType(ITypeDefinition definition) => definition switch {
+        ClrTypeDefinition clr => clr.RuntimeType.IsEnum,
+        Poly.Interpretation.Analysis.Semantics.AstTypeDefinition declared => declared.Form == Poly.Ast.Nodes.TypeDeclarationForm.Enum,
+        _ => false,
+    };
+
+    /// <summary>A CLR value type, or a declaration written as a struct (a declared enum states no value semantics, as
+    /// before).</summary>
+    public bool HasValueSemantics(ITypeDefinition definition) => definition switch {
+        ClrTypeDefinition clr => clr.RuntimeType.IsValueType,
+        Poly.Interpretation.Analysis.Semantics.AstTypeDefinition declared => declared.Form == Poly.Ast.Nodes.TypeDeclarationForm.Struct,
+        _ => false,
+    };
 }

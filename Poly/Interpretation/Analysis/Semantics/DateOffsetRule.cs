@@ -10,9 +10,14 @@ using Poly.Introspection;
 /// non-nullable left beside a non-nullable decimal is not an offset: the provider judges that pair (no operator).
 /// </summary>
 internal static class DateOffsetRule {
-    /// <summary>True when <paramref name="kind"/> is Add or Subtract, <paramref name="left"/> is a date type and <paramref name="right"/> a number.</summary>
-    public static bool Applies(OperatorKind kind, ITypeDefinition left, ITypeDefinition right) =>
+    /// <summary>True when <paramref name="kind"/> is Add or Subtract, <paramref name="left"/> is a date type and <paramref name="right"/> a
+    /// number the target's C# rule knows.</summary>
+    public static bool Applies(ITypeSystem system, OperatorKind kind, ITypeDefinition left, ITypeDefinition right) =>
         kind is OperatorKind.Add or OperatorKind.Subtract
         && SyntaxTypeCompatibilityAnalyzer.IsDateCategory(left) && SyntaxTypeCompatibilityAnalyzer.IsNumberCategory(right)
-        && !(left.NullableOf is null && right is { IsNumber: true, IsDecimal: true });
+        && system.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>() is { } csharp
+        // Fail closed (#998 T6a): the number is one the target's C# rule knows, nullable or not. A target with no C# rule,
+        // or a foreign definition that answers "number", decides no offset.
+        && csharp.SimpleTypeOf(right.NullableOf ?? right) is not null
+        && !(left.NullableOf is null && csharp.SimpleTypeOf(right) is Poly.Interpretation.CSharp.SimpleType.Decimal);
 }

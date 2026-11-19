@@ -132,6 +132,10 @@ public static class TypeDefinitionNodeAnalyzerExtensions {
 /// </summary>
 internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private readonly TypeDefinitionNode _node;
+
+    /// <summary>The form the declaration is written in (class, struct, interface, enum): its syntax, which the C# system
+    /// reads to answer whether a declared type is an enum or a value type (#998 T6a).</summary>
+    internal TypeDeclarationForm Form => _node.Form;
     private readonly ITypeDefinitionProvider _provider;
     private readonly IReadOnlyDictionary<string, ITypeDefinition>? _substitutions;
     private static long _nextOpenId;

@@ -157,7 +157,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
 
         // Date-offset fence (T-10): the interim DateOffsetRule, which the resolver reads for the offset's stamp too.
-        if (DateOffsetRule.Applies(kind, leftDefinition, rightDefinition)) {
+        if (DateOffsetRule.Applies(context.TypeSystem, kind, leftDefinition, rightDefinition)) {
             if (!RewriteDateOffset(context, parent, leftNode, rightNode, negate: kind is OperatorKind.Subtract))
                 Report(context, leftNode,
                     $"temporal offset requires a date type with AddDays (got '{leftDefinition.Name}')");
@@ -225,15 +225,23 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         Report(context, operandNode, $"operator {kind} is not defined for '{NameOf(definition)}': no {kind} operator for this type");
     }
 
+    /// <summary>Poly's shift-count policy over C#'s simple types: an integer count that is not already an <c>int</c>
+    /// or narrower (#998 T6a; the CLR host's table keeps its own copy for operator resolution).</summary>
+    internal static bool IsPolicyShiftCount(Poly.Interpretation.CSharp.SimpleType? count) =>
+        count is Poly.Interpretation.CSharp.SimpleType.Long or Poly.Interpretation.CSharp.SimpleType.UInt
+            or Poly.Interpretation.CSharp.SimpleType.ULong or Poly.Interpretation.CSharp.SimpleType.NInt
+            or Poly.Interpretation.CSharp.SimpleType.NUInt;
+
     /// <summary>
-    /// Poly's shift-count policy (<see cref="ClrBuiltInRules.IsPolicyShiftCount"/>): a count of a wider integer type is
-    /// converted to <c>int</c> unchecked, and the tree states it. The shift node is replaced by one whose count is that cast
-    /// (lifted to <c>int?</c> for a nullable count), so the emitter shifts by an <c>int</c> and decides nothing.
+    /// Poly's shift-count policy (<see cref="IsPolicyShiftCount"/>): a count of a wider integer type is converted to
+    /// <c>int</c> unchecked, and the tree states it. The shift node is replaced by one whose count is that cast (lifted to
+    /// <c>int?</c> for a nullable count), so the emitter shifts by an <c>int</c> and decides nothing.
     /// </summary>
     private static void StatePolicyShiftCount(
         AnalysisContext context, Node shift, Node count, ITypeDefinition countDefinition, ITypeOperator resolution) {
         var parameters = resolution.Parameters.ToArray();
-        if (parameters.Length != 2 || !ClrBuiltInRules.IsPolicyShiftCount(parameters[1].ParameterTypeDefinition))
+        if (parameters.Length != 2
+            || !IsPolicyShiftCount(context.TypeSystem.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>()?.SimpleTypeOf(parameters[1].ParameterTypeDefinition)))
             return;
         var target = countDefinition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null ? typeof(int?) : typeof(int);
         var targetDefinition = context.TypeDefinitions.GetTypeDefinition(target)

@@ -323,8 +323,18 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return mask is null ? null : new BitwiseAnd(mod.LeftHandValue, mask);
     }
 
+    // C#'s simple type of the operand, asked of the analysis' target (#998 T6a): a target that is not C#, or a definition
+    // that is no C# simple type, answers none, and nothing is reduced.
+    private static Poly.Interpretation.CSharp.SimpleType? SimpleTypeOf(AnalysisContext context, Node node) =>
+        context.GetResolvedType(node) is { } definition
+            ? context.TypeSystem.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>()?.SimpleTypeOf(definition)
+            : null;
+
     private static bool IsIntegerOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node) is { IsNumber: true, IsIntegral: true, IsNativeSized: false };
+        SimpleTypeOf(context, node) is Poly.Interpretation.CSharp.SimpleType.SByte or Poly.Interpretation.CSharp.SimpleType.Byte
+            or Poly.Interpretation.CSharp.SimpleType.Short or Poly.Interpretation.CSharp.SimpleType.UShort
+            or Poly.Interpretation.CSharp.SimpleType.Int or Poly.Interpretation.CSharp.SimpleType.UInt
+            or Poly.Interpretation.CSharp.SimpleType.Long or Poly.Interpretation.CSharp.SimpleType.ULong;
 
     /// <summary>
     /// True only for an unsigned integral operand. <c>x &gt;&gt; n</c> and <c>x &amp; (2^n - 1)</c> equal
@@ -333,14 +343,15 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// complement bits, so the two disagree for every negative dividend.
     /// </summary>
     private static bool IsUnsignedOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node) is { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false };
+        SimpleTypeOf(context, node) is Poly.Interpretation.CSharp.SimpleType.Byte or Poly.Interpretation.CSharp.SimpleType.UShort
+            or Poly.Interpretation.CSharp.SimpleType.UInt or Poly.Interpretation.CSharp.SimpleType.ULong;
 
     private static Constant? BuildMaskConstant(AnalysisContext context, Node left, long mask) {
-        object? value = context.GetResolvedType(left) switch {
-            { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false, NumberBits: 8 } => (byte)mask,
-            { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false, NumberBits: 16 } => (ushort)mask,
-            { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false, NumberBits: 32 } => (uint)mask,
-            { IsNumber: true, IsIntegral: true, IsSigned: false, IsNativeSized: false, NumberBits: 64 } => (ulong)mask,
+        object? value = SimpleTypeOf(context, left) switch {
+            Poly.Interpretation.CSharp.SimpleType.Byte => (byte)mask,
+            Poly.Interpretation.CSharp.SimpleType.UShort => (ushort)mask,
+            Poly.Interpretation.CSharp.SimpleType.UInt => (uint)mask,
+            Poly.Interpretation.CSharp.SimpleType.ULong => (ulong)mask,
             _ => (object?)null
         };
         return value is null ? null : new Constant(value);

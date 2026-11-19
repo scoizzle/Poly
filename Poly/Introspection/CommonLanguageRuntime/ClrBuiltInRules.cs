@@ -96,11 +96,6 @@ internal static class ClrBuiltInRules {
     /// </summary>
     public static bool IsPolicyShiftCount(ClrPrimitive type) => type is P.Int64 or P.UInt32 or P.UInt64 or P.NInt or P.NUInt;
 
-    /// <summary><see cref="IsPolicyShiftCount(ClrPrimitive)"/> asked of a type's number representation: an integer
-    /// that is not already an <c>int</c> or narrower.</summary>
-    public static bool IsPolicyShiftCount(ITypeDefinition count) =>
-        count is { IsNumber: true, IsIntegral: true } && (count.IsNativeSized || count.NumberBits == 64 || count is { NumberBits: 32, IsSigned: false });
-
     /// <summary>
     /// C# 12.12.7, reference type equality: <c>bool ==(object, object)</c> and <c>!=</c>, declared by <c>object</c>, when both
     /// operands are reference types and a reference conversion exists between them in either direction: an identity or

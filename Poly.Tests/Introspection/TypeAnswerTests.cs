@@ -114,7 +114,7 @@ public class TypeAnswerTests {
         var malformed = new Answering { IsIntegral = true, IsSigned = true, NumberBits = 64, HasDate = true, HasTime = true, IsCharacter = true };
 
         await Assert.That(ObeysTheParentRule(malformed)).IsFalse();
-        await Assert.That(ClrBuiltInRules.IsPolicyShiftCount(malformed)).IsFalse();
+        await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.SimpleTypeOf(malformed))).IsFalse();
         await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsTimestamp(malformed)).IsFalse();
         await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsNumericLike(malformed)).IsFalse();
     }

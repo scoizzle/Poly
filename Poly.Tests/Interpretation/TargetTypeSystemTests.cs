@@ -131,6 +131,106 @@ public class TargetTypeSystemTests {
         await Assert.That(() => Poly.Interpretation.Interpreter.Compile(call, underLedger)).Throws<InvalidOperationException>()
             .WithMessageContaining("defines no Add operator");
     }
+
+    [Test]
+    public async Task ConstantFolding_ReducesOnlyACSharpUnsignedOperand() {
+        // x % 8 -> x & 7 is sound only for C#'s unsigned simple types; a foreign type answering "unsigned 32-bit"
+        // about itself is not one (#998 T6a).
+        static (Lambda Lambda, Modulo Modulo) Program(Node type) {
+            var x = new Parameter("x", type);
+            var modulo = new Modulo(x, new Constant(8u));
+            return (new Lambda([x], modulo), modulo);
+        }
+
+        var (clrLambda, clrModulo) = Program(Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(uint)));
+        await Assert.That(Analyze(clrLambda).GetNodeReplacement(clrModulo)).IsTypeOf<BitwiseAnd>();
+
+        var (foreignLambda, foreignModulo) = Program(new TypeDefinitionReference(new ForeignUnsignedWord()));
+        await Assert.That(Analyze(foreignLambda).GetNodeReplacement(foreignModulo) is BitwiseAnd).IsFalse()
+            .Because("only C#'s own unsigned simple types are strength-reduced");
+    }
+
+    [Test]
+    public async Task CSharpRules_AnswerOnlyForCSharpsOwnDefinitions() {
+        var rules = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>();
+        var clr = Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+
+        await Assert.That(rules).IsNotNull();
+        await Assert.That(rules!.SimpleTypeOf(clr.GetTypeDefinition(typeof(uint)))).IsEqualTo(Poly.Interpretation.CSharp.SimpleType.UInt);
+        await Assert.That(rules.SimpleTypeOf(clr.GetTypeDefinition(typeof(string)))).IsNull().Because("string is not a C# simple type");
+        await Assert.That(rules.SimpleTypeOf(new ForeignUnsignedWord())).IsNull();
+        await Assert.That(rules.SimpleTypeOf(new LedgerHost().Amount)).IsNull();
+        await Assert.That(rules.IsEnumType(clr.GetTypeDefinition(typeof(DayOfWeek)))).IsTrue();
+        await Assert.That(rules.HasValueSemantics(clr.GetTypeDefinition(typeof(DayOfWeek)))).IsTrue();
+        await Assert.That(rules.HasValueSemantics(clr.GetTypeDefinition(typeof(string)))).IsFalse();
+        await Assert.That(((ITypeSystem)new LedgerHost()).Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>()).IsNull();
+    }
+
+    [Test]
+    public async Task DateOffset_AsksTheTargetsCSharpRule_AndFailsClosedForAForeignNumber() {
+        // A date plus a number of days is an offset only when the target's C# rule knows the number (#998 T6a). A
+        // foreign definition that answers "decimal number" is no C# number; a target with no C# rule decides none.
+        static ITypeDefinition Clr(Type type) => Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
+        var csharp = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+        var date = Clr(typeof(DateTime));
+
+        await Assert.That(DateOffsetRule.Applies(csharp, OperatorKind.Add, date, Clr(typeof(int)))).IsTrue();
+        await Assert.That(DateOffsetRule.Applies(csharp, OperatorKind.Subtract, date, Clr(typeof(nint)))).IsTrue();
+        await Assert.That(DateOffsetRule.Applies(csharp, OperatorKind.Add, date, Clr(typeof(decimal?)))).IsTrue()
+            .Because("only a non-nullable decimal beside a non-nullable date is left to the provider");
+        await Assert.That(DateOffsetRule.Applies(csharp, OperatorKind.Add, Clr(typeof(DateTime?)), Clr(typeof(decimal)))).IsTrue();
+        await Assert.That(DateOffsetRule.Applies(csharp, OperatorKind.Add, date, Clr(typeof(decimal)))).IsFalse();
+
+        await Assert.That(DateOffsetRule.Applies(csharp, OperatorKind.Add, date, new LedgerHost().Amount)).IsFalse()
+            .Because("the ledger's amount is no C# number, whatever it answers about itself");
+        await Assert.That(DateOffsetRule.Applies(new LedgerHost(), OperatorKind.Add, date, Clr(typeof(decimal)))).IsFalse()
+            .Because("a target with no C# rule decides no offset");
+    }
+}
+
+/// <summary>A foreign definition that answers, on the old classification members, that it is an unsigned 32-bit
+/// integer. It is no C# simple type, so C#'s rules must not treat it as one.</summary>
+public sealed class ForeignUnsignedWord : ITypeDefinition {
+    public string Name => "word";
+    public string? Namespace => "foreign";
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public ITypeDefinition? BaseType => null;
+    public IEnumerable<ITypeDefinition> Interfaces => [];
+    public IEnumerable<IParameter> GenericParameters => [];
+    public IEnumerable<ITypeMember> Members => [];
+    public IEnumerable<ITypeField> Fields => [];
+    public IEnumerable<ITypeProperty> Properties => [];
+    public IEnumerable<ITypeMethod> Methods => [];
+    public IEnumerable<ITypeConstructor> Constructors => [];
+    public IEnumerable<ITypeOperator> Operators => [];
+    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+    IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
+    ITypeDefinition? ITypeDefinition.NullableOf => null;
+    ITypeDefinition? ITypeDefinition.SequenceElementType => null;
+    bool ITypeDefinition.IsCollectionShape => false;
+    bool ITypeDefinition.IsEnumeration => false;
+    bool ITypeDefinition.HasValueSemantics => false;
+    bool ITypeDefinition.IsInterface => false;
+    bool ITypeDefinition.IsDelegate => false;
+    bool ITypeDefinition.IsBoolean => false;
+    bool ITypeDefinition.IsText => false;
+    bool ITypeDefinition.IsCharacter => false;
+    bool ITypeDefinition.IsNumber => true;
+    bool ITypeDefinition.IsIntegral => true;
+    bool ITypeDefinition.IsSigned => false;
+    bool ITypeDefinition.IsDecimal => false;
+    bool ITypeDefinition.IsNativeSized => false;
+    int ITypeDefinition.NumberBits => 32;
+    bool ITypeDefinition.IsTemporal => false;
+    bool ITypeDefinition.HasDate => false;
+    bool ITypeDefinition.HasTime => false;
+    bool ITypeDefinition.HasOffset => false;
+    bool ITypeDefinition.IsDuration => false;
+    bool ITypeDefinition.IsUniqueIdentifier => false;
+    bool ITypeDefinition.IsBinary => false;
+    bool ITypeDefinition.IsTopType => false;
+    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
+    ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
 }
 
 /// <summary>A type whose only indexer takes a long (not a collection).</summary>

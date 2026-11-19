@@ -10,6 +10,10 @@ public sealed class AnalysisContext : INodeMetadataProvider {
 
     public static AnalysisContext CreateDefault() => new();
 
+    /// <summary>The type system the analysis decides by: the <see cref="ITypeSystem"/> setting, else C# over the CLR. Every
+    /// analysis-time operator lookup asks it (#998 T4a); conversions follow in T4b.</summary>
+    public ITypeSystem TypeSystem { get; }
+
     public AnalysisContext() : this(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, AnalysisSettings.Default) { }
 
     public AnalysisContext(ITypeDefinitionProvider typeDefinitions)
@@ -33,6 +37,7 @@ public sealed class AnalysisContext : INodeMetadataProvider {
             TypeDefinitions = new TypeDefinitionProviderCollection(typeDefinitions, clr);
         }
         Settings = settings;
+        TypeSystem = settings.Get<ITypeSystem>() ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
         AnalysisDiagnosticConfiguration = Settings.Get<AnalysisDiagnosticConfiguration>() ?? AnalysisDiagnosticConfiguration.Default;
     }
 

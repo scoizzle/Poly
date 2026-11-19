@@ -53,7 +53,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
         else if (IsOrdering(cmp.Kind) && IsTyped(left) && IsTyped(right)
             && left.Definition is { } leftDefinition && right.Definition is { } rightDefinition
-            && leftDefinition.GetOperator(OperatorTable.KindOf(cmp.Kind), rightDefinition) is null)
+            && context.TypeSystem.Operator(OperatorTable.KindOf(cmp.Kind), leftDefinition, rightDefinition) is null)
             Report(context, cmp, $"ordering is not defined for '{Describe(left)}'");
 
         WalkExpression(context, cmp.Left, props, parameters, enumTypes);

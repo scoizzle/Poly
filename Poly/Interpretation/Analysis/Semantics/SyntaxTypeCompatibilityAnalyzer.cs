@@ -186,7 +186,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 return;
         }
 
-        if (leftUnderlying.GetOperator(kind, rightUnderlying) is not { } resolution) {
+        if (context.TypeSystem.Operator(kind, leftUnderlying, rightUnderlying) is not { } resolution) {
             if ((comparison && UndeclaredComparisonRule(kind, leftUnderlying, rightUnderlying))
                 || EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying) is not null)
                 return;
@@ -220,7 +220,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (OperandDefinition(context, operandNode) is not { } definition)
             return;
         var underlying = Underlying(context, definition);
-        if (underlying.GetOperator(kind, null) is not null || EnumBitwiseRule.Of(kind, underlying, null) is not null)
+        if (context.TypeSystem.Operator(kind, underlying, null) is not null || EnumBitwiseRule.Of(kind, underlying, null) is not null)
             return;
         Report(context, operandNode, $"operator {kind} is not defined for '{NameOf(definition)}': no {kind} operator for this type");
     }

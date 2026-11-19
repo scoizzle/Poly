@@ -324,7 +324,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (ResolveNodeType(context, operand) is not { } operandType)
             return null;
         var underlying = PeelNullable(context, operandType);
-        var result = underlying.GetOperator(kind, null)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, underlying, null);
+        var result = context.TypeSystem.Operator(kind, underlying, null)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, underlying, null);
         return result is null ? null : Lift(context, result, IsNullableType(operandType));
     }
 
@@ -350,7 +350,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         else if (DateOffsetRule.Applies(kind, leftType, rightType))
             result = leftUnderlying;
         else
-            result = leftUnderlying.GetOperator(kind, rightUnderlying)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying);
+            result = context.TypeSystem.Operator(kind, leftUnderlying, rightUnderlying)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying);
         return result is null ? null : Lift(context, result, lift);
     }
 

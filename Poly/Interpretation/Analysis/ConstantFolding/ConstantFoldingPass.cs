@@ -563,7 +563,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         var rightDefinition = rightType is null ? null : context.TypeDefinitions.GetTypeDefinition(rightType);
         if (leftDefinition is null || (right is not null && rightDefinition is null))
             return FoldResult.NotFoldable;
-        if (leftDefinition.GetOperator(kind, rightDefinition) is not { } resolution)
+        if (context.TypeSystem.Operator(kind, leftDefinition, rightDefinition) is not { } resolution)
             return sameTypeEquality ? Equality(kind, Equals(leftValue, rightValue)) : FoldResult.NotFoldable;
         // A declared operator outside the handled cells is never run at analysis time.
         if (!handled)

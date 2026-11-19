@@ -206,7 +206,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 Multiply => Introspection.OperatorKind.Multiply,
                 _ => Introspection.OperatorKind.Divide,
             };
-            return left.Definition!.GetOperator(kind, right.Definition) is { } resolution
+            return context.TypeSystem.Operator(kind, left.Definition!, right.Definition) is { } resolution
                 ? new ExprType(resolution.ResultTypeDefinition, Optional: false, DomainName: null).AsOptional(absent)
                 : ExprType.Unresolved;
         }

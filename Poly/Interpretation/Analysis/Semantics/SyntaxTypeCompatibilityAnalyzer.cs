@@ -507,7 +507,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return AcceptsNull(paramType);
         if (NullableValueAccepts(paramType, argType))
             return true;
-        if (CollectionsMatch(paramType, argType))
+        if (CollectionsMatch(context.TypeSystem, paramType, argType))
             return true;
         return OptionalNullBoxMatches(context, parameter, paramType, argType, arg);
     }
@@ -527,9 +527,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return underlying is not null && (argRuntime == underlying || underlying.IsAssignableFrom(argRuntime));
     }
 
-    private static bool CollectionsMatch(ITypeDefinition paramType, ITypeDefinition argType) {
-        var paramElement = ElementOf(paramType);
-        var argElement = ElementOf(argType);
+    private static bool CollectionsMatch(ITypeSystem system, ITypeDefinition paramType, ITypeDefinition argType) {
+        var paramElement = ElementOf(system, paramType);
+        var argElement = ElementOf(system, argType);
         if (paramElement is null || argElement is null)
             return false;
         if (ReferenceEquals(paramElement, argElement))
@@ -542,14 +542,14 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return false;
     }
 
-    private static ITypeDefinition? ElementOf(ITypeDefinition type) {
+    private static ITypeDefinition? ElementOf(ITypeSystem system, ITypeDefinition type) {
         if (type is AstCollectionTypeDefinition collection)
             return collection.ElementType;
         if (type.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(string))
             return null;
         if (!type.IsCollectionShape)
             return null;
-        var element = type.GetElementType();
+        var element = system.ElementType(type);
         return element is not null && !IsUniversalObject(element) ? element : null;
     }
 

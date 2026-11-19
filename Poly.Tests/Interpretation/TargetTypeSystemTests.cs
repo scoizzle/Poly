@@ -200,6 +200,22 @@ public class TargetTypeSystemTests {
         await Assert.That(SyntaxTypeCompatibilityAnalyzer.CategoryOf(new LedgerHost(), clr.GetTypeDefinition(typeof(decimal)))).IsEqualTo(SyntaxTypeCompatibilityAnalyzer.Cat.Unknown)
             .Because("a target that is not C# answers no C# category");
     }
+
+    [Test]
+    public async Task ElementType_PositionalIndexer_IsCSharpsRule_NotWhatAForeignIndexAnswers() {
+        // C#'s element type of a collection is its positional indexer's: an Item whose parameters are C#'s fixed-width
+        // integers (#998 T6c). An index typed by a foreign word that answers "integral" is no C# integer, so the pick
+        // falls to the sequence element (none here).
+        var clr = Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+        var csharp = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+        var text = clr.GetTypeDefinition(typeof(string));
+
+        await Assert.That(csharp.ElementType(new ForeignIndexed(clr.GetTypeDefinition(typeof(int)), text))).IsSameReferenceAs(text);
+        await Assert.That(csharp.ElementType(new ForeignIndexed(new ForeignUnsignedWord(), text))).IsNull()
+            .Because("the foreign word answers that it is an integer, but it is none of C#'s");
+        await Assert.That(csharp.ElementType(clr.GetTypeDefinition(typeof(List<int>)))?.Name).IsEqualTo("Int32");
+        await Assert.That(csharp.ElementType(clr.GetTypeDefinition(typeof(int[])))?.Name).IsEqualTo("Int32");
+    }
 }
 
 /// <summary>A foreign definition that answers, on the old classification members, that it is an unsigned 32-bit
@@ -250,4 +266,67 @@ public sealed class ForeignUnsignedWord : ITypeDefinition {
 /// <summary>A type whose only indexer takes a long (not a collection).</summary>
 public sealed class LongIndexed {
     public string this[long index] => index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}
+
+/// <summary>A foreign collection with one positional indexer, <c>Item[index]</c>, of the given types (#998 T6c).</summary>
+public sealed class ForeignIndexed(ITypeDefinition index, ITypeDefinition element) : ITypeDefinition {
+    public string Name => "indexed";
+    public string? Namespace => "foreign";
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public ITypeDefinition? BaseType => null;
+    public IEnumerable<ITypeDefinition> Interfaces => [];
+    public IEnumerable<IParameter> GenericParameters => [];
+    public IEnumerable<ITypeMember> Members => Properties;
+    public IEnumerable<ITypeField> Fields => [];
+    public IEnumerable<ITypeProperty> Properties => [new Indexer(this, index, element)];
+    public IEnumerable<ITypeMethod> Methods => [];
+    public IEnumerable<ITypeConstructor> Constructors => [];
+    public IEnumerable<ITypeOperator> Operators => [];
+    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+    IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
+    ITypeDefinition? ITypeDefinition.NullableOf => null;
+    ITypeDefinition? ITypeDefinition.SequenceElementType => null;
+    bool ITypeDefinition.IsCollectionShape => true;
+    bool ITypeDefinition.IsEnumeration => false;
+    bool ITypeDefinition.HasValueSemantics => false;
+    bool ITypeDefinition.IsInterface => false;
+    bool ITypeDefinition.IsDelegate => false;
+    bool ITypeDefinition.IsBoolean => false;
+    bool ITypeDefinition.IsText => false;
+    bool ITypeDefinition.IsCharacter => false;
+    bool ITypeDefinition.IsNumber => false;
+    bool ITypeDefinition.IsIntegral => false;
+    bool ITypeDefinition.IsSigned => false;
+    bool ITypeDefinition.IsDecimal => false;
+    bool ITypeDefinition.IsNativeSized => false;
+    int ITypeDefinition.NumberBits => 0;
+    bool ITypeDefinition.IsTemporal => false;
+    bool ITypeDefinition.HasDate => false;
+    bool ITypeDefinition.HasTime => false;
+    bool ITypeDefinition.HasOffset => false;
+    bool ITypeDefinition.IsDuration => false;
+    bool ITypeDefinition.IsUniqueIdentifier => false;
+    bool ITypeDefinition.IsBinary => false;
+    bool ITypeDefinition.IsTopType => false;
+    ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
+    ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
+
+    private sealed class Indexer(ITypeDefinition declaring, ITypeDefinition index, ITypeDefinition element) : ITypeProperty {
+        public MemberKind Kind => MemberKind.Indexer;
+        public string Name => "Item";
+        public ITypeDefinition MemberTypeDefinition => element;
+        public ITypeDefinition DeclaringTypeDefinition => declaring;
+        public IEnumerable<IParameter> Parameters => [new Index(index)];
+        public AccessModifier AccessModifier => AccessModifier.Public;
+        public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
+        public Mutability Mutability => Mutability.Mutable;
+    }
+
+    private sealed class Index(ITypeDefinition type) : IParameter {
+        public int Position => 0;
+        public string Name => "index";
+        public ITypeDefinition ParameterTypeDefinition => type;
+        public bool IsOptional => false;
+        public object? DefaultValue => null;
+    }
 }

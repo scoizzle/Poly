@@ -110,6 +110,10 @@ public static class TypeDefinitionExtensions {
             if (indexParameterTypes.Length > 0) {
                 return typeDefinition.FindMatchingIndexers(indexParameterTypes, system).FirstOrDefault()?.MemberTypeDefinition;
             }
+            if (system is not null)
+                return system.ElementType(typeDefinition);
+            // Interim (removed by T8, with the classification answers it reads): with no system, the positional pick asks
+            // the definition's own answers.
 
             var positionalIndexer = typeDefinition.Properties
                 .Where(static property => property.Name == "Item" && property.Parameters.Any())

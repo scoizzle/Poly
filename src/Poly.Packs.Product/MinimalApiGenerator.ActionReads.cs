@@ -179,6 +179,9 @@ internal sealed class ActionReadsWalker {
         "List", "IList", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection", "ICollection", "HashSet", "ISet",
     };
 
+    // The product pack emits C# for ASP.NET: its target type system is C#'s by construction (#998 T6c).
+    private static readonly ITypeSystem Target = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+
     private readonly CatalogIndex _catalog;
     private readonly IReadOnlyDictionary<string, StorageEntity> _storage;
     private readonly Dictionary<string, Entity> _entities;
@@ -399,10 +402,23 @@ internal sealed class ActionReadsWalker {
     private sealed record EntityCollectionType(string Element) : TypeClass;
     private sealed record UnknownType : TypeClass { public static readonly UnknownType Instance = new(); }
 
+    /// <summary>The target's top type: the definition its word <c>object</c> binds.</summary>
+    internal static bool IsTopDefinition(ITypeSystem system, ITypeDefinition definition) =>
+        system.Bind("object") is { } top && system.IsSame(top, definition);
+
+    /// <summary>A value a request carries as one field: a C# simple type, string, or the CLR's calendar types, Guid and
+    /// byte[] (owner rulings 2026-11-19). Asked of the target's C# rules and words; a foreign definition is no scalar.</summary>
+    internal static bool IsScalarDefinition(ITypeSystem system, ITypeDefinition definition) =>
+        system.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>() is { } csharp
+        && (csharp.SimpleTypeOf(definition) is not null
+            || (system.Bind("string") is { } text && system.IsSame(text, definition))
+            || ClrBuiltInRules.IsCalendarType(definition) || ClrBuiltInRules.IsGuid(definition)
+            || ClrBuiltInRules.IsByteArray(definition));
+
     private TypeClass Classify(Node? type) => type switch {
         OptionalTypeReference optional => Classify(optional.InnerType),
-        TypeDefinitionReference top when top.TypeDefinition.IsTopType => UnknownType.Instance,
-        TypeDefinitionReference ground when ground.TypeDefinition.IsGround() => ScalarType.Instance,
+        TypeDefinitionReference top when IsTopDefinition(Target, top.TypeDefinition) => UnknownType.Instance,
+        TypeDefinitionReference ground when IsScalarDefinition(Target, ground.TypeDefinition) => ScalarType.Instance,
         TypeDefinitionReference statesThePort when ClrTypeReferences.Denotes(statesThePort, typeof(IStoragePort)) =>
             PortType.Instance,
         TypeDefinitionReference resolved => ClassifyNamed(resolved.TypeDefinition.Name, resolved.TypeDefinition.FullName, []),

@@ -38,7 +38,31 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
 
     public ITypeDefinition? NullableOf(ITypeDefinition definition) => definition.NullableOf;
 
-    public ITypeDefinition? ElementType(ITypeDefinition definition) => definition.GetElementType();
+    /// <summary>
+    /// C#'s element type of a sequence: a collection's positional indexer (an <c>Item</c> whose parameters are all C#'s
+    /// fixed-width integers; the fewest parameters, then one that does not return <c>object</c>), else the sequence's
+    /// element (#998 T6c: the pick is C#'s rule, asked of its own simple types and words).
+    /// </summary>
+    public ITypeDefinition? ElementType(ITypeDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+        var top = Bind("object");
+        var positional = definition.Properties
+            .Where(static property => property.Name == "Item" && property.Parameters.Any())
+            .Select(property => new {
+                Property = property,
+                Parameters = property.Parameters.ToArray(),
+                ReturnsObject = top is not null && IsSame(top, property.MemberTypeDefinition)
+            })
+            .Where(candidate => candidate.Parameters.All(parameter => SimpleTypeOf(parameter.ParameterTypeDefinition)
+                is SimpleType.SByte or SimpleType.Byte or SimpleType.Short or SimpleType.UShort
+                or SimpleType.Int or SimpleType.UInt or SimpleType.Long or SimpleType.ULong))
+            .OrderBy(static candidate => candidate.Parameters.Length)
+            .ThenBy(static candidate => candidate.ReturnsObject)
+            .FirstOrDefault();
+        if (positional is not null && definition.IsCollectionShape)
+            return positional.Property.MemberTypeDefinition;
+        return definition.SequenceElementType;
+    }
 
     public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) =>
         destination.IsAssignableWithoutConversion(source);

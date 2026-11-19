@@ -283,7 +283,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             && context.GetResolvedMember(member) is AstPropertyDefinition astProp) {
             elementType = astProp.TryGetCollectionElementType();
         }
-        elementType ??= collectionType?.GetElementType();
+        elementType ??= collectionType is null ? null : context.TypeSystem.ElementType(collectionType);
 
         // Publish the element type so the compatibility check and the emitter agree on it.
         context.SetMetadata(foreachLoop, new ForEachElementTypeMetadata(elementType));

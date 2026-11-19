@@ -84,4 +84,56 @@ public class TypeShapeTests {
         await Assert.That(typeof(ITypeDefinition).GetProperty("Kind", any)).IsNull();
         await Assert.That(typeof(ITypeDefinition).GetProperty("PlatformAtom", any)).IsNull();
     }
+
+    // The contract's size is decided, not grown (docs/decisions/2026-11-19-a-type-system-owns-definitions-vocabulary-and-rules.md).
+    // Both lists are ratchets that a row of #998 shortens. A member is added only by editing the member list in the same
+    // change, citing that decision; the classification list only shrinks. They end at the decision's ten members and no
+    // classification property.
+    private static readonly string[] DecidedMembers = [
+        "Name", "Namespace", "AccessModifier", "FullName", "BaseType", "Interfaces", "GenericParameters", "Members",
+        "Fields", "Properties", "Methods", "Constructors", "Operators", "IsSameTypeAs", "IsCollectionShape",
+        "SequenceElementType", "Conversions", "NullableOf", "IsEnumeration", "HasValueSemantics", "IsInterface",
+        "IsDelegate", "IsBoolean", "IsText", "IsCharacter", "IsNumber", "IsIntegral", "IsSigned", "IsDecimal",
+        "IsNativeSized", "NumberBits", "IsTemporal", "HasDate", "HasTime", "HasOffset", "IsDuration",
+        "IsUniqueIdentifier", "IsBinary", "IsTopType", "ResolveConversionFrom", "IsAssignableWithoutConversion",
+        "ResolveOperator",
+    ];
+
+    private static readonly string[] RemainingClassificationProperties = [
+        "AccessModifier", "IsCollectionShape", "IsEnumeration", "HasValueSemantics", "IsInterface", "IsDelegate",
+        "IsBoolean", "IsText", "IsCharacter", "IsNumber", "IsIntegral", "IsSigned", "IsDecimal", "IsNativeSized",
+        "NumberBits", "IsTemporal", "HasDate", "HasTime", "HasOffset", "IsDuration", "IsUniqueIdentifier", "IsBinary",
+        "IsTopType",
+    ];
+
+    private const System.Reflection.BindingFlags Declared = System.Reflection.BindingFlags.Instance
+        | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public
+        | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+
+    // A property's or an event's accessor is that member, not another; every other method counts, operators included.
+    private static bool IsAccessor(System.Reflection.MemberInfo member) =>
+        member is System.Reflection.MethodInfo { IsSpecialName: true } method
+        && (method.Name.StartsWith("get_", StringComparison.Ordinal) || method.Name.StartsWith("set_", StringComparison.Ordinal)
+            || method.Name.StartsWith("add_", StringComparison.Ordinal) || method.Name.StartsWith("remove_", StringComparison.Ordinal));
+
+    [Test]
+    public async Task ITypeDefinition_IsExactlyTheDecidedMembers() {
+        var declared = typeof(ITypeDefinition).GetMembers(Declared)
+            .Where(static member => !IsAccessor(member))
+            .Select(static member => member.Name);
+
+        await Assert.That(declared).IsEquivalentTo(DecidedMembers)
+            .Because("a member is added or removed only by editing the decided list, citing the type-system decision");
+    }
+
+    [Test]
+    public async Task ITypeDefinition_StatesNoClassification() {
+        var classifying = typeof(ITypeDefinition).GetProperties(Declared)
+            .Where(static property => property.PropertyType == typeof(bool) || property.PropertyType == typeof(int)
+                || property.PropertyType.IsEnum)
+            .Select(static property => property.Name);
+
+        await Assert.That(classifying).IsEquivalentTo(RemainingClassificationProperties)
+            .Because("what kind of type something is, is its type system's rule; this list only shrinks");
+    }
 }

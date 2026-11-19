@@ -96,7 +96,8 @@ public class PrimitiveVocabularyTests {
         var resolved = provider.GetTypeDefinition("Decimal128");
 
         await Assert.That(resolved).IsNotNull();
-        await Assert.That(resolved is IHostType { HostKind: "decimal128" }).IsTrue();
+        await Assert.That(resolved is IHostType { HostKind: "decimal128", HostNumberBits: 128 }).IsTrue()
+            .Because("the host states what the number is in its own terms (#998 T8a)");
         await Assert.That((resolved!.IsNumber, resolved.IsDecimal, resolved.IsSigned, resolved.NumberBits)).IsEqualTo((true, true, true, 128));
         await Assert.That(resolved.GetClrPrimitive()).IsNull();
         ITypeDefinition clrDecimal = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(decimal));
@@ -109,6 +110,9 @@ public class PrimitiveVocabularyTests {
     /// <summary>A question only the second host answers: what the type is, in the host's own terms.</summary>
     private interface IHostType : ITypeDefinition {
         string HostKind { get; }
+
+        /// <summary>The width of a host number, in the host's own terms; 0 for a type that is no number.</summary>
+        int HostNumberBits { get; }
     }
 
     private sealed class SecondHostProvider : ITypeDefinitionProvider {
@@ -122,6 +126,7 @@ public class PrimitiveVocabularyTests {
 
     private sealed class HostPrimitive(string name, string hostKind, int numberBits = 0) : IHostType {
         public string HostKind => hostKind;
+        public int HostNumberBits => numberBits;
         public string Name => name;
         public string? Namespace => null;
         public AccessModifier AccessModifier => AccessModifier.Public;

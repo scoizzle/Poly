@@ -289,27 +289,6 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
     bool ITypeDefinition.IsCollectionShape => false;
     // A declaration answers the shape its form declares; it is never a ground type.
-    bool ITypeDefinition.IsEnumeration => _node.Form == TypeDeclarationForm.Enum;
-    bool ITypeDefinition.HasValueSemantics => _node.Form == TypeDeclarationForm.Struct;
-    bool ITypeDefinition.IsInterface => _node.Form == TypeDeclarationForm.Interface;
-    bool ITypeDefinition.IsDelegate => false;
-    bool ITypeDefinition.IsBoolean => false;
-    bool ITypeDefinition.IsText => false;
-    bool ITypeDefinition.IsCharacter => false;
-    bool ITypeDefinition.IsNumber => false;
-    bool ITypeDefinition.IsIntegral => false;
-    bool ITypeDefinition.IsSigned => false;
-    bool ITypeDefinition.IsDecimal => false;
-    bool ITypeDefinition.IsNativeSized => false;
-    int ITypeDefinition.NumberBits => 0;
-    bool ITypeDefinition.IsTemporal => false;
-    bool ITypeDefinition.HasDate => false;
-    bool ITypeDefinition.HasTime => false;
-    bool ITypeDefinition.HasOffset => false;
-    bool ITypeDefinition.IsDuration => false;
-    bool ITypeDefinition.IsUniqueIdentifier => false;
-    bool ITypeDefinition.IsBinary => false;
-    bool ITypeDefinition.IsTopType => false;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
 
     /// <summary>Each declaration builds one definition, so a declaration and its definition are one instance; a closed
@@ -935,27 +914,6 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
     bool ITypeDefinition.IsCollectionShape => true;
-    bool ITypeDefinition.IsEnumeration => false;
-    bool ITypeDefinition.HasValueSemantics => false;
-    bool ITypeDefinition.IsInterface => false;
-    bool ITypeDefinition.IsDelegate => false;
-    bool ITypeDefinition.IsBoolean => false;
-    bool ITypeDefinition.IsText => false;
-    bool ITypeDefinition.IsCharacter => false;
-    bool ITypeDefinition.IsNumber => false;
-    bool ITypeDefinition.IsIntegral => false;
-    bool ITypeDefinition.IsSigned => false;
-    bool ITypeDefinition.IsDecimal => false;
-    bool ITypeDefinition.IsNativeSized => false;
-    int ITypeDefinition.NumberBits => 0;
-    bool ITypeDefinition.IsTemporal => false;
-    bool ITypeDefinition.HasDate => false;
-    bool ITypeDefinition.HasTime => false;
-    bool ITypeDefinition.HasOffset => false;
-    bool ITypeDefinition.IsDuration => false;
-    bool ITypeDefinition.IsUniqueIdentifier => false;
-    bool ITypeDefinition.IsBinary => false;
-    bool ITypeDefinition.IsTopType => false;
     ITypeDefinition? ITypeDefinition.SequenceElementType => _item.MemberTypeDefinition;
 
     /// <summary>
@@ -1055,27 +1013,6 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => ClrOperatorResolution.Resolve(this, kind, right);
     ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
     bool ITypeDefinition.IsCollectionShape => false;
-    bool ITypeDefinition.IsEnumeration => false;
-    bool ITypeDefinition.HasValueSemantics => false;
-    bool ITypeDefinition.IsInterface => false;
-    bool ITypeDefinition.IsDelegate => false;
-    bool ITypeDefinition.IsBoolean => false;
-    bool ITypeDefinition.IsText => false;
-    bool ITypeDefinition.IsCharacter => false;
-    bool ITypeDefinition.IsNumber => false;
-    bool ITypeDefinition.IsIntegral => false;
-    bool ITypeDefinition.IsSigned => false;
-    bool ITypeDefinition.IsDecimal => false;
-    bool ITypeDefinition.IsNativeSized => false;
-    int ITypeDefinition.NumberBits => 0;
-    bool ITypeDefinition.IsTemporal => false;
-    bool ITypeDefinition.HasDate => false;
-    bool ITypeDefinition.HasTime => false;
-    bool ITypeDefinition.HasOffset => false;
-    bool ITypeDefinition.IsDuration => false;
-    bool ITypeDefinition.IsUniqueIdentifier => false;
-    bool ITypeDefinition.IsBinary => false;
-    bool ITypeDefinition.IsTopType => false;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
 
     /// <summary>

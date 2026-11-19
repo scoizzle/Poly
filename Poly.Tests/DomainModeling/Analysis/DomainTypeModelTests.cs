@@ -78,18 +78,18 @@ public class DomainTypeModelTests {
     [Test]
     public async Task Resolve_Enum_IsSyntheticEnumDefinition() {
         var status = Model().Resolve("Status");
-        await Assert.That(status.Definition!.IsEnumeration).IsTrue();
+        await Assert.That(status.Declared).IsEqualTo(Poly.DomainModeling.Meaning.DomainDeclaration.Enum)
+            .Because("the domain declared it an enum (#998 T8)");
         await Assert.That(status.DomainName).IsEqualTo("Status");
     }
 
     [Test]
     public async Task Resolve_EntityAndValueType_AreSyntheticClassAndStruct() {
         var model = Model();
-        await Assert.That(model.Resolve("Order").Definition!.HasValueSemantics).IsFalse();
-        await Assert.That(model.Resolve("Order").Definition!.IsEnumeration).IsFalse();
-        await Assert.That(model.Resolve("Order").Definition!.IsInterface).IsFalse();
-        await Assert.That(model.Resolve("Order").Definition!.IsDelegate).IsFalse();
-        await Assert.That(model.Resolve("Money").Definition!.HasValueSemantics).IsTrue();
+        await Assert.That(model.Resolve("Order").Declared).IsEqualTo(Poly.DomainModeling.Meaning.DomainDeclaration.Entity);
+        await Assert.That(model.Resolve("Money").Declared).IsEqualTo(Poly.DomainModeling.Meaning.DomainDeclaration.Value);
+        await Assert.That(model.Resolve("Cents").Declared).IsNull().Because("a declared primitive is a word, not a declaration of its own");
+        await Assert.That(model.Resolve("Decimal").Declared).IsNull();
     }
 
     [Test]

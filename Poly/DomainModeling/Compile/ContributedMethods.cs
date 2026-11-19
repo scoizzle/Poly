@@ -353,8 +353,9 @@ internal static class ContributedMethods {
         }
         else {
             string? resolved = member.Value switch {
-                // A ground type (`string`, `int`, `object`) is never a module type: nothing threads through it.
-                TypeDefinitionReference ground when ground.TypeDefinition.IsGround() => null,
+                // The CLR host's primitive types (`string`, `int`, `object`) are never module types: nothing threads
+                // through them (#998 T8: the host's own table, not what a definition answers about itself).
+                TypeDefinitionReference primitive when Poly.Introspection.CommonLanguageRuntime.ClrBuiltInRules.IsPrimitive(primitive.TypeDefinition) => null,
                 NamedTypeReference named => named.TypeName,
                 TypeReference type => type.TypeName,
                 _ => null

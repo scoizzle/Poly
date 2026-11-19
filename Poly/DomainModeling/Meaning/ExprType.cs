@@ -10,7 +10,10 @@ namespace Poly.DomainModeling.Meaning;
 /// <param name="Definition">Null only for <see cref="Unresolved"/>.</param>
 /// <param name="Optional">True when the value may be absent.</param>
 /// <param name="DomainName">The domain-level name this type was resolved from.</param>
-internal readonly record struct ExprType(ITypeDefinition? Definition, bool Optional, string? DomainName) {
+/// <param name="Declared">What the domain declared <paramref name="DomainName"/> as, when the definition is one of its
+/// own declarations (#998 T8): the domain's Entity, Value and Enum families are its declarations, never what a
+/// definition answers about itself.</param>
+internal readonly record struct ExprType(ITypeDefinition? Definition, bool Optional, string? DomainName, DomainDeclaration? Declared = null) {
     public static ExprType Unresolved => default;
 
     public bool IsResolved => Definition is not null;
@@ -29,3 +32,6 @@ internal readonly record struct ExprType(ITypeDefinition? Definition, bool Optio
     /// </summary>
     public ExprType AsOptional(bool optional = true) => optional && IsResolved ? this with { Optional = true } : this;
 }
+
+/// <summary>What a domain declared a type name as (#998 T8).</summary>
+internal enum DomainDeclaration { Entity, Value, Enum }

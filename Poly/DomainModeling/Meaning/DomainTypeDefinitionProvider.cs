@@ -28,6 +28,15 @@ internal sealed class DomainTypeDefinitionProvider : IClrTypeDefinitionProvider 
             _types.TryAdd(type.Name, type);
     }
 
+    /// <summary>What the domain declared <paramref name="name"/> as, when it is one of the domain's own declarations
+    /// (an entity, a value type or an enum), else null.</summary>
+    public DomainDeclaration? DeclarationOf(string name) => _types.GetValueOrDefault(name) switch {
+        Entity => DomainDeclaration.Entity,
+        Ontology.ValueType => DomainDeclaration.Value,
+        EnumType => DomainDeclaration.Enum,
+        _ => null,
+    };
+
     public ITypeDefinition? GetTypeDefinition(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         var declared = _types.GetValueOrDefault(name);

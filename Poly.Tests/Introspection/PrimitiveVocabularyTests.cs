@@ -64,9 +64,9 @@ public class PrimitiveVocabularyTests {
         await Assert.That(typeof(DateTimeOffset).GetPrimitiveType()).IsEqualTo(ClrPrimitive.DateTimeOffset);
         await Assert.That(ClrPrimitive.DateTimeOffset.GetClrType()).IsEqualTo(typeof(DateTimeOffset));
         ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DateTimeOffset));
-        await Assert.That(definition.IsGround()).IsTrue();
-        await Assert.That((definition.IsTemporal, definition.HasDate, definition.HasTime, definition.HasOffset, definition.IsDuration))
-            .IsEqualTo((true, true, true, true, false));
+        await Assert.That(ClrBuiltInRules.IsPrimitive(definition)).IsTrue();
+        await Assert.That((ClrBuiltInRules.IsCalendarType(definition), ClrBuiltInRules.IsTimestamp(definition))).IsEqualTo((true, true))
+            .Because("the CLR host's own table states it (#998 T8)");
     }
 
     [Test]
@@ -80,7 +80,7 @@ public class PrimitiveVocabularyTests {
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved is IHostType { HostKind: "absence" }).IsTrue();
-        await Assert.That(resolved!.IsGround()).IsFalse().Because("the host answers no ground question for it");
+        await Assert.That(ClrBuiltInRules.IsPrimitive(resolved!)).IsFalse().Because("it is none of the CLR host's primitives");
         await Assert.That(provider.Types).Contains(resolved);
         await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("Undefined")).IsNull();
         await Assert.That(ClrTypeDefinitionRegistry.Shared.Types.Any(static type => type is IHostType)).IsFalse();
@@ -98,8 +98,7 @@ public class PrimitiveVocabularyTests {
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved is IHostType { HostKind: "decimal128", HostNumberBits: 128 }).IsTrue()
             .Because("the host states what the number is in its own terms (#998 T8a)");
-        await Assert.That((resolved!.IsNumber, resolved.IsDecimal, resolved.IsSigned, resolved.NumberBits)).IsEqualTo((true, true, true, 128));
-        await Assert.That(resolved.GetClrPrimitive()).IsNull();
+        await Assert.That(resolved!.GetClrPrimitive()).IsNull();
         ITypeDefinition clrDecimal = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(decimal));
         await Assert.That(clrDecimal is IHostType).IsFalse()
             .Because("the CLR's decimal is not the host's, and is never asked the host's question");
@@ -145,27 +144,6 @@ public class PrimitiveVocabularyTests {
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
-        bool ITypeDefinition.IsEnumeration => false;
-        bool ITypeDefinition.HasValueSemantics => false;
-        bool ITypeDefinition.IsInterface => false;
-        bool ITypeDefinition.IsDelegate => false;
-        bool ITypeDefinition.IsBoolean => false;
-        bool ITypeDefinition.IsText => false;
-        bool ITypeDefinition.IsCharacter => false;
-        bool ITypeDefinition.IsNumber => numberBits > 0;
-        bool ITypeDefinition.IsIntegral => false;
-        bool ITypeDefinition.IsSigned => numberBits > 0;
-        bool ITypeDefinition.IsDecimal => numberBits > 0;
-        bool ITypeDefinition.IsNativeSized => false;
-        int ITypeDefinition.NumberBits => numberBits;
-        bool ITypeDefinition.IsTemporal => false;
-        bool ITypeDefinition.HasDate => false;
-        bool ITypeDefinition.HasTime => false;
-        bool ITypeDefinition.HasOffset => false;
-        bool ITypeDefinition.IsDuration => false;
-        bool ITypeDefinition.IsUniqueIdentifier => false;
-        bool ITypeDefinition.IsBinary => false;
-        bool ITypeDefinition.IsTopType => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
         ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
         ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;

@@ -26,13 +26,12 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static TypeFamily? Family(ExprType type) {
         if (type.IsNullLiteral) return TypeFamily.Null;
         if (type.Definition is not { } definition) return null;
-        if (definition.IsEnumeration) return TypeFamily.Enum;
-        if (!definition.IsGround()) {
-            // A value type is the Value family and a class the Entity family; an interface or a delegate is neither.
-            if (definition.HasValueSemantics) return TypeFamily.Value;
-            return !definition.IsInterface && !definition.IsDelegate
-                ? TypeFamily.Entity
-                : null;
+        // The domain's own declarations are families of their own; any other definition is in the family its domain
+        // word binds, or in none (#998 T8: never what the definition answers about itself).
+        switch (type.Declared) {
+            case DomainDeclaration.Enum: return TypeFamily.Enum;
+            case DomainDeclaration.Value: return TypeFamily.Value;
+            case DomainDeclaration.Entity: return TypeFamily.Entity;
         }
         return DomainTypeSystem.WordOf(definition) switch {
             "Text" => TypeFamily.Text,

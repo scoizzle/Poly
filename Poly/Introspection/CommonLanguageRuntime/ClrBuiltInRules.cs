@@ -107,6 +107,9 @@ internal static class ClrBuiltInRules {
     /// <summary>The CLR's Guid: the compatibility analyzer's Guid category (same ruling and removing row).</summary>
     public static bool IsGuid(ITypeDefinition definition) => definition.GetClrPrimitive() is P.Guid;
 
+    /// <summary>One of the CLR host's own primitive types (its table: bool through byte[], and object), by identity.</summary>
+    public static bool IsPrimitive(ITypeDefinition definition) => definition.GetClrPrimitive() is not null;
+
     /// <summary>The CLR's byte[] as a value: the product pack's scalar (same ruling).</summary>
     public static bool IsByteArray(ITypeDefinition definition) => definition.GetClrPrimitive() is P.ByteArray;
 

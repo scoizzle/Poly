@@ -37,27 +37,6 @@ public class TypeDefinitionExtensionsTests {
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
-        bool ITypeDefinition.IsEnumeration => false;
-        bool ITypeDefinition.HasValueSemantics => false;
-        bool ITypeDefinition.IsInterface => false;
-        bool ITypeDefinition.IsDelegate => false;
-        bool ITypeDefinition.IsBoolean => false;
-        bool ITypeDefinition.IsText => false;
-        bool ITypeDefinition.IsCharacter => false;
-        bool ITypeDefinition.IsNumber => false;
-        bool ITypeDefinition.IsIntegral => false;
-        bool ITypeDefinition.IsSigned => false;
-        bool ITypeDefinition.IsDecimal => false;
-        bool ITypeDefinition.IsNativeSized => false;
-        int ITypeDefinition.NumberBits => 0;
-        bool ITypeDefinition.IsTemporal => false;
-        bool ITypeDefinition.HasDate => false;
-        bool ITypeDefinition.HasTime => false;
-        bool ITypeDefinition.HasOffset => false;
-        bool ITypeDefinition.IsDuration => false;
-        bool ITypeDefinition.IsUniqueIdentifier => false;
-        bool ITypeDefinition.IsBinary => false;
-        bool ITypeDefinition.IsTopType => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
         ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
         ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
@@ -69,7 +48,7 @@ public class TypeDefinitionExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var arrayType = registry.GetTypeDefinition<int[]>();
 
-        var elementType = arrayType.GetElementType();
+        var elementType = arrayType.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(elementType).IsNotNull();
         await Assert.That(elementType!.GetRuntimeType()).IsEqualTo(typeof(int));
@@ -80,7 +59,7 @@ public class TypeDefinitionExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
 
-        var elementType = listType.GetElementType();
+        var elementType = listType.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(elementType).IsNotNull();
         await Assert.That(elementType!.GetRuntimeType()).IsEqualTo(typeof(int));
@@ -117,7 +96,7 @@ public class TypeDefinitionExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var objectType = registry.GetTypeDefinition<object>();
 
-        var elementType = objectType.GetElementType();
+        var elementType = objectType.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(elementType).IsNull();
     }

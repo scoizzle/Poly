@@ -8,17 +8,16 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Tests.Introspection;
 
 /// <summary>
-/// The two providers agree on what a type is: each states the same shape facts for the same shape, no producer invents
-/// one, and the writer fails closed on a declaration form it cannot print. A core attribute that depends on which
+/// The two providers agree on what a type is: C#'s rule states the same shape facts (enum, value semantics) for the
+/// same shape whichever provider built the definition (#998 T8), no producer invents one, and the writer fails closed
+/// on a declaration form it cannot print. A core attribute that depends on which
 /// provider answered is the defect this file guards. (Formerly stated over the closed <c>TypeKind</c> enum.)
 /// </summary>
 public class TypeKindProviderAgreementTests {
-    /// <summary>The shape facts a definition states, as one comparable line.</summary>
+    /// <summary>The shape facts C#'s rule states for a definition, as one comparable line.</summary>
     private static string Shape(ITypeDefinition definition) => string.Join("+", new[] {
-        definition.IsEnumeration ? "enumeration" : null,
-        definition.HasValueSemantics ? "value" : null,
-        definition.IsInterface ? "interface" : null,
-        definition.IsDelegate ? "delegate" : null,
+        Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(definition) ? "enumeration" : null,
+        Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.HasValueSemantics(definition) ? "value" : null,
     }.Where(static fact => fact is not null));
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
@@ -44,8 +43,8 @@ public class TypeKindProviderAgreementTests {
 
             await Assert.That(definition.GetClrPrimitive()).IsEqualTo(primitive)
                 .Because($"'{primitive}' must report its own id");
-            await Assert.That(definition.IsEnumeration).IsFalse();
-            await Assert.That(definition.IsGround()).IsTrue().Because($"'{primitive}' is a ground type");
+            await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(definition)).IsFalse();
+            await Assert.That(ClrBuiltInRules.IsPrimitive(definition)).IsTrue().Because($"'{primitive}' is one of the CLR host's primitives");
         }
     }
 
@@ -53,8 +52,8 @@ public class TypeKindProviderAgreementTests {
     public async Task ClrProvider_StatesTheShapeOfEachSample() {
         (Type Sample, string Shape)[] samples = [
             (typeof(int), "value"), (typeof(string), ""), (typeof(object), ""), (typeof(DateTime), "value"),
-            (typeof(Uri), ""), (typeof(KeyValuePair<int, int>), "value"), (typeof(IDisposable), "interface"),
-            (typeof(DayOfWeek), "enumeration+value"), (typeof(Action), "delegate"),
+            (typeof(Uri), ""), (typeof(KeyValuePair<int, int>), "value"), (typeof(IDisposable), ""),
+            (typeof(DayOfWeek), "enumeration+value"), (typeof(System.Action), ""),
         ];
 
         foreach (var (sample, shape) in samples)
@@ -65,7 +64,7 @@ public class TypeKindProviderAgreementTests {
     public async Task AstProvider_StatesTheShapeItsDeclarationFormDeclares() {
         await Assert.That(Shape(Resolve(new TypeDefinitionNode("Plain", Namespace: "Sample")))).IsEqualTo("");
         await Assert.That(Shape(Resolve(new TypeDefinitionNode("Status", Form: TypeDeclarationForm.Enum)))).IsEqualTo("enumeration");
-        await Assert.That(Shape(Resolve(new TypeDefinitionNode("IWidget", Form: TypeDeclarationForm.Interface)))).IsEqualTo("interface");
+        await Assert.That(Shape(Resolve(new TypeDefinitionNode("IWidget", Form: TypeDeclarationForm.Interface)))).IsEqualTo("");
         await Assert.That(Shape(Resolve(new TypeDefinitionNode("Money", Form: TypeDeclarationForm.Struct)))).IsEqualTo("value");
     }
 
@@ -101,7 +100,7 @@ public class TypeKindProviderAgreementTests {
     public async Task GetElementType_NoArguments_OnNonCollectionIndexer_ReturnsNull() {
         var indexerClass = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(ClrTypeIndexerTests.MultiParamIndexerClass));
 
-        await Assert.That(indexerClass.GetElementType()).IsNull();
+        await Assert.That(indexerClass.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
     }
 
     private static ITypeDefinition Resolve(TypeDefinitionNode node) {

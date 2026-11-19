@@ -726,13 +726,16 @@ public class ContributedMethodTests {
     }
 
     [Test]
-    public async Task Threading_ACallOnAGroundType_NamedLikeAThreadedMethod_IsRefused() {
+    [Arguments(typeof(string))]
+    [Arguments(typeof(int))]
+    [Arguments(typeof(object))]
+    public async Task Threading_ACallOnAGroundType_NamedLikeAThreadedMethod_IsRefused(Type ground) {
         // A ground type (`string`, `int`, `object`) is never a module type, so a threaded method's name called on one
         // cannot be threaded through it: refused, not silently left without its slot.
         var missing = typeof(ContributedMethods).GetMethod("Missing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
         var parameters = missing.GetParameters();
         TypeDefinitionNode[] module = [new("Host")];
-        var call = new Invoke(new Member(ClrTypeReferences.Of(typeof(string)), "Concat"));
+        var call = new Invoke(new Member(ClrTypeReferences.Of(ground), "Concat"));
         object?[] arguments = [
             call, 0, "Run", module, new List<List<MethodDefinitionNode>> { new() },
             Activator.CreateInstance(parameters[5].ParameterType), new HashSet<string>(StringComparer.Ordinal) { "Concat" }
@@ -742,5 +745,23 @@ public class ContributedMethodTests {
 
         await Assert.That(thrown!.InnerException).IsTypeOf<InvalidOperationException>();
         await Assert.That(thrown.InnerException!.Message).Contains("Cannot thread 'Concat'");
+    }
+
+    [Test]
+    public async Task Threading_ACallOnANonPrimitiveClrType_NamedLikeAThreadedMethod_LooksUpTheModuleByName() {
+        // A CLR type that is not one of the host's primitives is looked up as a module type by its name (#998 T8 pin):
+        // the module declares no such type, so nothing is threaded and nothing is refused.
+        var missing = typeof(ContributedMethods).GetMethod("Missing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var parameters = missing.GetParameters();
+        TypeDefinitionNode[] module = [new("Host")];
+        var call = new Invoke(new Member(ClrTypeReferences.Of(typeof(Uri)), "Concat"));
+        object?[] arguments = [
+            call, 0, "Run", module, new List<List<MethodDefinitionNode>> { new() },
+            Activator.CreateInstance(parameters[5].ParameterType), new HashSet<string>(StringComparer.Ordinal) { "Concat" }
+        ];
+
+        var result = (System.Collections.ICollection)missing.Invoke(null, arguments)!;
+
+        await Assert.That(result.Count).IsEqualTo(0);
     }
 }

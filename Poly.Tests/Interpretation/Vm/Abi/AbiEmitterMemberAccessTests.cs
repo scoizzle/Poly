@@ -173,6 +173,6 @@ public class AbiEmitterMemberAccessTests {
         await Assert.That(result).IsEqualTo("Active");
         await Assert.That(field.IsStatic).IsTrue();
         await Assert.That(field.Mutability.HasFlag(Mutability.CompileTimeConst)).IsTrue();
-        await Assert.That(ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!.IsEnumeration).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!)).IsTrue();
     }
 }

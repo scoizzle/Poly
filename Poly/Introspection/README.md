@@ -80,25 +80,23 @@ answers null for a host with no CLR types. The neutral contract therefore asks o
 answer, and `TypeDefinitionRuntimeTypeExtensions` (the `ITypeDefinition -> Type?` view) lives in
 `CommonLanguageRuntime/` with it.
 
-**What a type is, the definition answers.** `ITypeDefinition` answers it through its own members, none exclusive:
-shape (`IsEnumeration`, `HasValueSemantics`, `IsInterface`, `IsDelegate`), truth and text (`IsBoolean`, `IsText`, `IsCharacter`),
-number representation (`IsNumber`, `IsIntegral`, `IsSigned`, `IsDecimal`, `IsNativeSized`, `NumberBits`), time
-(`IsTemporal`, `HasDate`, `HasTime`, `HasOffset`, `IsDuration`), and `IsUniqueIdentifier`, `IsBinary`, `IsTopType`. A
-sub-answer is false unless its parent is true, and no member has a default body, so every definition answers every
-question. `IsGround()` is derived from them. There is no shared list of kinds (`TypeKind` is gone), no shared list of
-primitive types (`PrimitiveType`, `PrimitiveAtom` and the `PrimitiveTypeReference` node are gone), and no fact lookup
-(`GetFact`, `TypeFact` are gone).
+**What a type is, is its type system's rule (#998 T8).** `ITypeDefinition` states no classification: the answers
+(`IsEnumeration` … `IsTopType`), `IsGround()` and the CLR's answer table are gone. A consumer asks the system that owns
+the question: C#'s rule (`Poly.Interpretation.CSharp.ICSharpTypeRules`) and its words, the CLR host's own table
+(`ClrBuiltInRules.IsPrimitive`, `IsCalendarType`, `IsTimestamp`, `IsGuid`, `IsByteArray`), a foreign host's own rule
+(the test-only `LedgerHost.ILedgerRules`), the domain's words and declarations. There is no shared list of kinds
+(`TypeKind` is gone), no shared list of primitive types (`PrimitiveType`, `PrimitiveAtom` and the
+`PrimitiveTypeReference` node are gone), and no fact lookup (`GetFact`, `TypeFact` are gone).
 
-The CLR answers in `CommonLanguageRuntime/` (`ClrTypeDefinition`, from the runtime type and its own `ClrGround`
-table). A question only one host can answer goes on that host's own interface, never on the neutral contract
-(`IClrTypeDefinition`; the test-only `LedgerHost.ILedgerType`). The CLR's own table of the types its built-in rules name
-is `ClrPrimitive`, internal to the CLR host and used only by it and the VM; C#'s keywords are the C# surface's names for
-CLR definitions (`Poly.Interpretation.CSharp/CSharpTypeNames`). A type position in a tree is a definition reference
-(`TypeDefinitionReference`), which the writer spells as its language does.
+The CLR's definitions live in `CommonLanguageRuntime/` (`ClrTypeDefinition`, from the runtime type). A question only one
+host can answer goes on that host's own rule or interface, never on the neutral contract (`IClrTypeDefinition`). The
+CLR's own table of the types its built-in rules name is `ClrPrimitive`, internal to the CLR host and used only by it and
+the VM; C#'s keywords are the C# surface's names for CLR definitions (`Poly.Interpretation.CSharp/CSharpTypeNames`). A
+type position in a tree is a definition reference (`TypeDefinitionReference`), which the writer spells as its language
+does.
 
-Which platform answers a mixed operator/conversion pair is fixed by the door's shape — the left operand for an
-operator, the destination for a conversion — and `MixedPairAuthorityTests` pins both sides rather than relying on the
-CLR agreeing.
+The target type system decides a mixed operator or conversion pair, whichever system each operand comes from (#998 T3);
+`MixedPairAuthorityTests` pins that a foreign definition's own answer never decides.
 
 ## Conversions and operators (T-03b, T-24)
 

@@ -38,7 +38,7 @@ public sealed partial class DomainToCSharpExporter {
     /// ctor leaves unset and would otherwise raise CS8618.
     /// </summary>
     private static bool IsNonNullableReferenceScalar(Node propRef) =>
-        propRef is TypeDefinitionReference stated && stated.TypeDefinition is { IsText: true, IsCharacter: false };
+        propRef is TypeDefinitionReference stated && Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(stated.TypeDefinition) is "Text";
 
     private static bool IsDomainValueType(Domain domain, string typeName) =>
         domain.Types.OfType<ValueType>().Any(v =>

@@ -123,7 +123,8 @@ public sealed partial class DomainExpressionLoweringPass {
     }
 
     private bool IsOptionalBoolean(DomainExpression expr) =>
-        _analysis.GetMetadata<TypedExpressionMetadata>(expr) is { Type: { Optional: true, Definition: { } definition } } && definition.IsBoolean;
+        _analysis.GetMetadata<TypedExpressionMetadata>(expr) is { Type: { Optional: true, Definition: { } definition } }
+        && Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(definition) is "Boolean";
 
     /// <summary>
     /// Preserves source-order short-circuit when the right operand has statements:

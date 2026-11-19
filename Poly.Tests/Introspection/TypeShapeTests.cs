@@ -7,53 +7,42 @@ using Poly.Tests.TestHelpers;
 namespace Poly.Tests.Introspection;
 
 /// <summary>
-/// What shape a type has, the definition answers (#998): answers that are not exclusive, not a closed list of kinds.
+/// What shape a type has is a rule of the system that owns the question (#998 T8): C#'s enums and value semantics, a
+/// host's own rule; never a closed list of kinds, and the definition answers none of it.
 /// </summary>
 public class TypeShapeTests {
     private static ITypeDefinition Clr<T>() => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(T));
+    private static readonly Poly.Interpretation.CSharp.CSharpTypeSystem CSharp = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
 
     [Test]
-    public async Task ClrEnum_AnswersThatItIsAnEnum() {
-        await Assert.That(Clr<DayOfWeek>().IsEnumeration).IsTrue();
-        await Assert.That(Clr<DayOfWeek>().HasValueSemantics).IsTrue().Because("answers are not exclusive");
-        await Assert.That(Clr<int>().IsEnumeration).IsFalse();
-        await Assert.That(Clr<string>().IsEnumeration).IsFalse();
+    public async Task ClrEnum_IsAnEnumByCSharpsRule() {
+        await Assert.That(CSharp.IsEnumType(Clr<DayOfWeek>())).IsTrue();
+        await Assert.That(CSharp.HasValueSemantics(Clr<DayOfWeek>())).IsTrue().Because("the answers are not exclusive");
+        await Assert.That(CSharp.IsEnumType(Clr<int>())).IsFalse();
+        await Assert.That(CSharp.IsEnumType(Clr<string>())).IsFalse();
     }
 
     [Test]
-    public async Task ClrValueType_StatesValueSemantics_AndAReferenceTypeDoesNot() {
-        await Assert.That(Clr<int>().HasValueSemantics).IsTrue();
-        await Assert.That(Clr<DayOfWeek>().HasValueSemantics).IsTrue();
-        await Assert.That(Clr<DateTimeOffset>().HasValueSemantics).IsTrue();
-        await Assert.That(Clr<int?>().HasValueSemantics).IsTrue();
-        await Assert.That(Clr<string>().HasValueSemantics).IsFalse();
-        await Assert.That(Clr<Uri>().HasValueSemantics).IsFalse();
+    public async Task ClrValueType_HasValueSemanticsByCSharpsRule_AndAReferenceTypeDoesNot() {
+        await Assert.That(CSharp.HasValueSemantics(Clr<int>())).IsTrue();
+        await Assert.That(CSharp.HasValueSemantics(Clr<DayOfWeek>())).IsTrue();
+        await Assert.That(CSharp.HasValueSemantics(Clr<DateTimeOffset>())).IsTrue();
+        await Assert.That(CSharp.HasValueSemantics(Clr<int?>())).IsTrue();
+        await Assert.That(CSharp.HasValueSemantics(Clr<string>())).IsFalse();
+        await Assert.That(CSharp.HasValueSemantics(Clr<Uri>())).IsFalse();
     }
 
     [Test]
-    public async Task ClrInterfaceAndDelegate_StateTheirShape_AndAClassStatesNeither() {
-        await Assert.That(Clr<IDisposable>().IsInterface).IsTrue();
-        await Assert.That(Clr<Action>().IsDelegate).IsTrue();
-        await Assert.That(Clr<Func<int, int>>().IsDelegate).IsTrue();
-        await Assert.That(Clr<Uri>().IsInterface).IsFalse();
-        await Assert.That(Clr<Uri>().IsDelegate).IsFalse();
-        await Assert.That(Clr<Action>().IsInterface).IsFalse();
-    }
-
-    [Test]
-    public async Task Declaration_StatesTheFactItsFormDeclares() {
+    public async Task Declaration_CSharpStatesWhatItsFormDeclares() {
         var registry = new AstTypeRegistry();
         ITypeDefinition Declared(TypeDeclarationForm form) =>
             new AstTypeDefinition(new TypeDefinitionNode("T", Form: form), registry);
 
-        await Assert.That(Declared(TypeDeclarationForm.Enum).IsEnumeration).IsTrue();
-        await Assert.That(Declared(TypeDeclarationForm.Struct).HasValueSemantics).IsTrue();
-        await Assert.That(Declared(TypeDeclarationForm.Interface).IsInterface).IsTrue();
+        await Assert.That(CSharp.IsEnumType(Declared(TypeDeclarationForm.Enum))).IsTrue();
+        await Assert.That(CSharp.HasValueSemantics(Declared(TypeDeclarationForm.Struct))).IsTrue();
         var @class = Declared(TypeDeclarationForm.Class);
-        await Assert.That(@class.IsEnumeration).IsFalse();
-        await Assert.That(@class.HasValueSemantics).IsFalse();
-        await Assert.That(@class.IsInterface).IsFalse();
-        await Assert.That(@class.IsDelegate).IsFalse();
+        await Assert.That(CSharp.IsEnumType(@class)).IsFalse();
+        await Assert.That(CSharp.HasValueSemantics(@class)).IsFalse();
     }
 
     [Test]
@@ -65,8 +54,8 @@ public class TypeShapeTests {
         await Assert.That(ledger.Rule<LedgerHost.ILedgerRules>()?.MinorUnits(host.Amount)).IsEqualTo(2)
             .Because("a type system answers a question no other system has heard of, as a rule of its own");
         await Assert.That(ledger.Rule<LedgerHost.ILedgerRules>()?.MinorUnits(host.Account)).IsNull();
-        await Assert.That(host.Amount.IsEnumeration).IsFalse();
-        await Assert.That(host.Amount.HasValueSemantics).IsFalse();
+        await Assert.That(CSharp.IsEnumType(host.Amount)).IsFalse();
+        await Assert.That(CSharp.HasValueSemantics(host.Amount)).IsFalse();
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Rule<LedgerHost.ILedgerRules>()).IsNull()
             .Because("a system is never asked a question it does not own");
     }
@@ -94,19 +83,11 @@ public class TypeShapeTests {
     private static readonly string[] DecidedMembers = [
         "Name", "Namespace", "AccessModifier", "FullName", "BaseType", "Interfaces", "GenericParameters", "Members",
         "Fields", "Properties", "Methods", "Constructors", "Operators", "IsSameTypeAs", "IsCollectionShape",
-        "SequenceElementType", "Conversions", "NullableOf", "IsEnumeration", "HasValueSemantics", "IsInterface",
-        "IsDelegate", "IsBoolean", "IsText", "IsCharacter", "IsNumber", "IsIntegral", "IsSigned", "IsDecimal",
-        "IsNativeSized", "NumberBits", "IsTemporal", "HasDate", "HasTime", "HasOffset", "IsDuration",
-        "IsUniqueIdentifier", "IsBinary", "IsTopType", "ResolveConversionFrom", "IsAssignableWithoutConversion",
+        "SequenceElementType", "Conversions", "NullableOf", "ResolveConversionFrom", "IsAssignableWithoutConversion",
         "ResolveOperator",
     ];
 
-    private static readonly string[] RemainingClassificationProperties = [
-        "AccessModifier", "IsCollectionShape", "IsEnumeration", "HasValueSemantics", "IsInterface", "IsDelegate",
-        "IsBoolean", "IsText", "IsCharacter", "IsNumber", "IsIntegral", "IsSigned", "IsDecimal", "IsNativeSized",
-        "NumberBits", "IsTemporal", "HasDate", "HasTime", "HasOffset", "IsDuration", "IsUniqueIdentifier", "IsBinary",
-        "IsTopType",
-    ];
+    private static readonly string[] RemainingClassificationProperties = ["AccessModifier", "IsCollectionShape"];
 
     private const System.Reflection.BindingFlags Declared = System.Reflection.BindingFlags.Instance
         | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public

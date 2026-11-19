@@ -32,13 +32,13 @@ Provider-based type abstraction decoupled from CLR reflection. Interfaces allow 
 
 **Why keep:** Consumed by `DomainTools.cs` (MCP server) and test files. Not dormant — actively used.
 
-### What a type is — answered by the definition
+### What a type is — asked of the system that owns the question
 
-**What it is:** `ITypeDefinition` answers what a type is through its own members: `IsEnumeration`, `HasValueSemantics`, `IsInterface`, `IsDelegate`, `IsBoolean`, `IsText`, `IsCharacter`, `IsNumber` (with `IsIntegral`, `IsSigned`, `IsDecimal`, `IsNativeSized`, `NumberBits`), `IsTemporal` (with `HasDate`, `HasTime`, `HasOffset`, `IsDuration`), `IsUniqueIdentifier`, `IsBinary` and `IsTopType`. Answers are not exclusive: a CLR enum is both an enum and a value type. No member has a default body.
+**What it is:** `ITypeDefinition` states no classification (#998 T8). A consumer asks the owner of its question: C#'s rule (`ICSharpTypeRules`: `SimpleTypeOf`, `IsEnumType`, `HasValueSemantics`) and C#'s words `string` and `object`; the CLR host's own table (`ClrBuiltInRules.IsPrimitive`, `IsCalendarType`, `IsTimestamp`, `IsGuid`, `IsByteArray`); a foreign host's own rule; the domain's words and declarations. See `docs/decisions/2026-11-19-a-type-system-owns-definitions-vocabulary-and-rules.md` §3.
 
-**Why it replaced `TypeKind`, `PrimitiveType` and the fact lookup:** the closed enums (`TypeKind`: `Primitive`, `Class`, `Struct`, `Interface`, `Enum`, `Delegate`, `Union`, `Tuple`; `PrimitiveType`'s ids) made every platform map onto one list and every consumer switch on it; the domain's entity and value type had to pose as `Class` and `Struct`. The interim fact lookup (`GetFact<TFact>()` over `TypeFact` records) was open to new questions, and that openness had no production consumer, so the questions it carried became plain members. A question only one host can answer goes on that host's own interface. The form a declaration is written in (`TypeDeclarationForm`: class, interface, enum, struct) is syntax on the AST node.
+**Why it replaced `TypeKind`, `PrimitiveType`, the fact lookup and the definition's own answers:** the closed enums (`TypeKind`, `PrimitiveType`'s ids) made every platform map onto one list and every consumer switch on it. The answers that replaced them (`IsNumber`, `IsEnumeration`, …) still let a foreign definition decide what C# or the domain would do with it by answering a question it did not own; T8 removed them. The form a declaration is written in (`TypeDeclarationForm`: class, interface, enum, struct) is syntax on the AST node.
 
-**Where the old distinction went:** `Collection` is structural (`IsCollectionShape`), an enumeration is `IsEnumeration`, and integer-ness is `IsIntegral`; ground-ness is derived (`IsGround()`), and the CLR host keeps its own internal table (`ClrPrimitive`). Domain vocabulary lives in `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
+**Where the old distinction went:** `Collection` is structural (`IsCollectionShape`, until T9 merges it into the system's `ElementType`); an enumeration and value semantics are C#'s rule; integer-ness is C#'s simple types; ground-ness is the CLR host's own table (`ClrPrimitive`, internal). Domain vocabulary lives in the domain's type system (`DomainTypeSystem`) and `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
 
 ### TypeDefinitionProviderCollection ICollection surface — KEEP
 

@@ -154,7 +154,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(resolvedHolder).IsNotNull();
         await Assert.That(resolvedWidget).IsNotNull();
         var itemsType = resolvedHolder!.Properties.Single().MemberTypeDefinition;
-        await Assert.That(itemsType.GetElementType()).IsEqualTo(resolvedWidget);
+        await Assert.That(itemsType.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsEqualTo(resolvedWidget);
     }
 
     [Test]

@@ -24,7 +24,7 @@ internal sealed class DomainTypeModel {
 
     public ExprType Resolve(string domainName) =>
         _provider.GetTypeDefinition(domainName) is { } definition
-            ? new ExprType(definition, Optional: false, domainName)
+            ? new ExprType(definition, Optional: false, domainName, _provider.DeclarationOf(domainName))
             : ExprType.Unresolved;
 
     public ExprType OfProperty(Property property) {

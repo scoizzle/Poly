@@ -16,15 +16,6 @@ public static class TypeDefinitionExtensions {
         system is null ? destination.ResolveConversionFrom(source) : system.Conversion(source, destination);
 
     /// <summary>
-    /// True when the type is one of its platform's ground types: its values are truth values, text, numbers, times,
-    /// identifiers, bytes, or any value at all, not parts the model sees into. Derived from the type's own answers;
-    /// no platform states it.
-    /// </summary>
-    public static bool IsGround(this ITypeDefinition type) =>
-        type.IsBoolean || type.IsText || type.IsNumber || type.IsTemporal || type.IsUniqueIdentifier || type.IsBinary
-        || type.IsTopType;
-
-    /// <summary>
     /// The one type-identity notion, answered by the platform: <see cref="ITypeDefinition.IsSameTypeAs"/>.
     /// <see cref="IsAssignableFrom"/>, <c>GetOperator</c>, <c>GetCommonType</c> and overload scoring share it.
     /// </summary>
@@ -95,14 +86,16 @@ public static class TypeDefinitionExtensions {
         /// <summary>
         /// Gets the element type exposed by this type's indexer shape or sequence semantics.
         /// </summary>
-        /// <param name="indexParameterTypes">Optional index argument types used to select the appropriate indexer.</param>
-        /// <returns>The resolved element type, or null if no element type can be determined.</returns>
+        /// <param name="indexParameterTypes">Index argument types that select the indexer. With none, the element type is
+        /// a type system's rule, so this overload throws: pass the system (#998 T8).</param>
+        /// <returns>The selected indexer's type, or null when none matches.</returns>
         public ITypeDefinition? GetElementType(params ITypeDefinition[] indexParameterTypes) =>
             typeDefinition.GetElementType(null, indexParameterTypes);
 
         /// <summary>As <see cref="GetElementType(ITypeDefinition[])"/>, with the indexer chosen by
-        /// <paramref name="system"/>'s conversions (#998 T4b); null asks each parameter type's door (interim, removed by
-        /// T9).</summary>
+        /// <paramref name="system"/>'s conversions (#998 T4b); with no index arguments, <paramref name="system"/>'s element
+        /// type (required). Interim, removed by T9: with index arguments, a null system asks each parameter type's
+        /// door.</summary>
         public ITypeDefinition? GetElementType(ITypeSystem? system, params ITypeDefinition[] indexParameterTypes) {
             ArgumentNullException.ThrowIfNull(typeDefinition);
             ArgumentNullException.ThrowIfNull(indexParameterTypes);
@@ -110,29 +103,11 @@ public static class TypeDefinitionExtensions {
             if (indexParameterTypes.Length > 0) {
                 return typeDefinition.FindMatchingIndexers(indexParameterTypes, system).FirstOrDefault()?.MemberTypeDefinition;
             }
-            if (system is not null)
-                return system.ElementType(typeDefinition);
-            // Interim (removed by T8, with the classification answers it reads): with no system, the positional pick asks
-            // the definition's own answers.
-
-            var positionalIndexer = typeDefinition.Properties
-                .Where(static property => property.Name == "Item" && property.Parameters.Any())
-                .Select(static property => new {
-                    Property = property,
-                    Parameters = property.Parameters.ToArray(),
-                    ReturnsObject = property.MemberTypeDefinition.IsTopType
-                })
-                .Where(candidate => candidate.Parameters.All(static parameter =>
-                    parameter.ParameterTypeDefinition is { IsNumber: true, IsIntegral: true, IsNativeSized: false }))
-                .OrderBy(candidate => candidate.Parameters.Length)
-                .ThenBy(candidate => candidate.ReturnsObject)
-                .FirstOrDefault();
-
-            if (positionalIndexer != null && typeDefinition.IsCollectionShape) {
-                return positionalIndexer.Property.MemberTypeDefinition;
-            }
-
-            return typeDefinition.SequenceElementType;
+            // An element type with no index arguments is the target's rule (C#'s positional indexer, #998 T6c): with no
+            // system there is no one to ask, so the question fails closed (T8 removed the pick over a type's own answers).
+            if (system is null)
+                throw new ArgumentException("The element type of a sequence is its type system's rule: pass the system.", nameof(system));
+            return system.ElementType(typeDefinition);
         }
 
         /// <summary>

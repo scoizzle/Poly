@@ -157,7 +157,7 @@ public class InterpretationStabilizationTests {
         analyzer.Analyze(ctx, target);
         analyzer.Analyze(ctx, source);
         var items = ctx.TypeDefinitions.GetTypeDefinition("Source")!.Properties.Single(p => p.Name == "Items");
-        var element = items.MemberTypeDefinition.GetElementType();
+        var element = items.MemberTypeDefinition.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(element).IsNotNull();
         await Assert.That(element!.Name).IsEqualTo("Target");
     }

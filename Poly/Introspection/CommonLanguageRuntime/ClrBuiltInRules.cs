@@ -94,6 +94,19 @@ internal static class ClrBuiltInRules {
     /// unchecked, then masked by the shift: 5 bits for a 32-bit left operand, 6 for a 64-bit one. The lowered tree states the
     /// conversion as a cast.
     /// </summary>
+    /// <summary>The CLR's own calendar types (DateTime, DateOnly, TimeOnly, DateTimeOffset, TimeSpan): the compatibility
+    /// analyzer's Date category, which matches the CLR's definitions (owner ruling 2026-11-19; its removing row is I8b,
+    /// #972). Only the CLR's own definitions answer.</summary>
+    public static bool IsCalendarType(ITypeDefinition definition) =>
+        definition.GetClrPrimitive() is P.DateTime or P.DateOnly or P.TimeOnly or P.DateTimeOffset or P.TimeSpan;
+
+    /// <summary>A timestamp: exactly the CLR's DateTime or DateTimeOffset.</summary>
+    public static bool IsTimestamp(ITypeDefinition definition) =>
+        definition.GetClrPrimitive() is P.DateTime or P.DateTimeOffset;
+
+    /// <summary>The CLR's Guid: the compatibility analyzer's Guid category (same ruling and removing row).</summary>
+    public static bool IsGuid(ITypeDefinition definition) => definition.GetClrPrimitive() is P.Guid;
+
     public static bool IsPolicyShiftCount(ClrPrimitive type) => type is P.Int64 or P.UInt32 or P.UInt64 or P.NInt or P.NUInt;
 
     /// <summary>

@@ -14,7 +14,7 @@ internal static class DateOffsetRule {
     /// number the target's C# rule knows.</summary>
     public static bool Applies(ITypeSystem system, OperatorKind kind, ITypeDefinition left, ITypeDefinition right) =>
         kind is OperatorKind.Add or OperatorKind.Subtract
-        && SyntaxTypeCompatibilityAnalyzer.IsDateCategory(left) && SyntaxTypeCompatibilityAnalyzer.IsNumberCategory(right)
+        && SyntaxTypeCompatibilityAnalyzer.IsDateCategory(system, left) && SyntaxTypeCompatibilityAnalyzer.IsNumberCategory(system, right)
         && system.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>() is { } csharp
         // Fail closed (#998 T6a): the number is one the target's C# rule knows, nullable or not. A target with no C# rule,
         // or a foreign definition that answers "number", decides no offset.

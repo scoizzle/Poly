@@ -115,8 +115,8 @@ public class TypeAnswerTests {
 
         await Assert.That(ObeysTheParentRule(malformed)).IsFalse();
         await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.SimpleTypeOf(malformed))).IsFalse();
-        await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsTimestamp(malformed)).IsFalse();
-        await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsNumericLike(malformed)).IsFalse();
+        await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsTimestamp(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, malformed)).IsFalse();
+        await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsNumericLike(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, malformed)).IsFalse();
     }
 
     private static bool ObeysTheParentRule(ITypeDefinition t) =>

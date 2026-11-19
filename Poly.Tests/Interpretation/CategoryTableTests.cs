@@ -59,11 +59,11 @@ public class CategoryTableTests {
         foreach (var (subject, category, numeric, timestamp) in Gold) {
             {
                 var definition = (ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(subject);
-                await Assert.That(SyntaxTypeCompatibilityAnalyzer.CategoryOf(definition)).IsEqualTo(category)
+                await Assert.That(SyntaxTypeCompatibilityAnalyzer.CategoryOf(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, definition)).IsEqualTo(category)
                     .Because($"'{subject}' category");
-                await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsNumericLike(definition)).IsEqualTo(numeric)
+                await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsNumericLike(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, definition)).IsEqualTo(numeric)
                     .Because($"'{subject}' numeric-ness");
-                await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsTimestamp(definition)).IsEqualTo(timestamp)
+                await Assert.That(SyntaxTypeCompatibilityAnalyzer.IsTimestamp(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, definition)).IsEqualTo(timestamp)
                     .Because($"'{subject}' timestamp-ness");
             }
         }

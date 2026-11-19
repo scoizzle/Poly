@@ -186,6 +186,20 @@ public class TargetTypeSystemTests {
         await Assert.That(DateOffsetRule.Applies(new LedgerHost(), OperatorKind.Add, date, Clr(typeof(decimal)))).IsFalse()
             .Because("a target with no C# rule decides no offset");
     }
+
+    [Test]
+    public async Task CompatibilityCategory_IsCSharpsRule_NotWhatAForeignTypeAnswers() {
+        // The ledger's amount answers that it is a decimal number; it is no C# type, so the C# category table files it
+        // under nothing (#998 T6b).
+        var csharp = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+        var clr = Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+
+        await Assert.That(SyntaxTypeCompatibilityAnalyzer.CategoryOf(csharp, new LedgerHost().Amount)).IsEqualTo(SyntaxTypeCompatibilityAnalyzer.Cat.Unknown);
+        await Assert.That(SyntaxTypeCompatibilityAnalyzer.CategoryOf(csharp, new ForeignUnsignedWord())).IsEqualTo(SyntaxTypeCompatibilityAnalyzer.Cat.Unknown);
+        await Assert.That(SyntaxTypeCompatibilityAnalyzer.CategoryOf(csharp, clr.GetTypeDefinition(typeof(decimal)))).IsEqualTo(SyntaxTypeCompatibilityAnalyzer.Cat.Number);
+        await Assert.That(SyntaxTypeCompatibilityAnalyzer.CategoryOf(new LedgerHost(), clr.GetTypeDefinition(typeof(decimal)))).IsEqualTo(SyntaxTypeCompatibilityAnalyzer.Cat.Unknown)
+            .Because("a target that is not C# answers no C# category");
+    }
 }
 
 /// <summary>A foreign definition that answers, on the old classification members, that it is an unsigned 32-bit

@@ -57,16 +57,18 @@ public class TypeShapeTests {
     }
 
     [Test]
-    public async Task HostWithNoClrTypes_AnswersAQuestionOfItsOwn_OnItsOwnDefinitions() {
-        var host = new LedgerHost();
+    public async Task HostWithNoClrTypes_AnswersAQuestionOfItsOwn_AsARuleOfItsSystem() {
+        ITypeSystem ledger = new LedgerHost();
+        var host = (LedgerHost)ledger;
 
-        await Assert.That(host.Amount is LedgerHost.ILedgerType { MinorUnits: 2 }).IsTrue()
-            .Because("a platform answers a question no other platform has heard of, on its own definitions");
-        await Assert.That(host.Account is LedgerHost.ILedgerType { MinorUnits: null }).IsTrue();
+        await Assert.That(ledger.Rule<LedgerHost.ILedgerRules>()).IsNotNull();
+        await Assert.That(ledger.Rule<LedgerHost.ILedgerRules>()?.MinorUnits(host.Amount)).IsEqualTo(2)
+            .Because("a type system answers a question no other system has heard of, as a rule of its own");
+        await Assert.That(ledger.Rule<LedgerHost.ILedgerRules>()?.MinorUnits(host.Account)).IsNull();
         await Assert.That(host.Amount.IsEnumeration).IsFalse();
         await Assert.That(host.Amount.HasValueSemantics).IsFalse();
-        await Assert.That(Clr<decimal>() is LedgerHost.ILedgerType).IsFalse()
-            .Because("a platform is never asked a question it does not know");
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Rule<LedgerHost.ILedgerRules>()).IsNull()
+            .Because("a system is never asked a question it does not own");
     }
 
     [Test]

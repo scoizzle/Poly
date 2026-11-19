@@ -3,10 +3,12 @@ using Poly.Introspection;
 namespace Poly.Tests.TestHelpers;
 
 /// <summary>
-/// A host with no CLR behind it: three types in the namespace <c>ledger</c>, each its own definition. Test-only; it is
-/// the second platform the type-scope work (#998) is checked against, so a .NET assumption has something to fail on.
+/// A type system with no CLR behind it (#998 T2): three types in the namespace <c>ledger</c>, each its own definition,
+/// no words of its own, one operator of its own (<c>amount + amount</c>), and one rule of its own
+/// (<see cref="ILedgerRules"/>). Test-only; it is the second type system the type-system work is checked against, so a
+/// .NET or C# assumption has something to fail on. It is a base system: it is layered on nothing.
 /// </summary>
-sealed class LedgerHost : ITypeSource {
+sealed class LedgerHost : ITypeSource, ITypeSystem, LedgerHost.ILedgerRules {
     public const string Namespace = "ledger";
 
     public LedgerHost() {
@@ -22,14 +24,58 @@ sealed class LedgerHost : ITypeSource {
     public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) =>
         string.Equals(@namespace, Namespace, StringComparison.Ordinal) ? [Amount, Account, Entry] : [];
 
-    /// <summary>A question only this host answers, on its own definitions: how many minor units the type counts money
-    /// in, or null when it is not money. No other platform is asked it, so it is not on the neutral contract.</summary>
-    public interface ILedgerType : ITypeDefinition {
-        int? MinorUnits { get; }
+    /// <summary>A question only the ledger answers, declared by its owner and asked of the system: how many minor units
+    /// a type counts money in, or null when it is not money.</summary>
+    public interface ILedgerRules : ITypeSystemRule {
+        int? MinorUnits(ITypeDefinition definition);
     }
 
-    private sealed class LedgerDefinition(string name, int? minorUnits = null) : ILedgerType {
-        public int? MinorUnits => minorUnits;
+    // ── The type system ──
+
+    public ITypeSystem? Target => null;
+    public IReadOnlyList<ITypeSource> Sources => [this];
+
+    public ITypeDefinition? Resolve(string qualifiedName) =>
+        TypesIn(Namespace).FirstOrDefault(type => string.Equals(type.FullName, qualifiedName, StringComparison.Ordinal));
+
+    public ITypeDefinition? Bind(string word) => null;
+    public string? Spell(ITypeDefinition definition) => null;
+    public bool IsSame(ITypeDefinition a, ITypeDefinition b) => ReferenceEquals(a, b);
+    public ITypeDefinition? NullableOf(ITypeDefinition definition) => null;
+    public ITypeDefinition? ElementType(ITypeDefinition definition) => null;
+
+    public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) =>
+        IsSame(destination, source);
+
+    public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) => null;
+
+    /// <summary>The ledger's one operator: two amounts add to an amount. Anything else, a foreign operand included, has
+    /// no ledger operator.</summary>
+    public ITypeOperator? Operator(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right) =>
+        kind == OperatorKind.Add && ReferenceEquals(left, Amount) && right is not null && ReferenceEquals(right, Amount)
+            ? new AmountAddition(Amount)
+            : null;
+
+    public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule => this as TRule;
+
+    public int? MinorUnits(ITypeDefinition definition) =>
+        definition is LedgerDefinition own && TypesIn(Namespace).Contains(definition) ? own.MinorUnitsCounted : null;
+
+    private sealed class AmountAddition(ITypeDefinition amount) : ITypeOperator {
+        public OperatorKind Kind => OperatorKind.Add;
+        public ITypeDefinition DeclaringTypeDefinition => amount;
+        public IEnumerable<IParameter> Parameters => [new Operand(0, "left", amount), new Operand(1, "right", amount)];
+        public ITypeDefinition ResultTypeDefinition => amount;
+        public ITypeMethod? Method => null;
+    }
+
+    private sealed record Operand(int Position, string Name, ITypeDefinition ParameterTypeDefinition) : IParameter {
+        public bool IsOptional => false;
+        public object? DefaultValue => null;
+    }
+
+    private sealed class LedgerDefinition(string name, int? minorUnits = null) : ITypeDefinition {
+        public int? MinorUnitsCounted => minorUnits;
         public string Name => name;
         public string? Namespace => LedgerHost.Namespace;
         public AccessModifier AccessModifier => AccessModifier.Public;

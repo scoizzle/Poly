@@ -55,7 +55,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             static typeDefinition => typeDefinition.Methods,
             GetMethodSignature));
         _constructors = new(() => BuildConstructorCollection(type, this, provider));
-        _members = new(() => BuildMemberCollection(Fields, Properties, Methods));
+        _members = new(() => BuildMemberCollection(Fields, Properties, Methods, Constructors));
         // Declared only (owner ruling 1, #998 T10): the reflected op_* members; C#'s built-ins are its type system's, and
         // C# 11 does not consult a native integer's own members.
         _operators = new(() => Poly.Interpretation.CSharp.CSharpBuiltIns.IsNativeInteger(RuntimeType)
@@ -125,10 +125,6 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
 
     ITypeDefinition? ITypeDefinition.BaseType => BaseType;
     IEnumerable<ITypeDefinition> ITypeDefinition.Interfaces => Interfaces;
-    IEnumerable<ITypeField> ITypeDefinition.Fields => Fields;
-    IEnumerable<ITypeProperty> ITypeDefinition.Properties => Properties;
-    IEnumerable<ITypeMethod> ITypeDefinition.Methods => Methods;
-    IEnumerable<ITypeConstructor> ITypeDefinition.Constructors => Constructors;
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members;
     IEnumerable<ITypeOperator> ITypeDefinition.Operators => Operators;
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => Conversions;
@@ -405,16 +401,20 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private static IReadOnlyList<ClrTypeMember> BuildMemberCollection(
         IEnumerable<ClrTypeField> fields,
         IEnumerable<ClrPropertyMember> properties,
-        IEnumerable<ClrMethod> methods
+        IEnumerable<ClrMethod> methods,
+        IEnumerable<ClrConstructor> constructors
     ) {
         ArgumentNullException.ThrowIfNull(fields);
         ArgumentNullException.ThrowIfNull(properties);
         ArgumentNullException.ThrowIfNull(methods);
+        ArgumentNullException.ThrowIfNull(constructors);
 
+        // Every member the type declares (#998 T11), constructors last so each kind keeps its order.
         return Enumerable.Empty<ClrTypeMember>()
             .Concat(fields)
             .Concat(properties)
             .Concat(methods)
+            .Concat(constructors)
             .ToArray();
     }
 

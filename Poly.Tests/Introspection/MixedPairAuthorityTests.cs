@@ -93,15 +93,10 @@ public class MixedPairAuthorityTests {
 
         public string Name { get; }
         public string? Namespace => null;
-        public AccessModifier AccessModifier => AccessModifier.Public;
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
         public IEnumerable<ITypeMember> Members => [];
-        public IEnumerable<ITypeField> Fields => [];
-        public IEnumerable<ITypeProperty> Properties => [];
-        public IEnumerable<ITypeMethod> Methods => [];
-        public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => SelfAddition is null ? [AddOperator] : [AddOperator, SelfAddition];
 
         public ITypeSystem System => ThirdPlatform.Instance;

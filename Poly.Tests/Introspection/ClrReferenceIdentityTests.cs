@@ -74,15 +74,10 @@ public class ClrReferenceIdentityTests {
         string ns, string name, IReadOnlyList<ITypeDefinition>? interfaces = null) : ITypeDefinition {
         public string Name => name;
         public string? Namespace => ns;
-        public AccessModifier AccessModifier => AccessModifier.Public;
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => interfaces ?? [];
         public IEnumerable<IParameter> GenericParameters => [];
         public IEnumerable<ITypeMember> Members => [];
-        public IEnumerable<ITypeField> Fields => [];
-        public IEnumerable<ITypeProperty> Properties => [];
-        public IEnumerable<ITypeMethod> Methods => [];
-        public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];

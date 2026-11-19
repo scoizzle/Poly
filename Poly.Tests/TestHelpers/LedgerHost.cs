@@ -79,15 +79,10 @@ sealed class LedgerHost : ITypeSource, ITypeSystem, LedgerHost.ILedgerRules {
         public int? MinorUnitsCounted => minorUnits;
         public string Name => name;
         public string? Namespace => LedgerHost.Namespace;
-        public AccessModifier AccessModifier => AccessModifier.Public;
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
         public IEnumerable<ITypeMember> Members => [];
-        public IEnumerable<ITypeField> Fields => [];
-        public IEnumerable<ITypeProperty> Properties => [];
-        public IEnumerable<ITypeMethod> Methods => [];
-        public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
     }

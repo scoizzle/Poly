@@ -35,6 +35,18 @@ public static class TypeDefinitionExtensions {
     }
 
     extension(ITypeDefinition typeDefinition) {
+        /// <summary>The fields the type declares: a view over <see cref="ITypeDefinition.Members"/> (#998 T11).</summary>
+        public IEnumerable<ITypeField> Fields => typeDefinition.Members.OfType<ITypeField>();
+
+        /// <summary>The properties the type declares, indexers included: a view over its members (#998 T11).</summary>
+        public IEnumerable<ITypeProperty> Properties => typeDefinition.Members.OfType<ITypeProperty>();
+
+        /// <summary>The methods the type declares: a view over its members (#998 T11).</summary>
+        public IEnumerable<ITypeMethod> Methods => typeDefinition.Members.OfType<ITypeMethod>();
+
+        /// <summary>The constructors the type declares, a static one included: a view over its members (#998 T11).</summary>
+        public IEnumerable<ITypeConstructor> Constructors => typeDefinition.Members.OfType<ITypeConstructor>();
+
         /// <summary>
         /// Gets the best-matching method overloads for the given name and argument types.
         /// </summary>

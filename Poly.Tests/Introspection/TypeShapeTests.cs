@@ -81,11 +81,11 @@ public class TypeShapeTests {
     // change, citing that decision; the classification list only shrinks. They end at the decision's ten members and no
     // classification property.
     private static readonly string[] DecidedMembers = [
-        "System", "Name", "Namespace", "AccessModifier", "FullName", "BaseType", "Interfaces", "GenericParameters", "Members",
-        "Fields", "Properties", "Methods", "Constructors", "Operators", "Conversions",
+        "System", "Name", "Namespace", "FullName", "BaseType", "Interfaces", "GenericParameters", "Members", "Operators",
+        "Conversions",
     ];
 
-    private static readonly string[] RemainingClassificationProperties = ["AccessModifier"];
+    private static readonly string[] RemainingClassificationProperties = [];
 
     private const System.Reflection.BindingFlags Declared = System.Reflection.BindingFlags.Instance
         | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public

@@ -411,7 +411,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return null;
         }
 
-        var member = instanceType.Members.WithName(memberAccess.MemberName).FirstOrDefault();
+        // A constructor is a member (#998 T11) named after its type, but member access never reaches one.
+        var member = instanceType.Members.WithName(memberAccess.MemberName).FirstOrDefault(static m => m is not ITypeConstructor);
         if (member is null)
             context.ReportError(memberAccess, $"Type '{instanceType.Name}' does not contain a member named '{memberAccess.MemberName}'.");
         else

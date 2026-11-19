@@ -36,15 +36,10 @@ public class TypeDefinitionExtensionsTests {
     private sealed class NamedDefinition(string name, string? ns) : ITypeDefinition {
         public string Name => name;
         public string? Namespace => ns;
-        public AccessModifier AccessModifier => AccessModifier.Public;
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
         public IEnumerable<ITypeMember> Members => [];
-        public IEnumerable<ITypeField> Fields => [];
-        public IEnumerable<ITypeProperty> Properties => [];
-        public IEnumerable<ITypeMethod> Methods => [];
-        public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
 
         public ITypeSystem System => NamedPlatform.Instance;

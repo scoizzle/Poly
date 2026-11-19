@@ -224,15 +224,10 @@ public class TargetTypeSystemTests {
 public sealed class ForeignUnsignedWord : ITypeDefinition {
     public string Name => "word";
     public string? Namespace => "foreign";
-    public AccessModifier AccessModifier => AccessModifier.Public;
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => [];
     public IEnumerable<IParameter> GenericParameters => [];
     public IEnumerable<ITypeMember> Members => [];
-    public IEnumerable<ITypeField> Fields => [];
-    public IEnumerable<ITypeProperty> Properties => [];
-    public IEnumerable<ITypeMethod> Methods => [];
-    public IEnumerable<ITypeConstructor> Constructors => [];
     public IEnumerable<ITypeOperator> Operators => [];
     public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
@@ -247,15 +242,10 @@ public sealed class LongIndexed {
 public sealed class ForeignIndexed(ITypeDefinition index, ITypeDefinition element) : ITypeDefinition {
     public string Name => "indexed";
     public string? Namespace => "foreign";
-    public AccessModifier AccessModifier => AccessModifier.Public;
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => [];
     public IEnumerable<IParameter> GenericParameters => [];
-    public IEnumerable<ITypeMember> Members => Properties;
-    public IEnumerable<ITypeField> Fields => [];
-    public IEnumerable<ITypeProperty> Properties => [new Indexer(this, index, element)];
-    public IEnumerable<ITypeMethod> Methods => [];
-    public IEnumerable<ITypeConstructor> Constructors => [];
+    public IEnumerable<ITypeMember> Members => [new Indexer(this, index, element)];
     public IEnumerable<ITypeOperator> Operators => [];
     public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];

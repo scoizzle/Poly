@@ -132,7 +132,6 @@ public class TypeDefinitionProviderCollectionTests {
     private class MockTypeDefinition(string name) : ITypeDefinition {
         public string Name { get; } = name;
         public string? Namespace => null;
-        public AccessModifier AccessModifier => AccessModifier.Public;
         public IEnumerable<ITypeMember> Members => [];
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
@@ -147,10 +146,6 @@ public class TypeDefinitionProviderCollectionTests {
         }
 
         public string? Tag { get; set; }
-        public IEnumerable<ITypeField> Fields => [];
-        public IEnumerable<ITypeProperty> Properties => [];
-        public IEnumerable<ITypeMethod> Methods => [];
-        public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;

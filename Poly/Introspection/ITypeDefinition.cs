@@ -29,11 +29,6 @@ public interface ITypeDefinition {
     string? Namespace { get; }
 
     /// <summary>
-    /// Gets the visibility of the type.
-    /// </summary>
-    AccessModifier AccessModifier { get; }
-
-    /// <summary>
     /// Gets the fully-qualified name combining <see cref="Namespace"/> and <see cref="Name"/>.
     /// </summary>
     string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
@@ -57,29 +52,10 @@ public interface ITypeDefinition {
     IEnumerable<IParameter> GenericParameters { get; }
 
     /// <summary>
-    /// Gets all members (fields, properties, methods) defined on the type.
+    /// Gets every member the type declares: fields, properties, methods and constructors (#998 T11). The typed views
+    /// (<c>Fields</c>, <c>Properties</c>, <c>Methods</c>, <c>Constructors</c>) are extensions over it.
     /// </summary>
     IEnumerable<ITypeMember> Members { get; }
-
-    /// <summary>
-    /// Gets all field members defined on the type.
-    /// </summary>
-    IEnumerable<ITypeField> Fields { get; }
-
-    /// <summary>
-    /// Gets all property members defined on the type.
-    /// </summary>
-    IEnumerable<ITypeProperty> Properties { get; }
-
-    /// <summary>
-    /// Gets all method members defined on the type.
-    /// </summary>
-    IEnumerable<ITypeMethod> Methods { get; }
-
-    /// <summary>
-    /// Gets all constructors defined on the type.
-    /// </summary>
-    IEnumerable<ITypeConstructor> Constructors { get; }
 
     /// <summary>
     /// Gets the operators that apply to operands of this type. A platform decides which: a .NET primitive lists the

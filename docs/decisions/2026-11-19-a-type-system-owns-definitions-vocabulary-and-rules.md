@@ -1,8 +1,8 @@
 # A type system owns its definitions, vocabulary and rules
 
-Status: **Proposed, 2026-11-19 (revision 2). Waiting for the owner's ruling; no code follows until it rules.**
-Stream `stream/introspection` (#998, draft PR #997), base `dfafe16b4`. Revision 1 was titled "Introspection is
-structure, identity and providers".
+Status: **Approved, 2026-11-19** (revision 2 at `4434f1223`, with the three rulings below folded in). Stream
+`stream/introspection` (#998, draft PR #997), base `dfafe16b4`. Revision 1 was titled "Introspection is structure,
+identity and providers".
 
 ## Rulings this revision records
 
@@ -14,6 +14,15 @@ Owner, 2026-11-19:
 - "A type declaring its own implicit and explicit conversions is correct, so those stay on `ITypeDefinition`. The
   missing piece is the type system describing its global type promotion and implicit conversion rules … The type
   system is also the authority on mixed pairs and binary-operator promotion."
+
+Owner, approving revision 2:
+
+1. Declared operators stay on the definition, like declared conversions.
+2. The target system decides mixed pairs. Row T3 may retarget `MixedPairAuthorityTests`; this ruling is the
+   sign-off.
+3. Every rule implements a common base interface, `ITypeSystemRule`, even while it is empty. `Rule<T>()` and
+   registration are constrained to it. Guards check that every rule implements it, that Introspection declares no
+   rule (owners live outside Introspection), and that the base adds no classification member.
 
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.
@@ -51,7 +60,7 @@ convention that "the left operand's platform decides" (`MixedPairAuthorityTests`
 | 7 | `IEnumerable<IParameter> GenericParameters` | Declared arity and parameters. |
 | 8 | `IEnumerable<ITypeMember> Members` | Declared members; `Fields`, `Properties`, `Methods` and `Constructors` become views over it. |
 | 9 | `IEnumerable<ITypeConversion> Conversions` | **Declared** conversions only: the type's own `op_Implicit`/`op_Explicit` (owner ruling). Built-in conversions leave this list. |
-| 10 | `IEnumerable<ITypeOperator> Operators` | **Declared** operators only (`op_Addition` style). *Assumption:* this mirrors the conversion ruling; if the owner rules otherwise, declared operators become `Members` the system recognises. |
+| 10 | `IEnumerable<ITypeOperator> Operators` | **Declared** operators only (`op_Addition` style), owner ruling 1. Built-in operators leave this list. |
 
 Identity, nullability, element type, assignability, and conversion and operator *resolution* are rules, so they move
 to the system. The contract declares no `bool`, `int` or enum property.
@@ -83,7 +92,14 @@ public interface ITypeSystem {
     ITypeOperator? Operator(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right);
 
     // Questions its consumers need answered (§3)
-    TRule? Rule<TRule>() where TRule : class;
+    TRule? Rule<TRule>() where TRule : class, ITypeSystemRule;
+}
+
+public interface ITypeSystemRule { }   // the base every rule implements (owner ruling 3); empty, and kept free of classification
+
+public sealed class TypeSystemRules {  // registration, held by a system
+    public void Add<TRule>(TRule rule) where TRule : class, ITypeSystemRule;
+    public TRule? Find<TRule>() where TRule : class, ITypeSystemRule;
 }
 ```
 
@@ -139,8 +155,8 @@ system**. It is never the left operand's.
 - If no candidate is chosen, there is no operator, and analysis fails closed with a positioned error.
 
 So the answer is the same in either operand order. Today's "left operand's platform answers" (I4) gives
-different answers for `a + b` and `b + a` once two platforms differ. **This retargets `MixedPairAuthorityTests`, so
-it is an owner decision (row T3) and needs the advisor consult for retargeting a test.**
+different answers for `a + b` and `b + a` once two platforms differ. Owner ruling 2 approves retargeting
+`MixedPairAuthorityTests` in row T3; the advisor consult for retargeting a test still runs there.
 
 ### 2.4 How a definition reaches its system: a back-reference
 
@@ -149,7 +165,8 @@ it is an owner decision (row T3) and needs the advisor consult for retargeting a
 The alternative, a lookup by identity, needs a registry of every system, which is the process-wide lookup S2a
 removed. It also cannot say which system an AST declaration was declared into.
 
-What the back-reference costs:
+It is added in row T9, together with identity leaving the definition; nothing needs it before then. What the
+back-reference costs:
 
 - Each of the 4 production implementers and 7 test doubles carries one reference.
 - Test doubles share a `TestTypeSystem`.
@@ -168,7 +185,10 @@ to classify has three ways to get an answer, and Introspection declares none of 
 2. **Ask a question the system owns.** The system implements an interface its own language defines, for example
    the C# system's `ICSharpTypeSystem`.
 3. **Register a rule.** A library adds a rule object to the system when the session builds it
-   (`TypeSystemBuilder.AddRule<TRule>(rule)`), and a consumer asks for it.
+   (`TypeSystemRules.Add<TRule>(rule)`), and a consumer asks for it.
+
+Every rule, whether owned by a system's language (2) or registered (3), is an interface that extends
+`ITypeSystemRule` and is declared outside `Poly.Introspection`. `Rule<T>` and `Add<T>` accept nothing else.
 
 `Rule<TRule>()` returns a registered rule, else the system itself if it implements `TRule`, else
 `Target?.Rule<TRule>()`. A null answer means the system has no rule, and the consumer treats the type as not
@@ -176,8 +196,8 @@ applicable (#998 Q5).
 
 How this differs from `TypeFacts`:
 
-- A question is declared by the consumer or by the language that owns it, never by Introspection. A guard enforces
-  this (§5).
+- A question is declared by the consumer or by the language that owns it, never by Introspection, and it extends
+  `ITypeSystemRule`. Guards enforce both (§5).
 - The system is asked, not the definition.
 - The answer is behaviour, not a record of data about the type.
 
@@ -200,9 +220,9 @@ question is the constraint owner's:
 
 ```csharp
 // Declared in DomainModeling, registered by each library that contributes a constraint.
-interface IConstraintApplicability { bool? Applies(Constraint constraint, ITypeDefinition propertyType); }
+interface IConstraintApplicability : ITypeSystemRule { bool? Applies(Constraint constraint, ITypeDefinition propertyType); }
 
-builder.AddRule<IConstraintApplicability>(new CoreApplicability(domain));   // range → numbers, length → Text
+rules.Add<IConstraintApplicability>(new CoreApplicability(domain));   // range → numbers, length → Text
 bool applies = domain.Rule<IConstraintApplicability>()?.Applies(range, propertyType) ?? false;
 ```
 
@@ -212,8 +232,8 @@ asked what it is.
 ### 3.3 Constant folding's integer width (a question the system owns)
 
 ```csharp
-// ICSharpTypeSystem is the C# system's own surface; SimpleType is C#'s own closed list (C# §8.3.5).
-int? width = target.Rule<ICSharpTypeSystem>()?.SimpleTypeOf(definition) switch {
+// ICSharpTypeRules : ITypeSystemRule, declared by the C# surface; SimpleType is C#'s own closed list (C# §8.3.5).
+int? width = target.Rule<ICSharpTypeRules>()?.SimpleTypeOf(definition) switch {
     SimpleType.Byte => 8, SimpleType.UShort => 16, SimpleType.UInt => 32, SimpleType.ULong => 64, _ => null };
 ```
 
@@ -224,7 +244,7 @@ the C# system, and the neutral contracts never name it.
 ### 3.4 Shape (replaces revision 1's "CLR or AST" helper)
 
 Enum and value-type checks are C# rules (C# struct equality, enum comparison). The C# system answers
-`ICSharpTypeSystem.IsEnum` and `IsValueType` for its own definitions, both CLR and C#-declared. The domain's Entity,
+`ICSharpTypeRules.IsEnum` and `IsValueType` for its own definitions, both CLR and C#-declared. The domain's Entity,
 Value and Enum families are the domain system's, because they are its declarations. A definition from any other
 system is never asked these questions.
 
@@ -254,7 +274,7 @@ source, and `AstTypeDefinition.System` points at it.
 - one source (`amount`, `account`, `entry`);
 - no keywords;
 - its own `Operator` for `amount + amount`;
-- its own question, `ILedgerRules.MinorUnits(definition)`.
+- its own rule, `ILedgerRules : ITypeSystemRule` with `MinorUnits(definition)`.
 
 It is the second system the mixed-pair and fail-closed tests run against.
 
@@ -264,12 +284,17 @@ All of these extend the existing `TypeShapeTests.Contract_DeclaresNoClosedListOf
 
 - **`ITypeDefinition_IsExactlyTheDecidedMembers`:** a ratchet. It is pinned at today's 42, each row removes names,
   and it ends at §1's 10.
-- **`ITypeDefinition_StatesNoClassification`:** no `bool`, `int` or enum property.
+- **`ITypeDefinition_StatesNoClassification`:** a ratchet over the `bool`, `int` and enum properties. It is pinned at
+  today's 23 (the 21 answers, `IsCollectionShape`, `AccessModifier`) and only shrinks; it ends empty.
 - **`ITypeSystem_IsExactlyTheDecidedMembers`:** pinned at §2's 13 from the row that adds it.
 - **`ITypeSystem_ClassifiesNothing`:** no member takes exactly one `ITypeDefinition` and returns `bool`, `int` or an
   enum.
-- **`Introspection_DeclaresNoQuestion`:** no interface in `Poly.Introspection` other than the pinned contract set,
-  so a `TRule` is always declared by its consumer or its language.
+- **`Rules_AreConstrainedToTheBase`:** `ITypeSystem.Rule<T>`, `TypeSystemRules.Add<T>` and `Find<T>` constrain `T`
+  to `ITypeSystemRule`. The constraint is what makes every rule implement the base, and the test stops it loosening.
+- **`Introspection_DeclaresNoRule`:** no type in `Poly.Introspection` or its sub-namespaces implements
+  `ITypeSystemRule`, other than the base itself. Rule owners live outside Introspection.
+- **`ITypeSystemRule_ClassifiesNothing`:** the base declares no member that takes one `ITypeDefinition` and returns
+  `bool`, `int` or an enum.
 
 ## 6. Migration rows
 
@@ -279,15 +304,15 @@ Each row begins with a failing test, run red and recorded. Each ends with the fu
 | Row | Change | Failing test first |
 |---|---|---|
 | T0 | The `ITypeDefinition` ratchet and no-classification guards, pinned at 42. | A scratch 43rd member fails the ratchet (recorded, then removed). |
-| T1 | `ITypeSystem` and its guards. The shared C# system wraps today's pieces (keyword table, registry, `ClrBuiltInRules`, `ClrOperatorResolution`, `ModeledConversions`), and `ITypeDefinition.System` is added (ratchet 43). **Interim:** its `Conversion`/`Operator` delegate to today's definition doors. Removed by T9. | `csharp.Bind("int")` is `Int32`, `Spell` round-trips every keyword, and `Conversion`/`Operator` agree with today's doors on the full numeric matrix. |
+| T1 | `ITypeSystem`, `ITypeSystemRule`, `TypeSystemRules` and their guards. The shared C# system wraps today's pieces (keyword table, registry, `ClrBuiltInRules`, `ClrOperatorResolution`, `ModeledConversions`). **Interim:** its `Conversion`/`Operator` delegate to today's definition doors. Removed by T9. | `csharp.Bind("int")` is `Int32`, `Spell` round-trips every keyword, and `Conversion`/`Operator` agree with today's doors on the full numeric matrix. |
 | T2 | `LedgerHost` becomes a system with its own operator and its own rule. | `ledger.Rule<ILedgerRules>()` answers; `csharp.Rule<ILedgerRules>()` is null. |
-| T3 | **Owner decision.** The target system decides mixed pairs (§2.3); `MixedPairAuthorityTests` is retargeted after the advisor consult. | `clrInt + ledgerAmount` and `ledgerAmount + clrInt` resolve the same way (they differ today). |
+| T3 | The target system decides mixed pairs (§2.3, owner ruling 2); `MixedPairAuthorityTests` is retargeted after the advisor consult. | `clrInt + ledgerAmount` and `ledgerAmount + clrInt` resolve the same way (they differ today). |
 | T4 | Analysis, the VM and the domain type model ask the target system's `Conversion`/`Operator`/`IsAssignableWithoutConversion` instead of the definition. | An analysis whose target is the ledger system refuses `int + int` (today the CLR definition answers). |
 | T5 | The domain system is layered on C#. `Bind` uses `DomainTypeMapping`'s table, `DomainGround` is deleted, and families come from §3.1. **Interim:** that table stands in for the prelude. Removed by #998 S3. | A 64-bit integral definition that no domain word binds is not in the Number family (today it is `Int64`). |
-| T6 | `ICSharpTypeSystem` (`SimpleTypeOf`, `IsEnum`, `IsValueType`). The analyzer, constant folding, `DateOffsetRule`, the shift policy and `Classify` ask it. | A ledger definition is not folded and is `Cat.Unknown` (today `IsNumber` makes it `Cat.Number`). |
+| T6 | `ICSharpTypeRules : ITypeSystemRule` (`SimpleTypeOf`, `IsEnum`, `IsValueType`). The analyzer, constant folding, `DateOffsetRule`, the shift policy and `Classify` ask it. | A ledger definition is not folded and is `Cat.Unknown` (today `IsNumber` makes it `Cat.Number`). |
 | T7 | `IConstraintApplicability` is registered; `GuardClosedProperties` and the domain's `Family` ask the domain system. | `range` on a property bound to `Number` applies, and on one bound to `nint` does not, whatever the spelling. |
-| T8 | Delete `IsGround()`, the 21 answers and `ClrGround`. Ratchet 43 → 22. | The ratchet is lowered first (red). |
-| T9 | `IsSameTypeAs`, `NullableOf`, `ElementType` (merging `IsCollectionShape` and `SequenceElementType`) and the three doors leave the definition. The T1 interim is removed. Ratchet → 15. | Pins first: `byte[]` element type is null and `List<int>` is `int`. Then the ratchet. |
+| T8 | Delete `IsGround()`, the 21 answers and `ClrGround`. Ratchet 42 → 21. | The ratchet is lowered first (red). |
+| T9 | `ITypeDefinition.System` is added (§2.4); `IsSameTypeAs`, `NullableOf`, `ElementType` (merging `IsCollectionShape` and `SequenceElementType`) and the three doors leave the definition. The T1 interim is removed. Ratchet 21 + 1 − 7 = 15. | Pins first: `byte[]` element type is null and `List<int>` is `int`. Then the ratchet. |
 | T10 | `Conversions` and `Operators` list only declared ones; built-ins move into the C# system's rules. | `Clr<int>().Conversions` contains no built-in (it lists `int → long` today), with resolution unchanged. |
 | T11 | Typed member views become extensions, the CLR's `Members` includes constructors, and `AccessModifier` moves to the hosts. Ratchet → 10. | A CLR type's `Members` contains its constructors (fails today). |
 | T12 | `ITypeDefinitionProvider` and `TypeDefinitionProviderCollection` are retired: `AnalysisContext` holds a target system and the scope reads its `Sources`. | An analysis given only the ledger system resolves no CLR name (today the stack falls back to the CLR). |

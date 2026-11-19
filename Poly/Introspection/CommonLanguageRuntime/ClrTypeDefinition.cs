@@ -16,7 +16,6 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private readonly Lazy<IReadOnlyList<ClrTypeMember>> _members;
 
     private readonly ClrTypeDefinitionRegistry _provider;
-    private readonly ConcurrentDictionary<(OperatorKind Kind, ClrPrimitive? Other), IReadOnlyList<ClrTypeOperator>> _operatorsBeside = new();
     private readonly Lazy<IReadOnlyList<ClrTypeOperator>> _operators;
     private readonly Lazy<IReadOnlyList<ITypeConversion>> _conversions;
 
@@ -57,7 +56,11 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             GetMethodSignature));
         _constructors = new(() => BuildConstructorCollection(type, this, provider));
         _members = new(() => BuildMemberCollection(Fields, Properties, Methods));
-        _operators = new(() => [.. Enum.GetValues<OperatorKind>().SelectMany(kind => OperatorsBeside(kind, null))]);
+        // Declared only (owner ruling 1, #998 T10): the reflected op_* members; C#'s built-ins are its type system's, and
+        // C# 11 does not consult a native integer's own members.
+        _operators = new(() => ClrBuiltInRules.IsNativeInteger(RuntimeType)
+            ? []
+            : [.. Enum.GetValues<OperatorKind>().SelectMany(kind => FindOperators(kind).Select(method => new ClrTypeOperator(kind, method)))]);
         _conversions = new(ReadConversions);
     }
 
@@ -76,8 +79,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     public IReadOnlyList<ClrTypeMember> Members => _members.Value;
 
     /// <summary>
-    /// The operators that apply to two operands of this type (one, for a unary kind): what <see cref="OperatorsBeside"/>
-    /// offers beside this type itself, for every kind. A promoted operator is declared by the type it promotes to.
+    /// The operators this type declares: its reflected static <c>op_*</c> members, none for a native integer (#998 T10,
+    /// owner ruling 1). C#'s built-in operators are its type system's.
     /// </summary>
     public IReadOnlyList<ClrTypeOperator> Operators => _operators.Value;
 
@@ -115,10 +118,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     }
 
     /// <summary>
-    /// The conversions this type states: the reflected static <c>op_Implicit</c>/<c>op_Explicit</c> members it declares
-    /// (either end) and the built-in rules with this type as the source, which name no method. Reference conversions
-    /// are assignability, not conversion, and the lift into a nullable target is the caller's (T-06), so neither is
-    /// listed.
+    /// The conversions this type declares: the reflected static <c>op_Implicit</c>/<c>op_Explicit</c> members (either
+    /// end). C#'s built-ins are its type system's (#998 T10).
     /// </summary>
     internal IReadOnlyList<ITypeConversion> Conversions => _conversions.Value;
 
@@ -139,40 +140,17 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         Nullable.GetUnderlyingType(RuntimeType) is { } underlying
             ? _provider.GetTypeDefinition(underlying)
             : null;
-    public override string ToString() => FullName;
+    /// <summary>The registry that built this definition (C#'s built-in rules make their operators from it).</summary>
+    internal ClrTypeDefinitionRegistry Provider => _provider;
 
-    /// <summary>
-    /// The declared conversion first (implicit preferred), so a conversion that names a method is never replaced by a
-    /// built-in rule; then the built-in rules, only between two CLR definitions. A native integer's implicit built-in
-    /// conversion answers first: C# 11 makes <c>nint</c> to <c>long</c> implicit where IntPtr declares an explicit
-    /// <c>op_Explicit</c>; an explicit one keeps IntPtr's declared method (<c>(int)nint</c>).
-    /// </summary>
-    /// <remarks>The CLR host's own conversion body; C#'s system asks it (#998 T9: no longer a door on the contract).</remarks>
-    internal ITypeConversion? ConversionFrom(ITypeDefinition source) {
-        ArgumentNullException.ThrowIfNull(source);
-        var clrSource = source as ClrTypeDefinition;
-        ConversionOperatorKind? builtInKind = null;
-        if (clrSource is not null) {
-            builtInKind = ClrBuiltInRules.Conversion(GetPrimitiveTypeId(clrSource.RuntimeType), GetPrimitiveTypeId(RuntimeType));
-            if (builtInKind is ConversionOperatorKind.Implicit
-                && (ClrBuiltInRules.IsNativeInteger(clrSource.RuntimeType) || ClrBuiltInRules.IsNativeInteger(RuntimeType)))
-                return ClrTypeConversion.Intrinsic(builtInKind.Value, source, this);
-        }
-        if (FindDeclaredConversion(source, ConversionOperatorKind.Implicit) is { } declaredImplicit)
-            return declaredImplicit;
-        if (FindDeclaredConversion(source, ConversionOperatorKind.Explicit) is { } declaredExplicit)
-            return declaredExplicit;
-        if (builtInKind is { } kind)
-            return ClrTypeConversion.Intrinsic(kind, source, this);
-        return clrSource is null ? null : ResolveLiftedImplicitFrom(clrSource);
-    }
+    public override string ToString() => FullName;
 
     /// <summary>
     /// The conversion of <paramref name="kind"/> declared on the source or on this type, in that order, read from each
     /// definition's <see cref="Conversions"/> and matched on the ends the item names. A modeled source declares its
     /// own, so this answers it without naming a spelling.
     /// </summary>
-    private ITypeConversion? FindDeclaredConversion(ITypeDefinition source, ConversionOperatorKind kind) {
+    internal ITypeConversion? FindDeclaredConversion(ITypeDefinition source, ConversionOperatorKind kind) {
         foreach (var candidate in new[] { source, (ITypeDefinition)this }) {
             foreach (var conversion in candidate.Conversions) {
                 if (conversion.Kind != kind || conversion.Method is null)
@@ -183,26 +161,6 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             }
         }
         return null;
-    }
-
-    /// <summary>
-    /// C# 10.6.1's implicit nullable conversion: into <c>U?</c> from <c>S</c> or <c>S?</c> where <c>S</c> converts to
-    /// <c>U</c> implicitly (<c>long</c> to <c>decimal?</c>, <c>int?</c> to <c>long?</c>). It names no method, whatever the
-    /// underlying conversion declares, so it is never assignability; the emitter applies it from the bound parameter type.
-    /// Only for a nullable target. <c>S</c> to <c>S?</c> is the lift assignability states.
-    /// </summary>
-    private ITypeConversion? ResolveLiftedImplicitFrom(ClrTypeDefinition source) {
-        var underlying = Nullable.GetUnderlyingType(RuntimeType);
-        if (underlying is null)
-            return null;
-        var sourceUnderlying = Nullable.GetUnderlyingType(source.RuntimeType) ?? source.RuntimeType;
-        if (sourceUnderlying == underlying)
-            return null;
-        var underlyingConversion = _provider.GetTypeDefinition(underlying)
-            .ConversionFrom(_provider.GetTypeDefinition(sourceUnderlying));
-        return underlyingConversion is { Kind: ConversionOperatorKind.Implicit }
-            ? ClrTypeConversion.Intrinsic(ConversionOperatorKind.Implicit, source, this)
-            : null;
     }
 
     /// <summary>
@@ -227,36 +185,6 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         return TypeDefinitionExtensions.IsAssignableByHierarchy(this, source);
     }
 
-    /// <summary>
-    /// The operators this type offers beside an operand of <paramref name="other"/> (null: this type): the operators C#
-    /// applies itself, then the reflected static special-name <c>op_*</c> members, except a native integer's, which C# 11
-    /// does not consult. Where the CLR also declares an intrinsic's exact signature (Double and Single declare their
-    /// comparisons), the intrinsic is the answer. The built-in rules read the other operand only through its primitive,
-    /// so the cache is keyed by the kind and that primitive: keyed by the kind alone, the first pair would answer for
-    /// every other; keyed by the other definition, it would grow without bound on fresh synthetic collection types,
-    /// which are a new instance per resolve. Reference equality depends on the other definition itself, so it is
-    /// answered beside the cache (<see cref="ClrBuiltInRules.ReferenceEquality"/>).
-    /// </summary>
-    internal IReadOnlyList<ClrTypeOperator> OperatorsBeside(OperatorKind kind, ITypeDefinition? other) {
-        OperatorShape.ArityOf(kind);
-        var otherPrimitive = other is null ? GetPrimitiveTypeId(RuntimeType) : other.GetClrPrimitive();
-        var offered = _operatorsBeside.GetOrAdd((kind, otherPrimitive), key => {
-            var intrinsic = ClrBuiltInRules.Operators(this, key.Other, _provider, key.Kind);
-            var reflected = (ClrBuiltInRules.IsNativeInteger(RuntimeType) ? [] : FindOperators(key.Kind))
-                .Where(method => !intrinsic.Any(builtIn => SameSignature(builtIn, method)))
-                .Select(method => new ClrTypeOperator(key.Kind, method));
-            return [.. intrinsic, .. reflected];
-        });
-        return ClrBuiltInRules.ReferenceEquality(this, other, _provider, kind) is { } reference ? [.. offered, reference] : offered;
-    }
-
-    private static bool SameSignature(ClrTypeOperator intrinsic, ClrMethod method) {
-        var (pa, pb) = (intrinsic.Parameters.ToArray(), method.Parameters.ToArray());
-        return ReferenceEquals(intrinsic.ResultTypeDefinition, method.MemberTypeDefinition)
-            && pa.Length == pb.Length
-            && pa.Zip(pb).All(static pair => ReferenceEquals(pair.First.ParameterTypeDefinition, pair.Second.ParameterTypeDefinition));
-    }
-
     internal IEnumerable<ClrMethod> FindOperators(OperatorKind kind) {
         if (ClrSpecialNames.OperatorName(kind) is not { } name)
             return [];
@@ -268,10 +196,9 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     }
 
     /// <summary>
-    /// The conversions this type states, declared ones first: each reflected static special-name
-    /// <c>op_Implicit</c>/<c>op_Explicit</c> member with one parameter, then the built-in rule for this type as the
-    /// source and each simple type. The rules table is the same one <see cref="ITypeDefinition.ResolveConversionFrom"/>
-    /// reads; a declared conversion the other end owns is not listed, and is answered by the query.
+    /// The conversions this type declares (owner ruling 1, #998 T10): each reflected static special-name
+    /// <c>op_Implicit</c>/<c>op_Explicit</c> member with one parameter. C#'s built-in conversions are its type system's;
+    /// a declared conversion the other end owns is not listed, and C#'s <c>Conversion</c> finds it.
     /// </summary>
     private IReadOnlyList<ITypeConversion> ReadConversions() {
         const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
@@ -283,24 +210,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
                 continue;
             stated.Add(ClrTypeConversion.Declared(kind, CreateMethod(method)));
         }
-        var from = GetPrimitiveTypeId(RuntimeType);
-        foreach (var primitive in Enum.GetValues<ClrPrimitive>()) {
-            if (primitive == from || ClrBuiltInRules.Conversion(from, primitive) is not { } kind)
-                continue;
-            if (primitive.GetClrType() is not { } targetType)
-                continue;
-            var target = _provider.GetTypeDefinition(targetType);
-            Add(ClrTypeConversion.Intrinsic(kind, this, target));
-        }
         return stated;
-
-        void Add(ITypeConversion conversion) {
-            var duplicate = stated.Any(existing =>
-                TypeDefinitionExtensions.IsSameType(existing.SourceTypeDefinition, conversion.SourceTypeDefinition)
-                && TypeDefinitionExtensions.IsSameType(existing.ResultTypeDefinition, conversion.ResultTypeDefinition));
-            if (!duplicate)
-                stated.Add(conversion);
-        }
     }
 
     private ClrMethod CreateMethod(MethodInfo methodInfo) {
@@ -575,7 +485,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// mapping. This private wrapper exists only to keep call sites unchanged; new
     /// code should call <c>type.GetPrimitiveType()</c> directly.
     /// </summary>
-    private static ClrPrimitive? GetPrimitiveTypeId(Type type) =>
+    internal static ClrPrimitive? GetPrimitiveTypeId(Type type) =>
         type.GetPrimitiveType();
 
 }

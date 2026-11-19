@@ -647,7 +647,7 @@ public class OperatorLookupTests {
         ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", ClrTypeReferences.Of(typeof(long)),
             [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true) { Conversion = ConversionOperatorKind.Implicit });
         var number = OperatorOperands.Clr(typeof(long));
-        var offered = ((ClrTypeDefinition)number).OperatorsBeside(OperatorKind.Add, cents).Single();
+        var offered = ClrBuiltInRules.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, cents).Single();
         await Assert.That(offered.Method).IsNull();
         await Assert.That(offered.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, number))).IsTrue();
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(cents, number)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
@@ -657,7 +657,7 @@ public class OperatorLookupTests {
         await AssertResult(cents.GetOperator(OperatorKind.Add, number, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), number);
         // The sibling: without the conversion the same operator is offered and does not apply.
         ITypeDefinition plain = set.Add("Plain");
-        await Assert.That(((ClrTypeDefinition)number).OperatorsBeside(OperatorKind.Add, plain).Count).IsEqualTo(1);
+        await Assert.That(ClrBuiltInRules.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, plain).Count).IsEqualTo(1);
         await Assert.That(number.GetOperator(OperatorKind.Add, plain, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
     }
 

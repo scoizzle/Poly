@@ -119,7 +119,7 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
     /// a C# conversion.</summary>
     public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) =>
         destination is ClrTypeDefinition clr
-            ? clr.ConversionFrom(source)
+            ? ClrBuiltInRules.ConversionInto(clr, source)
             : Poly.Interpretation.Analysis.Semantics.ModeledConversions.Find(source, destination);
 
     /// <summary>C#'s operator selection over the operators both operands declare, with applicability decided by this
@@ -131,8 +131,15 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
             ArgumentNullException.ThrowIfNull(right);
         else if (right is not null)
             throw new ArgumentException($"Operator '{kind}' is unary; a right operand was given.", nameof(right));
-        return ClrOperatorResolution.Resolve(left, kind, right, Conversion);
+        return ClrOperatorResolution.Resolve(left, kind, right, Conversion, OfferedBy);
     }
+
+    /// <summary>The candidates C# offers for <paramref name="definition"/> beside <paramref name="other"/> (#998 T10): for a
+    /// CLR definition, C#'s built-ins and its declared operators; for any other, the operators it declares.</summary>
+    private static IEnumerable<ITypeOperator> OfferedBy(ITypeDefinition definition, OperatorKind kind, ITypeDefinition? other) =>
+        definition is ClrTypeDefinition clr
+            ? ClrBuiltInRules.OperatorsBeside(clr, kind, other)
+            : definition.Operators.Where(o => o.Kind == kind);
 
     public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule =>
         Rules.Find<TRule>() ?? this as TRule ?? Target?.Rule<TRule>();

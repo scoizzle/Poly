@@ -103,8 +103,11 @@ public class TypeRulesTests {
     private static ITypeDefinition[] ParametersOf(ITypeOperator declared) =>
         [.. declared.Parameters.Select(static p => p.ParameterTypeDefinition)];
 
-    private static ITypeOperator[] OperatorsOf(ITypeDefinition definition, OperatorKind kind) =>
-        [.. definition.Operators.Where(o => o.Kind == kind)];
+    // What C# offers for a CLR type beside itself: its built-ins and the type's declared operators (#998 T10; before
+    // T10 the definition's own Operators list carried the built-ins).
+    private static ITypeOperator[] OperatorsOf(ITypeDefinition definition, OperatorKind kind) => definition is ClrTypeDefinition clr
+        ? [.. ClrBuiltInRules.OperatorsBeside(clr, kind, null)]
+        : [.. definition.Operators.Where(o => o.Kind == kind)];
 
     // ---- ResolveConversionFrom: intrinsic conversions are reds on the stub, reflected ones are pins ----
 
@@ -271,7 +274,7 @@ public class TypeRulesTests {
     // ---- Conversions: the one member, declared ends and platform built-ins ----
 
     [Test]
-    public async Task Conversions_ClrType_ListsItsDeclaredConversion_AndThePlatformsBuiltIns() {
+    public async Task Conversions_ClrType_ListsItsDeclaredConversion_AndCSharpAppliesTheBuiltIns() {
         var offset = (ITypeDefinition)Clr(typeof(DateTimeOffset));
         var conversions = offset.Conversions.ToArray();
         var declared = conversions.Single(conversion => conversion.Method is not null);
@@ -279,42 +282,39 @@ public class TypeRulesTests {
         await Assert.That(declared.Method!.Name).IsEqualTo("op_Implicit");
         await Assert.That(declared.SourceTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTime));
         await Assert.That(declared.ResultTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTimeOffset));
-        // The box is the platform's answer, with no method.
-        var box = conversions.Single(conversion => IsTo(conversion, typeof(object)));
+        await Assert.That(conversions.All(static conversion => conversion.Method is not null)).IsTrue()
+            .Because("a type lists only what it declares (#998 T10)");
+        // The box is C#'s answer, with no method.
+        var box = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(offset, Clr(typeof(object)));
+        await Assert.That(box!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(box.Method).IsNull();
         await Assert.That(box.SourceTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTimeOffset));
         // C# applies the numeric conversions itself; a simple type declares none.
-        await Assert.That(((ITypeDefinition)Clr(typeof(int))).Conversions.All(conversion => conversion.Method is null)).IsTrue();
-
-        static bool IsTo(ITypeConversion conversion, Type type) =>
-            conversion.ResultTypeDefinition.GetRuntimeTypeOrThrow() == type;
+        await Assert.That(((ITypeDefinition)Clr(typeof(int))).Conversions).IsEmpty();
     }
 
     // ---- Conversions: the platform-complete outbound view ----
 
     [Test]
-    public async Task Conversions_ClrInt32_StatesThePlatformConversions_NotOnlyDeclarations() {
-        // S2b: a type states what it converts to, not only what it declares. Int32 declares none, yet C# has
-        // Int32 -> Int64 implicit and Int32 -> Object implicit (a box), neither with a method.
+    public async Task Conversions_ClrInt32_DeclaresNone_CSharpAppliesItsBuiltIns() {
+        // Int32 declares no conversion (#998 T10: a type lists only what it declares), yet C# has Int32 -> Int64 implicit
+        // and Int32 -> Object implicit (a box), neither with a method.
         var conversions = ((ITypeDefinition)Clr(typeof(int))).Conversions.ToArray();
-        var toLong = conversions.Single(conversion => IsTo(conversion, typeof(long)));
+        await Assert.That(conversions).IsEmpty();
+        var toLong = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), Clr(typeof(long)))!;
         await Assert.That(toLong.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toLong.Method).IsNull();
-        var toObject = conversions.Single(conversion => IsTo(conversion, typeof(object)));
+        var toObject = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), Clr(typeof(object)))!;
         await Assert.That(toObject.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toObject.Method).IsNull();
-        // An explicit numeric conversion is stated too.
-        var toUInt32 = conversions.Single(conversion => IsTo(conversion, typeof(uint)));
+        // An explicit numeric conversion is C#'s too.
+        var toUInt32 = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), Clr(typeof(uint)))!;
         await Assert.That(toUInt32.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(toUInt32.Method).IsNull();
-        // A conversion the other end declares is the query's, not this member's: decimal owns Int32 -> Decimal.
-        await Assert.That(conversions.Any(conversion => IsTo(conversion, typeof(decimal)))).IsFalse();
+        // A conversion the other end declares is the query's: decimal owns Int32 -> Decimal.
         var toDecimal = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), ((ITypeDefinition)Clr(typeof(decimal))));
         await Assert.That(toDecimal!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toDecimal.Method).IsNotNull();
-
-        static bool IsTo(ITypeConversion conversion, Type type) =>
-            conversion.ResultTypeDefinition.GetRuntimeTypeOrThrow() == type;
     }
 
     [Test]

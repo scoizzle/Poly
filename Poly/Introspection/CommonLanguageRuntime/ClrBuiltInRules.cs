@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+
 using P = Poly.Introspection.CommonLanguageRuntime.ClrPrimitive;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
@@ -268,5 +271,86 @@ internal static class ClrBuiltInRules {
                     yield return (own, [own], own);
                 break;
         }
+    }
+
+    // ── What C#'s type system offers for the CLR's definitions (#998 T10a). The definitions list only what they
+    // declare; C#'s system asks these. Interim, removed by T10b: the tables are keyed on the CLR host's ClrPrimitive
+    // and live here, not on C#'s SimpleType in Interpretation/CSharp. ──
+
+    /// <summary>
+    /// C#'s conversion into <paramref name="destination"/> (§2.2's order, moved from the definition): a native integer's
+    /// implicit built-in conversion first (C# 11 makes <c>nint</c> to <c>long</c> implicit where IntPtr declares an
+    /// explicit <c>op_Explicit</c>; an explicit one keeps IntPtr's declared method), then the declared conversion
+    /// (implicit preferred), so a conversion that names a method is never replaced by a built-in rule; then the built-in
+    /// rules, only between two CLR definitions; then C# 10.6.1's implicit nullable conversion.
+    /// </summary>
+    public static ITypeConversion? ConversionInto(ClrTypeDefinition destination, ITypeDefinition source) {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(source);
+        var clrSource = source as ClrTypeDefinition;
+        ConversionOperatorKind? builtInKind = null;
+        if (clrSource is not null) {
+            builtInKind = Conversion(ClrTypeDefinition.GetPrimitiveTypeId(clrSource.RuntimeType), ClrTypeDefinition.GetPrimitiveTypeId(destination.RuntimeType));
+            if (builtInKind is ConversionOperatorKind.Implicit
+                && (IsNativeInteger(clrSource.RuntimeType) || IsNativeInteger(destination.RuntimeType)))
+                return ClrTypeConversion.Intrinsic(builtInKind.Value, source, destination);
+        }
+        if (destination.FindDeclaredConversion(source, ConversionOperatorKind.Implicit) is { } declaredImplicit)
+            return declaredImplicit;
+        if (destination.FindDeclaredConversion(source, ConversionOperatorKind.Explicit) is { } declaredExplicit)
+            return declaredExplicit;
+        if (builtInKind is { } kind)
+            return ClrTypeConversion.Intrinsic(kind, source, destination);
+        return clrSource is null ? null : LiftedImplicit(destination, clrSource);
+    }
+
+    /// <summary>
+    /// C# 10.6.1's implicit nullable conversion: into <c>U?</c> from <c>S</c> or <c>S?</c> where <c>S</c> converts to
+    /// <c>U</c> implicitly (<c>long</c> to <c>decimal?</c>, <c>int?</c> to <c>long?</c>). It names no method, whatever the
+    /// underlying conversion declares, so it is never assignability; the emitter applies it from the bound parameter type.
+    /// Only for a nullable target. <c>S</c> to <c>S?</c> is the lift assignability states.
+    /// </summary>
+    private static ITypeConversion? LiftedImplicit(ClrTypeDefinition destination, ClrTypeDefinition source) {
+        var underlying = Nullable.GetUnderlyingType(destination.RuntimeType);
+        if (underlying is null)
+            return null;
+        var sourceUnderlying = Nullable.GetUnderlyingType(source.RuntimeType) ?? source.RuntimeType;
+        if (sourceUnderlying == underlying)
+            return null;
+        var underlyingConversion = ConversionInto(destination.Provider.GetTypeDefinition(underlying),
+            destination.Provider.GetTypeDefinition(sourceUnderlying));
+        return underlyingConversion is { Kind: ConversionOperatorKind.Implicit }
+            ? ClrTypeConversion.Intrinsic(ConversionOperatorKind.Implicit, source, destination)
+            : null;
+    }
+
+    private static readonly ConditionalWeakTable<ClrTypeDefinition, ConcurrentDictionary<(OperatorKind Kind, ClrPrimitive? Other), IReadOnlyList<ITypeOperator>>> Beside = new();
+
+    /// <summary>
+    /// The operators C# offers for <paramref name="owner"/> beside an operand of <paramref name="other"/> (null: the
+    /// owner itself): the operators C# applies itself, then the owner's declared <c>op_*</c> members. Where the CLR also
+    /// declares an intrinsic's exact signature (Double and Single declare their comparisons), the intrinsic is the
+    /// answer. The built-in rules read the other operand only through its primitive, so the cache is keyed by the kind
+    /// and that primitive: keyed by the kind alone, the first pair would answer for every other; keyed by the other
+    /// definition, it would grow without bound on fresh synthetic collection types, which are a new instance per
+    /// resolve. Reference equality depends on the other definition itself, so it is answered beside the cache.
+    /// </summary>
+    public static IReadOnlyList<ITypeOperator> OperatorsBeside(ClrTypeDefinition owner, OperatorKind kind, ITypeDefinition? other) {
+        ArgumentNullException.ThrowIfNull(owner);
+        OperatorShape.ArityOf(kind);
+        var otherPrimitive = other is null ? ClrTypeDefinition.GetPrimitiveTypeId(owner.RuntimeType) : other.GetClrPrimitive();
+        var offered = Beside.GetValue(owner, static _ => new()).GetOrAdd((kind, otherPrimitive), key => {
+            var intrinsic = Operators(owner, key.Other, owner.Provider, key.Kind);
+            var declared = owner.Operators.Where(o => o.Kind == key.Kind && !intrinsic.Any(builtIn => SameSignature(builtIn, o)));
+            return [.. intrinsic, .. declared];
+        });
+        return ReferenceEquality(owner, other, owner.Provider, kind) is { } reference ? [.. offered, reference] : offered;
+    }
+
+    private static bool SameSignature(ITypeOperator intrinsic, ITypeOperator declared) {
+        var (pa, pb) = (intrinsic.Parameters.ToArray(), declared.Parameters.ToArray());
+        return ReferenceEquals(intrinsic.ResultTypeDefinition, declared.ResultTypeDefinition)
+            && pa.Length == pb.Length
+            && pa.Zip(pb).All(static pair => ReferenceEquals(pair.First.ParameterTypeDefinition, pair.Second.ParameterTypeDefinition));
     }
 }

@@ -53,6 +53,15 @@ Owner, during T8 and T9 (2026-11-19):
     analysis holds a target system): C#'s own declarations (`AstTypeDefinition` and its synthetic collections and generic
     parameters, the domain's synthetic declarations) belong to the shared C# system, not to a per-unit layer.
 
+Owner, during T10 (2026-11-19):
+
+11. T10 deletes `ClrPrimitive` entirely: C#'s rules key on C#'s `SimpleType` plus runtime identity, and the VM and the
+    runtime executor switch on runtime types. Split (advisor): T10a moves the built-in operators and conversions into
+    C#'s system in the same slice that makes a CLR type's lists declared-only (else the resolver keeps a back door);
+    T10b deletes `ClrPrimitive` and re-keys C#'s tables on `SimpleType` in `Interpretation/CSharp`. Interim, removed by
+    T10b: in T10a the tables are still the CLR host's, keyed on `ClrPrimitive`. Its pin is T10b's guard
+    `PrimitiveVocabularyTests.ClrPrimitive_IsGone_FromEverySourceFile`, which fails while the interim stands.
+
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.
 
@@ -347,7 +356,7 @@ Each row begins with a failing test, run red and recorded. Each ends with the fu
 | T7 | `IConstraintApplicability` is registered; `GuardClosedProperties` and the domain's `Family` ask the domain system. | `range` on a property bound to `Number` applies, and on one bound to `nint` does not, whatever the spelling. |
 | T8 | Delete `IsGround()`, the 21 answers and `ClrGround`. Ratchet 42 → 21. | The ratchet is lowered first (red). |
 | T9 | `ITypeDefinition.System` is added (§2.4); `IsSameTypeAs`, `NullableOf`, `ElementType` (merging `IsCollectionShape` and `SequenceElementType`) and the three doors leave the definition. The T1 interim is removed. Ratchet 21 + 1 − 7 = 15. Split into T9a, T9b, T9c (ruling 10). | Pins first: `byte[]` element type is `byte` (ruling 9) and `List<int>` is `int`. Then the ratchet. |
-| T10 | `Conversions` and `Operators` list only declared ones; built-ins move into the C# system's rules. | `Clr<int>().Conversions` contains no built-in (it lists `int → long` today), with resolution unchanged. |
+| T10 | `Conversions` and `Operators` list only declared ones; built-ins move into the C# system's rules. Split into T10a and T10b (ruling 11); T10a's interim is removed by T10b. | `Clr<int>().Conversions` contains no built-in (it lists `int → long` today), with resolution unchanged. |
 | T11 | Typed member views become extensions, the CLR's `Members` includes constructors, and `AccessModifier` moves to the hosts. Ratchet → 10. | A CLR type's `Members` contains its constructors (fails today). |
 | T12 | `ITypeDefinitionProvider` and `TypeDefinitionProviderCollection` are retired: `AnalysisContext` holds a target system and the scope reads its `Sources`. | An analysis given only the ledger system resolves no CLR name (today the stack falls back to the CLR). |
 

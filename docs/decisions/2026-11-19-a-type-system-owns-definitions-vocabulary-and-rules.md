@@ -103,7 +103,7 @@ public sealed class TypeSystemRules {  // registration, held by a system
 }
 ```
 
-That is 13 members. A layered system answers what it owns and asks its `Target` for the rest.
+That is 12 members (revision 2 said 13; the recount in T1 is 12). A layered system answers what it owns and asks its `Target` for the rest.
 
 ### 2.1 What it absorbs
 
@@ -286,7 +286,7 @@ All of these extend the existing `TypeShapeTests.Contract_DeclaresNoClosedListOf
   and it ends at §1's 10.
 - **`ITypeDefinition_StatesNoClassification`:** a ratchet over the `bool`, `int` and enum properties. It is pinned at
   today's 23 (the 21 answers, `IsCollectionShape`, `AccessModifier`) and only shrinks; it ends empty.
-- **`ITypeSystem_IsExactlyTheDecidedMembers`:** pinned at §2's 13 from the row that adds it.
+- **`ITypeSystem_IsExactlyTheDecidedMembers`:** pinned at §2's 12 from the row that adds it.
 - **`ITypeSystem_ClassifiesNothing`:** no member takes exactly one `ITypeDefinition` and returns `bool`, `int` or an
   enum.
 - **`Rules_AreConstrainedToTheBase`:** `ITypeSystem.Rule<T>`, `TypeSystemRules.Add<T>` and `Find<T>` constrain `T`

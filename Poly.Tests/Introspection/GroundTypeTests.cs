@@ -111,21 +111,21 @@ public class GroundTypeTests {
     }
 
     [Test]
-    public async Task DomainGround_OfEveryClrGroundType_IsTheDomainsOwnRule() {
-        (Type Type, Poly.DomainModeling.Meaning.DomainGround? Ground)[] table = [
-            (typeof(string), Poly.DomainModeling.Meaning.DomainGround.Text),
-            (typeof(int), Poly.DomainModeling.Meaning.DomainGround.Int32),
-            (typeof(long), Poly.DomainModeling.Meaning.DomainGround.Int64),
-            (typeof(float), Poly.DomainModeling.Meaning.DomainGround.Float32),
-            (typeof(double), Poly.DomainModeling.Meaning.DomainGround.Float64),
-            (typeof(decimal), Poly.DomainModeling.Meaning.DomainGround.Decimal),
-            (typeof(bool), Poly.DomainModeling.Meaning.DomainGround.Boolean),
-            (typeof(DateOnly), Poly.DomainModeling.Meaning.DomainGround.Date),
-            (typeof(DateTime), Poly.DomainModeling.Meaning.DomainGround.DateTime),
-            (typeof(TimeOnly), Poly.DomainModeling.Meaning.DomainGround.Time),
-            (typeof(TimeSpan), Poly.DomainModeling.Meaning.DomainGround.Duration),
-            (typeof(Guid), Poly.DomainModeling.Meaning.DomainGround.Guid),
-            (typeof(byte[]), Poly.DomainModeling.Meaning.DomainGround.Binary),
+    public async Task DomainWord_OfEveryClrGroundType_IsTheDomainsOwnRule() {
+        (Type Type, string? Ground)[] table = [
+            (typeof(string), "Text"),
+            (typeof(int), "Int32"),
+            (typeof(long), "Number"),
+            (typeof(float), "Float32"),
+            (typeof(double), "Float"),
+            (typeof(decimal), "Decimal"),
+            (typeof(bool), "Boolean"),
+            (typeof(DateOnly), "Date"),
+            (typeof(DateTime), "DateTime"),
+            (typeof(TimeOnly), "Time"),
+            (typeof(TimeSpan), "Duration"),
+            (typeof(Guid), "Uuid"),
+            (typeof(byte[]), "Binary"),
             // Ground types the domain language has no rule for: they must not join a family because a fact exists.
             (typeof(char), null), (typeof(sbyte), null), (typeof(short), null), (typeof(byte), null), (typeof(ushort), null),
             (typeof(uint), null), (typeof(ulong), null), (typeof(nint), null), (typeof(nuint), null),
@@ -136,7 +136,7 @@ public class GroundTypeTests {
         await Assert.That(table.Select(static row => row.Type).Where(ClrGround.IsGround).Count())
             .IsEqualTo(Enum.GetValues<ClrPrimitive>().Length).Because("every CLR ground type has a row");
         foreach (var (type, ground) in table)
-            await Assert.That(Poly.DomainModeling.Meaning.DomainGrounds.Of(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)))
+            await Assert.That(Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)))
                 .IsEqualTo(ground).Because($"'{type}'");
     }
 

@@ -157,7 +157,8 @@ public sealed partial class DomainSession {
         IReadOnlyList<ContractContribution>? contractContributions = null,
         Poly.Introspection.ITypeSystem? targetTypeSystem = null) {
         Domain = domain;
-        TargetTypeSystem = targetTypeSystem ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+        _explicitTargetTypeSystem = targetTypeSystem;
+        TargetTypeSystem = targetTypeSystem ?? new DomainTypeSystem(typeMaps, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         Extensions = extensions;
         Language = language;
         Annotations = annotations;
@@ -200,7 +201,7 @@ public sealed partial class DomainSession {
     private DomainSession Clone(Domain? domain, SessionOptions options) =>
         new(domain, Extensions, options, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions,
             Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers,
-            ObservedFlows, DiagnosticAllowances, ContractContributions, TargetTypeSystem);
+            ObservedFlows, DiagnosticAllowances, ContractContributions, _explicitTargetTypeSystem);
 
     /// <summary>The contract the library with <paramref name="libraryId"/> contributed, or null.</summary>
     public ContractContribution? FindContractContribution(string libraryId) =>
@@ -245,12 +246,16 @@ public sealed partial class DomainSession {
         if (SameExtensions(Extensions, domain.Extensions))
             return Clone(domain, Options);
         var reloaded = LibrarySelection.Load(domain.Extensions, Options);
-        return new DomainSession(domain, reloaded.Extensions, Options, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions, TargetTypeSystem);
+        return new DomainSession(domain, reloaded.Extensions, Options, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions, _explicitTargetTypeSystem);
     }
 
     /// <summary>The type system the session's analysis decides by (<see cref="SessionBuilder.WithTargetTypeSystem"/>),
-    /// else C# over the CLR (#998 T4d).</summary>
+    /// else the domain language layered on C# over the CLR (#998 T4d, T5).</summary>
     public Poly.Introspection.ITypeSystem TargetTypeSystem { get; }
+
+    // The builder's target, if it named one. A session copy carries this, never the default: the default domain system
+    // binds the copy's own words (a reload for other `uses` has other type maps).
+    private readonly Poly.Introspection.ITypeSystem? _explicitTargetTypeSystem;
 
     /// <summary>
     /// Analyzes <paramref name="domain"/> with this session's pipeline (type maps included) and its target type system.

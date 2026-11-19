@@ -48,8 +48,10 @@ public class DomainTargetTypeSystemTests {
     }
 
     [Test]
-    public async Task Session_TargetIsTheBuildersOption_ElseCSharp() {
-        await Assert.That(SessionBuilder.CreateEmpty().LoadCore().Build().TargetTypeSystem).IsSameReferenceAs(CSharpTypeSystem.Shared);
+    public async Task Session_TargetIsTheBuildersOption_ElseTheDomainOverCSharp() {
+        var byDefault = SessionBuilder.CreateEmpty().LoadCore().Build().TargetTypeSystem;
+        await Assert.That(byDefault).IsTypeOf<DomainTypeSystem>().Because("the domain language is a type system layered on C# (T5)");
+        await Assert.That(byDefault.Target).IsSameReferenceAs(CSharpTypeSystem.Shared);
         var ledger = new LedgerHost();
         await Assert.That(SessionBuilder.CreateEmpty().LoadCore().WithTargetTypeSystem(ledger).Build().TargetTypeSystem)
             .IsSameReferenceAs(ledger);
@@ -77,5 +79,44 @@ public class DomainTargetTypeSystemTests {
 
         await Assert.That(built.WithDomain(new Domain("T", [])).TargetTypeSystem).IsSameReferenceAs(ledger);
         await Assert.That(built.WithTarget("host").TargetTypeSystem).IsSameReferenceAs(ledger);
+    }
+
+    [Test]
+    public async Task Family_IsTheDefinitionsTheDomainsWordsBind_NotWhatAForeignTypeAnswers() {
+        // The ledger's amount answers that it is a decimal number, but no domain word binds it: it joins no family
+        // (#998 T5, decision §3.1). The CLR's decimal is bound by "Decimal" and stays in it.
+        var ledger = new LedgerHost();
+        var (domain, _) = Build();
+        var model = new DomainTypeModel(domain, new TypeMappingRegistry(), CSharpTypeSystem.Shared);
+
+        await Assert.That(model.KindOf(new ExprType(ledger.Amount, Optional: false, DomainName: null))).IsEqualTo(NumericKind.None);
+        await Assert.That(model.KindOf(model.Resolve("Decimal"))).IsEqualTo(NumericKind.Decimal);
+        await Assert.That(model.KindOf(model.Resolve("Number"))).IsEqualTo(NumericKind.Integer64);
+    }
+
+    [Test]
+    public async Task DomainSystem_BindsItsWords_OnItsTarget_AndSpellsThemBack() {
+        var domain = new DomainTypeSystem(new TypeMappingRegistry(), CSharpTypeSystem.Shared);
+        var clr = Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+
+        await Assert.That(domain.Target).IsSameReferenceAs(CSharpTypeSystem.Shared);
+        await Assert.That(domain.IsSame(domain.Bind("Number")!, clr.GetTypeDefinition(typeof(long)))).IsTrue();
+        await Assert.That(domain.IsSame(domain.Bind("Int")!, clr.GetTypeDefinition(typeof(long)))).IsTrue().Because("an alias binds the same definition");
+        await Assert.That(domain.Spell(clr.GetTypeDefinition(typeof(long)))).IsEqualTo("Number");
+        await Assert.That(domain.Spell(clr.GetTypeDefinition(typeof(nint)))).IsNull().Because("no domain word binds nint");
+        await Assert.That(domain.Bind("short")).IsNull()
+            .Because("the interim table (DomainTypeMapping, until S3) binds the domain's words and the CLR names they lower to, nothing else");
+        await Assert.That(domain.Operator(Poly.Introspection.OperatorKind.Add, domain.Bind("Number")!, domain.Bind("Number")!)).IsNotNull()
+            .Because("what the domain does not own, its target answers");
+    }
+
+    [Test]
+    public async Task DefaultTarget_FollowsTheSessionsWords_AcrossAUsesChange() {
+        // A session reloaded for a domain with other `uses` has other words; its default domain system binds them.
+        var core = SessionBuilder.CreateEmpty().LoadCore().Build();
+        await Assert.That(core.TargetTypeSystem.Bind("Date")).IsNull().Because("core alone has no Date word");
+
+        var temporal = core.WithDomain(new Domain("T", []) { Extensions = ["temporal"] });
+        await Assert.That(temporal.TargetTypeSystem.Bind("Date")).IsNotNull().Because("the temporal library binds Date");
     }
 }

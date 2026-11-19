@@ -259,7 +259,8 @@ public sealed class SessionBuilder {
         return this;
     }
 
-    /// <summary>The type system the session's analysis decides operators and conversions by (#998 T4d); with none, C#
+    /// <summary>The type system the session's analysis decides operators and conversions by (#998 T4d); with none, the
+    /// domain language layered on C#
     /// over the CLR.</summary>
     public SessionBuilder WithTargetTypeSystem(Poly.Introspection.ITypeSystem system) {
         ArgumentNullException.ThrowIfNull(system);

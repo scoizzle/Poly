@@ -34,15 +34,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 ? TypeFamily.Entity
                 : null;
         }
-        return DomainGrounds.Of(definition) switch {
-            DomainGround.Text => TypeFamily.Text,
-            DomainGround.Int32 or DomainGround.Int64 or DomainGround.Float32 or DomainGround.Float64 or DomainGround.Decimal => TypeFamily.Number,
-            DomainGround.Boolean => TypeFamily.Boolean,
-            DomainGround.Date or DomainGround.DateTime => TypeFamily.Date,
-            DomainGround.Time => TypeFamily.Time,
-            DomainGround.Duration => TypeFamily.Duration,
-            DomainGround.Guid => TypeFamily.Guid,
-            DomainGround.Binary => TypeFamily.Binary,
+        return DomainTypeSystem.WordOf(definition) switch {
+            "Text" => TypeFamily.Text,
+            "Int32" or "Number" or "Float32" or "Float" or "Decimal" => TypeFamily.Number,
+            "Boolean" => TypeFamily.Boolean,
+            "Date" or "DateTime" => TypeFamily.Date,
+            "Time" => TypeFamily.Time,
+            "Duration" => TypeFamily.Duration,
+            "Uuid" => TypeFamily.Guid,
+            "Binary" => TypeFamily.Binary,
             _ => null,
         };
     }
@@ -54,15 +54,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private static bool IsDate(ExprType type) => Family(type) is TypeFamily.Date;
 
-    private static bool IsDateOnly(ExprType type) => DomainGrounds.Of(type.Definition) is DomainGround.Date;
+    private static bool IsDateOnly(ExprType type) => DomainTypeSystem.WordOf(type.Definition) is "Date";
 
-    private static bool IsDateTime(ExprType type) => DomainGrounds.Of(type.Definition) is DomainGround.DateTime;
+    private static bool IsDateTime(ExprType type) => DomainTypeSystem.WordOf(type.Definition) is "DateTime";
 
     /// <summary>A type as a message names it. Only typed values reach a message: an untyped one is DMSEM006's.</summary>
     private static string Describe(ExprType t) => Family(t) switch {
         TypeFamily.Text => "Text",
         // Only Decimal is distinct (#581); Float and Int32 keep the family name (removing row T-08).
-        TypeFamily.Number => DomainGrounds.Of(t.Definition) is DomainGround.Decimal ? "Decimal" : "Number",
+        TypeFamily.Number => DomainTypeSystem.WordOf(t.Definition) is "Decimal" ? "Decimal" : "Number",
         TypeFamily.Boolean => "Boolean",
         TypeFamily.Date => $"Date ({t.DomainName ?? "date"})",
         TypeFamily.Time => $"Time ({t.DomainName ?? "time"})",

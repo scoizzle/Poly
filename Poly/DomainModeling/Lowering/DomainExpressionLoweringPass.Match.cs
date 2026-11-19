@@ -32,7 +32,7 @@ public sealed partial class DomainExpressionLoweringPass {
         // conditional: `(T?)null` cannot share one word with a present arm. Analysis refuses a `null` arm into a required
         // slot (#606). The slot is the target's, or the match's own type when it has no target (an operand, an argument).
         var slot = typing.Unified.Optional ? SlotOf(typing.Unified, target) : null;
-        var toDecimal = DomainGrounds.Of(typing.Unified.Definition) is DomainGround.Decimal
+        var toDecimal = DomainTypeSystem.WordOf(typing.Unified.Definition) is "Decimal"
             || slot is not null && target is not null && TargetTypeAdapter.IsDecimal(_domain, target.TypeName);
         var arms = m.Arms
             .Select((a, i) => (Condition: RouteCondition(a.Condition), Value: Arm(a.Value, target, typing.ArmTypes[i], toDecimal, slot)))
@@ -70,16 +70,16 @@ public sealed partial class DomainExpressionLoweringPass {
     private SN.OptionalTypeReference? SlotOf(ExprType unified, DomainTypeReference? target) {
         if (target is not null && TargetTypeAdapter.OptionalSlot(target, _context) is { } fromTarget)
             return fromTarget;
-        var name = unified.DomainName ?? DomainGrounds.Of(unified.Definition) switch {
-            DomainGround.Int64 => "Number",
-            DomainGround.Decimal => "Decimal",
-            DomainGround.Text => "Text",
-            DomainGround.Boolean => "Boolean",
-            DomainGround.Guid => "Uuid",
-            DomainGround.Date => "Date",
-            DomainGround.DateTime => "DateTime",
-            DomainGround.Time => "Time",
-            DomainGround.Duration => "Duration",
+        var name = unified.DomainName ?? DomainTypeSystem.WordOf(unified.Definition) switch {
+            "Number" => "Number",
+            "Decimal" => "Decimal",
+            "Text" => "Text",
+            "Boolean" => "Boolean",
+            "Uuid" => "Uuid",
+            "Date" => "Date",
+            "DateTime" => "DateTime",
+            "Time" => "Time",
+            "Duration" => "Duration",
             _ => null,
         };
         return name is null ? null : TargetTypeAdapter.OptionalSlot(new DomainTypeReference(name), _context);
@@ -96,7 +96,7 @@ public sealed partial class DomainExpressionLoweringPass {
         var lowered = value is Literal { Value: null } && slot is not null
             ? LoweredExpression.Of(new SN.TypeCast(new Constant(null), slot))
             : target is null ? Route(value) : AdaptTo(value, target, _currentSubject);
-        return toDecimal && !armType.Optional && DomainGrounds.Of(armType.Definition) is DomainGround.Int32 or DomainGround.Int64
+        return toDecimal && !armType.Optional && DomainTypeSystem.WordOf(armType.Definition) is "Int32" or "Number"
             ? lowered with { Value = new SN.TypeCast(lowered.Value, ClrTypeReferences.Of(typeof(decimal))) }
             : lowered;
     }

@@ -95,11 +95,11 @@ internal sealed class DomainTypeModel {
         return model;
     }
 
-    public NumericKind KindOf(ExprType type) => DomainGrounds.Of(type.Definition) switch {
+    public NumericKind KindOf(ExprType type) => DomainTypeSystem.WordOf(type.Definition) switch {
         // Int32 → Integer64 is a judgement V-02 may revisit (T-02 A1: Int32 bounds parse as decimal).
-        DomainGround.Int32 or DomainGround.Int64 => NumericKind.Integer64,
-        DomainGround.Float64 => NumericKind.Float64,
-        DomainGround.Decimal => NumericKind.Decimal,
+        "Int32" or "Number" => NumericKind.Integer64,
+        "Float" => NumericKind.Float64,
+        "Decimal" => NumericKind.Decimal,
         _ => NumericKind.None
     };
 }

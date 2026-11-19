@@ -123,15 +123,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // A Decimal that came from unnamed arithmetic (`Dec * 2`) takes the Decimal name where the slot is a Number that is not a
         // Decimal, so the name rule of `Compatible` keeps it out of that slot whichever arm comes first. Into a declared Decimal
         // alias (`Cents`, API only) it stays unnamed and is accepted as on the base (the arithmetic itself is T-07's).
-        if (unified is { DomainName: null } unnamed && DomainGrounds.Of(unnamed.Definition) is DomainGround.Decimal
-            && target is { } numberSlot && Family(numberSlot) is TypeFamily.Number && DomainGrounds.Of(numberSlot.Definition) is not DomainGround.Decimal)
+        if (unified is { DomainName: null } unnamed && DomainTypeSystem.WordOf(unnamed.Definition) is "Decimal"
+            && target is { } numberSlot && Family(numberSlot) is TypeFamily.Number && DomainTypeSystem.WordOf(numberSlot.Definition) is not "Decimal")
             unified = unnamed with { DomainName = "Decimal" };
         // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
         var result = mismatches.Count > 0 ? firstKnown!.Value.AsOptional(false) : unified ?? TextFamily;
         return new MatchUnification(result.AsOptional(optional), types, mismatches, AllTyped: true);
     }
 
-    private static bool IsIntegerClass(ExprType type) => DomainGrounds.Of(type.Definition) is DomainGround.Int32 or DomainGround.Int64;
+    private static bool IsIntegerClass(ExprType type) => DomainTypeSystem.WordOf(type.Definition) is "Int32" or "Number";
 
     /// <summary>
     /// Two known, non-null arm types merged, or null when they do not unify: an enum with Text (the caller decides the
@@ -145,22 +145,22 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (Family(a) is TypeFamily.Enum or TypeFamily.Entity or TypeFamily.Value)
             return string.Equals(a.DomainName, b.DomainName, StringComparison.Ordinal) ? a : null;
         if (Family(a) is not TypeFamily.Number)
-            return DomainGrounds.Of(a.Definition) == DomainGrounds.Of(b.Definition) ? a : null;
-        var (left, right) = (DomainGrounds.Of(a.Definition), DomainGrounds.Of(b.Definition));
+            return DomainTypeSystem.WordOf(a.Definition) == DomainTypeSystem.WordOf(b.Definition) ? a : null;
+        var (left, right) = (DomainTypeSystem.WordOf(a.Definition), DomainTypeSystem.WordOf(b.Definition));
         if (left == right) return a;
-        if (left is DomainGround.Decimal && IsIntegerClass(b)) return a;
-        if (right is DomainGround.Decimal && IsIntegerClass(a)) return b.AsOptional(false);
+        if (left is "Decimal" && IsIntegerClass(b)) return a;
+        if (right is "Decimal" && IsIntegerClass(a)) return b.AsOptional(false);
         return null;
     }
 
     /// <summary>An arm type as DMMAT002 names it: a number by its real type (<see cref="Describe"/> keeps one word for the family).</summary>
     private static string DescribeArm(ExprType type) {
         var name = Family(type) is TypeFamily.Number
-            ? DomainGrounds.Of(type.Definition) switch {
-                DomainGround.Int64 => "Number",
-                DomainGround.Int32 => "Int32",
-                DomainGround.Float32 => "Float32",
-                DomainGround.Float64 => "Float",
+            ? DomainTypeSystem.WordOf(type.Definition) switch {
+                "Number" => "Number",
+                "Int32" => "Int32",
+                "Float32" => "Float32",
+                "Float" => "Float",
                 _ => Describe(type),
             }
             : Describe(type);

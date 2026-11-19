@@ -111,7 +111,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// R4 (owner ruling 2026-11-13): every Decimal day count is refused. One predicate: a Decimal count dropped its
     /// fraction on a Date and failed on a host everywhere else.
     /// </summary>
-    private static bool IsRefusedCount(ExprType countType) => DomainGrounds.Of(countType.Definition) is DomainGround.Decimal;
+    private static bool IsRefusedCount(ExprType countType) => DomainTypeSystem.WordOf(countType.Definition) is "Decimal";
 
     /// <summary>R3 (#648): the operands of a date difference may not be optional; neither door computes with an unset date.</summary>
     private void CheckDateDifferenceOperands(

@@ -158,7 +158,7 @@ public class TypeDefinitionProviderCollectionTests {
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;
-        bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+        public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
         ITypeOperator? ITypeDefinition.ResolveOperator(OperatorKind kind, ITypeDefinition? right) => null;
         ITypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) => null;
     }

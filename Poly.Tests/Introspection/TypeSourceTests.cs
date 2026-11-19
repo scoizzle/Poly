@@ -120,8 +120,11 @@ public class TypeSourceTests {
         registry.Add(order);
         registry.Add(loose);
 
-        await Assert.That(registry.TypesIn("Shop")).IsEquivalentTo(new ITypeDefinition[] { order });
-        await Assert.That(registry.TypesIn(null)).IsEquivalentTo(new ITypeDefinition[] { loose });
+        // By reference: a definition is compared by identity, never by walking its members (its System is a whole system).
+        await Assert.That(registry.TypesIn("Shop").ToList()).HasSingleItem();
+        await Assert.That(registry.TypesIn("Shop").Single()).IsSameReferenceAs(order);
+        await Assert.That(registry.TypesIn(null).ToList()).HasSingleItem();
+        await Assert.That(registry.TypesIn(null).Single()).IsSameReferenceAs(loose);
         await Assert.That(registry.TypesIn("Elsewhere")).IsEmpty();
     }
 

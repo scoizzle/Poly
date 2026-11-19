@@ -11,6 +11,12 @@ namespace Poly.Introspection;
 /// </remarks>
 public interface ITypeDefinition {
     /// <summary>
+    /// The type system that made this definition, and whose rules decide its identity and its relations (#998 T9,
+    /// decision §2.4). Two systems never share a definition.
+    /// </summary>
+    ITypeSystem System { get; }
+
+    /// <summary>
     /// Gets the simple (non-qualified) name of the type.
     /// </summary>
     /// <example>"String", "List`1"</example>
@@ -81,13 +87,6 @@ public interface ITypeDefinition {
     /// </summary>
     IEnumerable<ITypeOperator> Operators { get; }
 
-    /// <summary>
-    /// True when <paramref name="other"/> is the same type as this one, by this platform's identity notion. Identity is
-    /// the platform's answer, not the root's: a host decides what makes two of its definitions the same (a runtime
-    /// type, a declared name, a synthetic collection's kind and element), and a definition from another platform is
-    /// never the same type. Callers ask through <see cref="TypeDefinitionExtensions.IsSameType"/>.
-    /// </summary>
-    internal bool IsSameTypeAs(ITypeDefinition other);
 
     /// <summary>
     /// True when this type exposes a sequence shape: a platform's own collection definition, or a type whose

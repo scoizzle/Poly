@@ -6,15 +6,33 @@ namespace Poly.Tests.Introspection;
 public class TypeDefinitionExtensionsTests {
     [Test]
     public async Task IsSameType_ThirdPlatformDefinitions_CompareByTheirOwnAnswer() {
-        // I1: identity is the platform's. These definitions are neither CLR nor AST, so a root that decides identity
-        // with its own type tests would answer "not the same" even when the platform says they are.
+        // I1: identity is the platform's: these definitions are neither CLR nor AST, and the system that made them says they
+        // are the same (#998 T9: the system, not the definition, answers).
         ITypeDefinition first = new NamedDefinition("Money", "Billing");
         ITypeDefinition second = new NamedDefinition("Money", "Billing");
 
         await Assert.That(TypeDefinitionExtensions.IsSameType(first, second)).IsTrue();
     }
 
-    /// <summary>A definition from a platform the root knows nothing about: it answers its own identity.</summary>
+    /// <summary>A platform the root knows nothing about: its system decides identity by qualified name (#998 T9).</summary>
+    private sealed class NamedPlatform : ITypeSystem {
+        public static readonly NamedPlatform Instance = new();
+        public ITypeSystem? Target => null;
+        public IReadOnlyList<ITypeSource> Sources => [];
+        public ITypeDefinition? Resolve(string qualifiedName) => null;
+        public ITypeDefinition? Bind(string word) => null;
+        public string? Spell(ITypeDefinition definition) => null;
+        public bool IsSame(ITypeDefinition a, ITypeDefinition b) =>
+            string.Equals(a.Name, b.Name, StringComparison.Ordinal) && string.Equals(a.Namespace, b.Namespace, StringComparison.Ordinal);
+        public ITypeDefinition? NullableOf(ITypeDefinition definition) => null;
+        public ITypeDefinition? ElementType(ITypeDefinition definition) => null;
+        public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) => IsSame(destination, source);
+        public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) => null;
+        public ITypeOperator? Operator(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right) => null;
+        public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule => null;
+    }
+
+    /// <summary>A definition from a platform the root knows nothing about: its own system answers its identity.</summary>
     private sealed class NamedDefinition(string name, string? ns) : ITypeDefinition {
         public string Name => name;
         public string? Namespace => ns;
@@ -30,10 +48,7 @@ public class TypeDefinitionExtensionsTests {
         public IEnumerable<ITypeOperator> Operators => [];
         public ITypeDefinition? NullableOf => null;
 
-        public bool IsSameTypeAs(ITypeDefinition other) =>
-            other is NamedDefinition candidate
-            && string.Equals(candidate.Name, Name, StringComparison.Ordinal)
-            && string.Equals(candidate.Namespace, ns, StringComparison.Ordinal);
+        public ITypeSystem System => NamedPlatform.Instance;
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;

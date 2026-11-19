@@ -16,11 +16,12 @@ public static class TypeDefinitionExtensions {
         system is null ? destination.ResolveConversionFrom(source) : system.Conversion(source, destination);
 
     /// <summary>
-    /// The one type-identity notion, answered by the platform: <see cref="ITypeDefinition.IsSameTypeAs"/>.
-    /// <see cref="IsAssignableFrom"/>, <c>GetOperator</c>, <c>GetCommonType</c> and overload scoring share it.
+    /// The one type-identity notion: two definitions are the same type when one system made both and that system says
+    /// so (<see cref="ITypeSystem.IsSame"/>; #998 T9, decision §2.4). <see cref="IsAssignableFrom"/>, <c>GetOperator</c>,
+    /// <c>GetCommonType</c> and overload scoring share it.
     /// </summary>
     internal static bool IsSameType(ITypeDefinition a, ITypeDefinition b) =>
-        a is not null && a.IsSameTypeAs(b);
+        a is not null && b is not null && ReferenceEquals(a.System, b.System) && a.System.IsSame(a, b);
 
     /// <summary>The platform-neutral part of assignability: the same type, a base type, or an interface.</summary>
     internal static bool IsAssignableByHierarchy(ITypeDefinition destination, ITypeDefinition source) {

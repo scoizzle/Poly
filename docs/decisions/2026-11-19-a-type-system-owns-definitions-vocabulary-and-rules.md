@@ -40,6 +40,19 @@ Owner, during T6 and T7 (2026-11-19):
    T7 they are, and a write outside them fails. (Found during T7: the DSL's number keywords are Number and Decimal,
    so these words reach a domain that declares them as primitives through the API or an MCP change.)
 
+Owner, during T8 and T9 (2026-11-19):
+
+8. T8 runs in three steps: lower the ratchet first (red); retarget every surviving fact to its owner, deleting nothing
+   (T8a); then delete the members, removing only the tests that can no longer compile, each named with why nothing else
+   covers it (T8b).
+9. `byte[]`'s element type stays `byte` (C#'s rule: `foreach` over `byte[]` keeps working); the binary exclusion stays
+   in the compatibility analyzer's collection match and the CLR host's table. T9's pin is amended accordingly.
+10. T9 is split (advisor, 2026-11-19) so each slice is green and leaves no interim of its own: T9a adds `System` and
+    moves identity to the system; T9b moves the three doors and removes the optional-system helpers; T9c moves
+    `NullableOf` and the merged `ElementType` and removes the `IClrTypeDefinition` marker. Interim, removed by T12 (the
+    analysis holds a target system): C#'s own declarations (`AstTypeDefinition` and its synthetic collections and generic
+    parameters, the domain's synthetic declarations) belong to the shared C# system, not to a per-unit layer.
+
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.
 
@@ -333,7 +346,7 @@ Each row begins with a failing test, run red and recorded. Each ends with the fu
 | T6 | `ICSharpTypeRules : ITypeSystemRule` (`SimpleTypeOf`, `IsEnumType`, `HasValueSemantics`; ruling 4). The analyzer, constant folding, `DateOffsetRule`, the shift policy and `Classify` ask it. Split into T6a, T6b and T6c (ruling 6). | A ledger definition is not folded and is `Cat.Unknown` (today `IsNumber` makes it `Cat.Number`). |
 | T7 | `IConstraintApplicability` is registered; `GuardClosedProperties` and the domain's `Family` ask the domain system. | `range` on a property bound to `Number` applies, and on one bound to `nint` does not, whatever the spelling. |
 | T8 | Delete `IsGround()`, the 21 answers and `ClrGround`. Ratchet 42 → 21. | The ratchet is lowered first (red). |
-| T9 | `ITypeDefinition.System` is added (§2.4); `IsSameTypeAs`, `NullableOf`, `ElementType` (merging `IsCollectionShape` and `SequenceElementType`) and the three doors leave the definition. The T1 interim is removed. Ratchet 21 + 1 − 7 = 15. | Pins first: `byte[]` element type is null and `List<int>` is `int`. Then the ratchet. |
+| T9 | `ITypeDefinition.System` is added (§2.4); `IsSameTypeAs`, `NullableOf`, `ElementType` (merging `IsCollectionShape` and `SequenceElementType`) and the three doors leave the definition. The T1 interim is removed. Ratchet 21 + 1 − 7 = 15. Split into T9a, T9b, T9c (ruling 10). | Pins first: `byte[]` element type is `byte` (ruling 9) and `List<int>` is `int`. Then the ratchet. |
 | T10 | `Conversions` and `Operators` list only declared ones; built-ins move into the C# system's rules. | `Clr<int>().Conversions` contains no built-in (it lists `int → long` today), with resolution unchanged. |
 | T11 | Typed member views become extensions, the CLR's `Members` includes constructors, and `AccessModifier` moves to the hosts. Ratchet → 10. | A CLR type's `Members` contains its constructors (fails today). |
 | T12 | `ITypeDefinitionProvider` and `TypeDefinitionProviderCollection` are retired: `AnalysisContext` holds a target system and the scope reads its `Sources`. | An analysis given only the ledger system resolves no CLR name (today the stack falls back to the CLR). |

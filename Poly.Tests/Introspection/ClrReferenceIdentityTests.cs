@@ -17,7 +17,7 @@ public class ClrReferenceIdentityTests {
 
         await Assert.That(reference).IsTypeOf<TypeDefinitionReference>();
         var stated = ((TypeDefinitionReference)reference).TypeDefinition;
-        await Assert.That(stated.IsSameTypeAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string))))
+        await Assert.That(TypeDefinitionExtensions.IsSameType(stated, ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string))))
             .IsTrue().Because("a minted reference states the provider's definition, not a name to resolve again");
     }
 
@@ -85,7 +85,7 @@ public class ClrReferenceIdentityTests {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         public ITypeDefinition? NullableOf => null;
-        public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+        public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;

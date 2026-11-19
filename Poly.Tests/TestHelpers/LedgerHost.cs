@@ -12,9 +12,9 @@ sealed class LedgerHost : ITypeSource, ITypeSystem, LedgerHost.ILedgerRules {
     public const string Namespace = "ledger";
 
     public LedgerHost() {
-        Amount = new LedgerDefinition("amount", minorUnits: 2);
-        Account = new LedgerDefinition("account");
-        Entry = new LedgerDefinition("entry");
+        Amount = new LedgerDefinition(this, "amount", minorUnits: 2);
+        Account = new LedgerDefinition(this, "account");
+        Entry = new LedgerDefinition(this, "entry");
     }
 
     public ITypeDefinition Amount { get; }
@@ -74,7 +74,8 @@ sealed class LedgerHost : ITypeSource, ITypeSystem, LedgerHost.ILedgerRules {
         public object? DefaultValue => null;
     }
 
-    private sealed class LedgerDefinition(string name, int? minorUnits = null) : ITypeDefinition {
+    private sealed class LedgerDefinition(LedgerHost host, string name, int? minorUnits = null) : ITypeDefinition {
+        public ITypeSystem System => host;
         public int? MinorUnitsCounted => minorUnits;
         public string Name => name;
         public string? Namespace => LedgerHost.Namespace;
@@ -89,7 +90,6 @@ sealed class LedgerHost : ITypeSource, ITypeSystem, LedgerHost.ILedgerRules {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
         public ITypeDefinition? NullableOf => null;
-        public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;
         ITypeDefinition? ITypeDefinition.SequenceElementType => null;

@@ -156,7 +156,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
     public AstTypeDefinition(TypeDefinitionNode node, ITypeDefinitionProvider provider)
         : this(node, provider, substitutions: null,
-            openId: System.Threading.Interlocked.Increment(ref _nextOpenId)) {
+            openId: global::System.Threading.Interlocked.Increment(ref _nextOpenId)) {
     }
 
     private AstTypeDefinition(
@@ -293,7 +293,10 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
     /// <summary>Each declaration builds one definition, so a declaration and its definition are one instance; a closed
     /// generic is that definition closed, a distinct instance.</summary>
-    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+    /// <summary>C#'s own declaration: C#'s system decides its identity and relations (#998 T9). Interim, removed by T12
+    /// (the analysis holds a target system): a unit's declarations belong to the shared C# system, not a layer of their
+    /// own.</summary>
+    public ITypeSystem System => Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
 
     // AST-based types are dictionary-backed at runtime
     public Type RuntimeType => typeof(IDictionary<string, object>);
@@ -921,16 +924,10 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     /// reference equality alone never matches an omitted collection argument. A nested collection compares by this
     /// notion again (its name does not carry its element's namespace).
     /// </summary>
-    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) {
-        if (ReferenceEquals(this, other))
-            return true;
-        if (other is not AstCollectionTypeDefinition right || Kind != right.Kind)
-            return false;
-        if (ElementType is AstCollectionTypeDefinition || right.ElementType is AstCollectionTypeDefinition)
-            return TypeDefinitionExtensions.IsSameType(ElementType, right.ElementType);
-        return string.Equals(ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
-            && string.Equals(ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
-    }
+    /// <summary>C#'s own declaration: C#'s system decides its identity and relations (#998 T9). Interim, removed by T12
+    /// (the analysis holds a target system): a unit's declarations belong to the shared C# system, not a layer of their
+    /// own.</summary>
+    public ITypeSystem System => Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
     ITypeDefinition? ITypeDefinition.NullableOf => null;
     public Type RuntimeType => typeof(System.Collections.IList);
 }
@@ -1020,11 +1017,10 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     /// method-level parameters of one name on one type are the same type here: a stated limitation, and no DSL
     /// construct declares a method-level type parameter.
     /// </summary>
-    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) =>
-        ReferenceEquals(this, other)
-        || (other is AstGenericParameterTypeDefinition right
-            && string.Equals(Name, right.Name, StringComparison.Ordinal)
-            && TypeDefinitionExtensions.IsSameType(DeclaringType, right.DeclaringType));
+    /// <summary>C#'s own declaration: C#'s system decides its identity and relations (#998 T9). Interim, removed by T12
+    /// (the analysis holds a target system): a unit's declarations belong to the shared C# system, not a layer of their
+    /// own.</summary>
+    public ITypeSystem System => Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
 
     ITypeDefinition? ITypeDefinition.NullableOf => null;
     public Type RuntimeType => typeof(object);

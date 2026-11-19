@@ -24,7 +24,7 @@ internal sealed class UnitTypeScope(IReadOnlyList<ITypeSource> sources) : ITypeD
         var found = new List<ITypeDefinition>();
         foreach (var @namespace in _namespaces) {
             foreach (var source in sources) {
-                if (source.TypeIn(@namespace, name) is { } definition && !found.Any(definition.IsSameTypeAs))
+                if (source.TypeIn(@namespace, name) is { } definition && !found.Any(other => TypeDefinitionExtensions.IsSameType(definition, other)))
                     found.Add(definition);
             }
         }

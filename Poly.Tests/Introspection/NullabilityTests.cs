@@ -57,7 +57,7 @@ public class NullabilityTests {
         public IEnumerable<ITypeConstructor> Constructors => [];
         public IEnumerable<ITypeOperator> Operators => [];
 
-        public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+        public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
         bool ITypeDefinition.IsCollectionShape => false;

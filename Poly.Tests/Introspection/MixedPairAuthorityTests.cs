@@ -106,7 +106,7 @@ public class MixedPairAuthorityTests {
         public IEnumerable<ITypeOperator> Operators => SelfAddition is null ? [AddOperator] : [AddOperator, SelfAddition];
         public ITypeDefinition? NullableOf => null;
 
-        public bool IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+        public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
 
         IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [ImplicitConversion];
         bool ITypeDefinition.IsCollectionShape => false;

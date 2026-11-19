@@ -9,9 +9,9 @@ namespace Poly.Interpretation.CSharp;
 /// C# over the CLR: the CLR supplies the definitions (reflection), C# supplies the words (its type keywords) and the
 /// rules (the C# standard's conversions, promotion and operators). One shared instance backs every CLR definition.
 /// It decides every pair it is asked about, whichever system an operand comes from (#998 T3): it reads what both types
-/// declare and applies C#'s rules; a foreign definition's own answer never decides. Interim (removed by T9, when a
-/// definition names its system): a definition is C#'s own when it is an <see cref="IClrTypeDefinition"/>, and for its
-/// own definitions the rules still delegate to their doors.
+/// declare and applies C#'s rules; a foreign definition's own answer never decides. Interim (removed by T9b, ruling 10):
+/// a definition is C#'s own when it is an <see cref="IClrTypeDefinition"/>, and for its own definitions the conversion,
+/// assignability and operator rules still delegate to their doors.
 /// </summary>
 internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
     public static CSharpTypeSystem Shared { get; } = new();
@@ -34,7 +34,32 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
 
     public string? Spell(ITypeDefinition definition) => CSharpTypeNames.SpellingOf(definition);
 
-    public bool IsSame(ITypeDefinition a, ITypeDefinition b) => TypeDefinitionExtensions.IsSameType(a, b);
+    /// <summary>
+    /// C#'s identity (#998 T9, moved from the definitions): a CLR definition and a declared type are the same only as
+    /// the same object; two synthetic collections of one kind and element are one type (each resolve builds a fresh
+    /// instance; a nested collection compares by this notion again, since its name does not carry its element's
+    /// namespace); two generic parameters are one when they share a name and a declaring type.
+    /// </summary>
+    public bool IsSame(ITypeDefinition a, ITypeDefinition b) {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        if (ReferenceEquals(a, b))
+            return true;
+        return (a, b) switch {
+            (Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition left,
+                Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition right) when left.Kind == right.Kind =>
+                left.ElementType is Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition
+                    || right.ElementType is Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition
+                    ? TypeDefinitionExtensions.IsSameType(left.ElementType, right.ElementType)
+                    : string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
+                      && string.Equals(left.ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal),
+            (Poly.Interpretation.Analysis.Semantics.AstGenericParameterTypeDefinition left,
+                Poly.Interpretation.Analysis.Semantics.AstGenericParameterTypeDefinition right) =>
+                string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+                && TypeDefinitionExtensions.IsSameType(left.DeclaringType, right.DeclaringType),
+            _ => false,
+        };
+    }
 
     public ITypeDefinition? NullableOf(ITypeDefinition definition) => definition.NullableOf;
 

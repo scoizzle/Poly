@@ -137,9 +137,10 @@ per-file budget. Where the analysis builds a type reference it states the defini
 `System.Type` does not enter the tree from the meaning layers; `ClrTypeReference` remains the AST's source-level
 reference until its own row removes it, and the factory that builds one is the host's internal shorthand (`ClrTypeReferences.To<T>()`), not
 the AST's: `Poly/Ast` names no `typeof`. `IsAssignableWithoutConversion` is its first half: the same type, a base type or an interface, and for .NET `Type.IsAssignableFrom`, the lift from `T` to `T?` and `object` accepting every definition (the VM boxes a modeled entity). The box into `object` is also `ClrBuiltInRules`' implicit conversion, so it is stated twice; the two agree on every CLR definition (`ObjectAcceptsEveryClrDefinition_IsAssignableFromAndResolveConversionFromAgree`) and differ for a modeled source by design. Still outside the contract, with no removing row yet: the tier sum itself (a private copy of overload resolution that keeps the first of equal candidates; it is not C# 12.6.4 better-conversion), the boxing rule stated twice, and `SyntaxTypeCompatibilityAnalyzer`'s `IsImplicitlyConvertible(Type, Type)` with its nullable lifting, `CoerceTo`, `IsIntegerType`, `ConvertMethodName` and `IsIeeeFloating`. T-23 publishes `IsAssignableWithoutConversion`. `IsCollectionShape` and `GetElementType` are stated per platform (S5/S6): the shape members are answers, and the
-root names no CLR collection. Type identity is the platform's too (I1): `ITypeDefinition.IsSameTypeAs` is each
-platform's notion (a CLR definition is its instance, a modeled collection is its kind and element, a generic parameter
-is its name on its declaring type), and `TypeDefinitionExtensions.IsSameType` only delegates.
+root names no CLR collection. Type identity is the type system's (I1, #998 T9a): a definition names the system that made it
+(`ITypeDefinition.System`), and `TypeDefinitionExtensions.IsSameType` is "the same system, and its `IsSame` says so"
+(for C#: a CLR definition is its instance, a modeled collection is its kind and element, a generic parameter is its name
+on its declaring type).
 - **Modeled definitions** (`AstTypeDefinition`) declare an operator with a static method marked
   `MethodDefinitionNode.Operator`; the method's name plays no part. The C# reader marks a static member named like a
   CLR operator, the CLR's own encoding, since the C# surface has no `operator` declaration yet (#406); the domain

@@ -81,8 +81,8 @@ public class TypeShapeTests {
     // change, citing that decision; the classification list only shrinks. They end at the decision's ten members and no
     // classification property.
     private static readonly string[] DecidedMembers = [
-        "Name", "Namespace", "AccessModifier", "FullName", "BaseType", "Interfaces", "GenericParameters", "Members",
-        "Fields", "Properties", "Methods", "Constructors", "Operators", "IsSameTypeAs", "IsCollectionShape",
+        "System", "Name", "Namespace", "AccessModifier", "FullName", "BaseType", "Interfaces", "GenericParameters", "Members",
+        "Fields", "Properties", "Methods", "Constructors", "Operators", "IsCollectionShape",
         "SequenceElementType", "Conversions", "NullableOf", "ResolveConversionFrom", "IsAssignableWithoutConversion",
         "ResolveOperator",
     ];

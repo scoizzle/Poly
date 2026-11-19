@@ -233,7 +233,7 @@ public sealed class ForeignUnsignedWord : ITypeDefinition {
     public IEnumerable<ITypeMethod> Methods => [];
     public IEnumerable<ITypeConstructor> Constructors => [];
     public IEnumerable<ITypeOperator> Operators => [];
-    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+    public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
     ITypeDefinition? ITypeDefinition.NullableOf => null;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;
@@ -261,7 +261,7 @@ public sealed class ForeignIndexed(ITypeDefinition index, ITypeDefinition elemen
     public IEnumerable<ITypeMethod> Methods => [];
     public IEnumerable<ITypeConstructor> Constructors => [];
     public IEnumerable<ITypeOperator> Operators => [];
-    bool ITypeDefinition.IsSameTypeAs(ITypeDefinition other) => ReferenceEquals(this, other);
+    public ITypeSystem System => Poly.Tests.TestHelpers.TestTypeSystem.Instance;
     IEnumerable<ITypeConversion> ITypeDefinition.Conversions => [];
     ITypeDefinition? ITypeDefinition.NullableOf => null;
     ITypeDefinition? ITypeDefinition.SequenceElementType => null;

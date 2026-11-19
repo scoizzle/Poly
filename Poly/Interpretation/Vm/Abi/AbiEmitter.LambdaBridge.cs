@@ -697,7 +697,7 @@ public static partial class AbiEmitter {
         if (!IsGoverned(operand.Type))
             return Combine(node, () => factory(operand));
         var definition = OperandDefinition(operand.Type, node, ctx);
-        if (definition.GetOperator(kind, null) is not { } resolution)
+        if (TargetOf(node, ctx).Operator(kind, definition, null) is not { } resolution)
             throw RejectOperator(node, $"the type provider defines no {kind} operator for '{TypeName(operand.Type)}'");
         var lifted = Nullable.GetUnderlyingType(operand.Type) is not null;
         var parameter = Lift(RuntimeTypeOf(resolution.Parameters.Single().ParameterTypeDefinition, node), lifted);
@@ -730,13 +730,18 @@ public static partial class AbiEmitter {
         }
         var leftDefinition = OperandDefinition(left.Type, node, ctx);
         var rightDefinition = OperandDefinition(right.Type, node, ctx);
-        if (leftDefinition.GetOperator(kind, rightDefinition) is not { } resolution)
+        if (TargetOf(node, ctx).Operator(kind, leftDefinition, rightDefinition) is not { } resolution)
             throw RejectOperator(node, $"the type provider defines no {kind} operator for '{TypeName(left.Type)}' and '{TypeName(right.Type)}'");
         var parameters = resolution.Parameters
             .Select(parameter => Lift(RuntimeTypeOf(parameter.ParameterTypeDefinition, node), lifted)).ToArray();
         var result = RuntimeTypeOf(resolution.ResultTypeDefinition, node);
         return (ConvertOperand(node, left, parameters[0]), ConvertOperand(node, right, parameters[1]), comparison ? result : Lift(result, lifted));
     }
+
+    /// <summary>The type system the analysis decided by; the bridge states its body's operators and conversions by it
+    /// (#998 T4c).</summary>
+    private static ITypeSystem TargetOf(Node node, PureLambdaContext ctx) =>
+        (ctx.Abi.Analysis ?? throw RejectOperator(node, "the lambda bridge has no analysis, so no type system to state the operator")).TypeSystem;
 
     /// <summary>The type provider's definition of an operand's type, its nullable unwrapped; a missing definition is a refusal.</summary>
     private static ITypeDefinition OperandDefinition(Type type, Node node, PureLambdaContext ctx) {
@@ -820,7 +825,7 @@ public static partial class AbiEmitter {
         if (whenTrue == whenFalse)
             return whenTrue;
         var (trueDefinition, falseDefinition) = (OperandDefinition(whenTrue, conditional, ctx), OperandDefinition(whenFalse, conditional, ctx));
-        var common = new[] { trueDefinition, falseDefinition }.GetCommonType() is { } found
+        var common = new[] { trueDefinition, falseDefinition }.GetCommonType(TargetOf(conditional, ctx)) is { } found
             ? RuntimeTypeOf(found, conditional)
             : throw RejectOperator(conditional, $"the type provider states no common type for the arms '{TypeName(whenTrue)}' and '{TypeName(whenFalse)}'");
         var (trueNullable, falseNullable) = (Nullable.GetUnderlyingType(whenTrue) is not null, Nullable.GetUnderlyingType(whenFalse) is not null);
@@ -886,8 +891,8 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>
-    /// The conversion of a value to a CLR target (an argument, the lambda's return). Between governed types it is the type
-    /// provider's implicit <c>ResolveConversionFrom</c> over the underlying types, lifted to a nullable target (C# 10.6.1);
+    /// The conversion of a value to a CLR target (an argument, the lambda's return). Between governed types it is the
+    /// target type system's implicit <c>Conversion</c> over the underlying types, lifted to a nullable target (C# 10.6.1);
     /// a nullable value never converts implicitly to a non-nullable target. A null literal converts to a reference or a
     /// <c>Nullable&lt;&gt;</c> target (C# 10.2.7). Otherwise: identity, assignability.
     /// </summary>
@@ -943,11 +948,11 @@ public static partial class AbiEmitter {
         var (from, to) = (sourceUnderlying ?? source, targetUnderlying ?? target);
         if (from == to)
             return true;
-        var definitions = (ctx.Abi.Analysis ?? throw new InvalidOperationException(
-            "VM compile rejected: lambda bridge has no analysis, so no type provider to state the conversion.")).TypeDefinitions;
-        return definitions.GetClrTypeDefinition(to) is { } toDefinition
-            && definitions.GetClrTypeDefinition(from) is { } fromDefinition
-            && toDefinition.ResolveConversionFrom(fromDefinition) is { Kind: ConversionOperatorKind.Implicit };
+        var analysis = ctx.Abi.Analysis ?? throw new InvalidOperationException(
+            "VM compile rejected: lambda bridge has no analysis, so no type provider to state the conversion.");
+        return analysis.TypeDefinitions.GetClrTypeDefinition(to) is { } toDefinition
+            && analysis.TypeDefinitions.GetClrTypeDefinition(from) is { } fromDefinition
+            && analysis.TypeSystem.Conversion(fromDefinition, toDefinition) is { Kind: ConversionOperatorKind.Implicit };
     }
 
     private static InvalidOperationException RejectOperator(Node node, string reason) =>

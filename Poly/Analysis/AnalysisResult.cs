@@ -19,6 +19,10 @@ public sealed record AnalysisResult(
     public ITypeDefinitionProvider TypeDefinitions { get; init; } =
         Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
 
+    /// <summary>The type system the analysis decided by, which emit asks too: the <see cref="ITypeSystem"/> setting, else
+    /// C# over the CLR (#998 T4c).</summary>
+    public ITypeSystem TypeSystem => Settings.Get<ITypeSystem>() ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+
     /// <summary>
     /// Gets metadata of the specified type for the given node.
     /// Returns null if no metadata of that type exists for the node.

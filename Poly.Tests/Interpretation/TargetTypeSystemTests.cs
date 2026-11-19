@@ -110,6 +110,27 @@ public class TargetTypeSystemTests {
         await Assert.That(Analyze(index, new LedgerHost()).GetResolvedType(index)).IsNull()
             .Because("no indexer applies under the ledger, and the ledger states no element type for a CLR type");
     }
+
+    [Test]
+    public async Task VmLambdaBridge_AsksTheAnalysisTarget() {
+        // A literal lambda quoted for an Expression<Func<int, int, object>> parameter: the VM's lambda bridge states its
+        // body's operator, and the analysis result names the target that decides it (#998 T4c).
+        var x = new Parameter("x", Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(int)));
+        var y = new Parameter("y", Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(int)));
+        var call = new Invoke(
+            new Member(Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(BridgeProbe<int, int, object>)), "Apply"),
+            new Lambda([x, y], new Add(x, y)), new Constant(1), new Constant(2));
+        var analysis = Poly.Interpretation.Interpreter.Analyze(call, Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(analysis.TypeSystem).IsSameReferenceAs(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+
+        await Assert.That(() => Poly.Interpretation.Interpreter.Compile(call, analysis)).ThrowsNothing();
+
+        var underLedger = analysis with { Settings = analysis.Settings.With<ITypeSystem>(new LedgerHost()) };
+        await Assert.That(underLedger.TypeSystem).IsTypeOf<LedgerHost>();
+        await Assert.That(() => Poly.Interpretation.Interpreter.Compile(call, underLedger)).Throws<InvalidOperationException>()
+            .WithMessageContaining("defines no Add operator");
+    }
 }
 
 /// <summary>A type whose only indexer takes a long (not a collection).</summary>

@@ -70,11 +70,12 @@ internal abstract record LocalType(Type Clr) {
     }
 
     /// <summary><paramref name="value"/> as <paramref name="target"/> by C#'s implicit conversion: a declared
-    /// <c>op_Implicit</c> runs, a built-in numeric widening converts. There is no other conversion.</summary>
+    /// <c>op_Implicit</c> runs, a built-in numeric widening converts. There is no other conversion. The VM runs CLR
+    /// values, so the rule is the C# system's (#998 T4c): a run-time store has no analysis to name another.</summary>
     private static object ConvertImplicitly(object value, Type target) {
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var conversion = ((ITypeDefinition)registry.GetTypeDefinition(target))
-            .ResolveConversionFrom(registry.GetTypeDefinition(value.GetType()));
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(
+            registry.GetTypeDefinition(value.GetType()), registry.GetTypeDefinition(target));
         if (conversion is { Kind: ConversionOperatorKind.Implicit }) {
             if (conversion.Method is ClrMethod declaredMethod)
                 return declaredMethod.MethodInfo.Invoke(null, [value])!;

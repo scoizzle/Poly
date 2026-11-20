@@ -1,6 +1,7 @@
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
@@ -47,7 +48,7 @@ public class DeclarationOwnershipTests {
                     new NamedTypeReference("List", TypeArguments: [new NamedTypeReference("Order")])),
                 new PropertyDefinitionNode(
                     "Counts",
-                    new NamedTypeReference("List", TypeArguments: [Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(int))]))
+                    new NamedTypeReference("List", TypeArguments: [Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(int))]))
             ]);
         var analysis = Analyze(new CompilationUnitNode([], null, [order, shelf], null));
         var resolved = DefinitionOf(analysis, shelf);
@@ -72,7 +73,7 @@ public class DeclarationOwnershipTests {
                         new NamedTypeReference("List", TypeArguments: [new NamedTypeReference("Order")])),
                     new PropertyDefinitionNode(
                         "Counts",
-                        new NamedTypeReference("List", TypeArguments: [Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(int))]))
+                        new NamedTypeReference("List", TypeArguments: [Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(int))]))
                 ]);
             var unit = new CompilationUnitNode([], null, [order, shelf], null);
             return (Analyze(unit), unit);

@@ -1,6 +1,6 @@
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 using Artifact = Poly.DomainModeling.Compile.Artifact;
 

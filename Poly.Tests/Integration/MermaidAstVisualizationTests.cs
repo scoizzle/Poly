@@ -1,5 +1,5 @@
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Mermaid;
-using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Integration;

@@ -76,6 +76,12 @@ Owner, before T12 (2026-11-19):
 15. Retiring the provider removes the public `AnalysisContext(ITypeDefinitionProvider)` constructors and `Analyzer`'s
     `typeDefinitions` parameter; callers pass a type system as the `ITypeSystem` analysis setting.
 
+Owner, after T12 (2026-11-19):
+
+16. Introspection does not depend on the AST (row T13). `ITypeDefinitionNodeProvider` moves to the analysis
+    (`Poly/Analysis`, internal) and `ClrTypeReferences` to the C# surface (`Poly/Interpretation/CSharp`). Introspection's
+    dependencies on C# (a CLR definition's `System`, `CSharpBuiltIns`) are to be reevaluated after T13.
+
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.
 
@@ -373,6 +379,7 @@ Each row begins with a failing test, run red and recorded. Each ends with the fu
 | T10 | `Conversions` and `Operators` list only declared ones; built-ins move into the C# system's rules. Split into T10a and T10b (ruling 11); T10a's interim is removed by T10b. | `Clr<int>().Conversions` contains no built-in (it lists `int → long` today), with resolution unchanged. |
 | T11 | Typed member views become extensions, the CLR's `Members` includes constructors, and `AccessModifier` moves to the hosts. Ratchet → 10. | A CLR type's `Members` contains its constructors (fails today). |
 | T12 | `ITypeDefinitionProvider` and `TypeDefinitionProviderCollection` are retired: `AnalysisContext` holds a target system and the scope reads its `Sources`. | An analysis given only the ledger system resolves no CLR name (today the stack falls back to the CLR). |
+| T13 | Introspection names and uses no AST type (ruling 16): the declarations' node lookup is the analysis', the CLR type's tree reference the C# surface's. | `ArchitectureBoundaryTests.Introspection_NamesNoAst` (source) and `Introspection_UsesNoAstType_InItsCompiledCode` (IL) fail on the two files. |
 
 Not in scope: the analyzer's own `Cat` table (it keeps its removing row, I8b, #972), the 74 production callers of
 `ClrTypeReferences`, and the domain's storage mappings (`ToSqlColumnType`).

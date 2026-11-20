@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -130,6 +132,151 @@ public class ArchitectureBoundaryTests {
 
         await Assert.That(string.Join("; ", drift)).IsEmpty()
             .Because("the budget is exact: a count may only go down by editing this file in the same change");
+    }
+
+    [Test]
+    public async Task Introspection_NamesNoAst() {
+        // #998 T13 (owner, 2026-11-19): Introspection is beneath the AST. A tree reference to a CLR type is the C#
+        // surface's, and the declarations' node lookup is the analysis'; neither lives here.
+        var repo = GetRepoRoot();
+        var offenders = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(repo, "Poly/Introspection"), "*.cs", SearchOption.AllDirectories)) {
+            var relative = Path.GetRelativePath(repo, file).Replace('\\', '/');
+            if (relative.Contains("/obj/") || relative.EndsWith(".g.cs", StringComparison.Ordinal))
+                continue;
+            if (Regex.IsMatch(StripCommentsAndStrings(await File.ReadAllTextAsync(file)), @"\bPoly\.Ast\b"))
+                offenders.Add(relative);
+        }
+
+        await Assert.That(string.Join(", ", offenders)).IsEmpty()
+            .Because("Poly/Introspection names no Poly.Ast type");
+    }
+
+    [Test]
+    public async Task Introspection_UsesNoAstType_InItsCompiledCode() {
+        // The text scan cannot see an AST type the global usings import (Poly.Ast's Node, NodeId, NodeExtensions) or one
+        // reached through var or a member's return type, so this reads what Introspection compiled to: every signature,
+        // local and IL operand of every type declared in a Poly.Introspection namespace (#998 T13).
+        var assembly = typeof(Poly.Introspection.ITypeSystem).Assembly;
+        var opcodes = typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Select(static field => (OpCode)field.GetValue(null)!)
+            .ToDictionary(static opcode => (ushort)opcode.Value);
+        const BindingFlags declared = BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Instance | BindingFlags.Static;
+        var offenders = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var type in assembly.GetTypes().Where(IsIntrospection)) {
+            void Flag(Type? used, string where) {
+                if (NamesAst(used))
+                    offenders.Add($"{type.FullName} {where}: {used}");
+            }
+
+            void FlagAttributes(IEnumerable<CustomAttributeData> attributes, string where) {
+                foreach (var attribute in attributes) {
+                    Flag(attribute.AttributeType, $"{where} attribute");
+                    foreach (var argument in attribute.ConstructorArguments.Concat(attribute.NamedArguments.Select(static named => named.TypedValue)))
+                        Flag(argument.Value as Type, $"{where} attribute argument");
+                }
+            }
+
+            void FlagConstraints(IEnumerable<Type> parameters, string where) {
+                foreach (var parameter in parameters.Where(static candidate => candidate.IsGenericParameter))
+                    foreach (var constraint in parameter.GetGenericParameterConstraints())
+                        Flag(constraint, $"{where} constraint on {parameter.Name}");
+            }
+
+            Flag(type.BaseType, "base");
+            FlagAttributes(type.CustomAttributes, "type");
+            FlagConstraints(type.GetGenericArguments(), "type");
+            foreach (var implemented in type.GetInterfaces())
+                Flag(implemented, "interface");
+            foreach (var field in type.GetFields(declared)) {
+                Flag(field.FieldType, $"field {field.Name}");
+                FlagAttributes(field.CustomAttributes, $"field {field.Name}");
+            }
+            foreach (var property in type.GetProperties(declared))
+                FlagAttributes(property.CustomAttributes, $"property {property.Name}");
+
+            foreach (var method in type.GetMethods(declared).Cast<MethodBase>().Concat(type.GetConstructors(declared))) {
+                if (method is MethodInfo info)
+                    Flag(info.ReturnType, $"{method.Name} return");
+                FlagAttributes(method.CustomAttributes, method.Name);
+                if (method.IsGenericMethodDefinition)
+                    FlagConstraints(method.GetGenericArguments(), method.Name);
+                foreach (var parameter in method.GetParameters()) {
+                    Flag(parameter.ParameterType, $"{method.Name} parameter {parameter.Name}");
+                    FlagAttributes(parameter.CustomAttributes, $"{method.Name} parameter {parameter.Name}");
+                }
+                if (method.GetMethodBody() is not { } body)
+                    continue;
+                foreach (var local in body.LocalVariables)
+                    Flag(local.LocalType, $"{method.Name} local");
+                foreach (var clause in body.ExceptionHandlingClauses.Where(static clause => clause.Flags == ExceptionHandlingClauseOptions.Clause))
+                    Flag(clause.CatchType, $"{method.Name} catch");
+
+                var il = body.GetILAsByteArray() ?? [];
+                var typeArguments = type.IsGenericType ? type.GetGenericArguments() : null;
+                var methodArguments = method.IsGenericMethod ? method.GetGenericArguments() : null;
+                for (var at = 0; at < il.Length;) {
+                    var code = il[at] == 0xFE ? (ushort)(0xFE00 | il[at + 1]) : il[at];
+                    at += il[at] == 0xFE ? 2 : 1;
+                    var opcode = opcodes[code];
+                    if (opcode.OperandType is OperandType.InlineType or OperandType.InlineTok
+                        or OperandType.InlineMethod or OperandType.InlineField) {
+                        var member = type.Module.ResolveMember(BitConverter.ToInt32(il, at), typeArguments, methodArguments);
+                        switch (member) {
+                            case Type used:
+                                Flag(used, $"{method.Name} uses");
+                                break;
+                            case FieldInfo used:
+                                Flag(used.DeclaringType, $"{method.Name} reads {used.Name}");
+                                Flag(used.FieldType, $"{method.Name} reads {used.Name}");
+                                break;
+                            case MethodBase used:
+                                Flag(used.DeclaringType, $"{method.Name} calls {used.Name}");
+                                if (used is MethodInfo called)
+                                    Flag(called.ReturnType, $"{method.Name} calls {used.Name}");
+                                foreach (var parameter in used.GetParameters())
+                                    Flag(parameter.ParameterType, $"{method.Name} calls {used.Name}");
+                                if (used.IsGenericMethod)
+                                    foreach (var argument in used.GetGenericArguments())
+                                        Flag(argument, $"{method.Name} calls {used.Name}");
+                                break;
+                        }
+                    }
+                    at += OperandSize(opcode.OperandType, il, at);
+                }
+            }
+        }
+
+        await Assert.That(string.Join("; ", offenders)).IsEmpty()
+            .Because("Poly/Introspection's compiled code uses no Poly.Ast type");
+
+        static bool IsIntrospection(Type type) {
+            var outer = type;
+            while (outer.DeclaringType is { } declaring)
+                outer = declaring;
+            return outer.Namespace is "Poly.Introspection" || outer.Namespace?.StartsWith("Poly.Introspection.", StringComparison.Ordinal) == true;
+        }
+
+        static bool NamesAst(Type? type) {
+            if (type is null)
+                return false;
+            if (type.HasElementType)
+                return NamesAst(type.GetElementType());
+            if (type.Namespace is "Poly.Ast" || type.Namespace?.StartsWith("Poly.Ast.", StringComparison.Ordinal) == true)
+                return true;
+            return type.IsGenericType && !type.IsGenericTypeDefinition && type.GetGenericArguments().Any(NamesAst);
+        }
+
+        static int OperandSize(OperandType operand, byte[] il, int at) => operand switch {
+            OperandType.InlineNone => 0,
+            OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
+            OperandType.InlineVar => 2,
+            OperandType.InlineI8 or OperandType.InlineR => 8,
+            OperandType.InlineSwitch => 4 + 4 * BitConverter.ToInt32(il, at),
+            _ => 4,
+        };
     }
 
     /// <summary>Removes <c>//</c>, <c>/* */</c>, string and char literals, so documentation and messages do not count.</summary>

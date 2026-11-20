@@ -1,7 +1,7 @@
 using Poly.Compile;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
 using Poly.Tests.Docs;
 using Poly.Tests.DomainModeling.Analysis;

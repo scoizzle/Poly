@@ -1,9 +1,12 @@
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Ast.Nodes;
 
-namespace Poly.Introspection.CommonLanguageRuntime;
+
+namespace Poly.Interpretation.CSharp;
 
 /// <summary>
-/// The CLR host's factory for a tree reference to a runtime type. It states the platform's definition
+/// C#'s factory for a tree reference to a runtime type: C#'s view of a CLR type in a tree, whose checks ask C#'s
+/// system, so it lives on the C# surface rather than in Introspection, which names no AST (#998 T13). It states the platform's definition
 /// (<see cref="TypeDefinitionReference"/>), never a spelling of the type's name: two types that share a full name are
 /// still different types, and an implementer is assignable to the interface it implements. A nullable is an
 /// <see cref="OptionalTypeReference"/> over its underlying reference. No node carries a <c>System.Type</c>.
@@ -28,7 +31,7 @@ internal static class ClrTypeReferences {
     public static bool Denotes(Node? reference, Type type) {
         ArgumentNullException.ThrowIfNull(type);
         return reference is TypeDefinitionReference { TypeDefinition: var stated }
-            && Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type), stated);
+            && CSharpTypeSystem.Shared.IsAssignableWithoutConversion(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type), stated);
     }
 
     /// <summary>True when <paramref name="reference"/> states exactly the platform's definition of

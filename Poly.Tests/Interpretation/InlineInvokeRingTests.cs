@@ -1,6 +1,6 @@
 using Poly.Ast.Nodes;
 using Poly.Interpretation;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 

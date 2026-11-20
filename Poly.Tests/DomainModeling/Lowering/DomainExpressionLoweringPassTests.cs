@@ -1,7 +1,7 @@
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 using Poly.Tests.TestHelpers;
 
 using Parameter = Poly.Ast.Nodes.Parameter;

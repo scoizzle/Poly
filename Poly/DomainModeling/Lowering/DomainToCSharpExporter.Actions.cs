@@ -3,7 +3,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Runtime;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;

@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Text;
 
 using Poly.DomainModeling.Runtime;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
 namespace Poly.Tests.TestHelpers;

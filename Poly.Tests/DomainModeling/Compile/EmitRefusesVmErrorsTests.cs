@@ -1,7 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.DomainModeling.Compile;
 

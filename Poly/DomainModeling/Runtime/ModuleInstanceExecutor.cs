@@ -7,9 +7,9 @@ using Poly.DomainModeling.Ontology.Constraints;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 using Action = Poly.DomainModeling.Ontology.Action;

@@ -1,7 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 using Add = Poly.DomainModeling.Ontology.Add;
 using SN = Poly.Ast.Nodes;

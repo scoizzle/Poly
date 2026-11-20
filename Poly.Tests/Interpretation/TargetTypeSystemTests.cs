@@ -83,7 +83,7 @@ public class TargetTypeSystemTests {
     public async Task OverloadChoice_TheTargetsConversionDecides() {
         // Math.Abs has no int-to-long-only shape problem: Abs(int) is exact. Max(long, long) with an int argument needs
         // C#'s implicit widening, which only the target can grant.
-        static Node Call() => new Invoke(new Member(Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(Math)), "Max"),
+        static Node Call() => new Invoke(new Member(Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(Math)), "Max"),
             [new Constant(1L), new Constant(2)]);
 
         await Assert.That(Analyze(Call()).HasErrors).IsFalse();
@@ -109,7 +109,7 @@ public class TargetTypeSystemTests {
     public async Task IndexerElementType_TheTargetsConversionDecides() {
         // this[long] indexed by an int: C# widens the index; a target without that conversion binds no indexer and
         // states no element type.
-        static IndexAccess Index() => new(new New(Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(LongIndexed))), new Constant(1));
+        static IndexAccess Index() => new(new New(Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(LongIndexed))), new Constant(1));
 
         var index = Index();
         await Assert.That(Analyze(index).GetResolvedType(index)?.Name).IsEqualTo("String");
@@ -123,10 +123,10 @@ public class TargetTypeSystemTests {
     public async Task VmLambdaBridge_AsksTheAnalysisTarget() {
         // A literal lambda quoted for an Expression<Func<int, int, object>> parameter: the VM's lambda bridge states its
         // body's operator, and the analysis result names the target that decides it (#998 T4c).
-        var x = new Parameter("x", Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(int)));
-        var y = new Parameter("y", Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(int)));
+        var x = new Parameter("x", Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(int)));
+        var y = new Parameter("y", Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(int)));
         var call = new Invoke(
-            new Member(Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(BridgeProbe<int, int, object>)), "Apply"),
+            new Member(Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(BridgeProbe<int, int, object>)), "Apply"),
             new Lambda([x, y], new Add(x, y)), new Constant(1), new Constant(2));
         var analysis = Poly.Interpretation.Interpreter.Analyze(call, Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
         await Assert.That(analysis.HasErrors).IsFalse();
@@ -155,7 +155,7 @@ public class TargetTypeSystemTests {
             return (new Lambda([x], modulo), modulo);
         }
 
-        var (clrLambda, clrModulo) = Program(Poly.Introspection.CommonLanguageRuntime.ClrTypeReferences.Of(typeof(uint)));
+        var (clrLambda, clrModulo) = Program(Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(uint)));
         await Assert.That(Analyze(clrLambda).GetNodeReplacement(clrModulo)).IsTypeOf<BitwiseAnd>();
 
         var (foreignLambda, foreignModulo) = Program(new TypeDefinitionReference(new ForeignUnsignedWord()));

@@ -7,10 +7,10 @@ using Microsoft.CodeAnalysis.CSharp;
 
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.Introspection;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;

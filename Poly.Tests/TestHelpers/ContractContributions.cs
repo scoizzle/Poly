@@ -5,7 +5,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 

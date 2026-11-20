@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 
 using Poly.Interpretation;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 

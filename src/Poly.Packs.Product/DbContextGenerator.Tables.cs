@@ -2,8 +2,8 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Packs.Product;
 

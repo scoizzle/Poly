@@ -4,6 +4,7 @@ using Microsoft.CSharp.RuntimeBinder;
 
 using Poly.Analysis;
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;

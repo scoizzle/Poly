@@ -2,7 +2,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 

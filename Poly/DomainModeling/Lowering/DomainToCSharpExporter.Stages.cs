@@ -1,6 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Syntactic = Poly.Ast.Nodes;

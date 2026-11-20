@@ -2,7 +2,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Runtime;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Syntactic = Poly.Ast.Nodes;

@@ -1,6 +1,6 @@
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.DomainModeling.Lowering;
 

@@ -1,4 +1,4 @@
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.DomainModeling.Lowering;
 

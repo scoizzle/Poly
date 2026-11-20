@@ -1,0 +1,17 @@
+// Recorded refusal: creating an Entry fails at create time with
+// "Cannot thread 'Add' through Member in Entry.__Restore" (#934), in poly_simulate.
+// Renaming the action to Put makes the same domain run.
+domain FilesystemAdd
+
+Entry: entity {
+  Name: Text unique
+  Size: Number range(0, )
+  children: many owned Entry
+  Directory: stage {
+    Add: action (child: Text) {
+      create in children { Name: child Size: 0 }
+    }
+  }
+  File: stage {
+  }
+}

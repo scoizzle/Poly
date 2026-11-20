@@ -1,0 +1,17 @@
+domain Access
+
+User: entity {
+  Email: Text unique
+  roles: many Role
+}
+
+Role: entity {
+  Name: Text unique
+  users: many User
+  permissions: many Permission
+  HasUsers: policy { count users > 0 }
+}
+
+Permission: entity {
+  Code: Text unique
+}

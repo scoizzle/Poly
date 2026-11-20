@@ -1,0 +1,13 @@
+// Recorded refusal: Now + ttlSeconds Seconds is DMSEM006 at define time.
+// The same non-literal duration count as #649, on the clock form instead of a property.
+domain Cache2
+
+Entry: entity {
+  Key: Text unique
+  Value: Text
+  ExpiresAt: DateTime
+  Live: policy { ExpiresAt > Now }
+  Put: action (ttlSeconds: Number) {
+    assign ExpiresAt to Now + ttlSeconds Seconds
+  }
+}

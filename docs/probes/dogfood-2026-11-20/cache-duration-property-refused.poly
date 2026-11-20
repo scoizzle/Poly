@@ -1,0 +1,14 @@
+// Recorded refusal: Now + ttl (a Duration parameter) is DMSEM003 (F-11, #550).
+// A per-entry TTL cache cannot compute its expiry instant.
+domain Cache
+
+Entry: entity {
+  Key: Text unique
+  Value: Text
+  CreatedAt: DateTime default(Now)
+  ExpiresAt: DateTime
+  Live: policy { ExpiresAt > Now }
+  Put: action (ttl: Duration) {
+    assign ExpiresAt to Now + ttl
+  }
+}

@@ -1,0 +1,11 @@
+domain Escalation
+
+Incident: entity {
+  Title: Text
+  rungs: many Rung
+}
+
+Rung: entity {
+  Level: Number range(1, 5)
+  WaitMinutes: Number range(0, 60)
+}

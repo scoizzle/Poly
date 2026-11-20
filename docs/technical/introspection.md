@@ -40,12 +40,6 @@ Provider-based type abstraction decoupled from CLR reflection. Interfaces allow 
 
 **Where the old distinction went:** `Collection` is structural (the type system's `ElementType`, which merged `IsCollectionShape` and `SequenceElementType` in T9c); an enumeration and value semantics are C#'s rule; integer-ness is C#'s simple types; ground-ness is the CLR host's own identity facts (`ClrBuiltInRules.IsPrimitive` and its siblings; `ClrPrimitive` is gone, T10b). Domain vocabulary lives in the domain's type system (`DomainTypeSystem`) and `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core.
 
-### TypeDefinitionProviderCollection ICollection surface — KEEP
-
-**What it does:** Implements `ICollection<ITypeDefinitionProvider>`, forcing `Contains`, `CopyTo`, `IsReadOnly`. No consumer calls these via the interface. `ProviderCount` duplicates `Count`.
-
-**Why keep:** The interface signals "this is a collection" to the type system and forces `Count`, `Add`, `Remove`, `Clear` — which ARE used. The unused interface methods are compliance code that works correctly. Not dead, just dormant.
-
 ### IClrType + TypeDefinitionRuntimeTypeExtensions — KEEP
 
 **What they do:** Separate interface for CLR-backed types, with extension methods for getting the `System.Type`.

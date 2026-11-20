@@ -107,9 +107,9 @@ public static class TypeDefinitionExtensions {
 
         /// <summary>
         /// Determines if values of <paramref name="other"/> can be assigned to this type: no conversion is needed
-        /// (<see cref="ITypeDefinition.IsAssignableWithoutConversion"/>), or a declared implicit operator does it.
+        /// (<see cref="ITypeSystem.IsAssignableWithoutConversion"/>), or a declared implicit operator does it.
         /// A conversion the platform applies itself (numeric widening) is not assignment; ask
-        /// <see cref="ITypeDefinition.ResolveConversionFrom"/> for it.
+        /// <see cref="ITypeSystem.Conversion"/> for it.
         /// </summary>
         /// <param name="system">The type system that decides (#998 T4b).</param>
         public bool IsAssignableFrom(ITypeDefinition other, ITypeSystem system) {

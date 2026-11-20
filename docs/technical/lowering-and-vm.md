@@ -54,12 +54,6 @@ AST (analyzed) → Lowering → Bytecode → ProgramCompiler → Action<VmState>
 
 **Why keep:** Part of the `InterpreterResult` record's surface. Not worth removing from a coherent type for negligible line savings.
 
-### ICollection<> on TypeDefinitionProviderCollection (40 lines) — KEEP
-
-**What it does:** Implements `ICollection<ITypeDefinitionProvider>`, forcing `Contains`, `CopyTo`, `IsReadOnly`. No consumer calls these via the interface. `ProviderCount` duplicates `Count`.
-
-**Why keep:** The interface signals "this is a collection" to the type system and forces `Count`, `Add`, `Remove`, `Clear` — which ARE used. The unused methods are interface compliance that works correctly. Not dead, just dormant.
-
 ### Never-emitted µop types (14 types) — KEEP
 
 **What they are:** `NegImmOp` through `ShrImmOp` (9 immediate-bearing variants), `CmpLocalLeOp`/`CmpLocalJmpOp`, `IncLocalOp`, `BatchReduceOp`, `CountBitsOp`.

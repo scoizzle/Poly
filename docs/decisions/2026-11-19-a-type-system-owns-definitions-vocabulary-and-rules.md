@@ -82,6 +82,26 @@ Owner, after T12 (2026-11-19):
     (`Poly/Analysis`, internal) and `ClrTypeReferences` to the C# surface (`Poly/Interpretation/CSharp`). Introspection's
     dependencies on C# (a CLR definition's `System`, `CSharpBuiltIns`) are to be reevaluated after T13.
 
+Owner, closing the stream (2026-11-20; given in the stream's thread, recorded here):
+
+17. Scope. #972's rows I3, I7, I9 and the second platform stay open on #972 as future work; the stream closes
+    without them.
+18. The gate. Its budget entries name the rows that remove them: #954 (the numeric category rules) and #999 (the other
+    semantic passes). What the gate still cannot see (a bare `Type` parameter, a `"System.*"` name in a string,
+    `Poly/DomainModeling`: the rest of #998's S6 row) is #1000.
+19. #998's interims. The bare-name alias for the former primitive table is removed (S2b): a C# scope sees C#'s
+    implicit usings, with or without a unit, and the domain language imports no host namespace. Name lookup against the
+    scope is the end state, not nodes bound once. The reader's parse-time receiver binding is removed: the analysis
+    binds a short type receiver, never over a name in scope.
+20. Domain words (S3). The public `OverrideClrTypeName(word, spelling)` stays; a spelling binds only a prelude
+    definition, by C#'s own spelling of it, and the second spelling-to-type table is deleted.
+21. Two units in one analysis share one scope. Deferred: "We will have to do this in the future, skip for now." It
+    stays on #998 as the stream's one open interim.
+22. Generic names. A generic name is looked up with its arity. One the analysis itself declares with another arity
+    (`Action<int>` beside a declared non-generic `Action`) is refused at the reference: "Reject it."
+23. The pre-ship gate's review of the closing slices runs on a different model family (opencode-go/deepseek-v4.1-flash,
+    high); its fix delta is re-reviewed before the stream is marked ready.
+
 The recount at `dfafe16b4` is **42** members, not 43: 13 structural, 5 internal relations, 21 classification answers
 and 3 conversion/operator doors.
 

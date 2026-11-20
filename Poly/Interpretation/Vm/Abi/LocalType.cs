@@ -48,7 +48,7 @@ internal abstract record LocalType(Type Clr) {
 
     /// <summary>The frame word for a runtime value stored where <paramref name="declared"/> is the static type, encoded
     /// by the declared type only. For a value type, a value of another runtime type converts where C# converts it
-    /// implicitly at a call site (the platform's answer, <c>ResolveConversionFrom</c>); any other value is refused, and
+    /// implicitly at a call site (the type system's answer, <c>ITypeSystem.Conversion</c>); any other value is refused, and
     /// so is null for a non-nullable value type. A reference-typed declaration takes the reference as its handle (a
     /// host object passed for an AST type is dispatched by name); null is the absent sentinel.</summary>
     public static long Write(object? value, Type declared, VmManagedObjectHeap heap) {

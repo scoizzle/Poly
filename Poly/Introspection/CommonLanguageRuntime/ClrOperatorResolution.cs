@@ -1,7 +1,7 @@
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>
-/// C#'s operator selection (12.4.4, 12.4.5), the rule <c>ITypeDefinition.ResolveOperator</c> answers with for the .NET
+/// C#'s operator selection (12.4.4, 12.4.5), the rule C#'s <c>ITypeSystem.Operator</c> answers with for the .NET
 /// platform and for the C#-surface definitions the analysis builds.
 /// </summary>
 /// <remarks>

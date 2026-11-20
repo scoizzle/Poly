@@ -12,17 +12,17 @@ namespace Poly.Tests.Interpretation.Vm.Abi;
 /// method makes both defects visible where a parameter or constant hides them.
 /// </summary>
 public class AbiEmitterLiftedOperandOrderTests {
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeSource Analyze(TypeDefinitionNode typeNode) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, typeNode);
-        return context.TypeDefinitions;
+        return context.Declarations();
     }
 
     /// <summary>A type whose counter field makes each call observable: <c>Next</c> answers
     /// the call's ordinal as <c>long?</c>, and <c>Right</c> answers its ordinal times ten,
     /// so one left-then-right evaluation of both is 1 and 20.</summary>
-    private static ITypeDefinitionProvider CounterType() =>
+    private static ITypeSource CounterType() =>
         Analyze(new TypeDefinitionNode(
             "CountLot", "Branch",
             Fields: [new FieldDefinitionNode("n", ClrTypeReferences.To<long>(), new Constant(0L))],
@@ -49,7 +49,7 @@ public class AbiEmitterLiftedOperandOrderTests {
     private static Node Call(string method) =>
         new Invoke(new Member(new New(new TypeReference("Branch.CountLot")), method), []);
 
-    private static ExecutionResult Execute(Node body, ITypeDefinitionProvider types) =>
+    private static ExecutionResult Execute(Node body, ITypeSource types) =>
         Interpreter.Execute(Interpreter.Compile(body, types));
 
     [Test, Timeout(10_000)]

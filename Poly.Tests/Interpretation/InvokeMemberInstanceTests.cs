@@ -46,7 +46,7 @@ public class InvokeMemberInstanceTests {
         IEnumerator IEnumerable.GetEnumerator() => _values.GetEnumerator();
     }
 
-    private static ITypeDefinitionProvider BuildNotifyTypeDef(string typeName = "Person") {
+    private static ITypeSource BuildNotifyTypeDef(string typeName = "Person") {
         var typeDef = new TypeDefinitionNode(
             Name: typeName,
             Properties: [
@@ -70,7 +70,7 @@ public class InvokeMemberInstanceTests {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeDef);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     private static Invoke NotifyInvoke(string typeName = "Person") =>
@@ -155,7 +155,7 @@ public class InvokeMemberInstanceTests {
         var bag = new Dictionary<string, object?>();
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Ping"));
-        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
+        var program = Interpreter.Compile(invoke, ctx.Declarations());
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { bag }));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
     }
@@ -176,7 +176,7 @@ public class InvokeMemberInstanceTests {
         analyzer.Analyze(ctx, typeDef);
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Ping"));
-        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
+        var program = Interpreter.Compile(invoke, ctx.Declarations());
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { new Dictionary<string, object?>() }));
         // The callee writes its result word at slots[FramePos]; the caller moves it.
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
@@ -211,7 +211,7 @@ public class InvokeMemberInstanceTests {
         analyzer.Analyze(ctx, typeDef);
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Reset"));
-        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
+        var program = Interpreter.Compile(invoke, ctx.Declarations());
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { new Dictionary<string, object?>() }));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }

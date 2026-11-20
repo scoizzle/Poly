@@ -23,9 +23,9 @@ namespace Poly.Tests.DomainModeling.Runtime;
 public sealed class DomainResultErasureTests {
     [Test]
     public async Task DomainResultTypeProvider_AnswersTheArityKey() {
-        var provider = DomainResultTypeProvider.Wrap(ClrTypeDefinitionRegistry.Shared);
+        var provider = DomainResultTypeProvider.Instance;
 
-        var definition = provider.GetTypeDefinition(AstTypeRegistry.Key("DomainResult", 1));
+        var definition = provider.ByQualifiedName(AstTypeRegistry.Key("DomainResult", 1));
 
         await Assert.That(definition is IClrTypeDefinition).IsTrue();
         await Assert.That(((IClrTypeDefinition)definition!).RuntimeType)
@@ -106,8 +106,8 @@ public sealed class DomainResultErasureTests {
         var entry = new TypeDefinitionNode("Entry");
         var holder = new TypeDefinitionNode(
             "Holder", Properties: [new PropertyDefinitionNode("Slot", reference)]);
-        var ctx = new AnalysisContext(
-            DomainResultTypeProvider.Wrap(AnalysisContext.CreateDefault().TypeDefinitions));
+        var ctx = AnalysisContext.CreateDefault();
+        ctx.AddSource(DomainResultTypeProvider.Instance);
         new TypeDefinitionNodeAnalyzer().Analyze(ctx, new Block([entry, holder]));
         var resolved = ctx.GetMetadata<TypeDefinitionMetadata>(holder)!.TypeDefinition;
         return resolved.Properties.Single(p => p.Name == "Slot").MemberTypeDefinition;
@@ -176,7 +176,7 @@ public sealed class DomainResultErasureTests {
 
     [Test]
     public async Task AnalyzeModule_ModuleWithoutResultTwins_ResolvesPolyRuntime() {
-        // Seam pin: the seam wraps the default registry with DomainResultTypeProvider, so the
+        // Seam pin: the seam registers DomainResultTypeProvider as the analysis' own source, so the
         // lowered module, which declares none of the result family, analyzes clean.
         var (domain, analysis, session) = LowerWithSession(McpLibraryPoly());
         var module = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);

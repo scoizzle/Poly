@@ -11,16 +11,10 @@ public sealed record AnalysisResult(
     AnalysisOptions? Options = null,
     bool HasErrors = false
 ) : INodeMetadataProvider {
-    /// <summary>
-    /// The type provider of this analysis: its AST type table over the caller's
-    /// providers; a name it cannot answer is its type system's target chain's (#998 T12a). Belongs to one analysis, so concurrent or
-    /// sequential analyses never answer for each other.
-    /// </summary>
-    public ITypeDefinitionProvider TypeDefinitions { get; init; } =
-        Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
-
     /// <summary>The type system the analysis decided by, which emit asks too: this analysis' own layer over its target
-    /// (#998 T12a, T4c). It is the same instance the analysis used, never recomputed from settings.</summary>
+    /// (#998 T12a, T4c). It is the same instance the analysis used, never recomputed from settings. Its
+    /// <see cref="ITypeSystem.Resolve"/> answers the analysis' names, and its own sources hold what the analysis
+    /// declared (#998 T12b).</summary>
     public ITypeSystem TypeSystem { get; init; } = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
 
     /// <summary>

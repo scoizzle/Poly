@@ -85,7 +85,7 @@ public class AstConstructorDefinitionTests {
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
         var newNode = new New(new TypeReference("Sample.Widget"));
-        using var exec = Interpreter.Execute(Interpreter.Compile(newNode, ctx.TypeDefinitions));
+        using var exec = Interpreter.Execute(Interpreter.Compile(newNode, ctx.Declarations()));
         var bag = exec.GetValue<Dictionary<string, object?>>();
         await Assert.That(bag).IsNotNull();
         await Assert.That(bag!.Count).IsEqualTo(0);

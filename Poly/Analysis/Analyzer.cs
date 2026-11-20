@@ -38,23 +38,21 @@ public sealed class Analyzer(
             context.Settings,
             Options,
             context.HasErrors) {
-            TypeDefinitions = context.TypeDefinitions,
             TypeSystem = context.TypeSystem
         };
     }
 
     /// <summary>
-    /// Analyzes the given root node.
+    /// Analyzes the given root node in this context's type system. A caller that supplies its own sources registers them
+    /// through <c>setup</c> (#998 T12b).
     /// </summary>
     public AnalysisResult Analyze(Node root,
-        ITypeDefinitionProvider? typeDefinitions = null,
         Action<AnalysisContext>? setup = null,
         AnalysisSettings? settings = null) {
 
         ArgumentNullException.ThrowIfNull(root);
-        typeDefinitions ??= Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
         settings ??= AnalysisSettings.Default;
-        var context = new AnalysisContext(typeDefinitions, settings);
+        var context = new AnalysisContext(settings);
         setup?.Invoke(context);
         return RunPasses(context, root);
     }

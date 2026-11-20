@@ -182,7 +182,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (resolvedType is null)
             return replacement;
 
-        if (context.TypeDefinitions.GetTypeDefinition(c.Value.GetType()) is { } valueType
+        if (context.TypeSystem.ClrDefinitionOf(c.Value.GetType()) is { } valueType
             && TypeDefinitionExtensions.IsSameType(valueType, resolvedType))
             return replacement;
 
@@ -570,8 +570,8 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (!handled && !sameTypeEquality)
             return FoldResult.NotFoldable;
 
-        var leftDefinition = context.TypeDefinitions.GetTypeDefinition(leftType);
-        var rightDefinition = rightType is null ? null : context.TypeDefinitions.GetTypeDefinition(rightType);
+        var leftDefinition = context.TypeSystem.ClrDefinitionOf(leftType);
+        var rightDefinition = rightType is null ? null : context.TypeSystem.ClrDefinitionOf(rightType);
         if (leftDefinition is null || (right is not null && rightDefinition is null))
             return FoldResult.NotFoldable;
         if (context.TypeSystem.Operator(kind, leftDefinition, rightDefinition) is not { } resolution)

@@ -19,11 +19,11 @@ public class AsyncMethodVmTests {
         public static Task<long> Completed() => Task.FromResult(5L);
     }
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeSource Analyze(TypeDefinitionNode typeNode) {
         var tda = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     private static MethodDefinitionNode AsyncReturning(string name, Type task, Node body) => new(
@@ -32,13 +32,13 @@ public class AsyncMethodVmTests {
     private static TypeDefinitionNode ItemWith(params MethodDefinitionNode[] methods) =>
         new("Item", "Sample", Methods: methods);
 
-    private static VmProgram Compile(ITypeDefinitionProvider tda, Node root) =>
+    private static VmProgram Compile(ITypeSource tda, Node root) =>
         Interpreter.Compile(root, tda);
 
     private static ExecutionResult Execute(VmProgram program) =>
         Interpreter.Execute(program, s => s.SetArgs([.. Receiver]));
 
-    private static object? RunLong(ITypeDefinitionProvider tda, Node root) {
+    private static object? RunLong(ITypeSource tda, Node root) {
         using var exec = Execute(Compile(tda, root));
         return exec.Result.IsVoid ? null : exec.GetValue<long>();
     }

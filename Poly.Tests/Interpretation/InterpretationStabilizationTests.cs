@@ -156,7 +156,7 @@ public class InterpretationStabilizationTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, target);
         analyzer.Analyze(ctx, source);
-        var items = ctx.TypeDefinitions.GetTypeDefinition("Source")!.Properties.Single(p => p.Name == "Items");
+        var items = ctx.TypeSystem.Resolve("Source")!.Properties.Single(p => p.Name == "Items");
         var element = items.MemberTypeDefinition.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(element).IsNotNull();
         await Assert.That(element!.Name).IsEqualTo("Target");
@@ -173,12 +173,12 @@ public class InterpretationStabilizationTests {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, type);
-        var prop = ctx.TypeDefinitions.GetTypeDefinition("Holder")!.Properties.Single();
+        var prop = ctx.TypeSystem.Resolve("Holder")!.Properties.Single();
         await Assert.That(() => _ = prop.MemberTypeDefinition)
             .Throws<InvalidOperationException>();
     }
 
-    private static ITypeDefinitionProvider AnalyzePerson() => Analyze(PersonTypeDef());
+    private static ITypeSource AnalyzePerson() => Analyze(PersonTypeDef());
 
     private static TypeDefinitionNode PersonTypeDef() => new(
         "Person",
@@ -194,11 +194,11 @@ public class InterpretationStabilizationTests {
                 Getter: new PropertyGetterDefinitionNode())
         ]);
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode node) {
+    private static ITypeSource Analyze(TypeDefinitionNode node) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, node);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     [Test]
@@ -303,7 +303,7 @@ public class InterpretationStabilizationTests {
 
     [Test]
     public async Task CompileChecked_RootThisReference_DoesNotThrow() {
-        var program = Interpreter.CompileChecked(new ThisReference(), AnalysisContext.CreateDefault().TypeDefinitions);
+        var program = Interpreter.CompileChecked(new ThisReference(), ClrTypeDefinitionRegistry.Shared);
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.RawValue).IsEqualTo(0L);
     }

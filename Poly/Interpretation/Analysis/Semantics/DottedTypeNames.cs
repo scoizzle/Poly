@@ -34,7 +34,7 @@ internal static class DottedTypeNames {
         type = null!;
         if (!TryGetSpine(node, out var dotted, out _))
             return false;
-        if (context.TypeDefinitions.GetTypeDefinition(dotted) is not ClrTypeDefinition clr)
+        if (context.TypeSystem.Resolve(dotted) is not ClrTypeDefinition clr)
             return false;
         type = clr;
         return true;

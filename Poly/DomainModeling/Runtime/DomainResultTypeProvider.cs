@@ -14,8 +14,14 @@ namespace Poly.DomainModeling.Runtime;
 /// is a real CLR throw. Entity type defs stay on
 /// <see cref="TypeDefinitionNodeAnalyzer"/>.
 /// </summary>
-internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : IClrTypeDefinitionProvider {
-    public ITypeDefinition? GetTypeDefinition(string name) {
+/// <remarks>
+/// It is a source the analysis registers as its own (#998 T12b), so it answers these names before the target and a
+/// module's own declarations, registered above it, still win. A name it does not hold is the target's.
+/// </remarks>
+internal sealed class DomainResultTypeProvider : IQualifiedNameSource {
+    public static readonly DomainResultTypeProvider Instance = new();
+
+    public ITypeDefinition? ByQualifiedName(string name) {
         if (string.Equals(name, "DomainResult", StringComparison.Ordinal))
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(Poly.Runtime.DomainResult));
         // The generic name erases to DomainResult<object>: the VM is untyped, so one closed
@@ -29,14 +35,9 @@ internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : 
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string));
         if (string.Equals(name, "System.Text.RegularExpressions.Regex", StringComparison.Ordinal))
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(Regex));
-        return inner.GetTypeDefinition(name);
+        return null;
     }
 
-    public ITypeDefinition? GetTypeDefinition(Type type) => inner.GetClrTypeDefinition(type);
-
-    public IEnumerable<ITypeDefinition> Types => inner.Types;
-
-
-    internal static ITypeDefinitionProvider Wrap(ITypeDefinitionProvider inner) =>
-        inner is DomainResultTypeProvider wrapped ? wrapped : new DomainResultTypeProvider(inner);
+    /// <summary>This source holds no declarations of its own; it answers names the runtime family spells.</summary>
+    public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) => [];
 }

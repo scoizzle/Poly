@@ -15,7 +15,7 @@ namespace Poly.DomainModeling.Meaning;
 /// <see cref="TypeMappingRegistry.ToClrTypeName"/> so pack overrides apply.
 /// Bound to one (<see cref="Domain"/>, <see cref="TypeMappingRegistry"/>) pair: a new session needs a new provider.
 /// </summary>
-internal sealed class DomainTypeDefinitionProvider : IClrTypeDefinitionProvider {
+internal sealed class DomainTypeDefinitionProvider : IQualifiedNameSource, ITypeNameLookup {
     private readonly Dictionary<string, DomainType> _types = new(StringComparer.Ordinal);
     private readonly TypeMappingRegistry _typeMaps;
     private readonly ConcurrentDictionary<string, ITypeDefinition> _synthetic = new(StringComparer.Ordinal);
@@ -60,6 +60,14 @@ internal sealed class DomainTypeDefinitionProvider : IClrTypeDefinitionProvider 
 
     /// <summary>The synthetic declarations this provider has built so far.</summary>
     public IEnumerable<ITypeDefinition> Types => _synthetic.Values;
+
+    /// <summary>The synthetic declarations stated in <paramref name="namespace"/>: this domain as a type source.</summary>
+    public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) =>
+        _synthetic.Values.Where(type => string.Equals(type.Namespace, @namespace, StringComparison.Ordinal));
+
+    ITypeDefinition? IQualifiedNameSource.ByQualifiedName(string name) => GetTypeDefinition(name);
+
+    ITypeDefinition? ITypeNameLookup.Lookup(string name) => GetTypeDefinition(name);
 
     private ITypeDefinition? FromClrName(string name) =>
         DomainTypeMapping.TryClrType(_typeMaps.ToClrTypeName(name), out var ground)

@@ -748,7 +748,7 @@ public static partial class AbiEmitter {
         var analysis = ctx.Abi.Analysis
             ?? throw RejectOperator(node, "the lambda bridge has no analysis, so no type provider to state the operator");
         var underlying = Nullable.GetUnderlyingType(type) ?? type;
-        return analysis.TypeDefinitions.GetClrTypeDefinition(underlying)
+        return analysis.TypeSystem.ClrDefinitionOf(underlying)
             ?? throw RejectOperator(node, $"the type provider has no definition for '{underlying.Name}'");
     }
 
@@ -950,8 +950,8 @@ public static partial class AbiEmitter {
             return true;
         var analysis = ctx.Abi.Analysis ?? throw new InvalidOperationException(
             "VM compile rejected: lambda bridge has no analysis, so no type provider to state the conversion.");
-        return analysis.TypeDefinitions.GetClrTypeDefinition(to) is { } toDefinition
-            && analysis.TypeDefinitions.GetClrTypeDefinition(from) is { } fromDefinition
+        return analysis.TypeSystem.ClrDefinitionOf(to) is { } toDefinition
+            && analysis.TypeSystem.ClrDefinitionOf(from) is { } fromDefinition
             && analysis.TypeSystem.Conversion(fromDefinition, toDefinition) is { Kind: ConversionOperatorKind.Implicit };
     }
 

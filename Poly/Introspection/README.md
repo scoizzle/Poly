@@ -63,22 +63,16 @@ Represents a conversion a platform states: its `Kind` (`Implicit`/`Explicit`), t
 applies it itself. Implemented per platform (`ClrTypeConversion`, `AstConversionDefinition`); like `ITypeOperator`,
 nothing in the Root-adjacent contract says how a platform spells one.
 
-### ITypeDefinitionProvider
+### ITypeSystem and ITypeSource
 
-Resolves type definitions:
-
-- `GetTypeDefinition(string name)`
-- `Types` — the definitions the provider holds now. Not a claim of completeness: the CLR registry lists what it has
-  resolved so far (its universe is open), a declaration registry lists what it declares, and a composed provider lists
-  each definition once by identity. A consumer that needs "every type this session knows" enumerates the composed
-  provider instead of supplying candidates itself.
-- `GetDeferredTypeDefinitionResolver(string name)`
-
-The runtime-`Type` handle is **not** on this contract. A provider that has CLR types also implements
-`IClrTypeDefinitionProvider` (`GetTypeDefinition(Type)`); a consumer asks through `GetClrTypeDefinition`, which
-answers null for a host with no CLR types. The neutral contract therefore asks only questions every platform can
-answer, and `TypeDefinitionRuntimeTypeExtensions` (the `ITypeDefinition -> Type?` view) lives in
-`CommonLanguageRuntime/` with it.
+A type system (`ITypeSystem`, #998) holds what a set of definitions is: its `Sources` (`ITypeSource`: the definitions a
+source declares in a namespace, `TypesIn`/`TypeIn`), `Resolve(qualifiedName)`, its words (`Bind`/`Spell`) and its rules;
+a layered system names its `Target`. An analysis decides by its own layer (`Poly.Analysis.AnalysisTypeSystem`): its own
+sources answer a name first, then its target. `ITypeDefinitionProvider` and the fallback stack
+`TypeDefinitionProviderCollection` are gone (T12b). The runtime-`Type` handle is not on any contract: the CLR registry
+answers it internally, and a consumer reaches it through the internal `ClrDefinitionOf`, which walks the system and its
+target chain and answers null for a system with no CLR beneath it. `TypeDefinitionRuntimeTypeExtensions` (the
+`ITypeDefinition -> Type?` view) lives in `CommonLanguageRuntime/`.
 
 **What a type is, is its type system's rule (#998 T8).** `ITypeDefinition` states no classification: the answers
 (`IsEnumeration` … `IsTopType`), `IsGround()` and the CLR's answer table are gone. A consumer asks the system that owns

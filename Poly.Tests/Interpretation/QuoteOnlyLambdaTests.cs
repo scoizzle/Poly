@@ -52,7 +52,7 @@ public class QuoteOnlyLambdaTests {
     /// bridge's own message), <c>main-rejected</c> (an emit exception the bridge did not mark), <c>emit-throws</c> (a marked
     /// exception without the bridge's message), or <c>ran</c> with the quoted body's type and the value the probe recorded.
     /// </summary>
-    internal static string Run(Node call, object?[] args, ITypeDefinitionProvider? provider = null) {
+    internal static string Run(Node call, object?[] args, ITypeSource? provider = null) {
         var culture = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         try {
@@ -169,11 +169,11 @@ public class QuoteOnlyLambdaTests {
         await Assert.That(stage).IsEqualTo("ran; Decimal; 0.1");
     }
 
-    private static ITypeDefinitionProvider Provider(TypeDefinitionNode typeNode) {
+    private static ITypeSource Provider(TypeDefinitionNode typeNode) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, typeNode);
-        return context.TypeDefinitions;
+        return context.Declarations();
     }
 
     /// <summary>

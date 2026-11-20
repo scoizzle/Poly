@@ -448,11 +448,11 @@ public class InterpreterBranchVmTests {
         await Assert.That(exec.GetValue<long>()).IsEqualTo(4L);
     }
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeSource Analyze(TypeDefinitionNode typeNode) {
         var tda = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     private static Block WipeThen(Node tail) {
@@ -470,7 +470,7 @@ public class InterpreterBranchVmTests {
     /// Zero arguments yield 1 + 7. One argument, 5, yields 5 + 7.
     /// Two arguments yield 4 + 7. A third argument is rejected.
     /// </summary>
-    private static (ITypeDefinitionProvider Types, Invoke Call) Pick(int arguments) {
+    private static (ITypeSource Types, Invoke Call) Pick(int arguments) {
         var written = new Parameter(
             "written",
             ClrTypeReferences.Of(typeof(long)),

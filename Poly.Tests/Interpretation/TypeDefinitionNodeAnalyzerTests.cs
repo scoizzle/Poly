@@ -373,8 +373,8 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, new Block([plain, generic, holder]));
 
-        var plainDef = ctx.TypeDefinitions.GetTypeDefinition("DomainResult");
-        var genericDef = ctx.TypeDefinitions.GetTypeDefinition(AstTypeRegistry.Key("DomainResult", 1));
+        var plainDef = ctx.TypeSystem.Resolve("DomainResult");
+        var genericDef = ctx.TypeSystem.Resolve(AstTypeRegistry.Key("DomainResult", 1));
         await Assert.That(plainDef).IsNotNull();
         await Assert.That(genericDef).IsNotNull();
         await Assert.That(plainDef).IsNotSameReferenceAs(genericDef);

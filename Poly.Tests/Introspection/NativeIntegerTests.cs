@@ -624,7 +624,7 @@ public class NativeIntegerTests {
             ]);
         var context = Poly.Analysis.AnalysisContext.CreateDefault();
         new Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer().Analyze(context, holder);
-        var properties = context.TypeDefinitions.GetTypeDefinition("NativeHolder")!.Properties.ToDictionary(static p => p.Name, static p => p.MemberTypeDefinition.GetRuntimeType());
+        var properties = context.TypeSystem.Resolve("NativeHolder")!.Properties.ToDictionary(static p => p.Name, static p => p.MemberTypeDefinition.GetRuntimeType());
         await Assert.That(properties["Signed"]).IsEqualTo(typeof(nint));
         await Assert.That(properties["Unsigned"]).IsEqualTo(typeof(nuint));
     }

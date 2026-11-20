@@ -4,6 +4,7 @@ using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Introspection;
 
 using PrimValueKind = Poly.Interpretation.Vm.Abi.ValueRepresentationKind;
 
@@ -53,20 +54,34 @@ public static class Interpreter {
         _analyzer.Analyze(node);
 
     /// <summary>
-    /// Analyze <paramref name="node"/> with the AST types its provider supplies.
-    /// The types and the root are one compilation unit, so every member body the
+    /// Analyze <paramref name="node"/> with the AST type declarations its source supplies.
+    /// The declarations and the root are one compilation unit, so every member body the
     /// root can reach is analyzed in the same result. Emit never analyzes.
     /// </summary>
     public static AnalysisResult Analyze(
         Node node,
-        ITypeDefinitionProvider typeDefinitions,
+        ITypeSource source,
+        Action<AnalysisContext>? setup = null) {
+        ArgumentNullException.ThrowIfNull(source);
+        return Analyze(node, [source], setup);
+    }
+
+    /// <summary>
+    /// Analyze <paramref name="node"/> with the AST type declarations its sources supply, in the sources' order
+    /// (#998 T12b). Each source is registered as the analysis' own, so it answers a name before the analysis' target.
+    /// </summary>
+    public static AnalysisResult Analyze(
+        Node node,
+        IReadOnlyList<ITypeSource> sources,
         Action<AnalysisContext>? setup = null) {
         ArgumentNullException.ThrowIfNull(node);
-        ArgumentNullException.ThrowIfNull(typeDefinitions);
+        ArgumentNullException.ThrowIfNull(sources);
         return _analyzer.Analyze(
-            AnalysisRoot(node, typeDefinitions),
-            typeDefinitions: typeDefinitions,
-            setup: setup);
+            AnalysisRoot(node, sources),
+            setup: context => {
+                context.AddSources(sources);
+                setup?.Invoke(context);
+            });
     }
 
     /// <summary>
@@ -74,22 +89,27 @@ public static class Interpreter {
     /// Diagnostics on AST member bodies the root does not contain are handled by
     /// the emitter's callable path, not by the root gate.
     /// </summary>
-    public static VmProgram Compile(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) {
-        var analysis = Analyze(node, typeDefinitions);
+    public static VmProgram Compile(Node node, ITypeSource source, CompilationMode mode = CompilationMode.Normal) =>
+        Compile(node, [source], mode);
+
+    /// <summary>
+    /// Analyze and compile a Syntax program over the given sources. Analysis errors fail closed.
+    /// </summary>
+    public static VmProgram Compile(Node node, IReadOnlyList<ITypeSource> sources, CompilationMode mode = CompilationMode.Normal) {
+        var analysis = Analyze(node, sources);
         FailLoudOnAnalysisErrors(analysis, node);
         return AbiEmitter.Emit(node, analysis, mode);
     }
 
-    /// <summary>The analyzed root: a compilation unit containing the provider's
-    /// AST type declarations and <paramref name="node"/> as its top-level
-    /// statement. A root that already is a unit or a type declaration is used as
+    /// <summary>The analyzed root: a compilation unit containing the sources' AST type declarations and
+    /// <paramref name="node"/> as its top-level statement. A root that already is a unit or a type declaration is used as
     /// is.</summary>
-    private static Node AnalysisRoot(Node node, ITypeDefinitionProvider typeDefinitions) {
+    private static Node AnalysisRoot(Node node, IReadOnlyList<ITypeSource> sources) {
         if (node is CompilationUnitNode or TypeDefinitionNode)
             return node;
-        if (typeDefinitions is not ITypeDefinitionNodeProvider provider)
-            return node;
-        var types = provider.GetTypeDefinitionNodes()
+        var types = sources
+            .OfType<ITypeDefinitionNodeProvider>()
+            .SelectMany(static provider => provider.GetTypeDefinitionNodes())
             .Distinct<TypeDefinitionNode>(ReferenceEqualityComparer.Instance)
             .ToArray();
         return types.Length == 0
@@ -97,9 +117,9 @@ public static class Interpreter {
             : new CompilationUnitNode([], null, types, [node]);
     }
 
-    /// <summary>Alias of <see cref="Compile(Node, ITypeDefinitionProvider, CompilationMode)"/>.</summary>
-    public static VmProgram CompileChecked(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) =>
-        Compile(node, typeDefinitions, mode);
+    /// <summary>Alias of <see cref="Compile(Node, ITypeSource, CompilationMode)"/>.</summary>
+    public static VmProgram CompileChecked(Node node, ITypeSource source, CompilationMode mode = CompilationMode.Normal) =>
+        Compile(node, source, mode);
 
     /// <summary>
     /// Analyze and compile a Syntax program. Analysis errors fail closed.

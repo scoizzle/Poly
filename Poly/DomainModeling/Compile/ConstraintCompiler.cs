@@ -1,6 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.DomainModeling.Compile;
@@ -61,8 +62,8 @@ public interface IConstraintCompiler {
     /// Rewrites the module after contributions are installed. The default
     /// returns <paramref name="module"/> unchanged.
     /// </summary>
-    /// <param name="types">The analysis' type provider, so a rewrite that mints nodes can state a resolved definition.</param>
-    ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module, ITypeDefinitionProvider? types = null) =>
+    /// <param name="types">The analysis' type system, so a rewrite that mints nodes can state a resolved definition.</param>
+    ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module, ITypeSystem? types = null) =>
         new(module, []);
 }
 
@@ -91,7 +92,7 @@ public sealed class ConstraintCompileRequest {
         Constraint constraint,
         IReadOnlyDictionary<string, Parameter> parameters,
         StorageModel? storage,
-        ITypeDefinitionProvider? types = null) {
+        ITypeSystem? types = null) {
         Entity = entity;
         Property = property;
         Constraint = constraint;
@@ -100,14 +101,14 @@ public sealed class ConstraintCompileRequest {
         Types = types;
     }
 
-    /// <summary>The analysis' type provider, so a compiler states a resolved definition instead of a CLR type.</summary>
-    public ITypeDefinitionProvider? Types { get; }
+    /// <summary>The analysis' type system, so a compiler states a resolved definition instead of a CLR type.</summary>
+    public ITypeSystem? Types { get; }
 
-    /// <summary>A tree reference to <paramref name="type"/>: the provider's definition when it has the type, else the
-    /// CLR host's own.</summary>
+    /// <summary>A tree reference to <paramref name="type"/>: the type system's definition when its chain has the type,
+    /// else the CLR host's own.</summary>
     public Node TypeReference(Type type) {
         ArgumentNullException.ThrowIfNull(type);
-        return Types?.GetClrTypeDefinition(type) is { } definition
+        return Types?.ClrDefinitionOf(type) is { } definition
             ? new TypeDefinitionReference(definition)
             : ClrTypeReferences.Of(type);
     }

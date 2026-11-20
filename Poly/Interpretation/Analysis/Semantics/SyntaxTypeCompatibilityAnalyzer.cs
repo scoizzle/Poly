@@ -238,7 +238,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 context.TypeSystem.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>()?.SimpleTypeOf(parameters[1].ParameterTypeDefinition)))
             return;
         var target = countDefinition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null ? typeof(int?) : typeof(int);
-        var targetDefinition = context.TypeDefinitions.GetTypeDefinition(target)
+        var targetDefinition = context.TypeSystem.ClrDefinitionOf(target)
             ?? throw new InvalidOperationException($"the type provider has no definition for '{target}'");
         // The target node is minted here, so it carries its resolved type with it: the reference has no type of its
         // own, and the emitter reads a type node's CLR type from the analysis.
@@ -266,14 +266,14 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (effective is Constant { Value: null })
             return null;
         var definition = context.GetResolvedType(effective)
-            ?? (effective is Constant { Value: { } value } ? context.TypeDefinitions.GetTypeDefinition(value.GetType()) : null);
+            ?? (effective is Constant { Value: { } value } ? context.TypeSystem.ClrDefinitionOf(value.GetType()) : null);
         return definition?.GetRuntimeType() == typeof(void) ? null : definition;
     }
 
     /// <summary>The definition with a <c>Nullable&lt;T&gt;</c> peeled to <c>T</c>.</summary>
     private static ITypeDefinition Underlying(AnalysisContext context, ITypeDefinition definition) =>
         definition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is { } underlying
-            ? context.TypeDefinitions.GetTypeDefinition(underlying) ?? definition
+            ? context.TypeSystem.ClrDefinitionOf(underlying) ?? definition
             : definition;
 
     private static string NameOf(ITypeDefinition definition) => definition.GetRuntimeType()?.Name ?? definition.Name;
@@ -672,8 +672,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (priorType == rhsType)
             return;
 
-        var destDef = context.TypeDefinitions.GetTypeDefinition(priorType);
-        var srcDef = context.TypeDefinitions.GetTypeDefinition(rhsType);
+        var destDef = context.TypeSystem.ClrDefinitionOf(priorType);
+        var srcDef = context.TypeSystem.ClrDefinitionOf(rhsType);
         // An implicit native-integer conversion has no method: the tree states it as a cast, which the emitter executes
         // through the word type (a nuint widening to double or decimal is unsigned; a decimal store is a handle).
         if (destDef is not null && srcDef is not null && !destDef.IsAssignableFrom(srcDef, context.TypeSystem)
@@ -704,8 +704,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var target = ClrTypeOf(context, destination);
         var rhs = ClrTypeOf(context, assignment.Value);
         if (target is null || rhs is null) return;
-        var destDef = context.TypeDefinitions.GetTypeDefinition(target);
-        var srcDef = context.TypeDefinitions.GetTypeDefinition(rhs);
+        var destDef = context.TypeSystem.ClrDefinitionOf(target);
+        var srcDef = context.TypeSystem.ClrDefinitionOf(rhs);
         if (destDef is null || srcDef is null) return;
         if (destDef.IsAssignableFrom(srcDef, context.TypeSystem)) {
             RewriteAssignmentConversion(context, assignment, destDef, srcDef);
@@ -725,9 +725,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var dest = ClrTypeOf(context, typeCast);
         var destDef = context.GetResolvedType(typeCast.TargetTypeReference)
                     ?? context.GetResolvedType(typeCast)
-                    ?? (dest is not null ? context.TypeDefinitions.GetTypeDefinition(dest) : null);
+                    ?? (dest is not null ? context.TypeSystem.ClrDefinitionOf(dest) : null);
         var srcDef = context.GetResolvedType(typeCast.Operand)
-            ?? (source is not null ? context.TypeDefinitions.GetTypeDefinition(source) : null);
+            ?? (source is not null ? context.TypeSystem.ClrDefinitionOf(source) : null);
         if (destDef is not null && srcDef is not null) {
             // A native-integer cast is the platform's own conversion: the emitter converts through the word type, never
             // through IntPtr's declared operator or a Convert.To* overload pick.
@@ -802,7 +802,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             var destDef = parameters[i].ParameterTypeDefinition;
             var srcDef = context.GetResolvedType(arg)
                 ?? (ClrTypeOf(context, arg) is { } clr
-                    ? context.TypeDefinitions.GetTypeDefinition(clr)
+                    ? context.TypeSystem.ClrDefinitionOf(clr)
                     : null);
             if (destDef is null || srcDef is null || !destDef.IsAssignableFrom(srcDef, context.TypeSystem))
                 continue;
@@ -878,7 +878,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static bool RewriteStringConcat(
         AnalysisContext context, Node parent, Node left, Node right) {
-        var stringDef = context.TypeDefinitions.GetTypeDefinition(typeof(string));
+        var stringDef = context.TypeSystem.ClrDefinitionOf(typeof(string));
         if (stringDef is null)
             return false;
         var parts = new List<Node>();
@@ -900,7 +900,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (parts.Count <= 4) {
             // A part that is not a string takes the object overload; the emitter boxes the
             // integer into the object argument (`"a" + x`, `x` an int).
-            var objectDef = context.TypeDefinitions.GetTypeDefinition(typeof(object)) ?? stringDef;
+            var objectDef = context.TypeSystem.ClrDefinitionOf(typeof(object)) ?? stringDef;
             var argTypes = parts
                 .Select(p => ClrTypeOf(context, p) == typeof(string) ? stringDef : objectDef)
                 .ToArray();
@@ -999,7 +999,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static Node? ConvertOperand(AnalysisContext context, Node operand, ITypeDefinition parameter) {
         var source = context.GetResolvedType(operand)
             ?? (ClrTypeOf(context, operand) is { } clr
-                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                ? context.TypeSystem.ClrDefinitionOf(clr)
                 : null);
         if (source is null)
             return null;
@@ -1016,7 +1016,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         AnalysisContext context, Node parent, Node date, Node offset, bool negate) {
         var dateDef = context.GetResolvedType(date)
             ?? (ClrTypeOf(context, date) is { } clr
-                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                ? context.TypeSystem.ClrDefinitionOf(clr)
                 : null);
         if (dateDef is null)
             return false;
@@ -1031,7 +1031,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             amount = new UnaryMinus(offset);
             var offsetType = context.GetResolvedType(offset)
                 ?? (ClrTypeOf(context, offset) is { } ot
-                    ? context.TypeDefinitions.GetTypeDefinition(ot)
+                    ? context.TypeSystem.ClrDefinitionOf(ot)
                     : null);
             if (offsetType is not null)
                 context.SetResolvedType(amount, offsetType);
@@ -1053,15 +1053,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var underlying = Nullable.GetUnderlyingType(destClr) ?? destClr;
         if (ClrConvertMethods.NameOf(underlying) is not { } name)
             return false;
-        var convertDef = context.TypeDefinitions.GetTypeDefinition(typeof(Convert));
+        var convertDef = context.TypeSystem.ClrDefinitionOf(typeof(Convert));
         if (convertDef is null)
             return false;
         Node source = value;
         var sourceDef = srcDef;
         var underlyingDefinition = context.TypeSystem.NullableOf(destDef) ?? destDef;
         if (srcClr is not null && IsIeeeFloating(context.TypeSystem, srcDef) && IsIntegerType(context.TypeSystem, underlyingDefinition)) {
-            var doubleDef = context.TypeDefinitions.GetTypeDefinition(typeof(double));
-            var mathDef = context.TypeDefinitions.GetTypeDefinition(typeof(Math));
+            var doubleDef = context.TypeSystem.ClrDefinitionOf(typeof(double));
+            var mathDef = context.TypeSystem.ClrDefinitionOf(typeof(Math));
             if (doubleDef is null || mathDef is null)
                 return false;
             if (srcClr != typeof(double)) {
@@ -1085,7 +1085,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             Replace(context, original, invoke);
             return true;
         }
-        var nullableDef = context.TypeDefinitions.GetTypeDefinition(destClr);
+        var nullableDef = context.TypeSystem.ClrDefinitionOf(destClr);
         if (nullableDef is not null
             && TryConversionInvoke(context, invoke, nullableDef, method.MemberTypeDefinition, implicitOnly: true)
                 is { } boxed) {
@@ -1124,7 +1124,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static Node? CoerceTo(AnalysisContext context, Node value, ITypeDefinition destDef) {
         var srcDef = context.GetResolvedType(value)
             ?? (ClrTypeOf(context, value) is { } clr
-                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                ? context.TypeSystem.ClrDefinitionOf(clr)
                 : null);
         if (srcDef is null)
             return null;
@@ -1133,7 +1133,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (TryConversionInvoke(context, value, destDef, srcDef, implicitOnly: true) is { } conv)
             return conv;
         if (ClrConvertMethods.NameOf(destDef) is { } name) {
-            var convertDef = context.TypeDefinitions.GetTypeDefinition("System.Convert");
+            var convertDef = context.TypeSystem.Resolve("System.Convert");
             var method = convertDef?.FindMatchingMethodOverloads(name, [srcDef], context.TypeSystem).FirstOrDefault();
             if (method is not null)
                 return StampStaticInvoke(context, method, value);
@@ -1172,7 +1172,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var effective = context.GetNodeReplacement(node) ?? node;
         return context.GetResolvedType(effective)
             ?? (effective is Constant { Value: not null } constant
-                ? context.TypeDefinitions.GetClrTypeDefinition(constant.Value.GetType())
+                ? context.TypeSystem.ClrDefinitionOf(constant.Value.GetType())
                 : null);
     }
 

@@ -19,11 +19,11 @@ public class PrimitiveVocabularyTests {
 
         await Assert.That(introspection).DoesNotContain("PrimitiveType");
         await Assert.That(typeof(ITypeDefinition).GetProperty("PrimitiveType", any)).IsNull();
-        await Assert.That(typeof(ITypeDefinitionProvider).GetMethods(any)
-            .Where(static method => method.Name == nameof(ITypeDefinitionProvider.GetTypeDefinition))
+        await Assert.That(typeof(ITypeSystem).GetMethods(any)
+            .Where(static method => method.Name == nameof(ITypeSystem.Resolve))
             .SelectMany(static method => method.GetParameters())
             .Select(static parameter => parameter.ParameterType)).IsEquivalentTo(new[] { typeof(string) })
-            .Because("a provider resolves a name; no id from a shared list");
+            .Because("a system resolves a name; no id from a shared list (#998 T12b)");
         await Assert.That(typeof(Poly.Ast.Node).Assembly.GetType("Poly.Ast.Nodes.PrimitiveTypeReference")).IsNull();
     }
 
@@ -76,7 +76,7 @@ public class PrimitiveVocabularyTests {
         var provider = new SecondHostProvider();
         provider.Add(new HostPrimitive("Undefined", hostKind: "absence"));
 
-        var resolved = provider.GetTypeDefinition("Undefined");
+        var resolved = provider.ByQualifiedName("Undefined");
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved is IHostType { HostKind: "absence" }).IsTrue();
@@ -93,7 +93,7 @@ public class PrimitiveVocabularyTests {
         var provider = new SecondHostProvider();
         provider.Add(new HostPrimitive("Decimal128", hostKind: "decimal128", numberBits: 128));
 
-        var resolved = provider.GetTypeDefinition("Decimal128");
+        var resolved = provider.ByQualifiedName("Decimal128");
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved is IHostType { HostKind: "decimal128", HostNumberBits: 128 }).IsTrue()
@@ -114,12 +114,14 @@ public class PrimitiveVocabularyTests {
         int HostNumberBits { get; }
     }
 
-    private sealed class SecondHostProvider : ITypeDefinitionProvider {
+    private sealed class SecondHostProvider : IQualifiedNameSource {
         private readonly Dictionary<string, ITypeDefinition> _types = new(StringComparer.Ordinal);
 
         public void Add(ITypeDefinition definition) => _types[definition.Name] = definition;
 
-        public ITypeDefinition? GetTypeDefinition(string name) => _types.GetValueOrDefault(name);
+        public ITypeDefinition? ByQualifiedName(string name) => _types.GetValueOrDefault(name);
+        public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) =>
+            _types.Values.Where(type => string.Equals(type.Namespace, @namespace, StringComparison.Ordinal));
         public IEnumerable<ITypeDefinition> Types => _types.Values;
     }
 

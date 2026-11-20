@@ -55,14 +55,25 @@ public class AnalysisTypeSystemTests {
         var ledger = new LedgerHost();
         await Assert.That(ledger.Bind("int")).IsNull().Because("the ledger has no words of its own");
 
-        var underLedger = new AnalysisContext(ClrTypeDefinitionRegistry.Shared,
-            AnalysisSettings.Default.With<ITypeSystem>(ledger));
+        var underLedger = new AnalysisContext(AnalysisSettings.Default.With<ITypeSystem>(ledger));
         await Assert.That(underLedger.TypeSystem.Bind("int")).IsNull()
             .Because("the ledger binds no word and no C# sits beneath it");
 
         var underCSharp = new AnalysisContext();
         await Assert.That(underCSharp.TypeSystem.Bind("int")?.Name).IsEqualTo("Int32")
             .Because("the C# target's own vocabulary still answers");
+    }
+
+    [Test]
+    public async Task ClrByTypeLookup_FollowsTheTargetChain_AndAnswersNullWithNoClrBeneath() {
+        var underCSharp = new AnalysisContext();
+        await Assert.That(underCSharp.TypeSystem.ClrDefinitionOf(typeof(decimal)))
+            .IsSameReferenceAs(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(decimal)))
+            .Because("the default target's sources hold the CLR registry");
+
+        var underLedger = new AnalysisContext(AnalysisSettings.Default.With<ITypeSystem>(new LedgerHost()));
+        await Assert.That(underLedger.TypeSystem.ClrDefinitionOf(typeof(decimal))).IsNull()
+            .Because("a chain with no CLR source beneath it states no CLR type");
     }
 
     [Test]

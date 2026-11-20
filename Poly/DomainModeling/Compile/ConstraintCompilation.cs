@@ -25,7 +25,7 @@ internal static class ConstraintCompilation {
         var current = applied.Module;
         List<(Node From, Node To)>? replaced = null;
         foreach (var compiler in compilers) {
-            var rewrite = compiler.AfterApply(current, analysis.TypeDefinitions);
+            var rewrite = compiler.AfterApply(current, analysis.TypeSystem);
             if (rewrite.Replaced.Count == 0 && ReferenceEquals(rewrite.Module, current))
                 continue;
             replaced ??= [.. applied.ReplacedBodies];
@@ -104,7 +104,7 @@ internal static class ConstraintCompilation {
                     parameters[method.Name] = parameter;
             }
         }
-        return new ConstraintCompileRequest(entity, property, constraint, parameters, storage, analysis.TypeDefinitions);
+        return new ConstraintCompileRequest(entity, property, constraint, parameters, storage, analysis.TypeSystem);
     }
 
     private static void Absorb(

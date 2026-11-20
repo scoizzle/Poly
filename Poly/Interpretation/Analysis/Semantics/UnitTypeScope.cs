@@ -6,7 +6,7 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// are an ambiguity, never a first-match. It sits beneath every other provider, as a C# namespace import sits beneath
 /// a declaration.
 /// </summary>
-internal sealed class UnitTypeScope(IReadOnlyList<ITypeSource> sources) : ITypeDefinitionProvider, IAnalysisMetadata {
+internal sealed class UnitTypeScope(IReadOnlyList<ITypeSource> sources) : IQualifiedNameSource, IAnalysisMetadata {
     private readonly List<string> _namespaces = [];
 
     /// <summary>Imports <paramref name="namespace"/>; a repeated import is one import.</summary>
@@ -32,7 +32,9 @@ internal sealed class UnitTypeScope(IReadOnlyList<ITypeSource> sources) : ITypeD
     public ITypeDefinition? GetTypeDefinition(string name) =>
         Candidates(name) is [var only] ? only : null;
 
-    public IEnumerable<ITypeDefinition> Types => [];
+    public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) => [];
+
+    ITypeDefinition? IQualifiedNameSource.ByQualifiedName(string name) => GetTypeDefinition(name);
 }
 
 /// <summary>
@@ -54,7 +56,7 @@ public sealed class UnitTypeScopeAnalyzer : INodeAnalyzer {
                     : [.. (context.TypeSystem.Target ?? context.TypeSystem).Sources];
                 scope = new UnitTypeScope(sources);
                 context.SetMetadata(default, scope);
-                context.TypeDefinitions.AddFallback(scope);
+                context.AddScopeSource(scope);
             }
             foreach (var @namespace in unit.Usings)
                 scope.Import(@namespace);
@@ -62,7 +64,7 @@ public sealed class UnitTypeScopeAnalyzer : INodeAnalyzer {
         else if (BareTypeName(node) is { } name
             && context.GetMetadata<UnitTypeScope>(default) is { } open
             && open.Candidates(name) is { Count: > 1 } candidates
-            && context.TypeDefinitions.GetTypeDefinition(name) is null) {
+            && context.TypeSystem.Resolve(name) is null) {
             context.ReportDiagnostic(node, DiagnosticSeverity.Error,
                 $"'{name}' is ambiguous between {string.Join(" and ", candidates.Select(static type => $"'{type.FullName}'"))}");
         }

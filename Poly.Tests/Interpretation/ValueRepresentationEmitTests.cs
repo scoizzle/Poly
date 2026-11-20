@@ -472,7 +472,7 @@ public class ValueRepresentationEmitTests {
         var taker = new BoundaryProbe.Taker();
         var node = new Invoke(new Member(new Parameter("e", new TypeReference("BoundaryPerson")), "Take"),
             new Parameter("v", ClrTypeReferences.Of(type)));
-        using var exec = Interpreter.Execute(Interpreter.Compile(node, context.TypeDefinitions), taker, argument);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, context.Declarations()), taker, argument);
         return taker.Seen;
     }
 
@@ -645,7 +645,7 @@ public class ValueRepresentationEmitTests {
 
     private static object? ModuleCall(Row row) {
         var (context, root) = ModuleCallTree(row);
-        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { row.Value }));
+        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.Declarations()), s => s.SetArgs(new object?[] { row.Value }));
         return exec.Result.Value;
     }
 
@@ -679,7 +679,7 @@ public class ValueRepresentationEmitTests {
         var context = AnalysisContext.CreateDefault();
         new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
         var root = new Member(new New(new TypeReference("CtorBoundaryBox"), new Parameter("v", ClrTypeReferences.Of(typeof(DateOnly)))), "Held");
-        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { Day }));
+        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.Declarations()), s => s.SetArgs(new object?[] { Day }));
         await Assert.That(exec.Result.Value).IsEqualTo(Day);
     }
 
@@ -727,7 +727,7 @@ public class ValueRepresentationEmitTests {
         var context = AnalysisContext.CreateDefault();
         new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
         var root = new Invoke(new Member(new New(new TypeReference("TieBox")), "Run"), new Parameter("v", ClrTypeReferences.Of(typeof(int))));
-        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { 7 }));
+        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.Declarations()), s => s.SetArgs(new object?[] { 7 }));
         await Assert.That(CSharpCallOracle.Chosen([typeof(decimal?), typeof(long?)], typeof(int))).IsEqualTo("long?");
         await Assert.That(exec.Result.Value).IsEqualTo("decimal?");
     }
@@ -743,7 +743,7 @@ public class ValueRepresentationEmitTests {
     public async Task ModuleArgument_CSharpRefuses_StaysAnAnalysisError(Type argument, Type parameter) {
         await Assert.That(CSharpCallOracle.Binds(argument, parameter)).IsFalse();
         var (context, root) = ModuleCallTree(R(argument, parameter, null, null));
-        await Assert.That(() => Interpreter.Compile(root, context.TypeDefinitions))
+        await Assert.That(() => Interpreter.Compile(root, context.Declarations()))
             .Throws<InvalidOperationException>().WithMessageContaining("no matching member 'Take'");
     }
 
@@ -754,7 +754,7 @@ public class ValueRepresentationEmitTests {
         await Assert.That(CSharpCallOracle.BindsExpression("0", typeof(IntMark))).IsTrue();
         await Assert.That(CSharpCallOracle.BindsExpression("0", typeof(IntMark?))).IsTrue();
         var (context, root) = ModuleCallTree(R(typeof(int), typeof(IntMark?), 0, null, Shape.ZeroLiteral));
-        await Assert.That(() => Interpreter.Compile(root, context.TypeDefinitions)).Throws<InvalidOperationException>();
+        await Assert.That(() => Interpreter.Compile(root, context.Declarations())).Throws<InvalidOperationException>();
     }
 }
 

@@ -502,7 +502,7 @@ public class LoweredTreeOperandCoverageTests {
             var node = Walk(root).First(candidate => candidate.GetType() == row.Kind);
             var operands = node.Children.Where(static child => child is not null).Take(2)
                 .Select(child => analysis.GetResolvedType(child!)
-                    ?? (child is Constant { Value: { } value } ? analysis.TypeDefinitions.GetClrTypeDefinition(value.GetType()) : null))
+                    ?? (child is Constant { Value: { } value } ? analysis.TypeSystem.ClrDefinitionOf(value.GetType()) : null))
                 .ToArray();
             checkedRows++;
             if (operands.Any(static operand => operand is null)) {

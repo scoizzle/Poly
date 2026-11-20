@@ -152,12 +152,14 @@ public sealed class ModuleWithoutDeiSpikeTests {
     /// </summary>
     private sealed class ModuleHarness {
         private readonly IReadOnlyList<TypeDefinitionNode> _module;
-        private readonly ITypeDefinitionProvider _types;
+        private readonly IReadOnlyList<ITypeSource> _types;
+        private readonly AstTypeRegistry _declarations;
 
         private ModuleHarness(
-            IReadOnlyList<TypeDefinitionNode> module, ITypeDefinitionProvider types) {
+            IReadOnlyList<TypeDefinitionNode> module, IReadOnlyList<ITypeSource> types, AstTypeRegistry declarations) {
             _module = module;
             _types = types;
+            _declarations = declarations;
         }
 
         public static ModuleHarness For(string poly) {
@@ -175,16 +177,18 @@ public sealed class ModuleWithoutDeiSpikeTests {
             var analysis = result.Analysis;
             var module = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
 
-            // The AST definitions capture this context's provider at construction, so
+            // The AST definitions capture this context's scope at construction, so
             // the CLR DomainResult pair must be in the context before the module types
             // are registered — the same ordering DomainEntityInstance uses.
-            var ctx = new AnalysisContext(
-                DomainResultTypeProvider.Wrap(ClrTypeDefinitionRegistry.Shared));
+            var ctx = AnalysisContext.CreateDefault();
+            ctx.AddSource(DomainResultTypeProvider.Instance);
             var analyzer = new TypeDefinitionNodeAnalyzer();
             foreach (var type in module) {
                 analyzer.Analyze(ctx, type);
             }
-            return new ModuleHarness(module, ctx.TypeDefinitions);
+            var declarations = ctx.GetMetadata<AstTypeRegistry>(default)
+                ?? throw new InvalidOperationException("the module's declarations were not registered");
+            return new ModuleHarness(module, [declarations, DomainResultTypeProvider.Instance], declarations);
         }
 
         /// <summary>Runs a static factory and returns the value it built.</summary>
@@ -210,9 +214,9 @@ public sealed class ModuleWithoutDeiSpikeTests {
             var body = method.Body
                 ?? throw new InvalidOperationException(
                     $"Module method '{methodName}' on '{entityName}' has no body.");
-            var entityType = _types.GetTypeDefinition(entityName)
+            var entityType = _declarations.GetTypeDefinition(entityName)
                 ?? throw new InvalidOperationException(
-                    $"Type '{entityName}' is missing from the module provider.");
+                    $"Type '{entityName}' is missing from the module declarations.");
 
             var analysis = Interpreter.Analyze(body, _types,
                 setup: ctx => AnnotateThis(ctx, body, entityType));

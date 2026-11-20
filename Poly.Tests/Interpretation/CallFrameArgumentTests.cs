@@ -76,7 +76,7 @@ public class CallFrameArgumentTests {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, typeNode);
-        var analysis = Interpreter.Analyze(newNode, context.TypeDefinitions);
+        var analysis = Interpreter.Analyze(newNode, context.Declarations());
 
         var scan = VmTree.Read(AbiEmitter.Build(newNode, analysis, CompilationMode.NoDebug).Expression);
 
@@ -168,7 +168,7 @@ public class CallFrameArgumentTests {
             caught
         ], [boom, caught]);
 
-        using var exec = Interpreter.Execute(Interpreter.Compile(node, context.TypeDefinitions));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, context.Declarations()));
 
         await Assert.That(exec.RawValue).IsEqualTo(1L)
             .Because("the throw reached the caller's catch, so the callee frame was unwound and "

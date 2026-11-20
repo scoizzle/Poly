@@ -397,7 +397,7 @@ A provider-based type abstraction decoupled from CLR reflection. Consumers work 
 | Interface | Purpose |
 |---|---|
 | `ITypeDefinition` | A type with introspectable members |
-| `ITypeDefinitionProvider` | Resolves types by name (`IClrTypeDefinitionProvider` adds the CLR `Type` handle) |
+| `ITypeSystem` | Holds a set of definitions (`Sources`), resolves qualified names, binds its words and decides its rules (#998) |
 | `ITypeMember` | Base for all type members |
 | `ITypeMethod` | A method with parameters |
 | `ITypeConstructor` | A constructor |

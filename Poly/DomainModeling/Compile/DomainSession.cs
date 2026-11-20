@@ -418,14 +418,14 @@ public sealed partial class DomainSession {
 
     /// <summary>
     /// Analyzes a lowered operation module the way the runtime host does: the shared
-    /// <c>Poly.Runtime</c> result family is bound through <see cref="DomainResultTypeProvider"/>
-    /// over the default registry, and a module's own declarations still win over it.
+    /// <c>Poly.Runtime</c> result family is registered as the analysis' own source through
+    /// <see cref="DomainResultTypeProvider"/>, and a module's own declarations still win over it.
     /// </summary>
     public static AnalysisResult AnalyzeModule(IReadOnlyList<TypeDefinitionNode> module) {
         ArgumentNullException.ThrowIfNull(module);
         return Interpreter.Analyzer.Analyze(
             new CompilationUnitNode([], null, module, null),
-            typeDefinitions: DomainResultTypeProvider.Wrap(AnalysisContext.CreateDefault().TypeDefinitions));
+            setup: ctx => ctx.AddSource(DomainResultTypeProvider.Instance));
     }
 
     /// <summary>

@@ -11,36 +11,24 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     public static AnalysisContext CreateDefault() => new();
 
     /// <summary>The type system the analysis decides by: this analysis' own layer over the <see cref="ITypeSystem"/>
-    /// setting, else over C# (#998 T12a). Its own sources answer a name first; its <see cref="ITypeSystem.Target"/> answers
-    /// the rest. Every analysis-time operator lookup (#998 T4a), conversion and assignability check, and overload ranking
-    /// (T4b) asks it.</summary>
-    public ITypeSystem TypeSystem { get; }
+    /// setting, else over C# (#998 T12a, T12b). Its own sources answer a name first; its <see cref="ITypeSystem.Target"/>
+    /// answers the rest. Every analysis-time operator lookup (#998 T4a), conversion and assignability check, and overload
+    /// ranking (T4b) asks it.</summary>
+    public ITypeSystem TypeSystem => Layer;
 
-    public AnalysisContext() : this(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, AnalysisSettings.Default) { }
+    /// <summary>The layer behind <see cref="TypeSystem"/>, where the analysis registers what it declares.</summary>
+    internal AnalysisTypeSystem Layer { get; }
 
-    public AnalysisContext(ITypeDefinitionProvider typeDefinitions)
-        : this(typeDefinitions, AnalysisSettings.Default) { }
+    public AnalysisContext() : this(AnalysisSettings.Default) { }
 
     /// <summary>
-    /// Initializes a new instance with type definitions.
+    /// Initializes a new instance with the given settings: the target type system is the <see cref="ITypeSystem"/> setting,
+    /// else C# over the CLR (#998 T12a, T12b).
     /// </summary>
-    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisSettings settings) {
-        ArgumentNullException.ThrowIfNull(typeDefinitions);
+    public AnalysisContext(AnalysisSettings settings) {
         ArgumentNullException.ThrowIfNull(settings);
-        // The CLR is reached only as the target chain's answer (#998 T12a), never as a provider the analysis adds: a
-        // direct CLR registry passed here is the default provider, not an own source.
-        if (typeDefinitions is TypeDefinitionProviderCollection tpc) {
-            TypeDefinitions = tpc;
-        }
-        else if (ReferenceEquals(typeDefinitions, Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared)) {
-            TypeDefinitions = new TypeDefinitionProviderCollection();
-        }
-        else {
-            TypeDefinitions = new TypeDefinitionProviderCollection(typeDefinitions);
-        }
         Settings = settings;
-        TypeSystem = new AnalysisTypeSystem(TypeDefinitions, settings.Get<ITypeSystem>() ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
-        TypeDefinitions.Layer = TypeSystem;
+        Layer = new AnalysisTypeSystem(settings.Get<ITypeSystem>() ?? Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         AnalysisDiagnosticConfiguration = Settings.Get<AnalysisDiagnosticConfiguration>() ?? AnalysisDiagnosticConfiguration.Default;
     }
 
@@ -65,14 +53,19 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     public AnalysisDiagnosticConfiguration AnalysisDiagnosticConfiguration { get; }
 
     /// <summary>
-    /// Gets the type definition provider used for resolving type information.
-    /// This is always a <see cref="TypeDefinitionProviderCollection"/> — providers
-    /// registered during analysis (e.g. AST type definitions from
-    /// <c>TypeDefinitionNodeAnalyzer</c>) are added to this collection. It is the analysis layer's own sources; its
-    /// name lookup answers exactly what <see cref="TypeSystem"/> answers, and its by-<see cref="Type"/> lookup asks the
-    /// target chain's CLR source (null when the chain has none).
+    /// Registers a source the analysis owns, outranking the ones already registered: a source a caller supplied, or the
+    /// declarations the analysis found (#998 T12b). The layer's name lookup answers it before the target chain.
     /// </summary>
-    public TypeDefinitionProviderCollection TypeDefinitions { get; }
+    internal void AddSource(ITypeSource source) => Layer.AddSource(source);
+
+    /// <summary>Registers a block of own sources in the block's order.</summary>
+    internal void AddSources(IEnumerable<ITypeSource> sources) => Layer.AddSources(sources);
+
+    /// <summary>Registers a source beneath every other own source, above the target: a unit's <c>using</c> scope.</summary>
+    internal void AddScopeSource(ITypeSource source) => Layer.AddScopeSource(source);
+
+    /// <summary>The definition built for exactly <paramref name="node"/> by one of the own sources, or null.</summary>
+    internal ITypeDefinition? TypeDefinitionOf(TypeDefinitionNode node) => Layer.DefinitionOf(node);
 
     /// <summary>
     /// True when any error-level diagnostic has been reported.

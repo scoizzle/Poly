@@ -22,11 +22,11 @@ public class NullableCSharpTests {
         return exec.RawValue;
     }
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeSource Analyze(TypeDefinitionNode typeNode) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, typeNode);
-        return context.TypeDefinitions;
+        return context.Declarations();
     }
 
     private enum Color { Red = 1, Blue = 2 }

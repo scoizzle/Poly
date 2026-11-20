@@ -7,7 +7,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Thread-safe registry and provider for CLR-backed <see cref="ClrTypeDefinition"/> instances.
 /// Caches definitions by fully-qualified name and supports deferred resolution.
 /// </summary>
-internal sealed class ClrTypeDefinitionRegistry : IClrTypeDefinitionProvider, ITypeSource {
+internal sealed class ClrTypeDefinitionRegistry : IQualifiedNameSource, ITypeNameLookup {
     public static readonly ClrTypeDefinitionRegistry Shared = new();
     private readonly ConcurrentDictionary<string, ClrTypeDefinition> _types = new();
 
@@ -171,5 +171,7 @@ internal sealed class ClrTypeDefinitionRegistry : IClrTypeDefinitionProvider, IT
         return null;
     }
 
-    ITypeDefinition? IClrTypeDefinitionProvider.GetTypeDefinition(Type type) => GetTypeDefinition(type);
+    ITypeDefinition? IQualifiedNameSource.ByQualifiedName(string name) => GetTypeDefinition(name);
+
+    ITypeDefinition? ITypeNameLookup.Lookup(string name) => GetTypeDefinition(name);
 }

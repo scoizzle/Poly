@@ -28,13 +28,14 @@ public class TargetTypeSystemTests {
         .Build();
 
     private static AnalysisResult Analyze(Node node, ITypeSystem? target = null) =>
-        // A target that is not C# supplies no definitions of its own (#998 T12a): the ledger cases below give the analysis
-        // the CLR definitions the operators and conversions are asked about, and keep the target's rules.
+        // A target that is not C# supplies no definitions of its own (#998 T12a): the ledger cases below register the CLR
+        // registry as the analysis' own source, so the operators and conversions are asked about CLR definitions and the
+        // target's rules still decide.
         Analyzer.Analyze(
             node,
-            typeDefinitions: target is null
+            setup: target is null
                 ? null
-                : new TypeDefinitionProviderCollection(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared),
+                : context => context.AddSource(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared),
             settings: target is null ? null : AnalysisSettings.Default.With<ITypeSystem>(target));
 
     [Test]
@@ -61,7 +62,7 @@ public class TargetTypeSystemTests {
     public async Task Context_TargetIsTheSetting_ElseCSharp() {
         var ledger = new LedgerHost();
         await Assert.That(new AnalysisContext().TypeSystem.Target).IsSameReferenceAs(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
-        await Assert.That(new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared,
+        await Assert.That(new AnalysisContext(
             AnalysisSettings.Default.With<ITypeSystem>(ledger)).TypeSystem.Target).IsSameReferenceAs(ledger);
     }
 
@@ -133,9 +134,12 @@ public class TargetTypeSystemTests {
 
         await Assert.That(() => Poly.Interpretation.Interpreter.Compile(call, analysis)).ThrowsNothing();
 
-        // The analysis is clean under C#; emit then asks the result's system, so a result whose system is the ledger makes
-        // the bridge itself refuse the body (its own message, not the analysis' diagnostic).
-        var underLedger = analysis with { TypeSystem = new LedgerHost() };
+        // The analysis is clean under C#; emit then asks the result's system, so a result whose system is a layer over the
+        // ledger (holding the CLR's definitions, as the ledger has none) makes the bridge itself refuse the body's operator
+        // (its own message, not the analysis' diagnostic).
+        var ledgerLayer = new Poly.Analysis.AnalysisTypeSystem(new LedgerHost());
+        ledgerLayer.AddSource(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
+        var underLedger = analysis with { TypeSystem = ledgerLayer };
         await Assert.That(underLedger.HasErrors).IsFalse();
         await Assert.That(() => Poly.Interpretation.Interpreter.Compile(call, underLedger)).Throws<InvalidOperationException>()
             .WithMessageContaining("defines no Add operator");

@@ -23,7 +23,7 @@ public class AbiEmitterMemberAccessTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var prop = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var prop = ctx.TypeSystem.Resolve("Sample.Item")!.Properties.Single();
         var dict = new Dictionary<string, object?> { ["Count"] = 42 };
         var readExpr = AbiEmitter.EmitMemberRead(prop, Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -44,7 +44,7 @@ public class AbiEmitterMemberAccessTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var prop = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var prop = ctx.TypeSystem.Resolve("Sample.Item")!.Properties.Single();
         var dict = new Dictionary<string, object?>(); // empty — no "Count" key
         var readExpr = AbiEmitter.EmitMemberRead(prop, Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -64,7 +64,7 @@ public class AbiEmitterMemberAccessTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var prop = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var prop = ctx.TypeSystem.Resolve("Sample.Item")!.Properties.Single();
         var dict = new Dictionary<string, object?>();
         var readExpr = AbiEmitter.EmitMemberRead(prop, Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -83,7 +83,7 @@ public class AbiEmitterMemberAccessTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var field = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var field = ctx.TypeSystem.Resolve("Sample.Item")!.Fields.Single();
         var dict = new Dictionary<string, object?> { ["Tag"] = 99L };
         var readExpr = AbiEmitter.EmitMemberRead(field, Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -103,7 +103,7 @@ public class AbiEmitterMemberAccessTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var field = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var field = ctx.TypeSystem.Resolve("Sample.Item")!.Fields.Single();
         var dict = new Dictionary<string, object?>();
         var valueConst = Expression.Convert(Expression.Constant(77L), typeof(object));
         var writeExpr = AbiEmitter.EmitMemberWrite(field, Expression.Constant(dict), valueConst);
@@ -123,7 +123,7 @@ public class AbiEmitterMemberAccessTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var field = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var field = ctx.TypeSystem.Resolve("Sample.Item")!.Fields.Single();
         var dict = new Dictionary<string, object?> { ["Score"] = 7 };
         var readExpr = AbiEmitter.EmitMemberRead(field, Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -165,7 +165,7 @@ public class AbiEmitterMemberAccessTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var field = ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!.Fields.Single();
+        var field = ctx.TypeSystem.Resolve("PatronStatus")!.Fields.Single();
         var readExpr = AbiEmitter.EmitMemberRead(field, null);
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
         var result = lambda.Compile()();
@@ -173,6 +173,6 @@ public class AbiEmitterMemberAccessTests {
         await Assert.That(result).IsEqualTo("Active");
         await Assert.That(field.IsStatic).IsTrue();
         await Assert.That(field.Mutability.HasFlag(Mutability.CompileTimeConst)).IsTrue();
-        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!)).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(ctx.TypeSystem.Resolve("PatronStatus")!)).IsTrue();
     }
 }

@@ -8,7 +8,7 @@ namespace Poly.Tests.Interpretation;
 
 /// <summary>F14: Member/Assignment on dict-backed AST property/field via Interpreter.Compile.</summary>
 public class AstMemberVmTests {
-    private static ITypeDefinitionProvider BuildItemType(bool field = false) {
+    private static ITypeSource BuildItemType(bool field = false) {
         TypeDefinitionNode typeNode = field
             ? new TypeDefinitionNode(
                 "Item", "Sample",
@@ -19,7 +19,7 @@ public class AstMemberVmTests {
         var tda = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     [Test]
@@ -170,11 +170,11 @@ public class AstMemberVmTests {
         await Assert.That(bag!["Count"]).IsEqualTo(41L);
     }
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeSource Analyze(TypeDefinitionNode typeNode) {
         var tda = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     private static readonly Parameter ObjectValue = new("v", ClrTypeReferences.To<object>());

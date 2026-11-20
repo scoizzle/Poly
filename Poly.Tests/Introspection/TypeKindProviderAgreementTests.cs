@@ -109,7 +109,7 @@ public class TypeKindProviderAgreementTests {
     private static ITypeDefinition Resolve(TypeDefinitionNode node) {
         var context = AnalysisContext.CreateDefault();
         new TypeDefinitionNodeAnalyzer().Analyze(context, node);
-        return context.TypeDefinitions.GetTypeDefinition(node.Name)!;
+        return context.TypeSystem.Resolve(node.Name)!;
     }
 
     private sealed class TestParameter(string name) : IParameter {

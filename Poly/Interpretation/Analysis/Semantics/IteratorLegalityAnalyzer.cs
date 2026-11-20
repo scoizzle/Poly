@@ -260,7 +260,7 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
         }
         var valueDef = context.GetResolvedType(yield.Value);
         if (valueDef is not null && scope.ElementType is { } element
-            && context.TypeDefinitions.GetClrTypeDefinition(element) is { } elementDef
+            && context.TypeSystem.ClrDefinitionOf(element) is { } elementDef
             && !SyntaxTypeCompatibilityAnalyzer.IsImplicitlyConvertible(context.TypeSystem, valueDef, elementDef)) {
             Error(context, yield, "IT0006",
                 $"cannot yield a value of type '{valueDef.Name}' from an iterator of '{element.Name}'.");

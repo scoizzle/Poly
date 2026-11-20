@@ -33,7 +33,8 @@ public sealed partial class ModuleInstanceExecutor {
     private readonly Domain _domain;
     private readonly AnalysisResult _analysis;
     private IReadOnlyList<TypeDefinitionNode> _module;
-    private ITypeDefinitionProvider _types;
+    private IReadOnlyList<ITypeSource> _types;
+    private AstTypeRegistry _declarations;
     private readonly ModuleStoragePort _port = new();
     private readonly Dictionary<string, ModuleInstance> _byId = new(StringComparer.Ordinal);
     private readonly Dictionary<object, ModuleInstance> _byBag = new(System.Collections.Generic.ReferenceEqualityComparer.Instance);
@@ -48,20 +49,23 @@ public sealed partial class ModuleInstanceExecutor {
         _domain = domain;
         _module = [.. RuntimeAnalysisCache.GetOrLower(domain).Select(BindParameterBodies)];
         _analysis = RuntimeAnalysisCache.Analysis(domain);
-        _types = BuildTypes(_module);
+        (_types, _declarations) = BuildTypes(_module);
     }
 
-    private static ITypeDefinitionProvider BuildTypes(IReadOnlyList<TypeDefinitionNode> module) {
-        // The AST definitions capture this context's provider at construction, so the
+    private static (IReadOnlyList<ITypeSource> Sources, AstTypeRegistry Declarations) BuildTypes(
+        IReadOnlyList<TypeDefinitionNode> module) {
+        // The AST definitions capture this context's scope at construction, so the
         // CLR DomainResult pair (Poly.Runtime) must be in the context before the module types are
         // registered.
-        var ctx = new AnalysisContext(
-            DomainResultTypeProvider.Wrap(AnalysisContext.CreateDefault().TypeDefinitions));
+        var ctx = AnalysisContext.CreateDefault();
+        ctx.AddSource(DomainResultTypeProvider.Instance);
         var analyzer = new TypeDefinitionNodeAnalyzer();
         foreach (var type in module) {
             analyzer.Analyze(ctx, type);
         }
-        return ctx.TypeDefinitions;
+        var declarations = ctx.GetMetadata<AstTypeRegistry>(default)
+            ?? throw new InvalidOperationException("the module's declarations were not registered");
+        return ([declarations, DomainResultTypeProvider.Instance], declarations);
     }
 
     /// <summary>
@@ -343,7 +347,7 @@ public sealed partial class ModuleInstanceExecutor {
         // Nested When calls compile against the type provider, not the cache list.
         // Rebuild so the next action sees the replaced or cleared handler.
         _module = [.. module.Select(BindParameterBodies)];
-        _types = BuildTypes(_module);
+        (_types, _declarations) = BuildTypes(_module);
         _compiled.Clear();
     }
 
@@ -454,9 +458,9 @@ public sealed partial class ModuleInstanceExecutor {
         string entityName, string name, Node body, IReadOnlyList<Parameter> parameters) {
         if (_compiled.TryGetValue((entityName, name), out var cached) && ReferenceEquals(cached.Body, body))
             return cached;
-        var entityType = _types.GetTypeDefinition(entityName)
+        var entityType = _declarations.GetTypeDefinition(entityName)
             ?? throw new InvalidOperationException(
-                $"Type '{entityName}' is missing from the module provider.");
+                $"Type '{entityName}' is missing from the module declarations.");
         var analysis = Interpreter.Analyze(body, _types, setup: ctx => {
             AnnotateThis(ctx, body, entityType);
             if (parameters.Count > 0)

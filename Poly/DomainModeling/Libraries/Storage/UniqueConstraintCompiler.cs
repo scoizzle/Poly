@@ -3,6 +3,7 @@ using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
@@ -108,7 +109,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         return obligations ?? [];
     }
 
-    public ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module, ITypeDefinitionProvider? provider) {
+    public ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module, ITypeSystem? provider) {
         ArgumentNullException.ThrowIfNull(module);
         var replaced = new List<(Node From, Node To)>();
         List<TypeDefinitionNode>? types = null;
@@ -123,7 +124,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     }
 
     private static TypeDefinitionNode RewriteType(
-        TypeDefinitionNode type, List<(Node From, Node To)> replaced, ITypeDefinitionProvider? provider) {
+        TypeDefinitionNode type, List<(Node From, Node To)> replaced, ITypeSystem? provider) {
         if (type.Constructors is not null) {
             foreach (var ctor in type.Constructors) {
                 if (ContainsEnsureUnique(ctor.Body))
@@ -202,10 +203,10 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private static string Violation(string entity, string property) =>
         $"Unique constraint violated: '{property}' value is already used on another '{entity}'.";
 
-    /// <summary>A reference to <paramref name="type"/> the analysis can resolve: the provider's definition when it has
-    /// the type, else the CLR host's own.</summary>
-    private static Node TypeReferenceTo(ITypeDefinitionProvider? provider, Type type) =>
-        provider?.GetClrTypeDefinition(type) is { } definition
+    /// <summary>A reference to <paramref name="type"/> the analysis can resolve: the type system's definition when its
+    /// chain has the type, else the CLR host's own.</summary>
+    private static Node TypeReferenceTo(ITypeSystem? provider, Type type) =>
+        provider?.ClrDefinitionOf(type) is { } definition
             ? new TypeDefinitionReference(definition)
             : ClrTypeReferences.Of(type);
 

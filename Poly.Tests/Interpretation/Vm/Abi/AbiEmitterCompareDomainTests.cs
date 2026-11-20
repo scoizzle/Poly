@@ -540,7 +540,7 @@ public class AbiEmitterCompareDomainTests {
         await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
     }
 
-    private static ITypeDefinitionProvider StampType() {
+    private static ITypeSource StampType() {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, new TypeDefinitionNode(
@@ -554,7 +554,7 @@ public class AbiEmitterCompareDomainTests {
                 Stamp("Left", ClrTypeReferences.To<int>(), new Constant(0), 1L),
                 Stamp("Right", ClrTypeReferences.To<decimal>(), new Constant(0m), 2L),
             ]));
-        return context.TypeDefinitions;
+        return context.Declarations();
     }
 
     private static MethodDefinitionNode Stamp(string name, Node returns, Node value, long mark) =>

@@ -835,7 +835,7 @@ public class InfrastructurePipelineTests {
             Item: entity { Name: Text }
             """);
 
-        var context = new AnalysisContext(ClrTypeDefinitionRegistry.Shared);
+        var context = AnalysisContext.CreateDefault();
         var storagePass = new StoragePass();
         storagePass.Analyze(context, domain);
 

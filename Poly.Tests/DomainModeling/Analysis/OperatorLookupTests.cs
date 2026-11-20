@@ -34,8 +34,11 @@ internal static class OperatorOperands {
     public static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 }
 
-/// <summary>Modeled definitions declared by hand, so a test controls every operator and conversion member.</summary>
-internal sealed class ModeledTypeSet : IClrTypeDefinitionProvider {
+/// <summary>
+/// Modeled definitions declared by hand, so a test controls every operator and conversion member. It is also the scope
+/// its definitions resolve their member type names through (#998 T12b); every other question is C#'s.
+/// </summary>
+internal sealed class ModeledTypeSet : ITypeSystem, ITypeNameLookup {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
     public AstTypeDefinition Add(string name, params MethodDefinitionNode[] methods) {
@@ -49,6 +52,31 @@ internal sealed class ModeledTypeSet : IClrTypeDefinitionProvider {
     public ITypeDefinition? GetTypeDefinition(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
     public IEnumerable<ITypeDefinition> Types => _types.Values;
+
+    // ── The scope the modeled definitions resolve through, and the system they are analysed by ──
+
+    public TypeSystemRules Rules => CSharpTypeSystem.Shared.Rules;
+    public ITypeSystem? Target => CSharpTypeSystem.Shared;
+    public IReadOnlyList<ITypeSource> Sources => CSharpTypeSystem.Shared.Sources;
+    public ITypeDefinition? Resolve(string qualifiedName) => GetTypeDefinition(qualifiedName) ?? CSharpTypeSystem.Shared.Resolve(qualifiedName);
+    public ITypeDefinition? Bind(string word) => CSharpTypeSystem.Shared.Bind(word);
+    public string? Spell(ITypeDefinition definition) => CSharpTypeSystem.Shared.Spell(definition);
+    public bool IsSame(ITypeDefinition a, ITypeDefinition b) => CSharpTypeSystem.Shared.IsSame(a, b);
+    public ITypeDefinition? NullableOf(ITypeDefinition definition) => CSharpTypeSystem.Shared.NullableOf(definition);
+    public ITypeDefinition? ElementType(ITypeDefinition definition) => CSharpTypeSystem.Shared.ElementType(definition);
+
+    public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) =>
+        CSharpTypeSystem.Shared.IsAssignableWithoutConversion(destination, source);
+
+    public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) =>
+        CSharpTypeSystem.Shared.Conversion(source, destination);
+
+    public ITypeOperator? Operator(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right) =>
+        CSharpTypeSystem.Shared.Operator(kind, left, right);
+
+    public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule => CSharpTypeSystem.Shared.Rule<TRule>();
+
+    ITypeDefinition? ITypeNameLookup.Lookup(string name) => GetTypeDefinition(name);
 
     /// <summary>A static member: <c>static result name(parameters)</c>.</summary>
     public static MethodDefinitionNode Static(string name, string result, params string[] parameters) =>

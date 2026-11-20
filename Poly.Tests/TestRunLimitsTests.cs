@@ -2,10 +2,12 @@ using System.Globalization;
 
 namespace Poly.Tests;
 
-/// <summary>The test host carries durable run limits: a per-test timeout and a GC
-/// heap hard limit. This suite froze an 18 GB machine on 2026-11-11, so the limits
-/// are asserted here rather than trusted to a shell wrapper. A test that trips
-/// either one is a bug to report, never a limit to raise.</summary>
+/// <summary>The test host carries durable run settings: a per-test timeout, a GC
+/// heap hard limit and the GC mode. This suite froze an 18 GB machine on 2026-11-11,
+/// so the limits are asserted here rather than trusted to a shell wrapper. A test
+/// that trips either one is a bug to report, never a limit to raise. The GC mode is
+/// asserted for the same reason a limit is: it is what keeps a full run's collector
+/// cost from being the run's cost.</summary>
 public class TestRunLimitsTests {
     private const long FourGiB = 4_294_967_296;
 
@@ -43,5 +45,16 @@ public class TestRunLimitsTests {
 
         await Assert.That(applied as object).IsNotNull();
         await Assert.That(applied!.Value).IsEqualTo(TimeSpan.FromMinutes(3));
+    }
+
+    /// <summary>Server GC is a throughput setting, not a limit: the suite allocates about
+    /// 660 MB/s across 10k tests, and a workstation collector spent 38% of a run's CPU
+    /// collecting. <c>runtimeconfig.template.json</c> sets <c>System.GC.Server</c>, so this
+    /// asserts the switch reached the host and cannot regress silently. The host still runs
+    /// under the four GiB heap hard limit asserted above; spawned children are unaffected,
+    /// because every launcher pins its own <c>DOTNET_gcServer=0</c>.</summary>
+    [Test]
+    public async Task TestHost_RunsWithServerGc() {
+        await Assert.That(System.Runtime.GCSettings.IsServerGC).IsTrue();
     }
 }

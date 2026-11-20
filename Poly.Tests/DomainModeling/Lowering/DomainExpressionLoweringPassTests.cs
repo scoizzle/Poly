@@ -352,8 +352,7 @@ public class DomainExpressionLoweringPassTests {
         await Assert.That(fromMs.Delegate).IsTypeOf<Member>();
         var fromMember = (Member)fromMs.Delegate;
         await Assert.That(fromMember.MemberName).IsEqualTo("FromMilliseconds");
-        await Assert.That(fromMember.Value).IsTypeOf<NamedTypeReference>();
-        await Assert.That(((NamedTypeReference)fromMember.Value).TypeName).IsEqualTo("TimeSpan");
+        await Assert.That(fromMember.Value.States(typeof(TimeSpan))).IsTrue();
         await Assert.That(fromMs.Arguments.Length).IsEqualTo(1);
         await Assert.That(((Constant)fromMs.Arguments[0]).Value).IsEqualTo(50);
     }

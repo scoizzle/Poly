@@ -96,16 +96,15 @@ public class TypeSourceTests {
     }
 
     [Test]
-    public async Task ClrRegistry_BareNameThatSpellsAClrBuiltIn_IsTheInterimAlias() {
-        // Interim (#998 S2, removing row: the scope binds every bare name, including those of raw trees built with no
-        // unit): a bare name that spells a member of the CLR host's built-in table still names that type. This test is
-        // deleted with the rule; until then it pins exactly how far the alias reaches.
-        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("DateTime"))
+    public async Task ClrRegistry_BareName_IsNeverLookedUp() {
+        // #998 S2b: a scope binds every bare name, including a raw tree's (C#'s implicit usings), so the registry
+        // answers qualified names only. The interim alias for the former primitive table is gone.
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("DateTime")).IsNull()
+            .Because("a bare name is a scope's to bind, never the registry's");
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("Int32")).IsNull();
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("StringBuilder")).IsNull();
+        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("System.DateTime"))
             .IsSameReferenceAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DateTime)));
-        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("Int32"))
-            .IsSameReferenceAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(int)));
-        await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("StringBuilder")).IsNull()
-            .Because("the alias is the built-in table only, never a namespace lookup");
         await Assert.That(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("int")).IsNull()
             .Because("a keyword is the C# surface's name, bound by the reader, not by the registry");
     }

@@ -10,7 +10,12 @@ namespace Poly.DomainModeling.Meaning;
 /// family. Everything it does not own (identity, conversions, operators, rules) its target answers.
 /// Interim (removed by #998 S3, the prelude): the words and their bindings are <see cref="DomainTypeMapping"/>'s table.
 /// </summary>
-internal sealed class DomainTypeSystem(TypeMappingRegistry typeMaps, ITypeSystem target) : ITypeSystem {
+internal sealed class DomainTypeSystem(TypeMappingRegistry typeMaps, ITypeSystem target)
+    : ITypeSystem, Poly.Interpretation.Analysis.Semantics.IImplicitUsings {
+    /// <summary>The domain language imports no host namespace (#998 S2b): it answers the question itself, so C#'s
+    /// implicit usings never reach a domain analysis and a bare host name (<c>File</c>) stays unbound.</summary>
+    public IReadOnlyList<string> Namespaces => [];
+
     // The canonical word for each definition a domain word binds by default; aliases (Int, Int64, String, Bool, Double,
     // Guid) bind the same definitions. Pack overrides change what a word binds, not what a definition is called.
     private static readonly (ITypeDefinition Definition, string Word)[] Canonical = [

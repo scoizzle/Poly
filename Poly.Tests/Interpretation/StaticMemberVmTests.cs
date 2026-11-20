@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -10,13 +11,14 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class StaticMemberVmTests {
     [Test]
-    public async Task GetTypeDefinition_PrimitiveShortName_ResolvesBclType() {
-        var dateTime = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("DateTime");
-        await Assert.That(dateTime).IsNotNull();
-        await Assert.That(dateTime!.GetRuntimeType()).IsEqualTo(typeof(DateTime));
+    public async Task Analyze_ShortTypeNameWithNoUnit_BindsTheBclTypeThroughCSharpsImplicitSystem() {
+        // #998 S2b: the registry looks up no bare name; C#'s implicit `using System` binds it, as a dotnet project does.
+        var dateTime = new NamedTypeReference("DateTime");
+        var dateOnly = new NamedTypeReference("DateOnly");
+        var analysis = Interpreter.Analyze(new Invoke(new Member(dateOnly, "FromDateTime"), new Member(dateTime, "UtcNow")));
 
-        var dateOnly = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("DateOnly");
-        await Assert.That(dateOnly!.GetRuntimeType()).IsEqualTo(typeof(DateOnly));
+        await Assert.That(analysis.GetResolvedType(dateTime)?.GetRuntimeType()).IsEqualTo(typeof(DateTime));
+        await Assert.That(analysis.GetResolvedType(dateOnly)?.GetRuntimeType()).IsEqualTo(typeof(DateOnly));
     }
 
     [Test]

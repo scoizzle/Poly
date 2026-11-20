@@ -66,7 +66,7 @@ internal static class TemporalLowering {
                 var from = d.Kind is DateOperationKind.AddSeconds ? "FromSeconds" : "FromMilliseconds";
                 result = new Invoke(
                     new Member(date, "Add"),
-                    new Invoke(new Member(new NamedTypeReference("TimeSpan"), from), offset));
+                    new Invoke(new Member(TypeReference.To<TimeSpan>(), from), offset));
                 return true;
             }
 
@@ -154,7 +154,7 @@ internal static class TemporalLowering {
                 // DateOnly has no Subtract; the day count between two dates is their DayNumber difference.
                 result = family is DateClrFamily.DateOnly
                     ? new Invoke(
-                        new Member(new NamedTypeReference("TimeSpan"), "FromDays"),
+                        new Member(TypeReference.To<TimeSpan>(), "FromDays"),
                         new SN.Subtract(new Member(minuend, "DayNumber"), new Member(subtrahend, "DayNumber")))
                     : new Invoke(new Member(minuend, "Subtract"), [subtrahend]);
                 return true;
@@ -258,7 +258,7 @@ internal static class TemporalLowering {
             _ => throw UnsupportedDurationDefault(d),
         };
         return new Invoke(
-            new Member(new NamedTypeReference("TimeSpan"), factory),
+            new Member(TypeReference.To<TimeSpan>(), factory),
             new Constant(amount));
     }
 
@@ -321,10 +321,10 @@ internal static class TemporalLowering {
     };
 
     private static Node UtcNowMember() =>
-        new Member(new NamedTypeReference("DateTime"), "UtcNow");
+        new Member(TypeReference.To<DateTime>(), "UtcNow");
 
     private static Node DateOnlyFromUtcNow() =>
         new Invoke(
-            new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
+            new Member(TypeReference.To<DateOnly>(), "FromDateTime"),
             UtcNowMember());
 }

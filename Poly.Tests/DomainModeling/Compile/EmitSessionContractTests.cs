@@ -4,6 +4,7 @@ using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DslCompiler;
+using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
 using Poly.Packs.Sqlite;
 
@@ -292,8 +293,7 @@ public sealed class EmitSessionContractTests {
         await Assert.That(lowered).IsTypeOf<Member>();
         var member = (Member)lowered;
         await Assert.That(member.MemberName).IsEqualTo("UtcNow");
-        await Assert.That(member.Value).IsTypeOf<NamedTypeReference>();
-        await Assert.That(((NamedTypeReference)member.Value).TypeName).IsEqualTo("DateTime");
+        await Assert.That(member.Value.States(typeof(DateTime))).IsTrue();
     }
 
     [Test]

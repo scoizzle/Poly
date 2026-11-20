@@ -11,7 +11,7 @@ namespace Poly.Interpretation.CSharp;
 /// declare and applies C#'s rules; a foreign definition's own answer never decides. Its rules for its own definitions
 /// live here or in the CLR host's internals it calls (#998 T9: the definitions answer none of them).
 /// </summary>
-internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
+internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules, Poly.Interpretation.Analysis.Semantics.IImplicitUsings {
     public static CSharpTypeSystem Shared { get; } = new();
 
     internal CSharpTypeSystem() { }
@@ -22,10 +22,17 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
 
     public IReadOnlyList<ITypeSource> Sources { get; } = [ClrTypeDefinitionRegistry.Shared];
 
-    /// <summary>A qualified name through the CLR registry. Interim (#998 S2, its removing row): the registry still resolves
-    /// a bare name that spells a C# built-in (<c>Int32</c>, <c>DateTime</c>) without a using.</summary>
+    /// <summary>A qualified name through the CLR registry. A bare name is a scope's to bind (#998 S2b), so it resolves to
+    /// nothing here.</summary>
     public ITypeDefinition? Resolve(string qualifiedName) =>
         ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(qualifiedName);
+
+    /// <summary>The SDK's implicit global usings (<c>Microsoft.NET.Sdk</c> with <c>ImplicitUsings</c> enabled), which a
+    /// C# scope imports with no directive (#998 S2b, owner Q2).</summary>
+    public IReadOnlyList<string> Namespaces { get; } = [
+        "System", "System.Collections.Generic", "System.IO", "System.Linq", "System.Net.Http", "System.Threading",
+        "System.Threading.Tasks",
+    ];
 
     public ITypeDefinition? Bind(string word) =>
         CSharpTypeNames.TypeOf(word) is { } type ? ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type) : null;

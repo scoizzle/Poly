@@ -43,7 +43,16 @@ public class OverloadSweepTests {
     /// <b>a later slice that legitimately changes a winner adds a row here and explains it in its PR</b>, as T-16 does for
     /// <c>PopCount(1)</c>. Each row is pinned in a test of its own.
     /// </summary>
+    private const string S2bWhy = "#998 S2b: the exporter's `new NotSupportedException(...)` guard binds through C#'s implicit "
+        + "`using System`, where the retired bare-name alias left it unresolved; the analysis now completes and records the "
+        + "constructor site, and no winner changes";
+
     private static readonly (string Key, string Before, string After, string Why)[] ExplainedDeltas = [
+        ("poly guide // ✅ Correct — create is the final statement #0", "  errors: 1\n", "  errors: 0\n", S2bWhy),
+        ("poly guide // ✅ Correct — create is the final statement #0",
+         "  Poly.Runtime.DomainFailure.At(System.String)\n",
+         "  Poly.Runtime.DomainFailure.At(System.String)\n  System.NotSupportedException.ctor(System.String)\n",
+         S2bWhy),
         ("csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #4",
          "  errors: 1\n  System.Numerics.BitOperations.PopCount(System.UInt32)\n",
          "  errors: 2\n",

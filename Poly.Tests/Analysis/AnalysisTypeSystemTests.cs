@@ -48,6 +48,30 @@ public class AnalysisTypeSystemTests {
     }
 
     [Test]
+    public async Task BareClrName_WithNoUnit_BindsThroughCSharpsImplicitUsings() {
+        // #998 S2b (owner Q2): a C# scope sees C#'s implicit usings, so a raw tree built with no unit binds a bare name
+        // the way a dotnet project does. Random is in System and was never in the retired alias table.
+        var created = new New(new NamedTypeReference("Random"));
+
+        var underCSharp = Analyze(created);
+
+        await Assert.That(underCSharp.GetResolvedType(created.Type))
+            .IsSameReferenceAs(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(Random)));
+        await Assert.That(underCSharp.HasErrors).IsFalse();
+    }
+
+    [Test]
+    public async Task BareClrName_WithNoUnit_IsUnresolved_UnderALedgerTarget() {
+        var created = new New(new NamedTypeReference("Random"));
+
+        var underLedger = Analyze(created, new LedgerHost());
+
+        await Assert.That(underLedger.GetResolvedType(created.Type)).IsNull()
+            .Because("the ledger states no implicit usings, so nothing binds a bare name beneath it");
+        await Assert.That(underLedger.HasErrors).IsTrue();
+    }
+
+    [Test]
     public async Task Keyword_IsUnbound_UnderALedgerTarget() {
         var ledger = new LedgerHost();
         await Assert.That(ledger.Bind("int")).IsNull().Because("the ledger has no words of its own");

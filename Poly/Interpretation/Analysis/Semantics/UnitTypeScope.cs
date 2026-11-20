@@ -8,17 +8,23 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// </summary>
 internal sealed class UnitTypeScope(IReadOnlyList<ITypeSource> sources) : IQualifiedNameSource, IAnalysisMetadata {
     private readonly List<string> _namespaces = [];
+    private readonly Dictionary<string, IReadOnlyList<ITypeDefinition>> _candidates = new(StringComparer.Ordinal);
 
     /// <summary>Imports <paramref name="namespace"/>; a repeated import is one import.</summary>
     public void Import(string @namespace) {
-        if (!_namespaces.Contains(@namespace, StringComparer.Ordinal))
+        if (!_namespaces.Contains(@namespace, StringComparer.Ordinal)) {
             _namespaces.Add(@namespace);
+            _candidates.Clear();
+        }
     }
 
-    /// <summary>Every definition the imported namespaces declare under <paramref name="name"/>, each once.</summary>
+    /// <summary>Every definition the imported namespaces declare under <paramref name="name"/>, each once. Asked once
+    /// per name for this scope's imports: a miss probes every source for every namespace.</summary>
     public IReadOnlyList<ITypeDefinition> Candidates(string name) {
         if (name.Contains('.', StringComparison.Ordinal))
             return [];
+        if (_candidates.TryGetValue(name, out var cached))
+            return cached;
         var found = new List<ITypeDefinition>();
         foreach (var @namespace in _namespaces) {
             foreach (var source in sources) {
@@ -26,7 +32,7 @@ internal sealed class UnitTypeScope(IReadOnlyList<ITypeSource> sources) : IQuali
                     found.Add(definition);
             }
         }
-        return found;
+        return _candidates[name] = found;
     }
 
     public ITypeDefinition? GetTypeDefinition(string name) =>
@@ -38,26 +44,25 @@ internal sealed class UnitTypeScope(IReadOnlyList<ITypeSource> sources) : IQuali
 }
 
 /// <summary>
-/// Opens a <see cref="UnitTypeScope"/> for each <see cref="CompilationUnitNode"/> from its <c>using</c> directives,
-/// and reports a bare type name that no declaration binds and several imports do.
+/// Opens the analysis' <see cref="UnitTypeScope"/>: the namespaces its language imports with no directive
+/// (<see cref="IImplicitUsings"/>; C#'s implicit usings, #998 S2b), then each <see cref="CompilationUnitNode"/>'s
+/// <c>using</c> directives. Reports a bare type name that no declaration binds and several imports do.
 /// </summary>
 public sealed class UnitTypeScopeAnalyzer : INodeAnalyzer {
     public const string Id = "UnitTypeScope";
     public string PassName => Id;
 
     public void Analyze(AnalysisContext context, Node node) {
+        // The first node this pass visits is the root: a tree built with no unit still has its language's implicit usings.
+        if (context.GetMetadata<UnitTypeScope>(default) is null
+            && context.TypeSystem.Rule<IImplicitUsings>() is { Namespaces.Count: > 0 } implicitUsings) {
+            var opened = Open(context);
+            foreach (var @namespace in implicitUsings.Namespaces)
+                opened.Import(@namespace);
+        }
+
         if (node is CompilationUnitNode { Usings.Count: > 0 } unit) {
-            var scope = context.GetMetadata<UnitTypeScope>(default);
-            if (scope is null) {
-                // A unit's sources are its declarations, then the analysis' target chain (#998 T12a): the CLR is the C#
-                // target's source, never one every analysis appends.
-                ITypeSource[] sources = context.GetMetadata<AstTypeRegistry>(default) is { } declarations
-                    ? [declarations, .. (context.TypeSystem.Target ?? context.TypeSystem).Sources]
-                    : [.. (context.TypeSystem.Target ?? context.TypeSystem).Sources];
-                scope = new UnitTypeScope(sources);
-                context.SetMetadata(default, scope);
-                context.AddScopeSource(scope);
-            }
+            var scope = context.GetMetadata<UnitTypeScope>(default) ?? Open(context);
             foreach (var @namespace in unit.Usings)
                 scope.Import(@namespace);
         }
@@ -70,6 +75,18 @@ public sealed class UnitTypeScopeAnalyzer : INodeAnalyzer {
         }
 
         this.AnalyzeChildren(context, node);
+    }
+
+    private static UnitTypeScope Open(AnalysisContext context) {
+        // A scope's sources are the unit's declarations, then the analysis' target chain (#998 T12a): the CLR is the C#
+        // target's source, never one every analysis appends.
+        ITypeSource[] sources = context.GetMetadata<AstTypeRegistry>(default) is { } declarations
+            ? [declarations, .. (context.TypeSystem.Target ?? context.TypeSystem).Sources]
+            : [.. (context.TypeSystem.Target ?? context.TypeSystem).Sources];
+        var scope = new UnitTypeScope(sources);
+        context.SetMetadata(default, scope);
+        context.AddScopeSource(scope);
+        return scope;
     }
 
     private static string? BareTypeName(Node node) => node switch {

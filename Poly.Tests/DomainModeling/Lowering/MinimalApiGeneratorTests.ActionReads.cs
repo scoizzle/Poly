@@ -1005,7 +1005,6 @@ public partial class MinimalApiGeneratorTests {
             "guide fence Cabin: entity {",
             "guide fence domain Shipping",
             "guide fence domain Tokens",
-            "guide fence // ✅ Correct — create is the final statement",
             "guide fence invoke Validate                              # self-only",
             "guide fence Renew: action {",
             "guide fence domain Board",

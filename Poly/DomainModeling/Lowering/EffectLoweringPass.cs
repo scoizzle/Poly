@@ -1,6 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -286,8 +287,8 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
         return guid.Name switch {
             "Guid" => targetName is "Text" or "String"
                 ? new Invoke(new Member(
-                    new Invoke(new Member(new NamedTypeReference("Guid"), "NewGuid")), "ToString"))
-                : new Invoke(new Member(new NamedTypeReference("Guid"), "NewGuid")),
+                    new Invoke(new Member(TypeReference.To<Guid>(), "NewGuid")), "ToString"))
+                : new Invoke(new Member(TypeReference.To<Guid>(), "NewGuid")),
             _ => null,
         };
     }

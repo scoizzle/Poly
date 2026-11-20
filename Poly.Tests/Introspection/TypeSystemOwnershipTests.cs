@@ -47,6 +47,20 @@ public class TypeSystemOwnershipTests {
     }
 
     [Test]
+    public async Task ImplicitUsings_AreCSharps_NeverTheDomainLanguages() {
+        // #998 S2b: C#'s implicit usings are C#'s rule. The domain language layers on C# but imports no host namespace, so a
+        // bare host name (File, Environment) never binds beneath a domain analysis.
+        var domain = new DomainTypeSystem(new TypeMappingRegistry(), CSharp);
+
+        await Assert.That(CSharp.Rule<IImplicitUsings>()?.Namespaces).IsNotNull();
+        await Assert.That(CSharp.Rule<IImplicitUsings>()!.Namespaces).Contains("System");
+        await Assert.That(domain.Rule<IImplicitUsings>()?.Namespaces).IsNotNull();
+        await Assert.That(domain.Rule<IImplicitUsings>()!.Namespaces).IsEmpty()
+            .Because("the domain answers the question itself rather than inheriting C#'s");
+        await Assert.That(new LedgerHost().Rule<IImplicitUsings>()).IsNull();
+    }
+
+    [Test]
     public async Task Identity_AcrossSystems_IsNeverTheSame() {
         var ledger = new LedgerHost();
 

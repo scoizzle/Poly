@@ -3,6 +3,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Packs;
 
@@ -90,8 +91,7 @@ public sealed class TemporalGoldenTests {
         await Assert.That(delegateMember.Value).IsTypeOf<Member>();
         var clockMember = (Member)delegateMember.Value;
         await Assert.That(clockMember.MemberName).IsEqualTo("UtcNow");
-        await Assert.That(clockMember.Value).IsTypeOf<NamedTypeReference>();
-        await Assert.That(((NamedTypeReference)clockMember.Value).TypeName).IsEqualTo("DateTime");
+        await Assert.That(clockMember.Value.States(typeof(DateTime))).IsTrue();
         await Assert.That(invoke.Arguments.Length).IsEqualTo(1);
         await Assert.That(invoke.Arguments[0]).IsTypeOf<Constant>();
         await Assert.That(((Constant)invoke.Arguments[0]).Value).IsEqualTo(-12L);

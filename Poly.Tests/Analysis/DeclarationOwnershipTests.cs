@@ -102,6 +102,23 @@ public class DeclarationOwnershipTests {
             .Contains("'Action' is declared with 0 type parameter(s) and cannot be used with 1 type argument(s)");
     }
 
+    /// <summary>The gate's re-review repro, verbatim (xai/grok-4.7, 2026-11-20): at 5f8b3c930 it threw
+    /// <c>InvalidOperationException: Type with name 'Action' not found.</c></summary>
+    [Test]
+    public async Task GenericName_ReadThroughThis_IsAnAnalysisErrorNotAThrow() {
+        var analysis = Poly.Interpretation.Interpreter.Analyze(CSharpLanguage.Read("""
+            class Action { }
+            class Holder {
+                public Action<int> Callback { get; set; }
+                public object M() { return this.Callback.ToString(); }
+            }
+            """));
+
+        await Assert.That(analysis.Diagnostics.Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(static diagnostic => diagnostic.Message))
+            .Contains("'Action' is declared with 0 type parameter(s) and cannot be used with 1 type argument(s)");
+    }
+
     [Test]
     [Arguments("class Box<T> { }\nclass Holder { public Box<int> One { get; set; } }")]
     [Arguments("class Action { }\nclass Holder { public Action Plain { get; set; } public System.Action<int> Host { get; set; } }")]

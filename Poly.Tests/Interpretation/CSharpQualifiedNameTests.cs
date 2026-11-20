@@ -180,6 +180,8 @@ public class CSharpQualifiedNameTests {
     [Arguments("record C(Random Random) { public int M() { return Random.Next(5); } }", "Next")]
     [Arguments("class Box<T> { public string Path = \"x\"; }\nclass C : Box<int> { public string M() { return Path.Combine(\"a\", \"b\"); } }", "Combine")]
     [Arguments("class C : System.Exception { public object M() { return Data.Equals(null); } }", "Equals")]
+    [Arguments("class C : System.Threading.Tasks.Task<int> { public object M() { return Exception.Equals(null); } }", "Equals")]
+    [Arguments("class Mid : System.Threading.Tasks.Task<int> { }\nclass C : Mid { public object M() { return Exception.Equals(null); } }", "Equals")]
     public async Task InheritedMemberOrPrimaryParameter_NamedLikeAType_IsNeverBoundAsTheType(string source, string member) {
         // Found by the pre-ship review: a member a base type declares, and a record's primary-constructor parameter, are
         // names in scope too. Bound as the type, `Path.Combine` would run System.IO.Path's static method.

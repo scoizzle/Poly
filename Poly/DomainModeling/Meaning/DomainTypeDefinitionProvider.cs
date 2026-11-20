@@ -105,7 +105,7 @@ internal sealed class DomainTypeDefinitionProvider : IQualifiedNameSource, IType
     /// </summary>
     private static MethodDefinitionNode Equality(OperatorKind kind, string typeName) =>
         new(kind.ToString(),
-            ClrTypeReferences.Of(typeof(bool)),
+            TypeReference.Of(typeof(bool)),
             [new Parameter("left", new NamedTypeReference(typeName)), new Parameter("right", new NamedTypeReference(typeName))],
             IsStatic: true) { Operator = kind };
 

@@ -13,7 +13,7 @@ namespace Poly.Tests.Interpretation.Vm.Abi;
 public class ConditionalArmsTests {
     /// <summary>The condition is a parameter: a constant condition folds to one arm and never reaches the emitter.</summary>
     private static Node Pick(Node ifTrue, Node ifFalse) =>
-        new Block([new Conditional(new Parameter("pickFirst", ClrTypeReferences.To<bool>()), ifTrue, ifFalse)]);
+        new Block([new Conditional(new Parameter("pickFirst", TypeReference.To<bool>()), ifTrue, ifFalse)]);
 
     private static ExecutionResult Run(Node body, params object?[] args) =>
         Interpreter.Execute(Interpreter.Compile(body), s => s.SetArgs(args.Length == 0 ? [false] : args));
@@ -64,21 +64,21 @@ public class ConditionalArmsTests {
 
     [Test]
     public async Task Coalesce_HeapNullableDecimalThenIntegral_Rejects() =>
-        await AssertRejected(Coalesced(ClrTypeReferences.To<decimal?>(), new Constant(2L)), "coalesce", (object?)null);
+        await AssertRejected(Coalesced(TypeReference.To<decimal?>(), new Constant(2L)), "coalesce", (object?)null);
 
     [Test]
     public async Task Coalesce_ScalarNullableThenDecimal_Rejects() =>
-        await AssertRejected(Coalesced(ClrTypeReferences.To<long?>(), new Constant(1.5m)), "coalesce", (object?)null);
+        await AssertRejected(Coalesced(TypeReference.To<long?>(), new Constant(1.5m)), "coalesce", (object?)null);
 
     [Test]
     public async Task Coalesce_SameRepresentation_Runs() {
-        using var exec = Run(Coalesced(ClrTypeReferences.To<long?>(), new Constant(2L)), (object?)null);
+        using var exec = Run(Coalesced(TypeReference.To<long?>(), new Constant(2L)), (object?)null);
         await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
     }
 
     private static Node Switched(Node caseBody, Node defaultBody) =>
         new Block([new SwitchStatement(
-            new Parameter("key", ClrTypeReferences.To<long>()),
+            new Parameter("key", TypeReference.To<long>()),
             [new SwitchCase(new Constant(1L), caseBody)],
             defaultBody)]);
 
@@ -96,7 +96,7 @@ public class ConditionalArmsTests {
     [Arguments(3L, 5L, 3L)]
     [Arguments(null, null, 0L)]
     public async Task NestedCoalesce_NullableLong_Runs(long? first, long? second, long expected) {
-        var t = ClrTypeReferences.To<long?>();
+        var t = TypeReference.To<long?>();
         var body = new Block([new Coalesce(new Coalesce(new Parameter("p1", t), new Parameter("p2", t)), new Constant(0L))]);
         using var exec = Run(body, first, second);
         await Assert.That(exec.GetValue<long>()).IsEqualTo(expected);
@@ -107,7 +107,7 @@ public class ConditionalArmsTests {
     [Arguments(false, 3L, 5L)]
     public async Task Conditional_NullableLongArmFirst_Runs(bool flag, long value, long expected) {
         var body = new Block([new Conditional(
-            new Parameter("flag", ClrTypeReferences.To<bool>()), new Parameter("p", ClrTypeReferences.To<long?>()), new Constant(5L))]);
+            new Parameter("flag", TypeReference.To<bool>()), new Parameter("p", TypeReference.To<long?>()), new Constant(5L))]);
         using var exec = Run(body, flag, value);
         await Assert.That(exec.GetValue<long?>()).IsEqualTo(expected);
     }
@@ -117,7 +117,7 @@ public class ConditionalArmsTests {
     [Arguments(false, 3L, 3L)]
     public async Task Conditional_NullableLongArmSecond_Runs(bool flag, long value, long expected) {
         var body = new Block([new Conditional(
-            new Parameter("flag", ClrTypeReferences.To<bool>()), new Constant(5L), new Parameter("p", ClrTypeReferences.To<long?>()))]);
+            new Parameter("flag", TypeReference.To<bool>()), new Constant(5L), new Parameter("p", TypeReference.To<long?>()))]);
         using var exec = Run(body, flag, value);
         await Assert.That(exec.GetValue<long?>()).IsEqualTo(expected);
     }
@@ -142,7 +142,7 @@ public class ConditionalArmsTests {
     [Arguments(3, 5, 3)]
     [Arguments(null, null, 0)]
     public async Task NestedCoalesce_NullableDecimal_Runs(int? first, int? second, int expected) {
-        var t = ClrTypeReferences.To<decimal?>();
+        var t = TypeReference.To<decimal?>();
         var body = new Block([new Coalesce(new Coalesce(new Parameter("p1", t), new Parameter("p2", t)), new Constant(0m))]);
         using var exec = Run(body, first is null ? null : (decimal)first, second is null ? null : (decimal)second);
         await Assert.That(exec.GetValue<decimal>()).IsEqualTo((decimal)expected);
@@ -153,7 +153,7 @@ public class ConditionalArmsTests {
     [Test]
     public async Task Conditional_NullableArmTakenWhileNull_ThrowsToday() {
         var body = new Block([new Conditional(
-            new Parameter("flag", ClrTypeReferences.To<bool>()), new Parameter("p", ClrTypeReferences.To<long?>()), new Constant(5L))]);
+            new Parameter("flag", TypeReference.To<bool>()), new Parameter("p", TypeReference.To<long?>()), new Constant(5L))]);
         var thrown = Assert.Throws<InvalidOperationException>(() => {
             using var exec = Run(body, true, (object?)null);
             _ = exec.GetValue<long?>();

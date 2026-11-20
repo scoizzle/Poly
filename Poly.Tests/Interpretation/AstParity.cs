@@ -339,7 +339,7 @@ public static class AstParity {
     /// lambda becomes the method's parameters and body, and any other statement is the body itself.
     /// </summary>
     private static (Node ReturnType, Node Body, IReadOnlyList<Parameter>? Parameters) EntryShape(Node node) {
-        var objectType = ClrTypeReferences.Of(typeof(object));
+        var objectType = TypeReference.Of(typeof(object));
         var voidType = new TypeReference("void");
         return node switch {
             Return => (objectType, node, null),
@@ -356,9 +356,9 @@ public static class AstParity {
     /// a block body keeps its statements with its trailing value returned.</summary>
     static (Node ReturnType, Node Body, IReadOnlyList<Parameter>? Parameters) LambdaEntry(Lambda lambda) =>
         lambda.Body switch {
-            Block block when Yields(block) => (ClrTypeReferences.Of(typeof(object)), Hoisted(block), lambda.Parameters),
+            Block block when Yields(block) => (TypeReference.Of(typeof(object)), Hoisted(block), lambda.Parameters),
             Block => (new TypeReference("void"), lambda.Body, lambda.Parameters),
-            _ => (ClrTypeReferences.Of(typeof(object)), new Return(lambda.Body), lambda.Parameters),
+            _ => (TypeReference.Of(typeof(object)), new Return(lambda.Body), lambda.Parameters),
         };
 
     /// <summary>True when the block's value reaches a consumer: its last node is a value

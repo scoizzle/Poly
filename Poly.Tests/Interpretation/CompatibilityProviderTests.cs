@@ -57,7 +57,7 @@ internal static class ExtraOperandGrid {
     });
 
     private static GridCell Evaluate(Type left, OperatorKind kind, Type right) {
-        var node = Build(kind, new Parameter("a", ClrTypeReferences.Of(left)), new Parameter("b", ClrTypeReferences.Of(right)));
+        var node = Build(kind, new Parameter("a", TypeReference.Of(left)), new Parameter("b", TypeReference.Of(right)));
         string verdict;
         try {
             var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
@@ -108,7 +108,7 @@ public class CompatibilityProviderTests {
         return exec.RawValue;
     }
 
-    private static Parameter Param<T>(string name) => new(name, ClrTypeReferences.To<T>());
+    private static Parameter Param<T>(string name) => new(name, TypeReference.To<T>());
 
     /// <summary>
     /// Count and key checksum per family, verdict and provider answer. T-18 moved these from master (pinned in its
@@ -309,7 +309,7 @@ public class CompatibilityProviderTests {
     private static Node AssignMember(string member, object? value) {
         var host = new Variable("host");
         return new Block([
-            new Assignment(host, new New(ClrTypeReferences.To<AssignHost>())),
+            new Assignment(host, new New(TypeReference.To<AssignHost>())),
             new Assignment(new Member(host, member), new Constant(value))
         ], [host]);
     }
@@ -347,7 +347,7 @@ public class CompatibilityProviderTests {
     /// </summary>
     [Test]
     public async Task And_TrueWithNullableBool_IsAccepted_UntilT28() {
-        var node = new And(new Constant(true), new Parameter("f", ClrTypeReferences.To<bool?>()));
+        var node = new And(new Constant(true), new Parameter("f", TypeReference.To<bool?>()));
         await Assert.That(Interpreter.Analyze(node).Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
     }
 
@@ -360,9 +360,9 @@ public class CompatibilityProviderTests {
     [Arguments(null)]
     public async Task AndOr_OverNullableBool_ReadTheValue_AbsentIsNotTrue(bool? flag) {
         var sources = new (string Name, Func<Node> Operand, object?[] Args)[] {
-            ("parameter", static () => new Parameter("f", ClrTypeReferences.To<bool?>()), [flag]),
-            ("property", static () => new Member(new Parameter("b", ClrTypeReferences.To<NullableFlagBox>()), nameof(NullableFlagBox.Flag)), [new NullableFlagBox { Flag = flag }]),
-            ("call", () => new Invoke(new Member(ClrTypeReferences.Of(typeof(NullableFlagBox)), nameof(NullableFlagBox.Of)), new Constant(NullableFlagBox.Code(flag))), []),
+            ("parameter", static () => new Parameter("f", TypeReference.To<bool?>()), [flag]),
+            ("property", static () => new Member(new Parameter("b", TypeReference.To<NullableFlagBox>()), nameof(NullableFlagBox.Flag)), [new NullableFlagBox { Flag = flag }]),
+            ("call", () => new Invoke(new Member(TypeReference.Of(typeof(NullableFlagBox)), nameof(NullableFlagBox.Of)), new Constant(NullableFlagBox.Code(flag))), []),
         };
         var answers = new List<string>();
         foreach (var (name, operand, args) in sources) {
@@ -381,7 +381,7 @@ public class CompatibilityProviderTests {
         await Assert.That(answers).IsEquivalentTo(sources.SelectMany(s => new[] { "true and X", "X and true", "false or X", "X or false" }
             .Select(shape => $"{s.Name} {shape}: Boolean {expected}")).ToArray());
 
-        var both = Interpreter.Compile(new And(new Parameter("f", ClrTypeReferences.To<bool?>()), new Parameter("g", ClrTypeReferences.To<bool?>())));
+        var both = Interpreter.Compile(new And(new Parameter("f", TypeReference.To<bool?>()), new Parameter("g", TypeReference.To<bool?>())));
         await Assert.That(both.RootClrType).IsEqualTo(typeof(bool));
         using var pair = Interpreter.Execute(both, true, flag);
         await Assert.That(pair.RawValue).IsEqualTo(expected);
@@ -390,7 +390,7 @@ public class CompatibilityProviderTests {
     /// <summary>Short-circuit over a <c>bool?</c> right operand: <c>false and X</c> and <c>true or X</c> never run X.</summary>
     [Test]
     public async Task AndOr_OverNullableBool_DoNotRunTheRightOperand_WhenTheLeftDecides() {
-        static Node Explode() => new Invoke(new Member(ClrTypeReferences.Of(typeof(NullableFlagBox)), nameof(NullableFlagBox.Explode)));
+        static Node Explode() => new Invoke(new Member(TypeReference.Of(typeof(NullableFlagBox)), nameof(NullableFlagBox.Explode)));
         using (var and = Interpreter.Execute(Interpreter.Compile(new And(new Constant(false), Explode()))))
             await Assert.That(and.RawValue).IsEqualTo(0L);
         using (var or = Interpreter.Execute(Interpreter.Compile(new Or(new Constant(true), Explode()))))

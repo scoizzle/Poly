@@ -77,15 +77,15 @@ internal static class ConstraintCheckWriter {
         PresencePolicy Presence,
         CheckOrder Order) {
         internal static readonly ConstraintCheckStyle Create = new(
-            () => ClrTypeReferences.Of(typeof(string)),
+            () => TypeReference.Of(typeof(string)),
             () => new NamedTypeReference("System.Text.RegularExpressions.Regex"),
             NamesEnumValue: true,
             Presence: PresencePolicy.CreateSlot,
             Order: CheckOrder.Declaration);
 
         internal static readonly ConstraintCheckStyle Assign = new(
-            () => ClrTypeReferences.To<string>(),
-            () => ClrTypeReferences.To<System.Text.RegularExpressions.Regex>(),
+            () => TypeReference.To<string>(),
+            () => TypeReference.To<System.Text.RegularExpressions.Regex>(),
             NamesEnumValue: false,
             Presence: PresencePolicy.AssignValue,
             Order: CheckOrder.Category);

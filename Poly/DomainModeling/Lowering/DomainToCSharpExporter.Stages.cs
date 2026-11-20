@@ -48,12 +48,12 @@ public sealed partial class DomainToCSharpExporter {
             new OptionalTypeReference(
                 new NamedTypeReference(
                     "HashSet",
-                    TypeArguments: [ClrTypeReferences.Of(typeof(string))])),
+                    TypeArguments: [TypeReference.Of(typeof(string))])),
             AccessModifier: AccessModifier.Private));
         methods.Add(new MethodDefinitionNode(
             "NoteAutomaticStage",
             new TypeReference("void"),
-            Parameters: [new Parameter("stageName", ClrTypeReferences.Of(typeof(string)))],
+            Parameters: [new Parameter("stageName", TypeReference.Of(typeof(string)))],
             Body: new Block([
                 new IfStatement(
                     new Equal(
@@ -68,7 +68,7 @@ public sealed partial class DomainToCSharpExporter {
                         new Member(new ThisReference(), "_automaticStageChain"),
                         new New(new NamedTypeReference(
                             "HashSet",
-                            TypeArguments: [ClrTypeReferences.Of(typeof(string))])))),
+                            TypeArguments: [TypeReference.Of(typeof(string))])))),
                 new IfStatement(
                     new Syntactic.Not(new Invoke(
                         new Member(
@@ -78,7 +78,7 @@ public sealed partial class DomainToCSharpExporter {
                     new ThrowStatement(new New(
                         new NamedTypeReference("System.InvalidOperationException"),
                         new Invoke(
-                            new Member(ClrTypeReferences.Of(typeof(string)), "Concat"),
+                            new Member(TypeReference.Of(typeof(string)), "Concat"),
                             new Constant($"Automatic stage transition loop on entity '{entity.Name}': stage '"),
                             new Parameter("stageName"),
                             new Constant("' was already entered in this chain.")))))

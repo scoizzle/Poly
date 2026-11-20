@@ -314,7 +314,7 @@ internal static class TemporalLowering {
     }
 
     private static Node Int32Offset(Node rawArg) =>
-        new TypeCast(rawArg, ClrTypeReferences.Of(typeof(int)));
+        new TypeCast(rawArg, TypeReference.Of(typeof(int)));
 
     private static Node ScaleOffset(Node offset, int factor) => offset switch {
         Constant { Value: long n } => new Constant(n * factor),

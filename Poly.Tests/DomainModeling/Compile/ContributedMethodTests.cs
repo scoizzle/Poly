@@ -262,7 +262,7 @@ public class ContributedMethodTests {
             .GenerateCompilationUnit();
         var context = unit.FindType("LabDbContext")!;
         var contract = context.Interfaces!.Single();
-        await Assert.That(ClrTypeReferences.Denotes(contract, typeof(IStoragePort))).IsTrue();
+        await Assert.That(contract.Denotes(typeof(IStoragePort))).IsTrue();
 
         var exists = context.FindMethod("Exists")!;
         await Assert.That(exists.Body).IsNotNull();
@@ -533,8 +533,8 @@ public class ContributedMethodTests {
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var storage = _requireStorage ? request.RequireStorage() : null;
-            var dbType = ClrTypeReferences.Of(typeof(IStoragePort));
-            var text = ClrTypeReferences.Of(typeof(string));
+            var dbType = TypeReference.Of(typeof(IStoragePort));
+            var text = TypeReference.Of(typeof(string));
             var existsDb = new Parameter("db", dbType);
             var existsCode = new Parameter("code", text);
             var methodName = "ExistsWith" + request.Property.Name;
@@ -542,7 +542,7 @@ public class ContributedMethodTests {
             var propertyName = request.Property.Name;
             var exists = new MethodDefinitionNode(
                 methodName,
-                ClrTypeReferences.Of(typeof(bool)),
+                TypeReference.Of(typeof(bool)),
                 Parameters: [existsDb, existsCode],
                 Body: new Block([
                     new Return(new Invoke(
@@ -605,7 +605,7 @@ public class ContributedMethodTests {
         public bool Applies(Constraint constraint) => constraint is RangeConstraint;
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
-            var scale = ClrTypeReferences.Of(typeof(int));
+            var scale = TypeReference.Of(typeof(int));
             var parameter = new Parameter("scale", scale);
             return new ConstraintContribution(
                 LibraryId,
@@ -675,11 +675,11 @@ public class ContributedMethodTests {
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var type = request.Property.Name == "Code"
-                ? ClrTypeReferences.Of(typeof(IStoragePort))
-                : ClrTypeReferences.Of(typeof(string));
+                ? TypeReference.Of(typeof(IStoragePort))
+                : TypeReference.Of(typeof(string));
             var db = new Parameter("db", type);
             var value = request.ParameterOn("Create")
-                ?? new Parameter("value", ClrTypeReferences.Of(typeof(string)));
+                ?? new Parameter("value", TypeReference.Of(typeof(string)));
             return new ConstraintContribution(
                 LibraryId,
                 request.Entity.Name,
@@ -710,7 +710,7 @@ public class ContributedMethodTests {
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var method = new MethodDefinitionNode(
                 "ExistsWithAnything",
-                ClrTypeReferences.Of(typeof(bool)),
+                TypeReference.Of(typeof(bool)),
                 Parameters: [],
                 Body: new Block([new Return(new Constant(true))]),
                 IsStatic: true);
@@ -735,7 +735,7 @@ public class ContributedMethodTests {
         var missing = typeof(ContributedMethods).GetMethod("Missing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
         var parameters = missing.GetParameters();
         TypeDefinitionNode[] module = [new("Host")];
-        var call = new Invoke(new Member(ClrTypeReferences.Of(ground), "Concat"));
+        var call = new Invoke(new Member(TypeReference.Of(ground), "Concat"));
         object?[] arguments = [
             call, 0, "Run", module, new List<List<MethodDefinitionNode>> { new() },
             Activator.CreateInstance(parameters[5].ParameterType), new HashSet<string>(StringComparer.Ordinal) { "Concat" }
@@ -754,7 +754,7 @@ public class ContributedMethodTests {
         var missing = typeof(ContributedMethods).GetMethod("Missing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
         var parameters = missing.GetParameters();
         TypeDefinitionNode[] module = [new("Host")];
-        var call = new Invoke(new Member(ClrTypeReferences.Of(typeof(Uri)), "Concat"));
+        var call = new Invoke(new Member(TypeReference.Of(typeof(Uri)), "Concat"));
         object?[] arguments = [
             call, 0, "Run", module, new List<List<MethodDefinitionNode>> { new() },
             Activator.CreateInstance(parameters[5].ParameterType), new HashSet<string>(StringComparer.Ordinal) { "Concat" }

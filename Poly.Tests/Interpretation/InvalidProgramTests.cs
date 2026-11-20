@@ -109,7 +109,7 @@ public class InvalidProgramTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Body: thisReference,
                     IsStatic: true)
             ]);
@@ -144,7 +144,7 @@ public class InvalidProgramTests {
     [Test]
     public async Task Invoke_AfterReassignFromLambdaToInt_AnalysisErrorAndCompileRejects() {
         var f = new Variable("f");
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var node = new Block([
             new Assignment(f, new Lambda([x], new Add(x, new Constant(1L)))),
             new Assignment(f, new Constant(1L)),
@@ -187,7 +187,7 @@ public class InvalidProgramTests {
         var text = new Variable("text");
         var node = new Block([
             new Assignment(text, new Constant("42")),
-            new TypeCast(text, ClrTypeReferences.To<int>())
+            new TypeCast(text, TypeReference.To<int>())
         ], [text]);
         await AssertAnalysisThenCompileRejects(
             node,
@@ -308,7 +308,7 @@ public class InvalidProgramTests {
 
     [Test]
     public async Task Lambda_TooManyArgs_CompileRejects() {
-        var p = new Parameter("x", ClrTypeReferences.To<long>());
+        var p = new Parameter("x", TypeReference.To<long>());
         await AssertCompileRejectsReadable(
             new Invoke(new Lambda([p], p), new Constant(1L), new Constant(2L)),
             "lambda");
@@ -317,7 +317,7 @@ public class InvalidProgramTests {
     [Test]
     public async Task StoredLambda_ZeroArgsIntoArity1_AnalysisErrorAndCompileRejects() {
         var fn = new Variable("fn");
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var node = new Block([
             new Assignment(fn, new Lambda([x], new Add(x, new Constant(1L)))),
             new Invoke(fn)
@@ -331,8 +331,8 @@ public class InvalidProgramTests {
     [Test]
     public async Task StoredLambda_TooFewArgs_AnalysisErrorAndCompileRejects() {
         var fn = new Variable("fn");
-        var a = new Parameter("a", ClrTypeReferences.To<long>());
-        var b = new Parameter("b", ClrTypeReferences.To<long>());
+        var a = new Parameter("a", TypeReference.To<long>());
+        var b = new Parameter("b", TypeReference.To<long>());
         var node = new Block([
             new Assignment(fn, new Lambda([a, b], new Add(a, b))),
             new Invoke(fn, new Constant(1L))
@@ -346,7 +346,7 @@ public class InvalidProgramTests {
     [Test]
     public async Task StoredLambda_TooManyArgs_AnalysisErrorAndCompileRejects() {
         var fn = new Variable("fn");
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var node = new Block([
             new Assignment(fn, new Lambda([x], x)),
             new Invoke(fn, new Constant(1L), new Constant(2L))
@@ -362,7 +362,7 @@ public class InvalidProgramTests {
         // A reader emits a fresh Variable per identifier; the callee is not the
         // declaration node, so the arity check must resolve it through the binding.
         var fn = new Variable("fn");
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var node = new Block([
             new Assignment(fn, new Lambda([x], x)),
             new Invoke(new Variable("fn"))
@@ -391,7 +391,7 @@ public class InvalidProgramTests {
     public async Task Assignment_DateTimeToDateOnlyMember_AnalysisErrorAndCompileRejects() {
         var host = new Variable("host");
         var node = new Block([
-            new Assignment(host, new New(ClrTypeReferences.To<TypeCompatibilityTests.ConversionHost>())),
+            new Assignment(host, new New(TypeReference.To<TypeCompatibilityTests.ConversionHost>())),
             new Assignment(
                 new Member(host, "Start"),
                 new Constant(new DateTime(2026, 8, 26, 15, 0, 0)))
@@ -433,7 +433,7 @@ public class InvalidProgramTests {
                     "Create",
                     new NamedTypeReference("Order"),
                     Parameters: [
-                        new Parameter("name", ClrTypeReferences.Of(typeof(string))),
+                        new Parameter("name", TypeReference.Of(typeof(string))),
                         new Parameter(
                             "items",
                             new OptionalTypeReference(new NamedTypeReference(
@@ -445,7 +445,7 @@ public class InvalidProgramTests {
                             new Constant(null)),
                         new Parameter(
                             "count",
-                            new OptionalTypeReference(ClrTypeReferences.Of(typeof(int))),
+                            new OptionalTypeReference(TypeReference.Of(typeof(int))),
                             new Constant(null))
                     ],
                     IsStatic: true)
@@ -506,7 +506,7 @@ public class InvalidProgramTests {
                     "Create",
                     new NamedTypeReference("Order"),
                     Parameters: [
-                        new Parameter("name", ClrTypeReferences.Of(typeof(string))),
+                        new Parameter("name", TypeReference.Of(typeof(string))),
                         new Parameter(
                             "items",
                             new OptionalTypeReference(new NamedTypeReference(
@@ -658,14 +658,14 @@ public class InvalidProgramTests {
             "Order",
             Constructors: [
                 new ConstructorDefinitionNode(
-                    Parameters: [new Parameter("total", ClrTypeReferences.Of(typeof(long)))],
+                    Parameters: [new Parameter("total", TypeReference.Of(typeof(long)))],
                     AccessModifier: AccessModifier.Private)
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "Create",
                     new NamedTypeReference("Order"),
-                    Parameters: [new Parameter("total", ClrTypeReferences.Of(typeof(long)))],
+                    Parameters: [new Parameter("total", TypeReference.Of(typeof(long)))],
                     Body: new New(new NamedTypeReference("Order"), new Parameter("total")),
                     IsStatic: true)
             ]);
@@ -683,7 +683,7 @@ public class InvalidProgramTests {
             "Order",
             Constructors: [
                 new ConstructorDefinitionNode(
-                    [new Parameter("total", ClrTypeReferences.Of(typeof(long)))])
+                    [new Parameter("total", TypeReference.Of(typeof(long)))])
             ]);
         await AssertAnalysisThenCompileRejects(
             new Block([order, new New(new NamedTypeReference("Order"), new Constant(null))]),
@@ -698,10 +698,10 @@ public class InvalidProgramTests {
             Constructors: [
                 new ConstructorDefinitionNode(
                     Parameters: [
-                        new Parameter("isSuccess", ClrTypeReferences.Of(typeof(bool))),
+                        new Parameter("isSuccess", TypeReference.Of(typeof(bool))),
                         new Parameter(
                             "errorMessage",
-                            new OptionalTypeReference(ClrTypeReferences.Of(typeof(string))))
+                            new OptionalTypeReference(TypeReference.Of(typeof(string))))
                     ],
                     AccessModifier: AccessModifier.Private)
             ]);
@@ -710,11 +710,11 @@ public class InvalidProgramTests {
             Constructors: [
                 new ConstructorDefinitionNode(
                     Parameters: [
-                        new Parameter("isSuccess", ClrTypeReferences.Of(typeof(bool))),
+                        new Parameter("isSuccess", TypeReference.Of(typeof(bool))),
                         new Parameter("value", new NamedTypeReference("T")),
                         new Parameter(
                             "errorMessage",
-                            new OptionalTypeReference(ClrTypeReferences.Of(typeof(string))))
+                            new OptionalTypeReference(TypeReference.Of(typeof(string))))
                     ],
                     AccessModifier: AccessModifier.Private)
             ],

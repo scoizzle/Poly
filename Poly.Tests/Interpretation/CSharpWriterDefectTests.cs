@@ -168,7 +168,7 @@ public class CSharpWriterDefectTests {
 
     [Test]
     public async Task LambdaCallee_IsParenthesised() {
-        var v = new Parameter("v", ClrTypeReferences.To<int>());
+        var v = new Parameter("v", TypeReference.To<int>());
         var program = new Invoke(new Lambda([v], new Add(v, new Constant(10))), new Constant(5));
 
         await Assert.That(AstParity.Print(program)).Contains(")(5)");
@@ -179,7 +179,7 @@ public class CSharpWriterDefectTests {
 
     [Test]
     public async Task NestedClrType_PrintsWithDots() {
-        var printed = CSharpLanguage.Write(new Return(new New(ClrTypeReferences.To<Nested.Inner>())));
+        var printed = CSharpLanguage.Write(new Return(new New(TypeReference.To<Nested.Inner>())));
         await Assert.That(printed).Contains("Nested.Inner()");
         await Assert.That(printed).DoesNotContain("+");
     }
@@ -188,7 +188,7 @@ public class CSharpWriterDefectTests {
 
     [Test]
     public async Task TypeAs_OnAValueTypedOperand_BoxesBeforeTheTryCast() {
-        var program = new TypeAs(new Constant(42), ClrTypeReferences.To<string>());
+        var program = new TypeAs(new Constant(42), TypeReference.To<string>());
         await Assert.That(AstParity.Print(program)).Contains("(object)42 as string");
         await Assert.That(Evaluate(program)).IsNull();
     }

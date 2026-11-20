@@ -151,7 +151,7 @@ public sealed class DomainResultErasureTests {
                 new PropertyDefinitionNode(
                     "Typed",
                     new NamedTypeReference("DomainResult", TypeArguments: [
-                        ClrTypeReferences.Of(typeof(string)),
+                        TypeReference.Of(typeof(string)),
                     ])),
             ]);
 

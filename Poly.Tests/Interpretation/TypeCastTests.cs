@@ -11,7 +11,7 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_IntToDouble_ReturnsDouble() {
         // Arrange
-        var node = new TypeCast(Wrap(42), ClrTypeReferences.To<double>());
+        var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -23,7 +23,7 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_DoubleToInt_ReturnsInt() {
         // Arrange
-        var node = new TypeCast(Wrap(3.14), ClrTypeReferences.To<int>());
+        var node = new TypeCast(Wrap(3.14), TypeReference.To<int>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -35,7 +35,7 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_LongToInt_ReturnsInt() {
         // Arrange
-        var node = new TypeCast(Wrap(9999L), ClrTypeReferences.To<int>());
+        var node = new TypeCast(Wrap(9999L), TypeReference.To<int>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -47,8 +47,8 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_WithParameter_EvaluatesCorrectly() {
         // Arrange
-        var param = new Parameter("value", ClrTypeReferences.To<int>());
-        var node = new TypeCast(param, ClrTypeReferences.To<double>());
+        var param = new Parameter("value", TypeReference.To<int>());
+        var node = new TypeCast(param, TypeReference.To<double>());
 
         // Act
         var program = Interpreter.Compile(node);
@@ -61,7 +61,7 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_StringToObject_WorksCorrectly() {
         // Arrange
-        var node = new TypeCast(Wrap("hello"), ClrTypeReferences.To<object>());
+        var node = new TypeCast(Wrap("hello"), TypeReference.To<object>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -74,7 +74,7 @@ public class TypeCastTests {
     public async Task TypeCast_ObjectToString_WorksCorrectly() {
         // Arrange
         var obj = (object)"world";
-        var node = new TypeCast(Wrap(obj), ClrTypeReferences.To<string>());
+        var node = new TypeCast(Wrap(obj), TypeReference.To<string>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -86,7 +86,7 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_NullableToNonNullable_WorksCorrectly() {
         // Arrange
-        var node = new TypeCast(Wrap(42 as int?), ClrTypeReferences.To<int>());
+        var node = new TypeCast(Wrap(42 as int?), TypeReference.To<int>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -98,7 +98,7 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_NonNullableToNullable_WorksCorrectly() {
         // Arrange
-        var node = new TypeCast(Wrap(42), ClrTypeReferences.To<int?>());
+        var node = new TypeCast(Wrap(42), TypeReference.To<int?>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -109,7 +109,7 @@ public class TypeCastTests {
 
     [Test]
     public async Task TypeCast_GetTypeDefinition_ReturnsTargetType() {
-        var node = new TypeCast(Wrap(42), ClrTypeReferences.To<double>());
+        var node = new TypeCast(Wrap(42), TypeReference.To<double>());
         var analysis = Interpreter.Analyze(node);
         var resolved = analysis.GetResolvedType(node);
         await Assert.That(resolved).IsNotNull();
@@ -119,7 +119,7 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_ToString_ReturnsExpectedFormat() {
         // Arrange
-        var node = new TypeCast(Wrap(42), ClrTypeReferences.To<double>());
+        var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
         // Act
         var result = node.ToString();
@@ -131,14 +131,14 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException() {
         // Act & Assert
-        await Assert.That(() => new TypeCast(null!, ClrTypeReferences.To<double>())).Throws<ArgumentNullException>();
+        await Assert.That(() => new TypeCast(null!, TypeReference.To<double>())).Throws<ArgumentNullException>();
     }
 
     [Test]
     public async Task TypeIs_ObjectAgainstString_ReturnsTrue() {
         // Arrange
         var value = Wrap((object)"hello");
-        var node = new TypeIs(value, ClrTypeReferences.To<string>());
+        var node = new TypeIs(value, TypeReference.To<string>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -151,7 +151,7 @@ public class TypeCastTests {
     public async Task TypeIs_ObjectAgainstInt_ReturnsFalse() {
         // Arrange
         var value = Wrap((object)"hello");
-        var node = new TypeIs(value, ClrTypeReferences.To<int>());
+        var node = new TypeIs(value, TypeReference.To<int>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -164,7 +164,7 @@ public class TypeCastTests {
     public async Task TypeAs_ObjectToString_ReturnsStringValue() {
         // Arrange
         var value = Wrap((object)"hello");
-        var node = new TypeAs(value, ClrTypeReferences.To<string>());
+        var node = new TypeAs(value, TypeReference.To<string>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -177,7 +177,7 @@ public class TypeCastTests {
     public async Task TypeAs_ObjectToString_WithIncompatibleValue_ReturnsNull() {
         // Arrange
         var value = Wrap((object)42);
-        var node = new TypeAs(value, ClrTypeReferences.To<string>());
+        var node = new TypeAs(value, TypeReference.To<string>());
 
         // Act
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -188,7 +188,7 @@ public class TypeCastTests {
 
     [Test]
     public async Task TypeCast_ImplicitOperator_DoubleToMeters() {
-        var node = new TypeCast(Wrap(2.5), ClrTypeReferences.To<TypeCompatibilityTests.Meters>());
+        var node = new TypeCast(Wrap(2.5), TypeReference.To<TypeCompatibilityTests.Meters>());
         var analysis = Interpreter.Analyze(node);
         await Assert.That(analysis.GetNodeReplacement(node)).IsTypeOf<Invoke>();
         using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis));
@@ -199,7 +199,7 @@ public class TypeCastTests {
     public async Task TypeCast_ExplicitOperator_MetersToDouble() {
         var node = new TypeCast(
             Wrap(new TypeCompatibilityTests.Meters(2.5)),
-            ClrTypeReferences.To<double>());
+            TypeReference.To<double>());
         var analysis = Interpreter.Analyze(node);
         await Assert.That(analysis.GetNodeReplacement(node)).IsTypeOf<Invoke>();
         using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis));
@@ -209,7 +209,7 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_ImplicitOperator_DateTimeToDateTimeOffset() {
         var stamp = new DateTime(2026, 8, 26, 12, 0, 0, DateTimeKind.Utc);
-        var node = new TypeCast(Wrap(stamp), ClrTypeReferences.To<DateTimeOffset>());
+        var node = new TypeCast(Wrap(stamp), TypeReference.To<DateTimeOffset>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<DateTimeOffset>()).IsEqualTo(new DateTimeOffset(stamp));
     }
@@ -218,7 +218,7 @@ public class TypeCastTests {
     public async Task TypeAs_ObjectToNonNullableValueType_RejectsAtCompile() {
         // Arrange
         var value = Wrap((object)42);
-        var node = new TypeAs(value, ClrTypeReferences.To<int>());
+        var node = new TypeAs(value, TypeReference.To<int>());
 
         // Act & Assert - a lifted `as` to a non-nullable value type cannot be represented, so the VM refuses it
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
@@ -230,7 +230,7 @@ public class TypeCastTests {
         var operand = Wrap((object)"hello");
 
         // Act
-        var target = ClrTypeReferences.To<string>();
+        var target = TypeReference.To<string>();
         var isNode = operand.Is(target);
         var asNode = operand.As(target);
 

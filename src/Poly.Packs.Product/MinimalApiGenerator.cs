@@ -239,7 +239,7 @@ public sealed partial class MinimalApiGenerator {
                     new Member(new TypeReference(BuilderVar), "Services"),
                     "AddScoped")) {
                 TypeArguments = [
-                    ClrTypeReferences.Of(typeof(IStoragePort)),
+                    TypeReference.Of(typeof(IStoragePort)),
                     new TypeReference(dbContextName)
                 ]
             });
@@ -390,21 +390,21 @@ public sealed partial class MinimalApiGenerator {
     /// <summary>CLR keyword names are the CLR definitions the keywords name, so a
     /// domain type of the same name can print with <c>@</c> in type position.</summary>
     private static Node ClrTypeNode(string clrType) => clrType switch {
-        "bool" => ClrTypeReferences.Of(typeof(bool)),
-        "byte" => ClrTypeReferences.Of(typeof(byte)),
-        "char" => ClrTypeReferences.Of(typeof(char)),
-        "decimal" => ClrTypeReferences.Of(typeof(decimal)),
-        "double" => ClrTypeReferences.Of(typeof(double)),
-        "float" => ClrTypeReferences.Of(typeof(float)),
-        "int" => ClrTypeReferences.Of(typeof(int)),
-        "long" => ClrTypeReferences.Of(typeof(long)),
-        "object" => ClrTypeReferences.Of(typeof(object)),
-        "sbyte" => ClrTypeReferences.Of(typeof(sbyte)),
-        "short" => ClrTypeReferences.Of(typeof(short)),
-        "string" => ClrTypeReferences.Of(typeof(string)),
-        "uint" => ClrTypeReferences.Of(typeof(uint)),
-        "ulong" => ClrTypeReferences.Of(typeof(ulong)),
-        "ushort" => ClrTypeReferences.Of(typeof(ushort)),
+        "bool" => TypeReference.Of(typeof(bool)),
+        "byte" => TypeReference.Of(typeof(byte)),
+        "char" => TypeReference.Of(typeof(char)),
+        "decimal" => TypeReference.Of(typeof(decimal)),
+        "double" => TypeReference.Of(typeof(double)),
+        "float" => TypeReference.Of(typeof(float)),
+        "int" => TypeReference.Of(typeof(int)),
+        "long" => TypeReference.Of(typeof(long)),
+        "object" => TypeReference.Of(typeof(object)),
+        "sbyte" => TypeReference.Of(typeof(sbyte)),
+        "short" => TypeReference.Of(typeof(short)),
+        "string" => TypeReference.Of(typeof(string)),
+        "uint" => TypeReference.Of(typeof(uint)),
+        "ulong" => TypeReference.Of(typeof(ulong)),
+        "ushort" => TypeReference.Of(typeof(ushort)),
         _ => new TypeReference(clrType),
     };
 }

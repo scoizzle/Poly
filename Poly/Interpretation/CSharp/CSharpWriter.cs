@@ -1180,7 +1180,7 @@ public sealed class CSharpWriter {
                 // parameter type, on the fully-qualified type the VM binds.
                 return Expr(new Invoke(
                     new Member(new NamedTypeReference("BitOperations", "System.Numerics"), "PopCount"),
-                    new TypeCast(popCount.Operand, ClrTypeReferences.Of(typeof(ulong)))));
+                    new TypeCast(popCount.Operand, TypeReference.Of(typeof(ulong)))));
             case NewArray newArray:
                 return Render("expr-primary", "new-array", Fills.Of(("open", "["), ("close", "]")),
                     TypeText(newArray.ElementType), Expr(newArray.Length));

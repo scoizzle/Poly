@@ -508,7 +508,7 @@ public sealed partial class ModuleInstanceExecutor {
     }
 
     private static bool IsStoragePort(Parameter parameter) =>
-        ClrTypeReferences.Denotes(parameter.TypeReference, typeof(IStoragePort));
+        parameter.TypeReference.Denotes(typeof(IStoragePort));
 
     private static bool TryValue(
         IReadOnlyDictionary<string, object?> values, string parameterName, out object? value) {

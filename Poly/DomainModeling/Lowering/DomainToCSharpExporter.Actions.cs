@@ -87,7 +87,7 @@ public sealed partial class DomainToCSharpExporter {
     internal const string ActionBodyPrefix = "__BodyOf";
 
     private static Node ActionScopeCall(string member, params Node[] arguments) =>
-        new Invoke(new Member(ClrTypeReferences.Of(typeof(ActionScope)), member), arguments);
+        new Invoke(new Member(TypeReference.Of(typeof(ActionScope)), member), arguments);
 
     /// <summary>
     /// <c>ActionScope.Touch(this)</c>, the first statement of every mutator (L-03c): the action wrapper, a subscription
@@ -118,7 +118,7 @@ public sealed partial class DomainToCSharpExporter {
         var wrapper = new Block([
             new Assignment(scope, new TypeCast(
                 ActionScopeCall("Begin", new Constant(null)),
-                ClrTypeReferences.Of(typeof(ActionScopeToken)))),
+                TypeReference.Of(typeof(ActionScopeToken)))),
             new Assignment(done, new Constant(false)),
             new TryCatchFinally(
                 new Block([

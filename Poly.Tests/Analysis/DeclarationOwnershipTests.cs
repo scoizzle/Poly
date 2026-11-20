@@ -48,7 +48,7 @@ public class DeclarationOwnershipTests {
                     new NamedTypeReference("List", TypeArguments: [new NamedTypeReference("Order")])),
                 new PropertyDefinitionNode(
                     "Counts",
-                    new NamedTypeReference("List", TypeArguments: [Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(int))]))
+                    new NamedTypeReference("List", TypeArguments: [TypeReference.Of(typeof(int))]))
             ]);
         var analysis = Analyze(new CompilationUnitNode([], null, [order, shelf], null));
         var resolved = DefinitionOf(analysis, shelf);
@@ -73,7 +73,7 @@ public class DeclarationOwnershipTests {
                         new NamedTypeReference("List", TypeArguments: [new NamedTypeReference("Order")])),
                     new PropertyDefinitionNode(
                         "Counts",
-                        new NamedTypeReference("List", TypeArguments: [Poly.Interpretation.CSharp.ClrTypeReferences.Of(typeof(int))]))
+                        new NamedTypeReference("List", TypeArguments: [TypeReference.Of(typeof(int))]))
                 ]);
             var unit = new CompilationUnitNode([], null, [order, shelf], null);
             return (Analyze(unit), unit);
@@ -124,7 +124,7 @@ public class DeclarationOwnershipTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Format",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Parameters: [new Parameter("value")])
             ]);
 
@@ -152,7 +152,7 @@ public class DeclarationOwnershipTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Format",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Parameters: [new Parameter("value")])
             ]);
         var underDomain = DefinitionOf(Analyze(declared, domain), declared);

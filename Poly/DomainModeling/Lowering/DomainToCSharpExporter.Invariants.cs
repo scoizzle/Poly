@@ -18,7 +18,7 @@ public sealed partial class DomainToCSharpExporter {
     /// so a module compiled with storage never reaches this failure.
     /// </summary>
     private static MethodDefinitionNode EnsureUniqueAssignMethod(Entity entity) {
-        var propertyName = new Parameter("propertyName", ClrTypeReferences.Of(typeof(string)));
+        var propertyName = new Parameter("propertyName", TypeReference.Of(typeof(string)));
         var value = new Parameter("value", StoreJobObjectType());
         var nodes = new List<Node> {
             new IfStatement(
@@ -32,7 +32,7 @@ public sealed partial class DomainToCSharpExporter {
                 new Syntactic.And(
                     new Equal(propertyName, new Constant(prop.Name)),
                     new Invoke(
-                        new Member(ClrTypeReferences.Of(typeof(object)), "Equals"),
+                        new Member(TypeReference.Of(typeof(object)), "Equals"),
                         new Member(new ThisReference(), prop.Name),
                         value)),
                 new Block([DomainResultSuccess()])));
@@ -76,7 +76,7 @@ public sealed partial class DomainToCSharpExporter {
                 policyBodies?.Add((entity.Name, policy.Name), body);
             methods.Add(new MethodDefinitionNode(
                 policy.Name,
-                ClrTypeReferences.Of(typeof(bool)),
+                TypeReference.Of(typeof(bool)),
                 Body: body,
                 AccessModifier: AccessModifier.Public
             ));

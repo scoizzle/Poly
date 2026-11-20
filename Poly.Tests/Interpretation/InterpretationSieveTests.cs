@@ -37,7 +37,7 @@ public class InterpretationSieveTests {
         return new Block(
         [
             // bits = new long[wordCnt]
-            new Assignment(bits, new NewArray(ClrTypeReferences.To<long>(), new Constant(wordCnt))),
+            new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant(wordCnt))),
             // for (int i = 2; i * i <= limit; i++)
             new Assignment(i, new Constant(2)),
             new WhileLoop(
@@ -121,7 +121,7 @@ public class InterpretationSieveTests {
         var arr = new Variable("arr");
         var idx = new Variable("idx");
         var body = new Block([
-            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(2))),
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(2))),
             // Set bits 4,6,8 (start=4, step=2, limit=8) in word 0
             new StridedSetBits(arr, new Constant(4L), new Constant(2L), new Constant(8L)),
             // Read word 0: should have bits 4,6,8 set => value = (1<<4)|(1<<6)|(1<<8) = 336
@@ -139,7 +139,7 @@ public class InterpretationSieveTests {
         var arr = new Variable("arr");
         var i = new Variable("i");
         var body = new Block([
-            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(2))),
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(2))),
             new Assignment(i, new Constant(2L)),
             new StridedSetBits(arr, new Multiply(i, i), i, new Constant(10L)),
             // After setting bits 4,6,8,10: word 0 should have bits 4,6,8,10 set
@@ -165,7 +165,7 @@ public class InterpretationSieveTests {
             new Constant(0L));
 
         var body = new Block([
-            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(2))),
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(2))),
             new Assignment(i, new Constant(2L)),
             new IfStatement(IsPrime(i),
                 new StridedSetBits(arr, new Multiply(i, i), i, new Constant(10L))),
@@ -231,7 +231,7 @@ public class InterpretationSieveTests {
             new Constant(0L));
 
         var body = new Block([
-            new Assignment(bits, new NewArray(ClrTypeReferences.To<long>(), new Constant(wordCnt))),
+            new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant(wordCnt))),
             new Assignment(i, new Constant(2L)),
             new WhileLoop(
                 new LessThanOrEqual(new Multiply(i, i), new Constant(limit)),

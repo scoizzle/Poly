@@ -332,7 +332,7 @@ public class DomainExpressionLoweringPassTests {
         var cast = (TypeCast)arg;
         await Assert.That(cast.Operand).IsTypeOf<Constant>();
         await Assert.That(((Constant)cast.Operand).Value).IsEqualTo(14L);
-        await Assert.That(ClrTypeReferences.States(cast.TargetTypeReference, typeof(int))).IsTrue();
+        await Assert.That(cast.TargetTypeReference.States(typeof(int))).IsTrue();
     }
 
     [Test]

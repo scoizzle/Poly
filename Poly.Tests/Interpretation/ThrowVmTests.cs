@@ -7,14 +7,14 @@ public class ThrowVmTests {
     [Test]
     public async Task Throw_Unprotected_PropagatesClrException() {
         var throwStmt = new ThrowStatement(
-            new New(ClrTypeReferences.To<Exception>()));
+            new New(TypeReference.To<Exception>()));
         await Assert.That(() => { Interpreter.Execute(throwStmt); }).ThrowsExactly<Exception>();
     }
 
     [Test]
     public async Task Throw_WithMessage_PropagatesCorrectMessage() {
         var throwStmt = new ThrowStatement(
-            new New(ClrTypeReferences.To<InvalidOperationException>(), new Constant("test message")));
+            new New(TypeReference.To<InvalidOperationException>(), new Constant("test message")));
         bool caught = false;
         try { Interpreter.Execute(throwStmt); }
         catch (InvalidOperationException ioex) { caught = ioex.Message == "test message"; }
@@ -23,7 +23,7 @@ public class ThrowVmTests {
 
     [Test]
     public async Task Throw_InVoidContext_Propagates() {
-        var block = new Block(new ThrowStatement(new New(ClrTypeReferences.To<Exception>())));
+        var block = new Block(new ThrowStatement(new New(TypeReference.To<Exception>())));
         await Assert.That(() => { Interpreter.Execute(block); }).ThrowsExactly<Exception>();
     }
 
@@ -32,7 +32,7 @@ public class ThrowVmTests {
         var varX = new Variable("x");
         var block = new Block([
             new Assignment(varX, new Constant(42)),
-            new ThrowStatement(new New(ClrTypeReferences.To<Exception>())),
+            new ThrowStatement(new New(TypeReference.To<Exception>())),
             new Return(varX)
         ], [varX]);
         await Assert.That(() => { Interpreter.Execute(block); }).ThrowsExactly<Exception>();

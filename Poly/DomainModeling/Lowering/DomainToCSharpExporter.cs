@@ -169,7 +169,7 @@ public sealed partial class DomainToCSharpExporter {
     /// </summary>
     private static void AddActionScopeMembers(
         List<PropertyDefinitionNode> props, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
-        var objectType = ClrTypeReferences.Of(typeof(object));
+        var objectType = TypeReference.Of(typeof(object));
         var optionalObject = new OptionalTypeReference(objectType);
         var slots = new List<ScopeSlot>();
         foreach (var prop in props.Where(static p => p.Setter is not null && p.Getter?.Body is null && !p.IsStatic))
@@ -226,7 +226,7 @@ public sealed partial class DomainToCSharpExporter {
                 default: {
                         if (IsOptionalSet(type, out var setType)) {
                             var enumerable = new NamedTypeReference(
-                                "IEnumerable", TypeArguments: [ClrTypeReferences.Of(typeof(string))]);
+                                "IEnumerable", TypeArguments: [TypeReference.Of(typeof(string))]);
                             snapshot.Add(new Assignment(Slot(snapshotArray), new Syntactic.Conditional(
                                 new Equal(Field(name), new Constant(null)),
                                 new Constant(null),
@@ -254,7 +254,7 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>The synthetic entity-list type has no <c>Clear</c>; the cast to <c>IList</c> reaches the real one.</summary>
     private static Node ClearList(Node list) =>
-        new Invoke(new Member(new TypeCast(list, ClrTypeReferences.Of(typeof(System.Collections.IList))), "Clear"));
+        new Invoke(new Member(new TypeCast(list, TypeReference.Of(typeof(System.Collections.IList))), "Clear"));
 
     private readonly record struct ScopeSlot(string Name, Node Type);
 
@@ -284,7 +284,7 @@ public sealed partial class DomainToCSharpExporter {
         // the catalog is the single source of truth and no tree scan is performed (amu-w3-1).
         var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
         if (DomainTypeMapping.TryClrType(clr, out var ground))
-            return ClrTypeReferences.Of(ground);
+            return TypeReference.Of(ground);
         return new NamedTypeReference(typeName);
     }
 

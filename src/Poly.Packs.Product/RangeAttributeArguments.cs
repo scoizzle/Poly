@@ -27,7 +27,7 @@ internal static class RangeAttributeArguments {
         var max = maximum ?? openMaximum;
         if (clrType == "decimal") {
             return [
-                new TypeOf(ClrTypeReferences.Of(typeof(decimal))),
+                new TypeOf(TypeReference.Of(typeof(decimal))),
                 new Constant(DecimalBoundText(min)),
                 new Constant(DecimalBoundText(max)),
             ];

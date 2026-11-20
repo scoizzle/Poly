@@ -73,7 +73,7 @@ internal static class NullableCharGrid {
                             continue;
                         if (!Arithmetic(kind) && (Unwrap(left).IsEnum || Unwrap(right).IsEnum))
                             continue;
-                        var node = ExtraOperandGrid.Build(kind, new Parameter("a", ClrTypeReferences.Of(left)), new Parameter("b", ClrTypeReferences.Of(right)));
+                        var node = ExtraOperandGrid.Build(kind, new Parameter("a", TypeReference.Of(left)), new Parameter("b", TypeReference.Of(right)));
                         var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
                         cells.Add(new Cell(left, kind, right, Classify(kind, left, right, node, analysis, resolution)));
                     }
@@ -187,7 +187,7 @@ internal static class NullableCharGrid {
 }
 
 public class NullableCharProofTests {
-    private static Parameter Param<T>(string name) => new(name, ClrTypeReferences.To<T>());
+    private static Parameter Param<T>(string name) => new(name, TypeReference.To<T>());
 
     private static ExecutionResult Execute(Node node, params object?[] args) =>
         Interpreter.Execute(Interpreter.Compile(node), s => s.SetArgs(args));

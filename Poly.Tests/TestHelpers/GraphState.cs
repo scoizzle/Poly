@@ -190,7 +190,7 @@ public static class ModuleScopeOnly {
         var callArgs = new object?[parameters.Count];
         for (var i = 0; i < parameters.Count; i++) {
             var parameter = parameters[i];
-            if (ClrTypeReferences.Denotes(parameter.TypeReference, typeof(IStoragePort))) {
+            if (parameter.TypeReference.Denotes(typeof(IStoragePort))) {
                 callArgs[i] = port;
                 continue;
             }

@@ -110,7 +110,7 @@ public class RingCodecTests {
     [Test]
     public async Task UnknownArgumentKind_IsACompileError() {
         // A node the classifier cannot place is not silently a handle: emit fails closed.
-        await Assert.That(() => RingCodec.IsStackScalar(new Parameter("p", ClrTypeReferences.To<long>()), null))
+        await Assert.That(() => RingCodec.IsStackScalar(new Parameter("p", TypeReference.To<long>()), null))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("cannot tell whether argument");
     }

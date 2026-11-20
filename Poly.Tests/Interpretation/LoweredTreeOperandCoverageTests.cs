@@ -62,7 +62,7 @@ public class LoweredTreeOperandCoverageTests {
         public static long TakesNumber(long value) => value;
     }
 
-    static Parameter P<T>(string name) => new(name, ClrTypeReferences.To<T>());
+    static Parameter P<T>(string name) => new(name, TypeReference.To<T>());
     static Parameter Dec(string name = "d") => P<decimal>(name);
     static Parameter Num(string name = "n") => P<long>(name);
     static Parameter Txt(string name = "s") => P<string>(name);
@@ -74,7 +74,7 @@ public class LoweredTreeOperandCoverageTests {
     static Parameter NumArray(string name = "arr") => P<long[]>(name);
     static Node Wrap(params Node[] nodes) => new Block(nodes);
     static Node Pick(Node condition, Node ifTrue, Node ifFalse) => Wrap(new Conditional(condition, ifTrue, ifFalse));
-    static Node Call(string method, Node argument) => Wrap(new Invoke(new Member(ClrTypeReferences.Of(typeof(Probe)), method), argument));
+    static Node Call(string method, Node argument) => Wrap(new Invoke(new Member(TypeReference.Of(typeof(Probe)), method), argument));
 
     static Node Assign2(Node first, Node second) {
         var x = new Variable("x");
@@ -207,17 +207,17 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(DoWhileLoop), "NumberCondition", Rejects, () => Wrap(new DoWhileLoop(new Return(Num()), Num("c")), new Return(Num("m"))), [2L, 3L, 4L]), // operand common type: none, the condition is not Boolean
         Row(typeof(ForEachLoop), "DeclaredTextElementNumber", Rejects, () => {
             var item = new Variable("item");
-            return new Block([new ForEachLoop(item, NumArray(), item, DeclaredType: ClrTypeReferences.To<string>()), Num()], [item]);
+            return new Block([new ForEachLoop(item, NumArray(), item, DeclaredType: TypeReference.To<string>()), Num()], [item]);
         }, [new long[] { 1 }, 2L]), // operand common type: none, a long element does not convert to text
         // Pins the analyzer's implicit-only rule (CanConvert); C# itself allows an explicit conversion in foreach.
         Row(typeof(ForEachLoop), "DeclaredNumberElementDecimal", Rejects, () => {
             var item = new Variable("item");
-            return new Block([new ForEachLoop(item, P<decimal[]>("arr"), item, DeclaredType: ClrTypeReferences.To<long>()), Num()], [item]);
+            return new Block([new ForEachLoop(item, P<decimal[]>("arr"), item, DeclaredType: TypeReference.To<long>()), Num()], [item]);
         }, [new[] { 1.5m }, 2L]), // operand common type: none, a decimal element narrows to long only by cast
         Row(typeof(ForEachLoop), "DeclaredDecimalElementNumber", Accepts, () => {
             var acc = new Variable("acc");
             var item = new Variable("item");
-            return new Block([new Assignment(acc, Dec("dz")), new ForEachLoop(item, NumArray(), new Assignment(acc, item), DeclaredType: ClrTypeReferences.To<decimal>()), acc], [acc, item]);
+            return new Block([new Assignment(acc, Dec("dz")), new ForEachLoop(item, NumArray(), new Assignment(acc, item), DeclaredType: TypeReference.To<decimal>()), acc], [acc, item]);
         }, [0m, new long[] { 7 }], typeof(decimal), 7m, operandType: typeof(decimal)), // operand common type decimal: a long element widens to the declared decimal
 
         // Single-operand and statement kinds whose operand must have the right type: never executed (amendment 15).
@@ -231,19 +231,19 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(StridedSetBits), "StepText", Rejects, () => Wrap(new StridedSetBits(NumArray(), Num("start"), Txt("step"), Num("limit"))), [new long[] { 1 }, 0L, "a", 8L]), // operand common type: none, a stride is integral
 
         // Casts and constructors: legality of the conversion, and each argument against its parameter.
-        Row(typeof(TypeCast), "TextToNumber", Rejects, () => Wrap(new TypeCast(Txt(), ClrTypeReferences.To<long>())), ["a"]), // operand common type: none, text has no explicit conversion to long
-        Row(typeof(TypeCast), "DecimalToNumber", Accepts, () => Wrap(new TypeCast(Dec(), ClrTypeReferences.To<long>())), [1.5m], typeof(long), 1L), // operand common type: none, not an operand pair (long (explicit narrowing))
-        Row(typeof(TypeCast), "NumberToDecimal", Accepts, () => Wrap(new TypeCast(Num(), ClrTypeReferences.To<decimal>())), [2L], typeof(decimal), 2m), // operand common type: none, not an operand pair (decimal (explicit widening))
-        Row(typeof(TypeCast), "EntityToNumber", Rejects, () => Wrap(new TypeCast(Ent(), ClrTypeReferences.To<long>())), [new Item(1m)]), // operand common type: none, an entity has no conversion to long
-        Row(typeof(TypeAs), "NumberToText", Rejects, () => Wrap(new TypeAs(Num(), ClrTypeReferences.To<string>())), [2L]), // operand common type: none, a long is never a string
-        Row(typeof(TypeAs), "TextToText", Accepts, () => Wrap(new TypeAs(Txt(), ClrTypeReferences.To<string>())), ["a"], typeof(string), "a"), // operand common type: none, not an operand pair (string)
-        Row(typeof(New), "ArgumentTextForDecimalParameter", Rejects, () => Wrap(new New(ClrTypeReferences.To<Item>(), Txt())), ["a"]), // operand common type: none, text does not convert to decimal
-        Row(typeof(New), "ArgumentNumberForDecimalParameter", Converts, () => Wrap(new New(ClrTypeReferences.To<Item>(), Num())), [2L], operandType: typeof(decimal)), // operand common type decimal: the argument widens to decimal
-        Row(typeof(New), "ArgumentDecimalForDecimalParameter", Accepts, () => Wrap(new New(ClrTypeReferences.To<Item>(), Dec())), [1.5m], operandType: typeof(decimal)), // operand common type decimal: identical parameter type
-        Row(typeof(New), "ArgumentEntityForDecimalParameter", Rejects, () => Wrap(new New(ClrTypeReferences.To<Item>(), Ent())), [new Item(1m)]), // operand common type: none, an entity does not convert to decimal
-        Row(typeof(NewArray), "LengthText", Rejects, () => Wrap(new NewArray(ClrTypeReferences.To<long>(), Txt())), ["a"]), // operand common type: none, a length is integral
-        Row(typeof(NewArray), "LengthDecimal", Rejects, () => Wrap(new NewArray(ClrTypeReferences.To<long>(), Dec())), [1.5m]), // operand common type: none, a decimal length narrows only by cast
-        Row(typeof(NewArray), "LengthNumber", Accepts, () => Wrap(new NewArray(ClrTypeReferences.To<long>(), Num())), [2L], operandType: typeof(long)), // operand common type long: long[] (no value checked)
+        Row(typeof(TypeCast), "TextToNumber", Rejects, () => Wrap(new TypeCast(Txt(), TypeReference.To<long>())), ["a"]), // operand common type: none, text has no explicit conversion to long
+        Row(typeof(TypeCast), "DecimalToNumber", Accepts, () => Wrap(new TypeCast(Dec(), TypeReference.To<long>())), [1.5m], typeof(long), 1L), // operand common type: none, not an operand pair (long (explicit narrowing))
+        Row(typeof(TypeCast), "NumberToDecimal", Accepts, () => Wrap(new TypeCast(Num(), TypeReference.To<decimal>())), [2L], typeof(decimal), 2m), // operand common type: none, not an operand pair (decimal (explicit widening))
+        Row(typeof(TypeCast), "EntityToNumber", Rejects, () => Wrap(new TypeCast(Ent(), TypeReference.To<long>())), [new Item(1m)]), // operand common type: none, an entity has no conversion to long
+        Row(typeof(TypeAs), "NumberToText", Rejects, () => Wrap(new TypeAs(Num(), TypeReference.To<string>())), [2L]), // operand common type: none, a long is never a string
+        Row(typeof(TypeAs), "TextToText", Accepts, () => Wrap(new TypeAs(Txt(), TypeReference.To<string>())), ["a"], typeof(string), "a"), // operand common type: none, not an operand pair (string)
+        Row(typeof(New), "ArgumentTextForDecimalParameter", Rejects, () => Wrap(new New(TypeReference.To<Item>(), Txt())), ["a"]), // operand common type: none, text does not convert to decimal
+        Row(typeof(New), "ArgumentNumberForDecimalParameter", Converts, () => Wrap(new New(TypeReference.To<Item>(), Num())), [2L], operandType: typeof(decimal)), // operand common type decimal: the argument widens to decimal
+        Row(typeof(New), "ArgumentDecimalForDecimalParameter", Accepts, () => Wrap(new New(TypeReference.To<Item>(), Dec())), [1.5m], operandType: typeof(decimal)), // operand common type decimal: identical parameter type
+        Row(typeof(New), "ArgumentEntityForDecimalParameter", Rejects, () => Wrap(new New(TypeReference.To<Item>(), Ent())), [new Item(1m)]), // operand common type: none, an entity does not convert to decimal
+        Row(typeof(NewArray), "LengthText", Rejects, () => Wrap(new NewArray(TypeReference.To<long>(), Txt())), ["a"]), // operand common type: none, a length is integral
+        Row(typeof(NewArray), "LengthDecimal", Rejects, () => Wrap(new NewArray(TypeReference.To<long>(), Dec())), [1.5m]), // operand common type: none, a decimal length narrows only by cast
+        Row(typeof(NewArray), "LengthNumber", Accepts, () => Wrap(new NewArray(TypeReference.To<long>(), Num())), [2L], operandType: typeof(long)), // operand common type long: long[] (no value checked)
         Row(typeof(IndexAccess), "IndexText", Rejects, () => Wrap(new IndexAccess(NumArray(), Txt())), [new long[] { 5, 6 }, "a"]), // operand common type: none, an array index is integral
         Row(typeof(IndexAccess), "IndexDecimal", Rejects, () => Wrap(new IndexAccess(NumArray(), Dec())), [new long[] { 5, 6 }, 1.5m]), // operand common type: none, a decimal index narrows only by cast
         Row(typeof(IndexAccess), "IndexOptional", Rejects, () => Wrap(new IndexAccess(NumArray(), OptNum())), [new long[] { 5, 6 }, 1L]), // operand common type: none, long? is not an index
@@ -303,7 +303,7 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(UnaryMinus), "Enum", Rejects, () => Wrap(new UnaryMinus(P<DayOfWeek>("a"))), [DayOfWeek.Monday]),
         Row(typeof(Equal), "ClrStructWithoutEquality", Rejects, () => Wrap(new Equal(P<KeyValuePair<int, int>>("a"), P<KeyValuePair<int, int>>("b"))), [new KeyValuePair<int, int>(1, 2), new KeyValuePair<int, int>(1, 2)]),
         Row(typeof(LessThan), "ModelledStruct", Rejects, () => Wrap(new LessThan(new Parameter("a", new TypeDefinitionReference(ModelledStruct.Value)), new Parameter("b", new TypeDefinitionReference(ModelledStruct.Value)))), [null, null]),
-        Row(typeof(Equal), "VoidCallWithNumber", Rejects, () => Wrap(new Equal(new Invoke(new Member(new Member(ClrTypeReferences.Of(typeof(Holder)), nameof(Holder.Items)), "Clear")), new Constant(0L))), []),
+        Row(typeof(Equal), "VoidCallWithNumber", Rejects, () => Wrap(new Equal(new Invoke(new Member(new Member(TypeReference.Of(typeof(Holder)), nameof(Holder.Items)), "Clear")), new Constant(0L))), []),
         Row(typeof(Add), "NullWithNumber", Rejects, () => Wrap(new Add(new Constant(null), new Constant(1))), []),
         Row(typeof(UnaryMinus), "Null", Rejects, () => Wrap(new UnaryMinus(new Constant(null))), []),
         Row(typeof(Add), "TextWithUnresolved", Rejects, () => Wrap(new Add(new Constant("a"), new Default(null))), []),

@@ -23,7 +23,7 @@ public class ArithmeticNodeTests {
     [Test]
     public async Task Add_WithParameter_ReturnsCorrectSum() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int>());
+        var param = new Parameter("x", TypeReference.To<int>());
         var node = new Add(param, new Constant(10));
 
         // Act
@@ -76,7 +76,7 @@ public class ArithmeticNodeTests {
     [Test]
     public async Task Subtract_WithParameter_ReturnsCorrectDifference() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int>());
+        var param = new Parameter("x", TypeReference.To<int>());
         var node = new Subtract(param, new Constant(5));
 
         // Act
@@ -117,7 +117,7 @@ public class ArithmeticNodeTests {
     [Test]
     public async Task Multiply_WithParameter_ReturnsCorrectProduct() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int>());
+        var param = new Parameter("x", TypeReference.To<int>());
         var node = new Multiply(param, new Constant(3));
 
         // Act
@@ -182,7 +182,7 @@ public class ArithmeticNodeTests {
     [Test]
     public async Task Divide_WithParameter_ReturnsCorrectQuotient() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int>());
+        var param = new Parameter("x", TypeReference.To<int>());
         var node = new Divide(param, new Constant(2));
 
         // Act
@@ -223,7 +223,7 @@ public class ArithmeticNodeTests {
     [Test]
     public async Task Modulo_WithParameter_ReturnsCorrectRemainder() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int>());
+        var param = new Parameter("x", TypeReference.To<int>());
         var node = new Modulo(param, new Constant(7));
 
         // Act

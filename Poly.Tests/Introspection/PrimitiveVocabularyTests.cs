@@ -32,7 +32,7 @@ public class PrimitiveVocabularyTests {
     public async Task ClrReferenceShorthand_IsAnInternalTool_NotPublicSurface() {
         // The public ClrTypeReference node was deleted for being public (I8k); its shorthand must not become the
         // public way to state a type in its place.
-        await Assert.That(typeof(ClrTypeReferences).IsPublic).IsFalse();
+        await Assert.That(typeof(TypeReferenceExtensions).IsPublic).IsFalse();
     }
 
     [Test]

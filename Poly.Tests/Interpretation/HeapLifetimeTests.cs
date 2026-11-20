@@ -120,7 +120,7 @@ public class HeapLifetimeTests {
     /// <summary>The promote-able shape every structural row uses: one <c>new long[4]</c>
     /// whose only other references are element accesses.</summary>
     private static Block PromotableProgram(Variable cols) => ArrayProgram(
-        new NewArray(ClrTypeReferences.To<long>(), new Constant(4L)), cols,
+        new NewArray(TypeReference.To<long>(), new Constant(4L)), cols,
         new Assignment(new IndexAccess(cols, new Constant(0L)), new Constant(7L)),
         new IndexAccess(cols, new Constant(0L)));
 
@@ -259,7 +259,7 @@ public class HeapLifetimeTests {
     public async Task BlockValueArray_IsNotRecycled(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(4L))),
         ], [cols]);
 
         await AssertNoRecycle(program, "the block's own value");
@@ -281,7 +281,7 @@ public class HeapLifetimeTests {
     public async Task StridedSetBits_IsAReceiver_SoTheArrayIsPromotedAndRecycled(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = ArrayProgram(
-            new NewArray(ClrTypeReferences.To<long>(), new Constant(4L)), cols,
+            new NewArray(TypeReference.To<long>(), new Constant(4L)), cols,
             new StridedSetBits(cols, new Constant(0L), new Constant(1L), new Constant(3L)),
             new IndexAccess(cols, new Constant(0L)));
 
@@ -303,7 +303,7 @@ public class HeapLifetimeTests {
         var i = new Variable("i");
         var cols = new Variable("cols");
         var body = new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(4L))),
             new Assignment(new IndexAccess(cols, new Constant(0L)), new Constant(1L)),
         ], [cols]);
         var program = new Block([
@@ -326,7 +326,7 @@ public class HeapLifetimeTests {
     public async Task EscapingArray_IsNotRecycled(CancellationToken ct) {
         var cols = new Variable("cols");
         var returned = new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(4L))),
             new Return(cols),
         ], [cols]);
         await AssertNoRecycle(returned, "returned");
@@ -338,7 +338,7 @@ public class HeapLifetimeTests {
 
         var alias = new Variable("alias");
         var aliased = new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(4L))),
             new Assignment(alias, cols),
             alias,
         ], [cols, alias]);
@@ -347,9 +347,9 @@ public class HeapLifetimeTests {
         await Assert.That(aliasSlots[(int)aliasHandle]).IsAssignableTo<long[]>()
             .Because("a second binding to the array is a second holder of the handle");
 
-        var xs = new Parameter("xs", ClrTypeReferences.To<long[]>());
+        var xs = new Parameter("xs", TypeReference.To<long[]>());
         var passed = new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(3L))),
             new Invoke(new Lambda([xs], new Member(xs, "Length")), cols),
         ], [cols]);
         await AssertNoRecycle(passed, "passed as an argument");

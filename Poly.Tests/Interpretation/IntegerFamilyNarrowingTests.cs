@@ -24,8 +24,8 @@ public class IntegerFamilyNarrowingTests {
     public async Task ShortStore_WrapsAtInt16Boundary() {
         var s = new Variable("s");
         var program = new Block([
-            new Assignment(s, new TypeCast(new Constant(short.MaxValue), ClrTypeReferences.To<short>())),
-            new Assignment(s, new TypeCast(new Add(s, new Constant(1)), ClrTypeReferences.To<short>())),
+            new Assignment(s, new TypeCast(new Constant(short.MaxValue), TypeReference.To<short>())),
+            new Assignment(s, new TypeCast(new Add(s, new Constant(1)), TypeReference.To<short>())),
             new LessThan(s, new Constant(0)),
         ], [s]);
 
@@ -37,7 +37,7 @@ public class IntegerFamilyNarrowingTests {
     public async Task ShortVariable_RegisterIsInt32() {
         var s = new Variable("s");
         var program = new Block([
-            new Assignment(s, new TypeCast(new Constant((short)1), ClrTypeReferences.To<short>())),
+            new Assignment(s, new TypeCast(new Constant((short)1), TypeReference.To<short>())),
             s,
         ], [s]);
 
@@ -64,8 +64,8 @@ public class IntegerFamilyNarrowingTests {
     public async Task SByteStore_WrapsAtSByteBoundary() {
         var s = new Variable("s");
         var program = new Block([
-            new Assignment(s, new TypeCast(new Constant(sbyte.MaxValue), ClrTypeReferences.To<sbyte>())),
-            new Assignment(s, new TypeCast(new Add(s, new Constant(1)), ClrTypeReferences.To<sbyte>())),
+            new Assignment(s, new TypeCast(new Constant(sbyte.MaxValue), TypeReference.To<sbyte>())),
+            new Assignment(s, new TypeCast(new Add(s, new Constant(1)), TypeReference.To<sbyte>())),
             new LessThan(s, new Constant(0)),
         ], [s]);
 
@@ -102,8 +102,8 @@ public class IntegerFamilyNarrowingTests {
     private static bool WrappedEqualsZero<T>(T max) where T : struct {
         var v = new Variable("v");
         var program = new Block([
-            new Assignment(v, new TypeCast(new Constant(max), ClrTypeReferences.To<T>())),
-            new Assignment(v, new TypeCast(new Add(v, new Constant(1)), ClrTypeReferences.To<T>())),
+            new Assignment(v, new TypeCast(new Constant(max), TypeReference.To<T>())),
+            new Assignment(v, new TypeCast(new Add(v, new Constant(1)), TypeReference.To<T>())),
             new Equal(v, new Constant(default(T))),
         ], [v]);
         using var exec = Run(program);

@@ -41,7 +41,7 @@ public sealed partial class DbContextGenerator {
         );
         if (col.IsEnum) {
             chain = new Invoke(new Member(chain, "HasConversion")) {
-                TypeArguments = [ClrTypeReferences.Of(typeof(int))]
+                TypeArguments = [TypeReference.Of(typeof(int))]
             };
         }
 

@@ -55,8 +55,8 @@ public class VariableMultiAssignTypeExperimentTests {
     [Test]
     public async Task ExistingUnionTypeReference_MixedOptions_CollapseToObject() {
         var union = new UnionTypeReference([
-            ClrTypeReferences.Of(typeof(long)),
-            ClrTypeReferences.Of(typeof(string))
+            TypeReference.Of(typeof(long)),
+            TypeReference.Of(typeof(string))
         ]);
         var prop = new PropertyDefinitionNode("Value", union);
         var typeDef = new TypeDefinitionNode("Holder", Properties: [prop]);

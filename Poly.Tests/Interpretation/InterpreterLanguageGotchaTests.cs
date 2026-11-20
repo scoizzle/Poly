@@ -191,7 +191,7 @@ public class InterpreterLanguageGotchaTests {
     [Test]
     public async Task Invoke_VariableHoldingLambda_PassesArguments() {
         var fn = new Variable("fn");
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var lambda = new Lambda([x], new Add(x, new Constant(1L)));
         var node = new Block([
             new Assignment(fn, lambda),
@@ -234,8 +234,8 @@ public class InterpreterLanguageGotchaTests {
     [Test]
     public async Task Invoke_Arguments_EvaluateLeftToRight() {
         var x = new Variable("x");
-        var a = new Parameter("a", ClrTypeReferences.To<long>());
-        var b = new Parameter("b", ClrTypeReferences.To<long>());
+        var a = new Parameter("a", TypeReference.To<long>());
+        var b = new Parameter("b", TypeReference.To<long>());
         var lambda = new Lambda([a, b], b);
         var node = new Block([
             new Assignment(x, new Constant(0L)),
@@ -389,7 +389,7 @@ public class InterpreterLanguageGotchaTests {
     public async Task TryThrow_FinallyRunsThenPropagates() {
         var bag = new List<long>();
         var node = new TryCatchFinally(
-            new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>())),
+            new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())),
             CatchClauses: null,
             FinallyBlock: new Invoke(new Member(new Constant(bag), "Add"), new Constant(1L)));
         await Assert.That(() => {
@@ -401,9 +401,9 @@ public class InterpreterLanguageGotchaTests {
     [Test]
     public async Task FinallyThrow_ReplacesTryThrow() {
         var node = new TryCatchFinally(
-            new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>())),
+            new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())),
             CatchClauses: null,
-            FinallyBlock: new ThrowStatement(new New(ClrTypeReferences.To<ArgumentException>())));
+            FinallyBlock: new ThrowStatement(new New(TypeReference.To<ArgumentException>())));
         await Assert.That(() => {
             using var exec = Interpreter.Execute(Interpreter.Compile(node));
         }).Throws<ArgumentException>();
@@ -415,14 +415,14 @@ public class InterpreterLanguageGotchaTests {
         var node = new Block([
             new Assignment(caught, new Constant(0L)),
             new TryCatchFinally(
-                new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>())),
+                new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())),
                 CatchClauses: [
                     new CatchClause(
-                        ClrTypeReferences.To<InvalidOperationException>(),
+                        TypeReference.To<InvalidOperationException>(),
                         "ex",
                         new Assignment(caught, new Constant(1L))),
                     new CatchClause(
-                        ClrTypeReferences.To<Exception>(),
+                        TypeReference.To<Exception>(),
                         "ex2",
                         new Assignment(caught, new Constant(2L)))
                 ]),
@@ -437,7 +437,7 @@ public class InterpreterLanguageGotchaTests {
         var resource = new TrackingDisposable();
         var node = new UsingStatement(
             new Constant(resource),
-            new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>())));
+            new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())));
         await Assert.That(() => {
             using var exec = Interpreter.Execute(Interpreter.Compile(node));
         }).Throws<InvalidOperationException>();

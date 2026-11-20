@@ -1157,7 +1157,7 @@ public class CSharpScriptTests {
         await Assert.That(assignment.Destination).IsTypeOf<Variable>();
         await Assert.That(((Variable)assignment.Destination).Name).IsEqualTo("x");
         var value = (Default)assignment.Value;
-        await Assert.That(ClrTypeReferences.States(value.TargetType!, typeof(int))).IsTrue();
+        await Assert.That(value.TargetType!.States(typeof(int))).IsTrue();
         await Assert.That(block.Variables).Count().IsEqualTo(1);
     }
 

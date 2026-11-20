@@ -85,7 +85,7 @@ public class CSharpQualifiedNameTests {
                 new Member(new NamedTypeReference("BitOperations", "System.Numerics"), "PopCount")))
             .IsEqualTo("_ = System.Numerics.BitOperations.PopCount;");
         await Assert.That(CSharpLanguage.Write(
-                new Member(ClrTypeReferences.Of(typeof(int)), "MaxValue")))
+                new Member(TypeReference.Of(typeof(int)), "MaxValue")))
             .IsEqualTo("_ = int.MaxValue;");
     }
 

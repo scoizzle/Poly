@@ -46,8 +46,8 @@ public class CSharpLanguageTests {
     [Test]
     public async Task Write_GenericType_ClosesNestedTypeArguments() {
         var type = new NamedTypeReference("Dictionary", TypeArguments: [
-            ClrTypeReferences.Of(typeof(string)),
-            new CollectionTypeReference(ClrTypeReferences.Of(typeof(long))),
+            TypeReference.Of(typeof(string)),
+            new CollectionTypeReference(TypeReference.Of(typeof(long))),
         ]);
         var field = new FieldDefinitionNode("Prices", type);
         var text = CSharpLanguage.Write([new TypeDefinitionNode("Ledger", Fields: [field])]);

@@ -89,8 +89,8 @@ public class VmSnapshotCorpusTests {
             new Assignment(i, new Constant(3)),
             new Assignment(l, new Constant(4L)),
             new Assignment(d, new Add(
-                new TypeCast(i, ClrTypeReferences.To<double>()),
-                new TypeCast(l, ClrTypeReferences.To<double>()))),
+                new TypeCast(i, TypeReference.To<double>()),
+                new TypeCast(l, TypeReference.To<double>()))),
             d,
         ], [i, l, d]);
     }
@@ -144,10 +144,10 @@ public class VmSnapshotCorpusTests {
         return new Block([
             new Assignment(caught, new Constant(0L)),
             new TryCatchFinally(
-                new ThrowStatement(new New(ClrTypeReferences.Of(typeof(InvalidOperationException)))),
+                new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)))),
                 CatchClauses: [
                     new CatchClause(
-                        ClrTypeReferences.Of(typeof(InvalidOperationException)),
+                        TypeReference.Of(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(caught, new Constant(1L))),
                 ]),
@@ -158,7 +158,7 @@ public class VmSnapshotCorpusTests {
     static Node ArrayLocal() {
         var cols = new Variable("cols");
         return new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(4L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(4L))),
             new Assignment(new IndexAccess(cols, new Constant(0L)), new Constant(7L)),
             new IndexAccess(cols, new Constant(0L)),
         ], [cols]);
@@ -167,13 +167,13 @@ public class VmSnapshotCorpusTests {
     static Node NullableLocal() {
         var n = new Variable("n");
         return new Block([
-            new Assignment(n, new TypeCast(new Constant(null), ClrTypeReferences.To<int?>())),
+            new Assignment(n, new TypeCast(new Constant(null), TypeReference.To<int?>())),
             new Equal(n, new Constant(null)),
         ], [n]);
     }
 
     static Node FunctionInvoke() {
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         return new Invoke(new Lambda([x], new Add(x, new Constant(1L))), new Constant(6L));
     }
 

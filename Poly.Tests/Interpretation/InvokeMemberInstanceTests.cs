@@ -52,7 +52,7 @@ public class InvokeMemberInstanceTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "CurrentStage",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode())
             ],
             Methods: [
@@ -60,7 +60,7 @@ public class InvokeMemberInstanceTests {
                     "Notify",
                     new TypeReference("void"),
                     Parameters: [new Parameter("stageName",
-                        ClrTypeReferences.Of(typeof(string)))],
+                        TypeReference.Of(typeof(string)))],
                     Body: new Block([])),
                 new MethodDefinitionNode(
                     "Bounce",
@@ -146,7 +146,7 @@ public class InvokeMemberInstanceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Ping",
-                    ClrTypeReferences.Of(typeof(long)),
+                    TypeReference.Of(typeof(long)),
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -168,7 +168,7 @@ public class InvokeMemberInstanceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Ping",
-                    ClrTypeReferences.Of(typeof(long)),
+                    TypeReference.Of(typeof(long)),
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -186,7 +186,7 @@ public class InvokeMemberInstanceTests {
     public async Task VoidInvoke_LeavesZero() {
         var list = new List<string> { "a" };
         var invoke = new Invoke(
-            new Member(new Parameter("list", ClrTypeReferences.To<List<string>>()), "Clear"));
+            new Member(new Parameter("list", TypeReference.To<List<string>>()), "Clear"));
         using var exec = Interpreter.Execute(
             Interpreter.Compile(invoke), s => s.SetArgs(new object?[] { list }));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);

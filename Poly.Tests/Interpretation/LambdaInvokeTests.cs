@@ -16,7 +16,7 @@ public class LambdaInvokeTests {
 
     [Test]
     public async Task Lambda_WithOneParameter_ReturnsParameter() {
-        var p = new Parameter("x", ClrTypeReferences.To<int>());
+        var p = new Parameter("x", TypeReference.To<int>());
         var lambda = new Lambda([p], p);
 
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda, Wrap(7))));
@@ -25,8 +25,8 @@ public class LambdaInvokeTests {
 
     [Test]
     public async Task Lambda_WithTwoParameters_ReturnsSum() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
-        var y = new Parameter("y", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
+        var y = new Parameter("y", TypeReference.To<int>());
         var lambda = new Lambda([x, y], new Add(x, y));
 
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda, Wrap(3), Wrap(4))));
@@ -38,9 +38,9 @@ public class LambdaInvokeTests {
     [Test]
     public async Task Lambda_WithReturnStatement_ExitsLambdaNotOuterScope() {
         // outer param
-        var n = new Parameter("n", ClrTypeReferences.To<int>());
+        var n = new Parameter("n", TypeReference.To<int>());
         // inner lambda: (x) => { if (x > 0) return 1; return -1; }
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var innerLambda = new Lambda([x],
             new Block([
                 new IfStatement(new GreaterThan(x, Wrap(0)), Return.True),
@@ -62,7 +62,7 @@ public class LambdaInvokeTests {
 
     [Test]
     public async Task Invoke_WithLambdaNode_ExecutesBody() {
-        var p = new Parameter("v", ClrTypeReferences.To<int>());
+        var p = new Parameter("v", TypeReference.To<int>());
         var lambda = new Lambda([p], new Add(p, Wrap(10)));
         var invoke = new Invoke(lambda, Wrap(5));
 
@@ -72,8 +72,8 @@ public class LambdaInvokeTests {
 
     [Test]
     public async Task Invoke_WithOuterParameter_PassesValueIntoLambda() {
-        var outer = new Parameter("n", ClrTypeReferences.To<int>());
-        var inner = new Parameter("x", ClrTypeReferences.To<int>());
+        var outer = new Parameter("n", TypeReference.To<int>());
+        var inner = new Parameter("x", TypeReference.To<int>());
         var lambda = new Lambda([inner], new Add(inner, Wrap(1)));
         var invoke = new Invoke(lambda, outer);
 
@@ -86,8 +86,8 @@ public class LambdaInvokeTests {
 
     [Test]
     public async Task Lambda_CapturesOuterParameter_FromLexicalParentScope() {
-        var outer = new Parameter("outer", ClrTypeReferences.To<int>());
-        var inner = new Parameter("inner", ClrTypeReferences.To<int>());
+        var outer = new Parameter("outer", TypeReference.To<int>());
+        var inner = new Parameter("inner", TypeReference.To<int>());
         var lambda = new Lambda([inner], new Add(inner, outer));
         var invoke = new Invoke(lambda, Wrap(5));
 
@@ -102,7 +102,7 @@ public class LambdaInvokeTests {
 
     [Test]
     public async Task InvokeWith_ExtensionMethod_BuildsInvokeNode() {
-        var p = new Parameter("v", ClrTypeReferences.To<int>());
+        var p = new Parameter("v", TypeReference.To<int>());
         var lambda = new Lambda([p], new Add(p, Wrap(100)));
         var invoke = lambda.InvokeWith(Wrap(7));
 
@@ -114,7 +114,7 @@ public class LambdaInvokeTests {
 
     [Test]
     public async Task Block_WithEarlyReturn_ReturnsEarlyValue() {
-        var param = new Parameter("x", ClrTypeReferences.To<bool>());
+        var param = new Parameter("x", TypeReference.To<bool>());
         var block = new Block([
             new IfStatement(param, Return.True),
             Return.False

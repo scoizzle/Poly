@@ -18,10 +18,10 @@ public class CompileCostTests {
     private const double BoundMs = 30000;
 
     private static Node[] BoolParameters(int count) =>
-        Enumerable.Range(0, count).Select(i => (Node)new Parameter("p" + i, ClrTypeReferences.To<bool>())).ToArray();
+        Enumerable.Range(0, count).Select(i => (Node)new Parameter("p" + i, TypeReference.To<bool>())).ToArray();
 
     private static Node[] IntParameters(int count) =>
-        Enumerable.Range(0, count).Select(i => (Node)new Parameter("n" + i, ClrTypeReferences.To<int>())).ToArray();
+        Enumerable.Range(0, count).Select(i => (Node)new Parameter("n" + i, TypeReference.To<int>())).ToArray();
 
     private static Node AndChain(int count) => BoolParameters(count).Aggregate((acc, p) => new And(acc, p));
 
@@ -118,7 +118,7 @@ public class CompileCostTests {
 
     private static AnalysisResult Fold(Node ast) => Interpreter.Analyze(ast);
 
-    private static Node Flag(string name = "x") => new Parameter(name, ClrTypeReferences.To<bool>());
+    private static Node Flag(string name = "x") => new Parameter(name, TypeReference.To<bool>());
 
     private static Node Wrap(object? value) => new Constant(value);
 
@@ -216,8 +216,8 @@ public class CompileCostTests {
 
     [Test]
     public async Task LambdaAnd_FoldsOnlyWhenTheParametersAreBound() {
-        var p = new Parameter("p", ClrTypeReferences.To<bool>());
-        var q = new Parameter("q", ClrTypeReferences.To<bool>());
+        var p = new Parameter("p", TypeReference.To<bool>());
+        var q = new Parameter("q", TypeReference.To<bool>());
         var body = new And(p, q);
         var ast = new Invoke(new Lambda([p, q], body), Wrap(true), Wrap(false));
         var result = Fold(ast);
@@ -228,8 +228,8 @@ public class CompileCostTests {
 
     [Test]
     public async Task LambdaOr_FoldsOnlyWhenTheParametersAreBound() {
-        var p = new Parameter("p", ClrTypeReferences.To<bool>());
-        var q = new Parameter("q", ClrTypeReferences.To<bool>());
+        var p = new Parameter("p", TypeReference.To<bool>());
+        var q = new Parameter("q", TypeReference.To<bool>());
         var body = new Or(p, q);
         var ast = new Invoke(new Lambda([p, q], body), Wrap(false), Wrap(true));
         var result = Fold(ast);
@@ -240,9 +240,9 @@ public class CompileCostTests {
 
     [Test]
     public async Task LambdaNestedChain_FoldsOnlyWhenTheParametersAreBound() {
-        var p = new Parameter("p", ClrTypeReferences.To<bool>());
-        var q = new Parameter("q", ClrTypeReferences.To<bool>());
-        var r = new Parameter("r", ClrTypeReferences.To<bool>());
+        var p = new Parameter("p", TypeReference.To<bool>());
+        var q = new Parameter("q", TypeReference.To<bool>());
+        var r = new Parameter("r", TypeReference.To<bool>());
         var body = new And(new Or(p, q), r);
         var ast = new Invoke(new Lambda([p, q, r], body), Wrap(false), Wrap(true), Wrap(true));
         var result = Fold(ast);
@@ -253,9 +253,9 @@ public class CompileCostTests {
 
     [Test]
     public async Task LambdaAnd_WithANonConstantArgument_DoesNotFold() {
-        var p = new Parameter("p", ClrTypeReferences.To<bool>());
-        var q = new Parameter("q", ClrTypeReferences.To<bool>());
-        var outer = new Parameter("outer", ClrTypeReferences.To<bool>());
+        var p = new Parameter("p", TypeReference.To<bool>());
+        var q = new Parameter("q", TypeReference.To<bool>());
+        var outer = new Parameter("outer", TypeReference.To<bool>());
         var withFalseFirst = new Invoke(new Lambda([p, q], new And(p, q)), Wrap(false), outer);
         var withTrueFirst = new Invoke(new Lambda([p, q], new And(p, q)), Wrap(true), outer);
         await Assert.That(Fold(withFalseFirst).IsConstant(withFalseFirst)).IsFalse();
@@ -264,7 +264,7 @@ public class CompileCostTests {
 
     [Test]
     public async Task LambdaAnd_FalseBoundLeftWithAnUnboundOuterParameter_FoldsToFalse() {
-        var p = new Parameter("p", ClrTypeReferences.To<bool>());
+        var p = new Parameter("p", TypeReference.To<bool>());
         var outer = Flag("outer");
         var ast = new Invoke(new Lambda([p], new And(p, outer)), Wrap(false));
         var result = Fold(ast);

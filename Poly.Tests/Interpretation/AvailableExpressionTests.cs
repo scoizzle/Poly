@@ -320,7 +320,7 @@ public class AvailableExpressionTests {
         var arr = new Variable("arr");
         var body = new Block([
             new Assignment(row, new Constant(5L)),
-            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(10L))),
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(10L))),
             new Assignment(new IndexAccess(arr, row), new Subtract(row, new Constant(1L))),
             new Assignment(new IndexAccess(arr, new Constant(1L)), new Subtract(row, new Constant(1L))),
             new Assignment(new IndexAccess(arr, new Constant(2L)), new Subtract(row, new Constant(1L))),
@@ -372,7 +372,7 @@ public class AvailableExpressionTests {
         var i = new Variable("i");
         var sum = new Add(new IndexAccess(a, i), new IndexAccess(a, i));
         var block = new Block([
-            new Assignment(a, new NewArray(ClrTypeReferences.To<long>(), new Constant(2L))),
+            new Assignment(a, new NewArray(TypeReference.To<long>(), new Constant(2L))),
             new Assignment(new IndexAccess(a, new Constant(0L)), new Constant(3L)),
             new Assignment(i, new Constant(0L)),
             sum,
@@ -393,7 +393,7 @@ public class AvailableExpressionTests {
         var first = new Assignment(acc, new IndexAccess(a, i));
         var second = new Assignment(acc, new Add(acc, new IndexAccess(a, i)));
         var block = new Block([
-            new Assignment(a, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
+            new Assignment(a, new NewArray(TypeReference.To<long>(), new Constant(3L))),
             new Assignment(new IndexAccess(a, new Constant(0L)), new Constant(3L)),
             new Assignment(i, new Constant(0L)),
             new Assignment(j, new Constant(0L)),
@@ -416,7 +416,7 @@ public class AvailableExpressionTests {
         var first = new Assignment(acc, new IndexAccess(a, new Constant(1L)));
         var second = new Assignment(acc, new Add(acc, new IndexAccess(a, new Constant(1L))));
         var block = new Block([
-            new Assignment(a, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
+            new Assignment(a, new NewArray(TypeReference.To<long>(), new Constant(3L))),
             new Assignment(new IndexAccess(a, new Constant(1L)), new Constant(3L)),
             first,
             new Assignment(new IndexAccess(a, new Constant(2L)), new Constant(1L)),
@@ -435,11 +435,11 @@ public class AvailableExpressionTests {
         var a = new Variable("a");
         var i = new Variable("i");
         var acc = new Variable("acc");
-        var xs = new Parameter("xs", ClrTypeReferences.To<long[]>());
+        var xs = new Parameter("xs", TypeReference.To<long[]>());
         var first = new Assignment(acc, new IndexAccess(a, i));
         var second = new Assignment(acc, new Add(acc, new IndexAccess(a, i)));
         var block = new Block([
-            new Assignment(a, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
+            new Assignment(a, new NewArray(TypeReference.To<long>(), new Constant(3L))),
             new Assignment(new IndexAccess(a, new Constant(0L)), new Constant(7L)),
             new Assignment(i, new Constant(0L)),
             first,
@@ -519,7 +519,7 @@ public class AvailableExpressionTests {
         var first = new Assignment(acc, new IndexAccess(a, i));
         var second = new Assignment(acc, new Add(acc, new IndexAccess(a, i)));
         var block = new Block([
-            new Assignment(a, new NewArray(ClrTypeReferences.To<long>(), new Constant(1L))),
+            new Assignment(a, new NewArray(TypeReference.To<long>(), new Constant(1L))),
             new Assignment(new IndexAccess(a, new Constant(0L)), new Constant(3L)),
             new Assignment(i, new Constant(0L)),
             new Assignment(flag, new Constant(true)),

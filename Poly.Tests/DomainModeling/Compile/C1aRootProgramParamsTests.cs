@@ -128,7 +128,7 @@ public class C1aRootProgramParamsTests {
     [Test]
     public async Task C1a_RootCompile_ParameterAfterThis_ReadsSetArgsNotInstance() {
         // SetArgs(this, plate): plate must be the string, never the receiver object.
-        var plate = new Parameter("plate", ClrTypeReferences.To<string>());
+        var plate = new Parameter("plate", TypeReference.To<string>());
         var body = plate;
         var analysis = Interpreter.Analyzer.Analyze(body);
         var program = Interpreter.Compile(body, analysis, [plate]);
@@ -143,7 +143,7 @@ public class C1aRootProgramParamsTests {
     [Test]
     public async Task C1a_RootCompile_LocalsDoNotWipeParameterSlots() {
         // Two locals: without ReserveFrameSlots they occupy slot 0 (this) then slot 1 (plate).
-        var plate = new Parameter("plate", ClrTypeReferences.To<string>());
+        var plate = new Parameter("plate", TypeReference.To<string>());
         var create0 = new Variable("create0");
         var create1 = new Variable("create1");
         var body = new Block([

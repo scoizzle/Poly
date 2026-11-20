@@ -63,12 +63,12 @@ public class CallFrameArgumentTests {
         var typeNode = new TypeDefinitionNode(
             "Widget",
             "Sample",
-            Properties: [new PropertyDefinitionNode("Count", ClrTypeReferences.Of(typeof(long)))],
+            Properties: [new PropertyDefinitionNode("Count", TypeReference.Of(typeof(long)))],
             Constructors: [
                 new ConstructorDefinitionNode(
                     [
-                        new Parameter("name", ClrTypeReferences.Of(typeof(string))),
-                        new Parameter("count", ClrTypeReferences.Of(typeof(long))),
+                        new Parameter("name", TypeReference.Of(typeof(string))),
+                        new Parameter("count", TypeReference.Of(typeof(long))),
                     ],
                     new Block([new Assignment(new Member(new ThisReference(), "Count"), new Constant(1L))])),
             ]);
@@ -136,15 +136,15 @@ public class CallFrameArgumentTests {
         var typeNode = new TypeDefinitionNode(
             "Boom",
             "Sample",
-            Properties: [new PropertyDefinitionNode("Last", ClrTypeReferences.Of(typeof(long)))],
+            Properties: [new PropertyDefinitionNode("Last", TypeReference.Of(typeof(long)))],
             Constructors: [new ConstructorDefinitionNode()],
             Methods: [
                 new MethodDefinitionNode(
                     "Blow",
-                    ClrTypeReferences.Of(typeof(long)),
-                    [new Parameter("v", ClrTypeReferences.Of(typeof(long)))],
+                    TypeReference.Of(typeof(long)),
+                    [new Parameter("v", TypeReference.Of(typeof(long)))],
                     new Block([
-                        new ThrowStatement(new New(ClrTypeReferences.Of(typeof(InvalidOperationException)))),
+                        new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)))),
                     ]),
                     IsStatic: false),
             ]);
@@ -161,7 +161,7 @@ public class CallFrameArgumentTests {
                 new Invoke(new Member(boom, "Blow"), new Constant(1L)),
                 CatchClauses: [
                     new CatchClause(
-                        ClrTypeReferences.Of(typeof(InvalidOperationException)),
+                        TypeReference.Of(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(caught, new Constant(1L)))
                 ]),

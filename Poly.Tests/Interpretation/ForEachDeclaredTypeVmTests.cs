@@ -23,7 +23,7 @@ public class ForEachDeclaredTypeVmTests {
             new Assignment(sum, new Constant(0.0)),
             new ForEachLoop(d, new Constant(new long[] { 1L, 3L }),
                 new Assignment(sum, new Add(sum, new Divide(d, new Constant(2L)))),
-                DeclaredType: ClrTypeReferences.To<double>()),
+                DeclaredType: TypeReference.To<double>()),
             sum
         ], [sum]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -38,7 +38,7 @@ public class ForEachDeclaredTypeVmTests {
             new Assignment(sum, new Constant(0L)),
             new ForEachLoop(d, new Constant(new long[] { 1L, 3L }),
                 new Assignment(sum, new Add(sum, new Divide(d, new Constant(2L)))),
-                DeclaredType: ClrTypeReferences.To<int>()),
+                DeclaredType: TypeReference.To<int>()),
             sum
         ], [sum]);
         // C# has no implicit long-to-int conversion for the loop variable.
@@ -50,7 +50,7 @@ public class ForEachDeclaredTypeVmTests {
         var d = new Variable("d");
         var node = new Block([
             new ForEachLoop(d, new Constant(new long[] { 1L }), new Assignment(d, d),
-                DeclaredType: ClrTypeReferences.To<string>())
+                DeclaredType: TypeReference.To<string>())
         ]);
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
@@ -62,7 +62,7 @@ public class ForEachDeclaredTypeVmTests {
         var d = new Variable("d");
         var node = new Block([
             new ForEachLoop(d, new Constant(new long[] { 1L }), new Assignment(d, d),
-                DeclaredType: ClrTypeReferences.To<decimal>())
+                DeclaredType: TypeReference.To<decimal>())
         ]);
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }

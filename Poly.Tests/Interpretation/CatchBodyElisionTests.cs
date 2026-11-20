@@ -30,7 +30,7 @@ public class CatchBodyElisionTests {
         var caught = new Variable("caught");
         var acc = new Variable("acc");
         var catchBody = new Block(new Assignment(caught, Wrap(1)), new Assignment(acc, Wrap(41)));
-        return (new TryCatchFinally(tryBlock, [new CatchClause(ClrTypeReferences.To<DivideByZeroException>(), null, catchBody)]), catchBody);
+        return (new TryCatchFinally(tryBlock, [new CatchClause(TypeReference.To<DivideByZeroException>(), null, catchBody)]), catchBody);
     }
 
     [Test]
@@ -128,7 +128,7 @@ public class CatchBodyElisionTests {
     [Test]
     public async Task Try_WithArrayCreation_KeepsCatchReachable() {
         var (program, catchBody) = Build(new Block(
-            new NewArray(ClrTypeReferences.To<int>(), new Variable("n"))));
+            new NewArray(TypeReference.To<int>(), new Variable("n"))));
 
         var analysis = Analyze(program);
 
@@ -175,8 +175,8 @@ public class CatchBodyElisionTests {
 
     [Test]
     public async Task Try_WithNullableDecimalArithmetic_KeepsCatchReachable() {
-        var left = new Parameter("left", ClrTypeReferences.To<decimal?>());
-        var right = new Parameter("right", ClrTypeReferences.To<decimal?>());
+        var left = new Parameter("left", TypeReference.To<decimal?>());
+        var right = new Parameter("right", TypeReference.To<decimal?>());
         var acc = new Variable("acc");
         var (program, catchBody) = Build(new Block(
             new Assignment(acc, new Add(left, right))));

@@ -438,7 +438,7 @@ public class ControlFlowAnalysisTests {
             new Constant(0L),
             CatchClauses: [
                 new CatchClause(
-                    ClrTypeReferences.Of(typeof(InvalidOperationException)),
+                    TypeReference.Of(typeof(InvalidOperationException)),
                     null,
                     catchBody)
             ]);
@@ -458,7 +458,7 @@ public class ControlFlowAnalysisTests {
             tryBlock,
             CatchClauses: [
                 new CatchClause(
-                    ClrTypeReferences.Of(typeof(InvalidOperationException)),
+                    TypeReference.Of(typeof(InvalidOperationException)),
                     null,
                     catchBody)
             ]);
@@ -480,7 +480,7 @@ public class ControlFlowAnalysisTests {
             tryBlock,
             CatchClauses: [
                 new CatchClause(
-                    ClrTypeReferences.Of(typeof(InvalidOperationException)),
+                    TypeReference.Of(typeof(InvalidOperationException)),
                     null,
                     catchBody)
             ]);
@@ -500,7 +500,7 @@ public class ControlFlowAnalysisTests {
             tryBlock,
             CatchClauses: [
                 new CatchClause(
-                    ClrTypeReferences.Of(typeof(InvalidOperationException)),
+                    TypeReference.Of(typeof(InvalidOperationException)),
                     null,
                     catchBody)
             ]);

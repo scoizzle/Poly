@@ -42,7 +42,7 @@ public class SuspendResumeVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Tick",
-                    ClrTypeReferences.Of(typeof(long)),
+                    TypeReference.Of(typeof(long)),
                     Body: new Block([
                         new SuspendNode(new Constant(0L), "mid"),
                         new Constant(7L)
@@ -62,7 +62,7 @@ public class SuspendResumeVmTests {
     [Test]
     public async Task SuspendInLambda_IsACompileRejection() {
         var declaration = new Variable("fn");
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var node = new Block([
             new Assignment(declaration, new Lambda([x], new Block([
                 new SuspendNode(new Constant(0L), "mid"),
@@ -78,7 +78,7 @@ public class SuspendResumeVmTests {
 
     [Test]
     public async Task Suspend_InsideSetArgsBody_ResumesAndReturnsParameter() {
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var body = new Invoke(new Lambda([x], new Block([
             new SuspendNode(new Constant(0L), "mid"),
             x

@@ -31,7 +31,7 @@ public class CoalesceTests {
     [Test]
     public async Task Coalesce_WithParameterLeft_EvaluatesCorrectly() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int?>());
+        var param = new Parameter("x", TypeReference.To<int?>());
         var node = new Coalesce(param, Wrap(99));
 
         // Act
@@ -73,7 +73,7 @@ public class CoalesceTests {
 
     [Test]
     public async Task Coalesce_NullableZero_IsValueNotNull() {
-        var param = new Parameter("x", ClrTypeReferences.To<int?>());
+        var param = new Parameter("x", TypeReference.To<int?>());
         var node = new Coalesce(param, Wrap(100));
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program, s => s.SetArgs(0));

@@ -93,10 +93,10 @@ public class IntegerWidthParityTests {
 
     [Test]
     public async Task PureLambda_NegOfIntMinValueParameter_WrapsAtIntWidth() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var lambda = new Lambda([x], new UnaryMinus(x));
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(
-            new Member(ClrTypeReferences.Of(typeof(NegProbe)), nameof(NegProbe.ApplyInt)),
+            new Member(TypeReference.Of(typeof(NegProbe)), nameof(NegProbe.ApplyInt)),
             lambda, new Constant(int.MinValue))));
         int operand = int.MinValue;
         await Assert.That(exec.GetValue<int>()).IsEqualTo(unchecked(-operand));

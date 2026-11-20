@@ -286,9 +286,9 @@ public static class AstShapeGenerator {
     }
 
     static Node TypeRef(Ty type) => type switch {
-        Ty.Long => ClrTypeReferences.To<long>(),
-        Ty.Double => ClrTypeReferences.To<double>(),
-        _ => ClrTypeReferences.To<int>(),
+        Ty.Long => TypeReference.To<long>(),
+        Ty.Double => TypeReference.To<double>(),
+        _ => TypeReference.To<int>(),
     };
 
     static string Literal(object value) => value switch {

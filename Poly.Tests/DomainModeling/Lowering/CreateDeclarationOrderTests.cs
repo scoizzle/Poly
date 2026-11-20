@@ -230,7 +230,7 @@ public sealed class CreateDeclarationOrderTests {
             foreach (var entity in result.Domain.Types.OfType<Entity>()) {
                 var create = module.Single(t => t.Name == entity.Name).Methods!.Single(m => m.Name == "Create");
                 var lowered = (create.Parameters ?? [])
-                    .Where(p => !ClrTypeReferences.Denotes(p.TypeReference, typeof(Poly.Runtime.IStoragePort)))
+                    .Where(p => !p.TypeReference.Denotes(typeof(Poly.Runtime.IStoragePort)))
                     .Select(p => p.Name);
                 var slots = result.Analysis.GetStructure(entity)!.CreateSlots.Select(s => DomainToCSharpExporter.ToCamelCase(s.Name));
                 if (!lowered.SequenceEqual(slots))

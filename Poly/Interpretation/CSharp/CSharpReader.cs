@@ -288,7 +288,7 @@ public static class CSharpReader {
                     : member.Children[0];
                 fields.Add(new FieldDefinitionNode(
                     Capture(target, "name"),
-                    ClrTypeReferences.Of(typeof(int)),
+                    TypeReference.Of(typeof(int)),
                     new Constant(FoldEnumValue(target)),
                     IsStatic: true,
                     IsConst: true));
@@ -556,7 +556,7 @@ public static class CSharpReader {
             }
         }
 
-        private static Node Primitive(Type type) => ClrTypeReferences.Of(type);
+        private static Node Primitive(Type type) => TypeReference.Of(type);
 
         // ── statements ───────────────────────────────────────────────────────
 

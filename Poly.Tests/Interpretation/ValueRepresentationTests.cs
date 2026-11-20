@@ -132,7 +132,7 @@ public class ValueRepresentationTests {
 
     [Test]
     public async Task IfStatement_IsVoid() {
-        var cond = new Parameter("cond", ClrTypeReferences.To<bool>());
+        var cond = new Parameter("cond", TypeReference.To<bool>());
         var node = new IfStatement(cond, Wrap(1), Wrap(2));
         var result = Analyzer.Analyze(node);
         var (kind, clr) = ValueRepresentationClassifier.Classify(result, node);
@@ -231,7 +231,7 @@ public class ValueRepresentationTests {
 
     [Test]
     public async Task Lambda_WithParameter_IsFuncOfParamAndYield() {
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var lambda = new Lambda([x], new Add(x, new Constant(1L)));
         var result = Analyzer.Analyze(lambda);
         await Assert.That(result.GetResolvedType(lambda)!.GetRuntimeType())
@@ -240,7 +240,7 @@ public class ValueRepresentationTests {
 
     [Test]
     public async Task IfStatement_HasNoResolvedType() {
-        var cond = new Parameter("cond", ClrTypeReferences.To<bool>());
+        var cond = new Parameter("cond", TypeReference.To<bool>());
         var node = new IfStatement(cond, Wrap(1), Wrap(2));
         var result = Analyzer.Analyze(node);
         await Assert.That(result.GetResolvedType(node)).IsNull();
@@ -333,7 +333,7 @@ public class ValueRepresentationTests {
 
     [Test]
     public async Task Invoke_Parameter_HasCalleeBodyKind() {
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var add1 = new Lambda([x], new Add(x, new Constant(1L)));
         var f = new Parameter("f");
         var invokeF = new Invoke(f, new Constant(41L));
@@ -404,7 +404,7 @@ public class ValueRepresentationTests {
     [Test]
     public async Task NewArray_IsHeapRef() {
         var node = new NewArray(
-            ClrTypeReferences.To<int>(),
+            TypeReference.To<int>(),
             new Constant(10));
         var result = Analyzer.Analyze(node);
         var (kind, clr) = ValueRepresentationClassifier.Classify(result, node);

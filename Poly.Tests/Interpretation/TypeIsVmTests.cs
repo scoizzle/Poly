@@ -31,7 +31,7 @@ public class TypeIsVmTests {
     /// </summary>
     [Test]
     public async Task TypeIs_StringConstant_IsString_ReturnsTrue() {
-        var node = new TypeIs(new Constant("hello"), ClrTypeReferences.To<string>());
+        var node = new TypeIs(new Constant("hello"), TypeReference.To<string>());
         var analysis = _analyzer.Analyze(node);
         var result = Interpreter.Compile(node, analysis);
         using var exec = Interpreter.Execute(result);
@@ -43,7 +43,7 @@ public class TypeIsVmTests {
     /// </summary>
     [Test]
     public async Task TypeIs_StringConstant_IsInt_ReturnsFalse() {
-        var node = new TypeIs(new Constant("hello"), ClrTypeReferences.To<int>());
+        var node = new TypeIs(new Constant("hello"), TypeReference.To<int>());
         var analysis = _analyzer.Analyze(node);
         var result = Interpreter.Compile(node, analysis);
         using var exec = Interpreter.Execute(result);
@@ -55,7 +55,7 @@ public class TypeIsVmTests {
     /// </summary>
     [Test]
     public async Task TypeIs_NullConstant_ReturnsFalse() {
-        var node = new TypeIs(Null, ClrTypeReferences.To<string>());
+        var node = new TypeIs(Null, TypeReference.To<string>());
         var analysis = _analyzer.Analyze(node);
         var result = Interpreter.Compile(node, analysis);
         using var exec = Interpreter.Execute(result);
@@ -68,7 +68,7 @@ public class TypeIsVmTests {
     /// </summary>
     [Test]
     public async Task TypeIs_IntConstant_IsInt_ReturnsTrue() {
-        var node = new TypeIs(new Constant(1), ClrTypeReferences.To<int>());
+        var node = new TypeIs(new Constant(1), TypeReference.To<int>());
         var analysis = _analyzer.Analyze(node);
         var result = Interpreter.Compile(node, analysis);
         using var exec = Interpreter.Execute(result);
@@ -80,7 +80,7 @@ public class TypeIsVmTests {
     /// </summary>
     [Test]
     public async Task TypeIs_IntConstant_IsLong_ReturnsFalse() {
-        var node = new TypeIs(new Constant(1), ClrTypeReferences.To<long>());
+        var node = new TypeIs(new Constant(1), TypeReference.To<long>());
         var analysis = _analyzer.Analyze(node);
         var result = Interpreter.Compile(node, analysis);
         using var exec = Interpreter.Execute(result);
@@ -93,7 +93,7 @@ public class TypeIsVmTests {
     /// </summary>
     [Test]
     public async Task TypeIs_IntConstant_IsValueType_ReturnsTrue() {
-        var node = new TypeIs(new Constant(1), ClrTypeReferences.To<ValueType>());
+        var node = new TypeIs(new Constant(1), TypeReference.To<ValueType>());
         var analysis = _analyzer.Analyze(node);
         var result = Interpreter.Compile(node, analysis);
         using var exec = Interpreter.Execute(result);

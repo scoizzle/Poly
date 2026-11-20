@@ -13,12 +13,12 @@ public class ThisReferenceTests {
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Name", ClrTypeReferences.Of(typeof(string)))
+                new PropertyDefinitionNode("Name", TypeReference.Of(typeof(string)))
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "GetName",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Body: memberAccess)
             ]);
 
@@ -69,7 +69,7 @@ public class ThisReferenceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Body: thisReference,
                     IsStatic: true)
             ]);
@@ -96,10 +96,10 @@ public class ThisReferenceTests {
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Name", ClrTypeReferences.Of(typeof(string))),
+                new PropertyDefinitionNode("Name", TypeReference.Of(typeof(string))),
                 new PropertyDefinitionNode(
                     "DisplayName",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode(memberAccess))
             ]);
 
@@ -128,7 +128,7 @@ public class ThisReferenceTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Bad",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Initializer: new PropertyInitializerDefinitionNode(thisReference),
                     IsStatic: true)
             ]);

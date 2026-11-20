@@ -18,33 +18,33 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class ClrReferencePrintTests {
     private static readonly (string Name, Node Printed, string Expected)[] Cases = [
-        Cast("int", ClrTypeReferences.To<int>(), "_ = (int)1;"),
-        Cast("string", ClrTypeReferences.To<string>(), "_ = (string)1;"),
-        Cast("bool", ClrTypeReferences.To<bool>(), "_ = (bool)1;"),
-        Cast("object", ClrTypeReferences.To<object>(), "_ = (object)1;"),
-        Cast("decimal", ClrTypeReferences.To<decimal>(), "_ = (decimal)1;"),
-        Cast("int?", ClrTypeReferences.To<int?>(), "_ = (int?)1;"),
-        Cast("List<int>", ClrTypeReferences.To<List<int>>(), "_ = (List<int>)1;"),
-        Cast("Dictionary<string,int>", ClrTypeReferences.To<Dictionary<string, int>>(), "_ = (Dictionary<string, int>)1;"),
-        Cast("ISet<long>", ClrTypeReferences.To<ISet<long>>(), "_ = (ISet<long>)1;"),
-        Cast("int[]", ClrTypeReferences.To<int[]>(), "_ = (System.Int32[])1;"),
-        Cast("KeyValuePair<int,int>", ClrTypeReferences.To<KeyValuePair<int, int>>(), "_ = (KeyValuePair<int, int>)1;"),
-        Cast("DayOfWeek", ClrTypeReferences.To<DayOfWeek>(), "_ = (System.DayOfWeek)1;"),
-        Cast("DateTime", ClrTypeReferences.To<DateTime>(), "_ = (DateTime)1;"),
-        Cast("Guid", ClrTypeReferences.To<Guid>(), "_ = (Guid)1;"),
-        Cast("Uri", ClrTypeReferences.To<Uri>(), "_ = (System.Uri)1;"),
-        Cast("Of(long)", ClrTypeReferences.Of(typeof(long)), "_ = (long)1;"),
+        Cast("int", TypeReference.To<int>(), "_ = (int)1;"),
+        Cast("string", TypeReference.To<string>(), "_ = (string)1;"),
+        Cast("bool", TypeReference.To<bool>(), "_ = (bool)1;"),
+        Cast("object", TypeReference.To<object>(), "_ = (object)1;"),
+        Cast("decimal", TypeReference.To<decimal>(), "_ = (decimal)1;"),
+        Cast("int?", TypeReference.To<int?>(), "_ = (int?)1;"),
+        Cast("List<int>", TypeReference.To<List<int>>(), "_ = (List<int>)1;"),
+        Cast("Dictionary<string,int>", TypeReference.To<Dictionary<string, int>>(), "_ = (Dictionary<string, int>)1;"),
+        Cast("ISet<long>", TypeReference.To<ISet<long>>(), "_ = (ISet<long>)1;"),
+        Cast("int[]", TypeReference.To<int[]>(), "_ = (System.Int32[])1;"),
+        Cast("KeyValuePair<int,int>", TypeReference.To<KeyValuePair<int, int>>(), "_ = (KeyValuePair<int, int>)1;"),
+        Cast("DayOfWeek", TypeReference.To<DayOfWeek>(), "_ = (System.DayOfWeek)1;"),
+        Cast("DateTime", TypeReference.To<DateTime>(), "_ = (DateTime)1;"),
+        Cast("Guid", TypeReference.To<Guid>(), "_ = (Guid)1;"),
+        Cast("Uri", TypeReference.To<Uri>(), "_ = (System.Uri)1;"),
+        Cast("Of(long)", TypeReference.Of(typeof(long)), "_ = (long)1;"),
         // The shapes the first factory attempt exposed.
-        Cast("Func<int,int>", ClrTypeReferences.To<Func<int, int>>(), "_ = (Func<int, int>)1;"),
-        Cast("Action<int>", ClrTypeReferences.To<Action<int>>(), "_ = (Action<int>)1;"),
-        Cast("Task<int>", ClrTypeReferences.To<Task<int>>(), "_ = (Task<int>)1;"),
-        Cast("nested", ClrTypeReferences.To<AstParityTests.ParityWidget>(), "_ = (Poly.Tests.Interpretation.AstParityTests.ParityWidget)1;"),
-        Cast("void", ClrTypeReferences.Of(typeof(void)), "_ = (System.Void)1;"),
-        Cast("int[][]", ClrTypeReferences.To<int[][]>(), "_ = (System.Int32[][])1;"),
+        Cast("Func<int,int>", TypeReference.To<Func<int, int>>(), "_ = (Func<int, int>)1;"),
+        Cast("Action<int>", TypeReference.To<Action<int>>(), "_ = (Action<int>)1;"),
+        Cast("Task<int>", TypeReference.To<Task<int>>(), "_ = (Task<int>)1;"),
+        Cast("nested", TypeReference.To<AstParityTests.ParityWidget>(), "_ = (Poly.Tests.Interpretation.AstParityTests.ParityWidget)1;"),
+        Cast("void", TypeReference.Of(typeof(void)), "_ = (System.Void)1;"),
+        Cast("int[][]", TypeReference.To<int[][]>(), "_ = (System.Int32[][])1;"),
         // The old printer answered int? here (TypeCode reports an enum as its underlying integer); the reference
         // spells the type it was given.
-        Cast("DayOfWeek?", ClrTypeReferences.To<DayOfWeek?>(), "_ = (System.DayOfWeek?)1;"),
-        ("typeof(int)", new TypeOf(ClrTypeReferences.To<int>()), "_ = typeof(int);")
+        Cast("DayOfWeek?", TypeReference.To<DayOfWeek?>(), "_ = (System.DayOfWeek?)1;"),
+        ("typeof(int)", new TypeOf(TypeReference.To<int>()), "_ = typeof(int);")
     ];
 
     private static (string, Node, string) Cast(string name, Node reference, string expected) =>

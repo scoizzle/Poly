@@ -246,7 +246,7 @@ public class ActionScopeTouchShapeTests {
 
     private static bool IsTouchOfThis(Node node) =>
         node is Invoke { Delegate: Member { MemberName: "Touch", Value: var receiver }, Arguments: [ThisReference] }
-        && ClrTypeReferences.Denotes(receiver, typeof(ActionScope));
+        && receiver.Denotes(typeof(ActionScope));
 
     /// <summary>Every method that writes <c>this</c> before (or without) touching it, as <c>Type.Method</c>.</summary>
     internal static List<string> Violations(IEnumerable<TypeDefinitionNode> types) {
@@ -334,7 +334,7 @@ public class ActionScopeTouchShapeTests {
 
     [Test]
     public async Task Tripwire_WhenAMethodWritesAPeerOrThroughAnAlias_NamesIt() {
-        static MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(ClrTypeReferences.Of(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
+        static MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(TypeReference.Of(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
         var peer = Method("PeerWrite", new Assignment(new Member(new Parameter("peer"), "X"), new Constant(1)));
         var alias = Method("AliasWrite", new Block([
             new Assignment(new Variable("self"), new ThisReference()),

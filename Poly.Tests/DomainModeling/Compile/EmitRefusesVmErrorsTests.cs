@@ -20,7 +20,7 @@ public sealed class EmitRefusesVmErrorsTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    ClrTypeReferences.Of(typeof(bool)),
+                    TypeReference.Of(typeof(bool)),
                     Body: new Not(new Constant(42)))
             ]);
 
@@ -39,7 +39,7 @@ public sealed class EmitRefusesVmErrorsTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Flag",
-                    ClrTypeReferences.Of(typeof(bool)),
+                    TypeReference.Of(typeof(bool)),
                     Body: new Not(new Constant(false)))
             ]);
 
@@ -65,7 +65,7 @@ public sealed class EmitRefusesVmErrorsTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    ClrTypeReferences.Of(typeof(bool)),
+                    TypeReference.Of(typeof(bool)),
                     Body: new Not(new Constant(42)))
             ]);
         RuntimeAnalysisCache.ReplaceModule(domain, [broken]);

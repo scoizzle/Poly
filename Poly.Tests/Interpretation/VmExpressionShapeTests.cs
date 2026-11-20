@@ -179,7 +179,7 @@ public class VmExpressionShapeTests {
         var node = new Block([
             new TryCatchFinally(
                 new Block([new Assignment(x, new Constant(1L))]),
-                [new CatchClause(ClrTypeReferences.To<Exception>(), "ex", new Assignment(x, new Constant(2L)))]),
+                [new CatchClause(TypeReference.To<Exception>(), "ex", new Assignment(x, new Constant(2L)))]),
             x
         ], [x]);
         var built = Build(node, CompilationMode.Normal);

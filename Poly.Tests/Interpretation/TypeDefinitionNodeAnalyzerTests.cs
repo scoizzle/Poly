@@ -16,16 +16,16 @@ public class TypeDefinitionNodeAnalyzerTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Item",
-                    ClrTypeReferences.Of(typeof(int)),
-                    IndexParameters: [new Parameter("index", ClrTypeReferences.Of(typeof(int)))])
+                    TypeReference.Of(typeof(int)),
+                    IndexParameters: [new Parameter("index", TypeReference.Of(typeof(int)))])
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "Format",
-                    ClrTypeReferences.Of(typeof(string)),
+                    TypeReference.Of(typeof(string)),
                     Parameters: [
-                        new Parameter("value", ClrTypeReferences.Of(typeof(string))),
-                        new Parameter("count", ClrTypeReferences.Of(typeof(int)), new Constant(3))
+                        new Parameter("value", TypeReference.Of(typeof(string))),
+                        new Parameter("count", TypeReference.Of(typeof(int)), new Constant(3))
                     ])
             ],
             BaseType: new NamedTypeReference("Base", "Sample"),
@@ -207,8 +207,8 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode(
                     "Value",
                     new UnionTypeReference([
-                        ClrTypeReferences.Of(typeof(int)),
-                        ClrTypeReferences.Of(typeof(int))
+                        TypeReference.Of(typeof(int)),
+                        TypeReference.Of(typeof(int))
                     ]))
             ]);
 
@@ -219,8 +219,8 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode(
                     "Value",
                     new UnionTypeReference([
-                        ClrTypeReferences.Of(typeof(int)),
-                        ClrTypeReferences.Of(typeof(string))
+                        TypeReference.Of(typeof(int)),
+                        TypeReference.Of(typeof(string))
                     ]))
             ]);
 
@@ -248,28 +248,28 @@ public class TypeDefinitionNodeAnalyzerTests {
             "BaseWidget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("BaseOnly", ClrTypeReferences.Of(typeof(string))),
-                new PropertyDefinitionNode("Shared", ClrTypeReferences.Of(typeof(string)))
+                new PropertyDefinitionNode("BaseOnly", TypeReference.Of(typeof(string))),
+                new PropertyDefinitionNode("Shared", TypeReference.Of(typeof(string)))
             ],
             Methods: [
-                new MethodDefinitionNode("BaseMethod", ClrTypeReferences.Of(typeof(string))),
-                new MethodDefinitionNode("SharedMethod", ClrTypeReferences.Of(typeof(string)))
+                new MethodDefinitionNode("BaseMethod", TypeReference.Of(typeof(string))),
+                new MethodDefinitionNode("SharedMethod", TypeReference.Of(typeof(string)))
             ],
             Fields: [
-                new FieldDefinitionNode("BaseField", ClrTypeReferences.Of(typeof(string))),
-                new FieldDefinitionNode("SharedField", ClrTypeReferences.Of(typeof(string)))
+                new FieldDefinitionNode("BaseField", TypeReference.Of(typeof(string))),
+                new FieldDefinitionNode("SharedField", TypeReference.Of(typeof(string)))
             ]);
         var subjectType = new TypeDefinitionNode(
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Shared", ClrTypeReferences.Of(typeof(string)))
+                new PropertyDefinitionNode("Shared", TypeReference.Of(typeof(string)))
             ],
             Methods: [
-                new MethodDefinitionNode("SharedMethod", ClrTypeReferences.Of(typeof(string)))
+                new MethodDefinitionNode("SharedMethod", TypeReference.Of(typeof(string)))
             ],
             Fields: [
-                new FieldDefinitionNode("SharedField", ClrTypeReferences.Of(typeof(string)))
+                new FieldDefinitionNode("SharedField", TypeReference.Of(typeof(string)))
             ],
             BaseType: new NamedTypeReference("BaseWidget", "Sample"));
 
@@ -295,8 +295,8 @@ public class TypeDefinitionNodeAnalyzerTests {
             "WidgetCreated",
             "Sample",
             PrimaryConstructorParameters: [
-                new Parameter("Name", ClrTypeReferences.Of(typeof(string))),
-                new Parameter("Version", ClrTypeReferences.Of(typeof(int)))
+                new Parameter("Name", TypeReference.Of(typeof(string))),
+                new Parameter("Version", TypeReference.Of(typeof(int)))
             ],
             Semantics: TypeDefinitionSemantics.ImmutableValue);
 
@@ -321,12 +321,12 @@ public class TypeDefinitionNodeAnalyzerTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Maybe",
-                    new OptionalTypeReference(ClrTypeReferences.Of(typeof(int)))),
+                    new OptionalTypeReference(TypeReference.Of(typeof(int)))),
                 new PropertyDefinitionNode(
                     "Dict",
                     new MapTypeReference(
-                        ClrTypeReferences.Of(typeof(string)),
-                        ClrTypeReferences.Of(typeof(int)))),
+                        TypeReference.Of(typeof(string)),
+                        TypeReference.Of(typeof(int)))),
             ]);
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
@@ -367,7 +367,7 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode("Plain", new NamedTypeReference("DomainResult")),
                 new PropertyDefinitionNode(
                     "Closed",
-                    new NamedTypeReference("DomainResult", TypeArguments: [ClrTypeReferences.Of(typeof(string))]))
+                    new NamedTypeReference("DomainResult", TypeArguments: [TypeReference.Of(typeof(string))]))
             ]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();

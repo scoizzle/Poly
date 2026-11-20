@@ -47,7 +47,7 @@ public class EffectCompositionTests {
 
     [Test]
     public async Task NewArray_AllocatesAndThrows() {
-        await Assert.That(NodeFacts.Effects(new NewArray(ClrTypeReferences.To<int>(), Wrap(1))))
+        await Assert.That(NodeFacts.Effects(new NewArray(TypeReference.To<int>(), Wrap(1))))
             .IsEqualTo(NodeEffect.Allocate | NodeEffect.Throws)
             .Because("array creation allocates and raises OverflowException on a negative length");
     }
@@ -80,7 +80,7 @@ public class EffectCompositionTests {
     public async Task TypedCatch_DoesNotAbsorbTheThrow() {
         var tryCatch = new TryCatchFinally(
             new Divide(Wrap(1), Wrap(0)),
-            [new CatchClause(ClrTypeReferences.To<InvalidOperationException>(), null, Wrap(1))]);
+            [new CatchClause(TypeReference.To<InvalidOperationException>(), null, Wrap(1))]);
         var program = new Block([tryCatch, Wrap(1)]);
         var analysis = Analyze(program);
 
@@ -97,7 +97,7 @@ public class EffectCompositionTests {
             [new CatchClause(null, null, Wrap(1))]);
         var outer = new TryCatchFinally(
             inner,
-            [new CatchClause(ClrTypeReferences.To<Exception>(), null, outerCatchBody)]);
+            [new CatchClause(TypeReference.To<Exception>(), null, outerCatchBody)]);
         var analysis = Analyze(outer);
 
         await Assert.That(analysis.CanElide(outerCatchBody)).IsTrue()
@@ -107,7 +107,7 @@ public class EffectCompositionTests {
 
     [Test]
     public async Task Lambda_KeepsStateEffectsButNotItsThrow() {
-        var p = new Parameter("p", ClrTypeReferences.To<int>());
+        var p = new Parameter("p", TypeReference.To<int>());
         var target = new Variable("t");
         var body = new Block(new Assignment(target, p), new Divide(p, Wrap(2)));
         var lambda = new Lambda([p], body);
@@ -153,7 +153,7 @@ public class EffectCompositionTests {
             [new CatchClause(null, null, Wrap(1))]);
         var outer = new TryCatchFinally(
             new Block(inner, new Divide(Wrap(2), Wrap(0))),
-            [new CatchClause(ClrTypeReferences.To<Exception>(), null, outerCatchBody)]);
+            [new CatchClause(TypeReference.To<Exception>(), null, outerCatchBody)]);
         var analysis = Analyze(outer);
 
         await Assert.That(analysis.GetMetadata<SideEffectMetadata>(outer)!.Throws).IsTrue()
@@ -166,7 +166,7 @@ public class EffectCompositionTests {
         var tryCatch = new TryCatchFinally(
             new Divide(Wrap(1), Wrap(0)),
             [
-                new CatchClause(ClrTypeReferences.To<InvalidOperationException>(), null, Wrap(1)),
+                new CatchClause(TypeReference.To<InvalidOperationException>(), null, Wrap(1)),
                 new CatchClause(null, null, Wrap(2)),
             ]);
 

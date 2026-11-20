@@ -106,7 +106,7 @@ public sealed partial class DbContextGenerator {
             methods.Add(TryReserveMethod());
             methods.Add(RecordMethod());
             methods.Add(ReleaseMethod());
-            interfaces = [ClrTypeReferences.Of(typeof(IStoragePort))];
+            interfaces = [TypeReference.Of(typeof(IStoragePort))];
         }
 
         var contextType = new TypeDefinitionNode(

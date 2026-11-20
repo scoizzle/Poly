@@ -160,7 +160,7 @@ public class AstParitySequenceTests {
                 new Assignment(caught, Wrap(0)))),
             new("unwind, then reuse the locals", new TryCatchFinally(
                 new Assignment(acc, new Divide(Wrap(10), den)),
-                [new CatchClause(ClrTypeReferences.To<DivideByZeroException>(), null, new Block(
+                [new CatchClause(TypeReference.To<DivideByZeroException>(), null, new Block(
                     new Assignment(caught, Wrap(1)),
                     new Assignment(acc, Wrap(41))))],
                 new Assignment(acc, new Add(acc, Wrap(1))))),
@@ -200,7 +200,7 @@ public class AstParitySequenceTests {
     static AstParitySequence.SequenceCase Closure_CapturedLocalAcrossIterations() {
         var acc = new Variable("acc");
         var i = new Variable("i");
-        var n = new Parameter("n", ClrTypeReferences.To<int>());
+        var n = new Parameter("n", TypeReference.To<int>());
         return new("Closure_CapturedLocalAcrossIterations", [
             new("seed", new Assignment(acc, Wrap(0))),
             new("fold through the closure", new ForLoop(
@@ -323,7 +323,7 @@ public class AstParitySequenceTests {
         return new("Array_IndexAssignAndLength", [
             new("seed", new Block(
                 new Assignment(acc, Wrap(0)),
-                new Assignment(a, new NewArray(ClrTypeReferences.To<int>(), Wrap(3))))),
+                new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(3))))),
             new("write two slots", new Block(
                 new Assignment(new IndexAccess(a, Wrap(0)), Wrap(5)),
                 new Assignment(new IndexAccess(a, Wrap(1)), Wrap(7)))),
@@ -343,7 +343,7 @@ public class AstParitySequenceTests {
                 new Assignment(i, new Add(i, Wrap(1))),
                 new TryCatchFinally(
                     new Assignment(acc, new Divide(new Add(acc, Wrap(10)), new Subtract(i, Wrap(1)))),
-                    [new CatchClause(ClrTypeReferences.To<DivideByZeroException>(), null,
+                    [new CatchClause(TypeReference.To<DivideByZeroException>(), null,
                         new Assignment(acc, new Add(acc, Wrap(1))))]),
                 DeclaredVariables: [i])),
         ], [acc], acc);

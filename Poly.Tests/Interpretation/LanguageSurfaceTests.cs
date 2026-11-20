@@ -20,7 +20,7 @@ public class LanguageSurfaceTests {
 
     [Test]
     public async Task TypeReference_AsValue_CompileRejects() {
-        await Assert.That(() => Interpreter.Compile(ClrTypeReferences.Of(typeof(string))))
+        await Assert.That(() => Interpreter.Compile(TypeReference.Of(typeof(string))))
             .Throws<InvalidOperationException>();
     }
 }

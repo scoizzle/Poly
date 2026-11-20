@@ -25,7 +25,7 @@ public class AbiEmitterLiftedOperandOrderTests {
     private static ITypeSource CounterType() =>
         Analyze(new TypeDefinitionNode(
             "CountLot", "Branch",
-            Fields: [new FieldDefinitionNode("n", ClrTypeReferences.To<long>(), new Constant(0L))],
+            Fields: [new FieldDefinitionNode("n", TypeReference.To<long>(), new Constant(0L))],
             Constructors: [new ConstructorDefinitionNode([], new Block([]))],
             Methods: [
                 CountingMethod("Next", 1L),
@@ -37,7 +37,7 @@ public class AbiEmitterLiftedOperandOrderTests {
     private static MethodDefinitionNode CountingMethod(string name, long scale) =>
         new(
             name,
-            new OptionalTypeReference(ClrTypeReferences.To<long>()),
+            new OptionalTypeReference(TypeReference.To<long>()),
             Parameters: [],
             Body: new Block([
                 new Assignment(

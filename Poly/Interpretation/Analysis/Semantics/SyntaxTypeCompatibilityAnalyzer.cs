@@ -243,7 +243,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             ?? throw new InvalidOperationException($"the type provider has no definition for '{target}'");
         // The target node is minted here, so it carries its resolved type with it: the reference has no type of its
         // own, and the emitter reads a type node's CLR type from the analysis.
-        var targetNode = ClrTypeReferences.Of(target);
+        var targetNode = TypeReference.Of(target);
         context.SetResolvedType(targetNode, targetDefinition);
         var cast = new TypeCast(count, targetNode);
         context.SetResolvedType(cast, targetDefinition);

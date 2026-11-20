@@ -13,13 +13,13 @@ namespace Poly.Tests.Interpretation;
 public class InterpreterBranchVmTests {
     [Test]
     public async Task InstanceMethod_BlockLocals_DoNotWipeParameter() {
-        var plate = new Parameter("plate", ClrTypeReferences.To<string>());
+        var plate = new Parameter("plate", TypeReference.To<string>());
         var tda = Analyze(new TypeDefinitionNode(
             "ReadLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Read",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Parameters: [plate],
                     Body: WipeThen(new Return(plate)))
             ]));
@@ -32,13 +32,13 @@ public class InterpreterBranchVmTests {
 
     [Test]
     public async Task StaticMethod_BlockLocals_DoNotWipeParameter() {
-        var plate = new Parameter("plate", ClrTypeReferences.To<string>());
+        var plate = new Parameter("plate", TypeReference.To<string>());
         var tda = Analyze(new TypeDefinitionNode(
             "StaticLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Read",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Parameters: [plate],
                     Body: WipeThen(new Return(plate)),
                     IsStatic: true)
@@ -52,24 +52,24 @@ public class InterpreterBranchVmTests {
 
     [Test]
     public async Task InstanceMethod_AfterStaticCall_StillReadsParameter() {
-        var inner = new Parameter("plate", ClrTypeReferences.To<string>());
-        var outer = new Parameter("plate", ClrTypeReferences.To<string>());
+        var inner = new Parameter("plate", TypeReference.To<string>());
+        var outer = new Parameter("plate", TypeReference.To<string>());
         var tda = Analyze(new TypeDefinitionNode(
             "RelayLot", "Branch",
             Properties: [
-                new PropertyDefinitionNode("Seen", ClrTypeReferences.To<string>()),
-                new PropertyDefinitionNode("Plate", ClrTypeReferences.To<string>())
+                new PropertyDefinitionNode("Seen", TypeReference.To<string>()),
+                new PropertyDefinitionNode("Plate", TypeReference.To<string>())
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "Echo",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Parameters: [inner],
                     Body: WipeThen(new Return(inner)),
                     IsStatic: true),
                 new MethodDefinitionNode(
                     "Wrap",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Parameters: [outer],
                     Body: WipeThen(new Block([
                         new Assignment(
@@ -91,20 +91,20 @@ public class InterpreterBranchVmTests {
 
     [Test]
     public async Task InstanceMethod_AfterInstanceCall_StillReadsParameter() {
-        var inner = new Parameter("plate", ClrTypeReferences.To<string>());
-        var outer = new Parameter("plate", ClrTypeReferences.To<string>());
+        var inner = new Parameter("plate", TypeReference.To<string>());
+        var outer = new Parameter("plate", TypeReference.To<string>());
         var tda = Analyze(new TypeDefinitionNode(
             "StampLot", "Branch",
-            Properties: [new PropertyDefinitionNode("Plate", ClrTypeReferences.To<string>())],
+            Properties: [new PropertyDefinitionNode("Plate", TypeReference.To<string>())],
             Methods: [
                 new MethodDefinitionNode(
                     "Stamp",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Parameters: [inner],
                     Body: WipeThen(new Return(inner))),
                 new MethodDefinitionNode(
                     "Relay",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Parameters: [outer],
                     Body: WipeThen(new Block([
                         new Assignment(
@@ -126,11 +126,11 @@ public class InterpreterBranchVmTests {
     public async Task InstanceMethod_BlockLocals_DoNotWipeReceiver() {
         var tda = Analyze(new TypeDefinitionNode(
             "NamedLot", "Branch",
-            Properties: [new PropertyDefinitionNode("Name", ClrTypeReferences.To<string>())],
+            Properties: [new PropertyDefinitionNode("Name", TypeReference.To<string>())],
             Methods: [
                 new MethodDefinitionNode(
                     "Read",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Body: WipeThen(new Return(new Member(new ThisReference(), "Name"))))
             ]));
         var bag = new Dictionary<string, object?> { ["Name"] = "LOT" };
@@ -142,7 +142,7 @@ public class InterpreterBranchVmTests {
 
     [Test]
     public async Task Constructor_BlockLocals_StoreParameterOnDictionary() {
-        var plate = new Parameter("plate", ClrTypeReferences.To<string>());
+        var plate = new Parameter("plate", TypeReference.To<string>());
         var a = new Variable("a");
         var b = new Variable("b");
         var tda = Analyze(new TypeDefinitionNode(
@@ -156,7 +156,7 @@ public class InterpreterBranchVmTests {
                         new Assignment(new Member(new ThisReference(), "Plate"), plate)
                     ], [a, b]))
             ],
-            Properties: [new PropertyDefinitionNode("Plate", ClrTypeReferences.To<string>())]));
+            Properties: [new PropertyDefinitionNode("Plate", TypeReference.To<string>())]));
         var program = Interpreter.Compile(
             new New(new TypeReference("Branch.BuiltLot"), new Constant("KEEP")), tda);
         using var exec = Interpreter.Execute(program);
@@ -215,15 +215,15 @@ public class InterpreterBranchVmTests {
 
     [Test]
     public async Task AstMethod_OmittedStringDefault_UsesHeapDefault() {
-        var extra = new Parameter("extra", ClrTypeReferences.To<string>(), DefaultValue: new Constant("DEF"));
+        var extra = new Parameter("extra", TypeReference.To<string>(), DefaultValue: new Constant("DEF"));
         var tda = Analyze(new TypeDefinitionNode(
             "TextLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Pick",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Parameters: [
-                        new Parameter("written", ClrTypeReferences.To<string>()),
+                        new Parameter("written", TypeReference.To<string>()),
                         extra
                     ],
                     Body: new Return(extra),
@@ -240,16 +240,16 @@ public class InterpreterBranchVmTests {
     public async Task AstMethod_NonConstantDefault_OmittedArgumentIsZero() {
         var extra = new Parameter(
             "extra",
-            ClrTypeReferences.Of(typeof(long)),
+            TypeReference.Of(typeof(long)),
             DefaultValue: new Add(new Constant(1L), new Constant(1L)));
         var tda = Analyze(new TypeDefinitionNode(
             "OpenLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Pick",
-                    ClrTypeReferences.Of(typeof(long)),
+                    TypeReference.Of(typeof(long)),
                     Parameters: [
-                        new Parameter("written", ClrTypeReferences.Of(typeof(long))),
+                        new Parameter("written", TypeReference.Of(typeof(long))),
                         extra
                     ],
                     Body: new Return(extra),
@@ -272,13 +272,13 @@ public class InterpreterBranchVmTests {
 
     [Test]
     public async Task InstanceMethod_OnTypeName_CompileRejected() {
-        var plate = new Parameter("plate", ClrTypeReferences.To<string>());
+        var plate = new Parameter("plate", TypeReference.To<string>());
         var tda = Analyze(new TypeDefinitionNode(
             "InstanceLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Read",
-                    ClrTypeReferences.To<string>(),
+                    TypeReference.To<string>(),
                     Parameters: [plate],
                     Body: new Return(plate))
             ]));
@@ -358,7 +358,7 @@ public class InterpreterBranchVmTests {
     public async Task NewArray_LengthZero_IndexThrows() {
         var arr = new Variable("arr");
         var program = Interpreter.Compile(new Block([
-            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(0L))),
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(0L))),
             new IndexAccess(arr, new Constant(0L))
         ], [arr]));
         await Assert.That(() => {
@@ -376,7 +376,7 @@ public class InterpreterBranchVmTests {
     public async Task StridedSetBits_HeapArray_SetsWordBits() {
         var arr = new Variable("arr");
         var node = new Block([
-            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(17L))),
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(17L))),
             new StridedSetBits(arr, new Constant(4L), new Constant(2L), new Constant(8L)),
             new IndexAccess(arr, new Constant(0L))
         ], [arr]);
@@ -398,7 +398,7 @@ public class InterpreterBranchVmTests {
 
     [Test]
     public async Task Lambda_TooManyArguments_CompileRejected() {
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         await Assert.That(() => Interpreter.Compile(
                 new Invoke(new Lambda([x], x), new Constant(1L), new Constant(2L))))
             .Throws<InvalidOperationException>()
@@ -416,7 +416,7 @@ public class InterpreterBranchVmTests {
     public async Task IndexAccess_WithoutIndex_ReadsFirstElement() {
         var arr = new Variable("arr");
         var node = new Block([
-            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(1L))),
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(1L))),
             new Assignment(new IndexAccess(arr), new Constant(4L)),
             new IndexAccess(arr)
         ], [arr]);
@@ -427,7 +427,7 @@ public class InterpreterBranchVmTests {
     [Test]
     public async Task Default_Guid_IsEmptyStruct() {
         using var exec = Interpreter.Execute(
-            Interpreter.Compile(new Default(ClrTypeReferences.To<Guid>())));
+            Interpreter.Compile(new Default(TypeReference.To<Guid>())));
         await Assert.That(exec.GetValue<Guid>()).IsEqualTo(Guid.Empty);
     }
 
@@ -473,18 +473,18 @@ public class InterpreterBranchVmTests {
     private static (ITypeSource Types, Invoke Call) Pick(int arguments) {
         var written = new Parameter(
             "written",
-            ClrTypeReferences.Of(typeof(long)),
+            TypeReference.Of(typeof(long)),
             DefaultValue: new Constant(1L));
         var extra = new Parameter(
             "extra",
-            ClrTypeReferences.Of(typeof(long)),
+            TypeReference.Of(typeof(long)),
             DefaultValue: new Constant(7L));
         var tda = Analyze(new TypeDefinitionNode(
             "PickLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Pick",
-                    ClrTypeReferences.Of(typeof(long)),
+                    TypeReference.Of(typeof(long)),
                     Parameters: [written, extra],
                     Body: new Return(new Add(written, extra)),
                     IsStatic: true)
@@ -501,7 +501,7 @@ public class InterpreterBranchVmTests {
     private static Block StoreLoad(long length, long index, long value) {
         var arr = new Variable("arr");
         return new Block([
-            new Assignment(arr, new NewArray(ClrTypeReferences.To<long>(), new Constant(length))),
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(length))),
             new Assignment(new IndexAccess(arr, new Constant(index)), new Constant(value)),
             new IndexAccess(arr, new Constant(index))
         ], [arr]);

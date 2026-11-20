@@ -75,7 +75,7 @@ public sealed class CatalogIndex {
                 foreach (var type in types) {
                     foreach (var method in type.Methods ?? []) {
                         foreach (var parameter in method.Parameters ?? []) {
-                            if (ClrTypeReferences.Denotes(parameter.TypeReference, typeof(IStoragePort)))
+                            if (parameter.TypeReference.Denotes(typeof(IStoragePort)))
                                 return true;
                         }
                     }

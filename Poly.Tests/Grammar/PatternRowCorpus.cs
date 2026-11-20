@@ -92,10 +92,10 @@ internal static class PatternRowCorpus {
     public static IReadOnlyList<(string Name, TypeDefinitionNode Type)> CSharpTypes { get; } = [
         ("empty-enum", new TypeDefinitionNode("Empty", Form: TypeDeclarationForm.Enum)),
         ("negative-enum", new TypeDefinitionNode("Negative", Form: TypeDeclarationForm.Enum, Fields: [
-            new FieldDefinitionNode("A", ClrTypeReferences.To<int>(), new Constant(-1), IsStatic: true, IsConst: true),
+            new FieldDefinitionNode("A", TypeReference.To<int>(), new Constant(-1), IsStatic: true, IsConst: true),
         ])),
         ("body-less-method", new TypeDefinitionNode("Shell", Methods: [
-            new MethodDefinitionNode("Declared", ClrTypeReferences.To<long>()),
+            new MethodDefinitionNode("Declared", TypeReference.To<long>()),
         ])),
     ];
 

@@ -111,7 +111,7 @@ public sealed class ConstraintCompileRequest {
         ArgumentNullException.ThrowIfNull(type);
         return Types?.ClrDefinitionOf(type) is { } definition
             ? new TypeDefinitionReference(definition)
-            : ClrTypeReferences.Of(type);
+            : Ast.Nodes.TypeReference.Of(type);
     }
 
     public Entity Entity { get; }

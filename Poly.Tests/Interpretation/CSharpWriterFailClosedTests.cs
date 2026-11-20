@@ -87,7 +87,7 @@ public class CSharpWriterFailClosedTests {
 
     [Test]
     public async Task NewArray_WriteRead_IsKindStable() {
-        var printed = CSharpLanguage.Write(new NewArray(ClrTypeReferences.To<long>(), new Constant(4L)));
+        var printed = CSharpLanguage.Write(new NewArray(TypeReference.To<long>(), new Constant(4L)));
         await Assert.That(printed).IsEqualTo("new long[4L];");
 
         var source = $"class C {{ void M() {{ var a = {printed} }} }}";
@@ -125,7 +125,7 @@ public class CSharpWriterFailClosedTests {
             new PropertyGetterDefinitionNode(),
             new PropertySetterDefinitionNode(),
             new PropertyInitializerDefinitionNode(),
-            new UnionTypeReference([ClrTypeReferences.To<long>()]),
+            new UnionTypeReference([TypeReference.To<long>()]),
             new ResolvedTypeReference(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string))),
         ];
         foreach (var node in kinds) {

@@ -57,7 +57,7 @@ public class AnyChildTests {
             Methods: [
                 new MethodDefinitionNode(
                     "M",
-                    ClrTypeReferences.To<object>(),
+                    TypeReference.To<object>(),
                     Body: new Block(new ThrowStatement(new Variable("ex"))))
             ]);
         var root = new CompilationUnitNode([], null, [typeDef], null);

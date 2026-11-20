@@ -144,7 +144,7 @@ public class InterpretationStabilizationTests {
         var target = new TypeDefinitionNode("Target",
             Properties: [
                 new PropertyDefinitionNode("Age",
-                    ClrTypeReferences.Of(typeof(long)),
+                    TypeReference.Of(typeof(long)),
                     Getter: new PropertyGetterDefinitionNode())
             ]);
         var source = new TypeDefinitionNode("Source",
@@ -185,13 +185,13 @@ public class InterpretationStabilizationTests {
         "Person",
         Properties: [
             new PropertyDefinitionNode("Age",
-                ClrTypeReferences.Of(typeof(long)),
+                TypeReference.Of(typeof(long)),
                 Getter: new PropertyGetterDefinitionNode()),
             new PropertyDefinitionNode("Name",
-                ClrTypeReferences.Of(typeof(string)),
+                TypeReference.Of(typeof(string)),
                 Getter: new PropertyGetterDefinitionNode()),
             new PropertyDefinitionNode("Ref",
-                ClrTypeReferences.Of(typeof(object)),
+                TypeReference.Of(typeof(object)),
                 Getter: new PropertyGetterDefinitionNode())
         ]);
 
@@ -495,7 +495,7 @@ public class InterpretationStabilizationTests {
     private static async Task AssertSlot0(object? arg, long expectedRaw) {
         var program = Interpreter.Compile(arg is null
             ? new ThisReference()
-            : new Parameter("p", ClrTypeReferences.Of(arg.GetType())));
+            : new Parameter("p", TypeReference.Of(arg.GetType())));
         using var exec = Interpreter.Execute(program, s => s.SetArgs(arg));
         await Assert.That(exec.RawValue).IsEqualTo(expectedRaw);
     }

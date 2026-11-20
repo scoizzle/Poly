@@ -14,7 +14,7 @@ namespace Poly.Tests.Introspection;
 public class ClrReferenceIdentityTests {
     [Test]
     public async Task Of_PlainType_CarriesTheProvidersDefinition() {
-        var reference = ClrTypeReferences.Of(typeof(string));
+        var reference = TypeReference.Of(typeof(string));
 
         await Assert.That(reference).IsTypeOf<TypeDefinitionReference>();
         var stated = ((TypeDefinitionReference)reference).TypeDefinition;
@@ -24,7 +24,7 @@ public class ClrReferenceIdentityTests {
 
     [Test]
     public async Task Of_GenericType_CarriesTheClosedDefinition() {
-        var reference = ClrTypeReferences.Of(typeof(Func<int, string>));
+        var reference = TypeReference.Of(typeof(Func<int, string>));
 
         await Assert.That(reference).IsTypeOf<TypeDefinitionReference>();
         var stated = ((TypeDefinitionReference)reference).TypeDefinition;
@@ -34,7 +34,7 @@ public class ClrReferenceIdentityTests {
 
     [Test]
     public async Task Of_NullableType_KeepsTheOptionalShapeOverItsUnderlyingDefinition() {
-        var reference = ClrTypeReferences.Of(typeof(int?));
+        var reference = TypeReference.Of(typeof(int?));
 
         await Assert.That(reference).IsTypeOf<OptionalTypeReference>();
         await Assert.That(((OptionalTypeReference)reference).InnerType).IsTypeOf<TypeDefinitionReference>();
@@ -55,18 +55,18 @@ public class ClrReferenceIdentityTests {
 
     [Test]
     public async Task Denotes_AnImplementerOfThePort_IsTrue() {
-        var implementer = ClrTypeReferences.Of(typeof(Poly.DomainModeling.Runtime.ModuleStoragePort));
-        await Assert.That(ClrTypeReferences.Denotes(implementer, typeof(IStoragePort))).IsTrue()
+        var implementer = TypeReference.Of(typeof(Poly.DomainModeling.Runtime.ModuleStoragePort));
+        await Assert.That(implementer.Denotes(typeof(IStoragePort))).IsTrue()
             .Because("a parameter typed as an implementer of the port takes the port");
     }
 
     [Test]
     public async Task Denotes_ASpelledName_IsFalse() {
         var spelled = new NamedTypeReference("IStoragePort", "Poly.Runtime");
-        await Assert.That(ClrTypeReferences.Denotes(spelled, typeof(IStoragePort))).IsFalse()
+        await Assert.That(spelled.Denotes(typeof(IStoragePort))).IsFalse()
             .Because("a name is not a type: only a stated definition denotes one");
-        await Assert.That(ClrTypeReferences.Denotes(ClrTypeReferences.To<string>(), typeof(IStoragePort))).IsFalse();
-        await Assert.That(ClrTypeReferences.Denotes(ClrTypeReferences.To<IStoragePort>(), typeof(IStoragePort))).IsTrue();
+        await Assert.That(TypeReference.To<string>().Denotes(typeof(IStoragePort))).IsFalse();
+        await Assert.That(TypeReference.To<IStoragePort>().Denotes(typeof(IStoragePort))).IsTrue();
     }
 
     /// <summary>A definition from another platform: identity is its own reference, so a same-named definition from

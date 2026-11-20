@@ -55,7 +55,7 @@ public class UnaryMinusTests {
     [Test]
     public async Task UnaryMinus_WithParameter_EvaluatesCorrectly() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int>());
+        var param = new Parameter("x", TypeReference.To<int>());
         var node = new UnaryMinus(param);
 
         // Act
@@ -73,7 +73,7 @@ public class UnaryMinusTests {
     [Test]
     public async Task UnaryMinus_DoubleNegation_ReturnsOriginalValue() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int>());
+        var param = new Parameter("x", TypeReference.To<int>());
         var node = new UnaryMinus(new UnaryMinus(param));
 
         // Act
@@ -89,7 +89,7 @@ public class UnaryMinusTests {
     [Test]
     public async Task UnaryMinus_WithArithmeticExpression_EvaluatesCorrectly() {
         // Arrange
-        var param = new Parameter("x", ClrTypeReferences.To<int>());
+        var param = new Parameter("x", TypeReference.To<int>());
         var node = new UnaryMinus(new Add(param, Wrap(5)));
 
         // Act

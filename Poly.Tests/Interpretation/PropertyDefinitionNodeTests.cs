@@ -10,7 +10,7 @@ public class PropertyDefinitionNodeTests {
         var defaultValue = new Constant("alpha");
         var property = new PropertyDefinitionNode(
             "Name",
-            ClrTypeReferences.Of(typeof(string)),
+            TypeReference.Of(typeof(string)),
             DefaultValue: defaultValue);
 
         await Assert.That(property.DefaultValue).IsSameReferenceAs(defaultValue);
@@ -23,7 +23,7 @@ public class PropertyDefinitionNodeTests {
     public async Task Analyze_PropertyDefinition_InTypeDefinition_MapsProperty() {
         var property = new PropertyDefinitionNode(
             "Name",
-            ClrTypeReferences.Of(typeof(string)),
+            TypeReference.Of(typeof(string)),
             DefaultValue: new Constant("alpha"));
         var typeNode = new TypeDefinitionNode("Widget", "Sample", Properties: [property]);
         var analysis = new AnalyzerBuilder()

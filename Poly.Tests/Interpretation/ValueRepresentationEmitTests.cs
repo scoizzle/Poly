@@ -57,13 +57,13 @@ public class ValueRepresentationEmitTests {
         AnalyzerWithoutRepresentationPass.Analyze(node);
 
     private static Member Probe(string name) =>
-        new(ClrTypeReferences.Of(typeof(RepresentationProbe)), name);
+        new(TypeReference.Of(typeof(RepresentationProbe)), name);
 
     [Test]
     public async Task ScalarIntoObjectParameter_IsBoxedWithoutARepresentationPass() {
         // A non-constant scalar has no representation metadata here; emit must read
         // the parameter's resolved type and box the raw word, not deref it.
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var node = new Invoke(Probe(nameof(RepresentationProbe.SeenAsObject)), x);
         var result = Analyze(node);
 
@@ -80,7 +80,7 @@ public class ValueRepresentationEmitTests {
         var a = new Variable("a");
         var b = new Variable("b");
         var c = new Variable("c");
-        var p = new Parameter("p", ClrTypeReferences.To<long>());
+        var p = new Parameter("p", TypeReference.To<long>());
         var node = new Block([
             new Assignment(a, new Constant("one")),
             new Assignment(b, new Constant("two")),
@@ -123,7 +123,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task IfTrue_NestedConditionalReturn_YieldsTheUnconditionalReturn() {
-        var flag = new Parameter("flag", ClrTypeReferences.To<bool>());
+        var flag = new Parameter("flag", TypeReference.To<bool>());
         var node = new Block([
             new IfStatement(new Constant(true), new Block([
                 new IfStatement(flag, new Return(new Constant("s"))),
@@ -154,7 +154,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task IfTrue_IfElseBothReturn_YieldsTheBranchValue() {
-        var flag = new Parameter("flag", ClrTypeReferences.To<bool>());
+        var flag = new Parameter("flag", TypeReference.To<bool>());
         var node = new Block([
             new IfStatement(new Constant(true), new Block([
                 new IfStatement(flag, new Return(new Constant(1L)), new Return(new Constant(2L)))
@@ -171,7 +171,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task IfTrue_WithFallThroughIf_DoesNotStealTheLaterReturn() {
-        var flag = new Parameter("flag", ClrTypeReferences.To<bool>());
+        var flag = new Parameter("flag", TypeReference.To<bool>());
         var a = new Variable("a");
         var node = new Block([
             new Assignment(a, new Constant("heap")),
@@ -190,7 +190,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task IfElse_DifferentArmTypes_DoNotBecomeTheBlockType() {
-        var flag = new Parameter("flag", ClrTypeReferences.To<bool>());
+        var flag = new Parameter("flag", TypeReference.To<bool>());
         var a = new Variable("a");
         var node = new Block([
             new Assignment(a, new Constant("heap")),
@@ -209,7 +209,7 @@ public class ValueRepresentationEmitTests {
     [Test]
     public async Task EnumConstant_IntoEnumParameter_Unboxes() {
         var node = new Invoke(
-            new Member(ClrTypeReferences.Of(typeof(EnumProbe)), nameof(EnumProbe.Id)),
+            new Member(TypeReference.Of(typeof(EnumProbe)), nameof(EnumProbe.Id)),
             new Constant(EnumProbe.Value.A));
         var result = Analyze(node);
 
@@ -220,9 +220,9 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task NullableMember_PassedToMethod_IsTheValueNotTheHandle() {
-        var arg = new Parameter("box", ClrTypeReferences.To<NullableProbe.Box>());
+        var arg = new Parameter("box", TypeReference.To<NullableProbe.Box>());
         var node = new Invoke(
-            new Member(ClrTypeReferences.Of(typeof(NullableProbe)), nameof(NullableProbe.Id)),
+            new Member(TypeReference.Of(typeof(NullableProbe)), nameof(NullableProbe.Id)),
             new Member(arg, nameof(NullableProbe.Box.N)));
         var result = Analyze(node);
 
@@ -246,7 +246,7 @@ public class ValueRepresentationEmitTests {
     public async Task FoldedShift_CarriesTheOriginalIntegerType() {
         // x * 8 lowers to ShiftLeft(x, 3); the replacement must carry x's type so
         // emit classifies it as a scalar.
-        var p = new Parameter("p", ClrTypeReferences.To<int>());
+        var p = new Parameter("p", TypeReference.To<int>());
         var multiply = new Multiply(p, new Constant(8L));
         var node = new Block([
             new Assignment(new Variable("a"), new Constant("heap")),
@@ -272,7 +272,7 @@ public class ValueRepresentationEmitTests {
     [Test]
     public async Task DateOffset_RootIsTheDate() {
         var date = new DateOnly(2026, 1, 1);
-        var p = new Parameter("p", ClrTypeReferences.To<DateOnly>());
+        var p = new Parameter("p", TypeReference.To<DateOnly>());
         var node = new Add(p, new Constant(1L));
         var result = Analyze(node);
 
@@ -284,7 +284,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task DecimalArithmetic_RootIsADecimal() {
-        var p = new Parameter("d", ClrTypeReferences.To<decimal>());
+        var p = new Parameter("d", TypeReference.To<decimal>());
         var node = new Add(p, new Constant(1m));
         var result = Analyze(node);
 
@@ -304,10 +304,10 @@ public class ValueRepresentationEmitTests {
         }
     }
 
-    private static Parameter P<T>(string name) => new(name, ClrTypeReferences.To<T>());
+    private static Parameter P<T>(string name) => new(name, TypeReference.To<T>());
 
     private static Invoke NullableCall(string method, bool present) =>
-        new(new Member(ClrTypeReferences.Of(typeof(NullableProbe)), method), new Constant(present));
+        new(new Member(TypeReference.Of(typeof(NullableProbe)), method), new Constant(present));
 
     /// <summary>
     /// Unary minus and <c>~</c> on a value held behind a handle (issue 832): a struct wider than a word, and a nullable
@@ -424,12 +424,12 @@ public class ValueRepresentationEmitTests {
     [Test]
     public async Task DateMinusDecimalDays_AddDaysOfTheNegatedCount_IsTheEarlierDate() {
         var node = new Invoke(new Member(P<DateOnly>("start"), nameof(DateOnly.AddDays)),
-            new TypeCast(new UnaryMinus(P<decimal>("days")), ClrTypeReferences.To<int>()));
+            new TypeCast(new UnaryMinus(P<decimal>("days")), TypeReference.To<int>()));
         await Assert.That(Answer(node, new DateOnly(2024, 2, 28), 2m)).IsEqualTo($"DateOnly {new DateOnly(2024, 2, 26)}");
     }
 
     private static string Constructed<T>(Node argument, params object?[] args) =>
-        Answer(new Member(new New(ClrTypeReferences.Of(typeof(T)), argument), nameof(CtorProbe.ObjectBox.Text)), args);
+        Answer(new Member(new New(TypeReference.Of(typeof(T)), argument), nameof(CtorProbe.ObjectBox.Text)), args);
 
     /// <summary>A CLR constructor argument is the value its parameter's type reads from the word, as a call argument is:
     /// a scalar for an <c>object</c> parameter is the boxed value, an IEEE word is the double, a decimal or optional handle
@@ -452,9 +452,9 @@ public class ValueRepresentationEmitTests {
     }
 
     private static Invoke ToText(Node value) =>
-        new(new Member(ClrTypeReferences.Of(typeof(Convert)), nameof(Convert.ToString)), value);
+        new(new Member(TypeReference.Of(typeof(Convert)), nameof(Convert.ToString)), value);
 
-    private static Parameter ObjectParameter(string name) => new(name, ClrTypeReferences.Of(typeof(object)));
+    private static Parameter ObjectParameter(string name) => new(name, TypeReference.Of(typeof(object)));
 
     private static string HostArrayAfter(Node stored) {
         var host = new object?[] { null };
@@ -466,12 +466,12 @@ public class ValueRepresentationEmitTests {
     private static string NameDispatched(Type type, object argument) {
         var typeDef = new TypeDefinitionNode(Name: "BoundaryPerson", Methods: [
             new MethodDefinitionNode("Take", new TypeReference("void"),
-                Parameters: [new Parameter("x", ClrTypeReferences.Of(type))], Body: new Block([]))]);
+                Parameters: [new Parameter("x", TypeReference.Of(type))], Body: new Block([]))]);
         var context = AnalysisContext.CreateDefault();
         new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
         var taker = new BoundaryProbe.Taker();
         var node = new Invoke(new Member(new Parameter("e", new TypeReference("BoundaryPerson")), "Take"),
-            new Parameter("v", ClrTypeReferences.Of(type)));
+            new Parameter("v", TypeReference.Of(type)));
         using var exec = Interpreter.Execute(Interpreter.Compile(node, context.Declarations()), taker, argument);
         return taker.Seen;
     }
@@ -493,7 +493,7 @@ public class ValueRepresentationEmitTests {
         ], [text]);
         var array = new Variable("v");
         var vmArray = new Block([
-            new Assignment(array, new NewArray(ClrTypeReferences.Of(typeof(object)), new Constant(1))),
+            new Assignment(array, new NewArray(TypeReference.Of(typeof(object)), new Constant(1))),
             new Assignment(new IndexAccess(array, new Constant(0)), new Constant(7)),
             ToText(new IndexAccess(array, new Constant(0)))
         ], [array]);
@@ -505,8 +505,8 @@ public class ValueRepresentationEmitTests {
             HostArrayAfter(new Constant(7)),
             HostArrayAfter(new Constant("s")),
             Answer(forEach, new List<object> { 7 }),
-            Answer(new Invoke(new Member(ClrTypeReferences.Of(typeof(BoundaryProbe)), nameof(BoundaryProbe.Apply)), new Lambda([o], ToText(o)))),
-            Answer(new Invoke(new Lambda([forwarded], new Invoke(new Member(ClrTypeReferences.Of(typeof(BoundaryProbe)), nameof(BoundaryProbe.CallIt)), forwarded)),
+            Answer(new Invoke(new Member(TypeReference.Of(typeof(BoundaryProbe)), nameof(BoundaryProbe.Apply)), new Lambda([o], ToText(o)))),
+            Answer(new Invoke(new Lambda([forwarded], new Invoke(new Member(TypeReference.Of(typeof(BoundaryProbe)), nameof(BoundaryProbe.CallIt)), forwarded)),
                 P<Func<object>>("f")), (object)(Func<object>)(static () => 7)),
             NameDispatched(typeof(bool), true),
             NameDispatched(typeof(int), 7),
@@ -617,12 +617,12 @@ public class ValueRepresentationEmitTests {
     public static IEnumerable<string> PinnedRowNames() => PinnedRows.Keys;
 
     private static (AnalysisContext Context, Node Root) ModuleCallTree(Row row, Type? parameterOverride = null) {
-        var argument = new Parameter("v", ClrTypeReferences.Of(row.Argument));
-        var taken = new Parameter("x", ClrTypeReferences.Of(parameterOverride ?? row.Parameter));
-        var asObject = ClrTypeReferences.Of(typeof(object));
+        var argument = new Parameter("v", TypeReference.Of(row.Argument));
+        var taken = new Parameter("x", TypeReference.Of(parameterOverride ?? row.Parameter));
+        var asObject = TypeReference.Of(typeof(object));
         var typeDef = new TypeDefinitionNode(Name: "ArgumentBoundaryBox",
             Constructors: [new ConstructorDefinitionNode([], new Block([]))],
-            Properties: [new PropertyDefinitionNode("Held", ClrTypeReferences.Of(row.Argument))],
+            Properties: [new PropertyDefinitionNode("Held", TypeReference.Of(row.Argument))],
             Methods: [
                 new MethodDefinitionNode("Take", asObject, Parameters: [taken], Body: new Return(new TypeCast(taken, asObject))),
                 new MethodDefinitionNode("Run", asObject, Parameters: [argument], Body: new Block([
@@ -639,7 +639,7 @@ public class ValueRepresentationEmitTests {
         var context = AnalysisContext.CreateDefault();
         new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
         var root = new Invoke(new Member(new New(new TypeReference("ArgumentBoundaryBox")), "Run"),
-            new Parameter("v", ClrTypeReferences.Of(row.Argument)));
+            new Parameter("v", TypeReference.Of(row.Argument)));
         return (context, root);
     }
 
@@ -672,13 +672,13 @@ public class ValueRepresentationEmitTests {
     /// <summary>A module constructor's argument is the same site: a date into a <c>DateOnly?</c> parameter is the date.</summary>
     [Test]
     public async Task ModuleConstructorArgument_WordIntoOptionalParameter_ArrivesAsCSharpPasses() {
-        var date = new Parameter("d", ClrTypeReferences.Of(typeof(DateOnly?)));
+        var date = new Parameter("d", TypeReference.Of(typeof(DateOnly?)));
         var typeDef = new TypeDefinitionNode(Name: "CtorBoundaryBox",
             Constructors: [new ConstructorDefinitionNode([date], new Block([new Assignment(new Member(new ThisReference(), "Held"), date)]))],
-            Properties: [new PropertyDefinitionNode("Held", ClrTypeReferences.Of(typeof(DateOnly?)))]);
+            Properties: [new PropertyDefinitionNode("Held", TypeReference.Of(typeof(DateOnly?)))]);
         var context = AnalysisContext.CreateDefault();
         new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
-        var root = new Member(new New(new TypeReference("CtorBoundaryBox"), new Parameter("v", ClrTypeReferences.Of(typeof(DateOnly)))), "Held");
+        var root = new Member(new New(new TypeReference("CtorBoundaryBox"), new Parameter("v", TypeReference.Of(typeof(DateOnly)))), "Held");
         using var exec = Interpreter.Execute(Interpreter.Compile(root, context.Declarations()), s => s.SetArgs(new object?[] { Day }));
         await Assert.That(exec.Result.Value).IsEqualTo(Day);
     }
@@ -690,7 +690,7 @@ public class ValueRepresentationEmitTests {
     }
 
     private static object? ClrCall(string method, Type argument, object value) {
-        var root = new Invoke(new Member(ClrTypeReferences.Of(typeof(ClrNullableProbe)), method), new Parameter("v", ClrTypeReferences.Of(argument)));
+        var root = new Invoke(new Member(TypeReference.Of(typeof(ClrNullableProbe)), method), new Parameter("v", TypeReference.Of(argument)));
         using var exec = Interpreter.Execute(Interpreter.Compile(root), s => s.SetArgs(new object?[] { value }));
         return exec.Result.Value;
     }
@@ -712,10 +712,10 @@ public class ValueRepresentationEmitTests {
     /// <c>decimal?</c> by order. C# binds <c>long?</c>. Row #847 (overload tie-breaking) removes the deviation.</summary>
     [Test]
     public async Task OverloadTie_NullableDecimalDeclaredFirst_BindsByOrder_WhereCSharpBindsLong() {
-        var asObject = ClrTypeReferences.Of(typeof(object));
-        var v = new Parameter("v", ClrTypeReferences.Of(typeof(int)));
+        var asObject = TypeReference.Of(typeof(object));
+        var v = new Parameter("v", TypeReference.Of(typeof(int)));
         Node Take(Type parameter, string name) => new MethodDefinitionNode("Take", asObject,
-            Parameters: [new Parameter("x", ClrTypeReferences.Of(parameter))], Body: new Return(new Constant(name)));
+            Parameters: [new Parameter("x", TypeReference.Of(parameter))], Body: new Return(new Constant(name)));
         var typeDef = new TypeDefinitionNode(Name: "TieBox",
             Constructors: [new ConstructorDefinitionNode([], new Block([]))],
             Methods: [
@@ -726,7 +726,7 @@ public class ValueRepresentationEmitTests {
             ]);
         var context = AnalysisContext.CreateDefault();
         new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
-        var root = new Invoke(new Member(new New(new TypeReference("TieBox")), "Run"), new Parameter("v", ClrTypeReferences.Of(typeof(int))));
+        var root = new Invoke(new Member(new New(new TypeReference("TieBox")), "Run"), new Parameter("v", TypeReference.Of(typeof(int))));
         using var exec = Interpreter.Execute(Interpreter.Compile(root, context.Declarations()), s => s.SetArgs(new object?[] { 7 }));
         await Assert.That(CSharpCallOracle.Chosen([typeof(decimal?), typeof(long?)], typeof(int))).IsEqualTo("long?");
         await Assert.That(exec.Result.Value).IsEqualTo("decimal?");

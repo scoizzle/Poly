@@ -86,7 +86,7 @@ public sealed partial class MinimalApiGenerator {
             new Constant($"PRAGMA user_version = {schemaId.ToString(System.Globalization.CultureInfo.InvariantCulture)}")));
         var read = new Await(new Invoke(new Member(
             new Invoke(new Member(database, "SqlQueryRaw"), new Constant(UserVersionQuery)) {
-                TypeArguments = [ClrTypeReferences.Of(typeof(int))]
+                TypeArguments = [TypeReference.Of(typeof(int))]
             },
             "SingleAsync")));
 

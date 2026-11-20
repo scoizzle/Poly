@@ -56,7 +56,7 @@ public class ExpressionBodyDumpTests {
             new Constant(0L));
 
         return new Block(
-            [new Assignment(bits, new NewArray(ClrTypeReferences.To<long>(), new Constant((long)wordCnt))),
+            [new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant((long)wordCnt))),
              new Assignment(i, new Constant(2L)),
              new WhileLoop(new LessThanOrEqual(new Multiply(i, i), new Constant(Limit)),
                  new Block([

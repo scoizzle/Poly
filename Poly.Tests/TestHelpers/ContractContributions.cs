@@ -54,10 +54,10 @@ public static class ContractContributions {
     /// </summary>
     public static Func<Block> TraceBody(string endpointName) => () => new Block([
         new Invoke(
-            new Member(ClrTypeReferences.Of(typeof(System.Diagnostics.Debug)), "WriteLine"),
+            new Member(TypeReference.Of(typeof(System.Diagnostics.Debug)), "WriteLine"),
             [
                 new Invoke(
-                    new Member(ClrTypeReferences.To<string>(), "Concat"),
+                    new Member(TypeReference.To<string>(), "Concat"),
                     [
                         new Constant($"Contract endpoint '{endpointName}' request: "),
                         new Parameter("request"),

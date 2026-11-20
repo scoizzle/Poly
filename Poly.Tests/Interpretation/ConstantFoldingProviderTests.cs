@@ -170,8 +170,8 @@ internal static class ConstantFoldGrid {
 
     /// <summary>The unfolded VM: the same operator over Parameter operands, run with the row's values, as the ledger runs it.</summary>
     public static string UnfoldedVm(FoldGridRow row) {
-        var a = new Parameter("a", ClrTypeReferences.Of(row.Left.Clr!));
-        var b = row.Right is null ? null : new Parameter("b", ClrTypeReferences.Of(row.Right.Clr!));
+        var a = new Parameter("a", TypeReference.Of(row.Left.Clr!));
+        var b = row.Right is null ? null : new Parameter("b", TypeReference.Of(row.Right.Clr!));
         var node = Build(row.Op, a, b);
         try {
             var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
@@ -327,8 +327,8 @@ public class ConstantFoldingProviderTests {
         await Assert.That(MasterUnfoldedValues.Value.Keys.Order(StringComparer.Ordinal).ToArray())
             .IsEquivalentTo(rows.Select(static row => row.Key).Order(StringComparer.Ordinal).ToArray());
         foreach (var row in rows) {
-            var a = new Parameter("a", ClrTypeReferences.Of(row.Left.Clr!));
-            var b = new Parameter("b", ClrTypeReferences.Of(row.Right!.Clr!));
+            var a = new Parameter("a", TypeReference.Of(row.Left.Clr!));
+            var b = new Parameter("b", TypeReference.Of(row.Right!.Clr!));
             await Assert.That(ConstantFoldGrid.UnfoldedVm(row)).IsEqualTo("throws InvalidOperationException");
             await Assert.That(() => Interpreter.Compile(ConstantFoldGrid.Build(row.Op, a, b)))
                 .Throws<InvalidOperationException>().WithMessageContaining("comparison between incompatible types");
@@ -542,9 +542,9 @@ public class ConstantFoldingProviderTests {
         Node[] rejected = [
             new And(new Constant(false), new Constant(5)),
             new Or(new Constant(true), new Constant("x")),
-            new And(new Constant(true), new Parameter("n", ClrTypeReferences.To<long>())),
-            new Or(new Constant(false), new Parameter("s", ClrTypeReferences.To<string>())),
-            new And(new Constant(false), new Parameter("m", ClrTypeReferences.To<long>()))
+            new And(new Constant(true), new Parameter("n", TypeReference.To<long>())),
+            new Or(new Constant(false), new Parameter("s", TypeReference.To<string>())),
+            new And(new Constant(false), new Parameter("m", TypeReference.To<long>()))
         ];
         foreach (var node in rejected) {
             var analysis = Interpreter.Analyze(node);
@@ -556,9 +556,9 @@ public class ConstantFoldingProviderTests {
         }
         await AssertFolds(new And(new Constant(false), new Constant(true)), false);
         await AssertFolds(new Or(new Constant(true), new Constant(false)), true);
-        await AssertFolds(new And(new Constant(false), new Parameter("p", ClrTypeReferences.To<bool>())), false);
-        await AssertFolds(new Or(new Constant(true), new Parameter("q", ClrTypeReferences.To<bool>())), true);
-        var flag = new Parameter("r", ClrTypeReferences.To<bool>());
+        await AssertFolds(new And(new Constant(false), new Parameter("p", TypeReference.To<bool>())), false);
+        await AssertFolds(new Or(new Constant(true), new Parameter("q", TypeReference.To<bool>())), true);
+        var flag = new Parameter("r", TypeReference.To<bool>());
         var andTrue = new And(new Constant(true), flag);
         await Assert.That(ReferenceEquals(Interpreter.Analyze(andTrue).GetNodeReplacement(andTrue), flag)).IsTrue();
     }
@@ -606,7 +606,7 @@ public class ConstantFoldingProviderTests {
     [Test]
     public async Task TextConcat_AndTheNameofChain_Fold() {
         await AssertFolds(new Add(new Constant("a"), new Constant("b")), "ab");
-        var p = new Parameter("p", ClrTypeReferences.To<int>());
+        var p = new Parameter("p", TypeReference.To<int>());
         var chain = new Add(new Add(new Constant("a"), new Invoke(new TypeReference("nameof"), p)), new Constant("b"));
         await AssertFolds(new Lambda([p], chain).Body, "apb");
     }
@@ -740,7 +740,7 @@ public class ConstantFoldingProviderTests {
         await Assert.That(ConstantFoldGrid.Typed(analysis.GetConstantValue(pair))).IsEqualTo("Decimal:3.5");
         await Assert.That(analysis.GetNodeReplacement(pair) is Invoke { Delegate: Member { MemberName: "Add" } }).IsTrue();
 
-        var twin = new Add(new Parameter("d", ClrTypeReferences.To<decimal>()), new Parameter("n", ClrTypeReferences.To<long>()));
+        var twin = new Add(new Parameter("d", TypeReference.To<decimal>()), new Parameter("n", TypeReference.To<long>()));
         var twinAnalysis = Interpreter.Analyze(twin);
         await Assert.That(twinAnalysis.IsConstant(twin)).IsFalse();
         await Assert.That(twinAnalysis.GetNodeReplacement(twin) is Invoke { Delegate: Member { MemberName: "Add" } }).IsTrue();
@@ -839,10 +839,10 @@ public class ConstantFoldingProviderTests {
     /// </summary>
     [Test]
     public async Task ParameterWhoseValueDisagreesWithItsStamp_Declines_AndAnAgreeingOneFolds() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var disagreeing = new Invoke(new Lambda([x], new Add(x, new Constant(1))), new Constant(5L));
         await AssertDoesNotFold(disagreeing);
-        var y = new Parameter("y", ClrTypeReferences.To<int>());
+        var y = new Parameter("y", TypeReference.To<int>());
         await AssertFolds(new Invoke(new Lambda([y], new Add(y, new Constant(1))), new Constant(5)), 6);
     }
 
@@ -856,7 +856,7 @@ public class ConstantFoldingProviderTests {
         var unstamped = new Invoke(new Lambda([x], new Add(x, new Constant(1))), new Constant(5));
         await Assert.That(Interpreter.Analyze(unstamped).GetResolvedType(x)).IsNull();
         await AssertDoesNotFold(unstamped);
-        var y = new Parameter("y", ClrTypeReferences.To<int>());
+        var y = new Parameter("y", TypeReference.To<int>());
         await AssertFolds(new Invoke(new Lambda([y], new Add(y, new Constant(1))), new Constant(5)), 6);
     }
 

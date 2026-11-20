@@ -55,7 +55,7 @@ public class AstParityTests {
         new("MiddlewareInterpreterIntegrationTests.UnaryMinus_WithPositiveValue_ReturnsNegated",
             new UnaryMinus(Wrap(42))),
         new("MiddlewareInterpreterIntegrationTests.TypeCast_IntToDouble_CastsCorrectly",
-            new TypeCast(Wrap(42), ClrTypeReferences.To<double>())),
+            new TypeCast(Wrap(42), TypeReference.To<double>())),
         new("MiddlewareInterpreterIntegrationTests.Block_MultipleStatements_ExecutesAllAndReturnsLast",
             new Block( Wrap(10), Wrap(20), Wrap(30))),
         new("MiddlewareInterpreterIntegrationTests.Modulo_TenModThree_ReturnsOne",
@@ -154,11 +154,11 @@ public class AstParityTests {
         new("ModuloTests.Modulo_WithNegativeNumbers_ReturnsCorrectRemainder",
             new Modulo(Wrap(-17), Wrap(5))),
         new("NewNodeTests.New_ParameterlessConstructor_CompilesAndCreatesInstance",
-            new New(ClrTypeReferences.To<ParityWidget>())),
+            new New(TypeReference.To<ParityWidget>())),
         new("NewNodeTests.New_WithOptionalParameter_UsesDefaultValueWhenOmitted",
-            new New(ClrTypeReferences.To<ParityWidget>(), Wrap("alpha"))),
+            new New(TypeReference.To<ParityWidget>(), Wrap("alpha"))),
         new("NewNodeTests.New_WithExplicitArguments_BindsAllConstructorParameters",
-            new New(ClrTypeReferences.To<ParityWidget>(), Wrap("beta"), Wrap(42))),
+            new New(TypeReference.To<ParityWidget>(), Wrap("beta"), Wrap(42))),
         new("NumericTypePromotionTests.NumericTypePromotion_Add_IntAndDouble_ReturnsDouble",
             new Add(Wrap(10), Wrap(3.14))),
         new("NumericTypePromotionTests.NumericTypePromotion_Multiply_FloatAndInt_ReturnsFloat",
@@ -178,29 +178,29 @@ public class AstParityTests {
         new("NumericTypePromotionTests.NumericTypePromotion_Add_ULongAndInt_ReturnsULong",
             new Add(Wrap(100UL), Wrap(50))),
         new("TypeCastTests.TypeCast_IntToDouble_ReturnsDouble",
-            new TypeCast(Wrap(42), ClrTypeReferences.To<double>())),
+            new TypeCast(Wrap(42), TypeReference.To<double>())),
         new("TypeCastTests.TypeCast_DoubleToInt_ReturnsInt",
-            new TypeCast(Wrap(3.14), ClrTypeReferences.To<int>())),
+            new TypeCast(Wrap(3.14), TypeReference.To<int>())),
         new("TypeCastTests.TypeCast_LongToInt_ReturnsInt",
-            new TypeCast(Wrap(9999L), ClrTypeReferences.To<int>())),
+            new TypeCast(Wrap(9999L), TypeReference.To<int>())),
         new("TypeCastTests.TypeCast_StringToObject_WorksCorrectly",
-            new TypeCast(Wrap("hello"), ClrTypeReferences.To<object>())),
+            new TypeCast(Wrap("hello"), TypeReference.To<object>())),
         new("TypeCastTests.TypeCast_ObjectToString_WorksCorrectly",
-            new TypeCast(Wrap(((object)"world")), ClrTypeReferences.To<string>())),
+            new TypeCast(Wrap(((object)"world")), TypeReference.To<string>())),
         new("TypeCastTests.TypeCast_NullableToNonNullable_WorksCorrectly",
-            new TypeCast(Wrap(42 as int?), ClrTypeReferences.To<int>())),
+            new TypeCast(Wrap(42 as int?), TypeReference.To<int>())),
         new("TypeCastTests.TypeCast_NonNullableToNullable_WorksCorrectly",
-            new TypeCast(Wrap(42), ClrTypeReferences.To<int?>())),
+            new TypeCast(Wrap(42), TypeReference.To<int?>())),
         new("TypeCastTests.TypeIs_ObjectAgainstString_ReturnsTrue",
-            new TypeIs((Wrap((object)"hello")), ClrTypeReferences.To<string>())),
+            new TypeIs((Wrap((object)"hello")), TypeReference.To<string>())),
         new("TypeCastTests.TypeIs_ObjectAgainstInt_ReturnsFalse",
-            new TypeIs((Wrap((object)"hello")), ClrTypeReferences.To<int>())),
+            new TypeIs((Wrap((object)"hello")), TypeReference.To<int>())),
         new("TypeCastTests.TypeAs_ObjectToString_ReturnsStringValue",
-            new TypeAs((Wrap((object)"hello")), ClrTypeReferences.To<string>())),
+            new TypeAs((Wrap((object)"hello")), TypeReference.To<string>())),
         new("TypeCastTests.TypeAs_ObjectToString_WithIncompatibleValue_ReturnsNull",
-            new TypeAs((Wrap((object)42)), ClrTypeReferences.To<string>())),
+            new TypeAs((Wrap((object)42)), TypeReference.To<string>())),
         new("TypeCastTests.TypeAs_ObjectToNonNullableValueType_ReturnsNullableValue",
-            new TypeAs((Wrap((object)42)), ClrTypeReferences.To<int>())),
+            new TypeAs((Wrap((object)42)), TypeReference.To<int>())),
         new("UnaryMinusTests.UnaryMinus_WithPositiveInteger_ReturnsNegative",
             new UnaryMinus(Wrap(42))),
         new("UnaryMinusTests.UnaryMinus_WithNegativeInteger_ReturnsPositive",
@@ -356,10 +356,10 @@ public class AstParityTests {
         yield return new("ForEachLoopTests.ForEachLoop_LoopVariableDoesNotLeakOutsideLoopScope",
             new Block(new ForEachLoop(leaked, new Constant(new[] { 1 }), new Constant(0)), leaked));
 
-        var v = new Parameter("v", ClrTypeReferences.To<int>());
+        var v = new Parameter("v", TypeReference.To<int>());
         yield return new("LambdaInvokeTests.Invoke_WithLambdaNode_ExecutesBody",
             new Invoke(new Lambda([v], new Add(v, Wrap(10))), Wrap(5)));
-        var w = new Parameter("v", ClrTypeReferences.To<int>());
+        var w = new Parameter("v", TypeReference.To<int>());
         yield return new("LambdaInvokeTests.InvokeWith_ExtensionMethod_BuildsInvokeNode",
             new Lambda([w], new Add(w, Wrap(100))).InvokeWith(Wrap(7)));
     }
@@ -538,7 +538,7 @@ public class AstParityTests {
     /// </summary>
     public static IEnumerable<MovedShape> ShapesMovedFromTheLinqParityCases() {
         static MovedShape Seeded(string label, Func<Parameter, Node> body, object?[] args) {
-            var widget = new Parameter("widget", ClrTypeReferences.To<ParityWidget>());
+            var widget = new Parameter("widget", TypeReference.To<ParityWidget>());
             return new(label, new Lambda([widget], body(widget)), args);
         }
 

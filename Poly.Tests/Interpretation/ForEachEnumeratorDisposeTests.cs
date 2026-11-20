@@ -39,7 +39,7 @@ public class ForEachEnumeratorDisposeTests {
         var node = new ForEachLoop(
             item,
             new Constant(coll),
-            new ThrowStatement(new New(ClrTypeReferences.To<InvalidOperationException>(), new Constant("x"))));
+            new ThrowStatement(new New(TypeReference.To<InvalidOperationException>(), new Constant("x"))));
         try {
             using var exec = Interpreter.Execute(Interpreter.Compile(node));
         }

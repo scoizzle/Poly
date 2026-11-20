@@ -44,7 +44,7 @@ public class AbiEmitterNullScalarTests {
     }
 
     private static Parameter OptionalAge() =>
-        new("age", new OptionalTypeReference(ClrTypeReferences.To<long>()));
+        new("age", new OptionalTypeReference(TypeReference.To<long>()));
 
     [Test]
     public async Task OptionalScalar_Present_NotEqualNull_IsTrue() {
@@ -77,13 +77,13 @@ public class AbiEmitterNullScalarTests {
     /// handle, so absence is the sentinel.</summary>
     [Test]
     public async Task OptionalScalar_NullableClrType_PresentZero_NotEqualNull_IsTrue() {
-        var age = new Parameter("age", ClrTypeReferences.To<long?>());
+        var age = new Parameter("age", TypeReference.To<long?>());
         await Assert.That(Run(new NotEqual(age, new Constant(null)), 0L)).IsEqualTo(1L);
     }
 
     [Test]
     public async Task OptionalScalar_NullableClrType_Absent_EqualNull_IsTrue() {
-        var age = new Parameter("age", ClrTypeReferences.To<long?>());
+        var age = new Parameter("age", TypeReference.To<long?>());
         await Assert.That(Run(new Equal(age, new Constant(null)))).IsEqualTo(1L);
     }
 
@@ -185,19 +185,19 @@ public class AbiEmitterNullScalarTests {
     /// <summary>Nullable bool compares through its 0/1 value word.</summary>
     [Test]
     public async Task OptionalScalar_Bool_EqualTrue_Present_IsTrue() {
-        var flag = new Parameter("flag", new OptionalTypeReference(ClrTypeReferences.To<bool>()));
+        var flag = new Parameter("flag", new OptionalTypeReference(TypeReference.To<bool>()));
         await Assert.That(Run(new Equal(flag, new Constant(true)), true)).IsEqualTo(1L);
     }
 
     [Test]
     public async Task OptionalScalar_Bool_EqualTrue_Absent_IsFalse() {
-        var flag = new Parameter("flag", new OptionalTypeReference(ClrTypeReferences.To<bool>()));
+        var flag = new Parameter("flag", new OptionalTypeReference(TypeReference.To<bool>()));
         await Assert.That(Run(new Equal(flag, new Constant(true)))).IsEqualTo(0L);
     }
 
     [Test]
     public async Task OptionalScalar_Bool_NotEqualTrue_Absent_IsTrue() {
-        var flag = new Parameter("flag", new OptionalTypeReference(ClrTypeReferences.To<bool>()));
+        var flag = new Parameter("flag", new OptionalTypeReference(TypeReference.To<bool>()));
         await Assert.That(Run(new NotEqual(flag, new Constant(true)))).IsEqualTo(1L);
     }
 
@@ -222,14 +222,14 @@ public class AbiEmitterNullScalarTests {
     /// sentinel.</summary>
     [Test]
     public async Task OptionalScalar_CastFromScalar_BoxesValue() {
-        var body = new TypeCast(new Constant(41L), new OptionalTypeReference(ClrTypeReferences.To<long>()));
+        var body = new TypeCast(new Constant(41L), new OptionalTypeReference(TypeReference.To<long>()));
         using var exec = Execute(body);
         await Assert.That(exec.GetValue<long>()).IsEqualTo(41L);
     }
 
     [Test]
     public async Task OptionalScalar_CastFromNull_IsNull() {
-        var body = new TypeCast(new Constant(null), new OptionalTypeReference(ClrTypeReferences.To<long>()));
+        var body = new TypeCast(new Constant(null), new OptionalTypeReference(TypeReference.To<long>()));
         using var exec = Execute(body);
         await Assert.That(exec.Result.Value).IsNull();
     }
@@ -237,7 +237,7 @@ public class AbiEmitterNullScalarTests {
     /// <summary>Three-valued logic has no bool result here, so it fails closed.</summary>
     [Test]
     public async Task OptionalScalar_LogicalNot_IsCompileRejected() {
-        var flag = new Parameter("flag", new OptionalTypeReference(ClrTypeReferences.To<bool>()));
+        var flag = new Parameter("flag", new OptionalTypeReference(TypeReference.To<bool>()));
         await Assert.That(() => Interpreter.Compile(new Not(flag)))
             .Throws<InvalidOperationException>();
     }
@@ -249,7 +249,7 @@ public class AbiEmitterNullScalarTests {
 
     [Test]
     public async Task NullableCtorParam_ScalarArgument_Boxes() {
-        using var exec = Execute(new New(ClrTypeReferences.To<NullableCtor>(), new Constant(41L)));
+        using var exec = Execute(new New(TypeReference.To<NullableCtor>(), new Constant(41L)));
         await Assert.That(exec.GetValue<NullableCtor>()!.Value).IsEqualTo(41L);
     }
 }

@@ -62,7 +62,7 @@ public class OptionalPropertyLoweringTests {
         var token = EntityType(domain, analysis, "Token");
 
         var name = Property(token, "Name");
-        await Assert.That(ClrTypeReferences.States(name.MemberType!, typeof(string))).IsTrue();
+        await Assert.That(name.MemberType!.States(typeof(string))).IsTrue();
         await Assert.That(name.Constraints!.Any(c => c is Constant { Value: "required" })).IsTrue();
 
         var nameParam = CtorParameter(token, "name");
@@ -99,7 +99,7 @@ public class OptionalPropertyLoweringTests {
 
         var limit = Property(counter, "Limit");
         await Assert.That(limit.MemberType).IsTypeOf<OptionalTypeReference>();
-        await Assert.That(ClrTypeReferences.States(((OptionalTypeReference)limit.MemberType!).InnerType, typeof(long))).IsTrue();
+        await Assert.That(((OptionalTypeReference)limit.MemberType!).InnerType.States(typeof(long))).IsTrue();
     }
 
     [Test]

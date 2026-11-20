@@ -162,7 +162,7 @@ public sealed class EveryConceptHasTreeTests {
             Methods: [
                 new MethodDefinitionNode(
                     "M",
-                    ClrTypeReferences.Of(typeof(int)),
+                    TypeReference.Of(typeof(int)),
                     Body: new Constant(DomainExpression.Literal(1)))
             ]);
 
@@ -328,7 +328,7 @@ public sealed class EveryConceptHasTreeTests {
     }
 
     private static bool IsBoolMethod(MethodDefinitionNode method) =>
-        ClrTypeReferences.States(method.ReturnType, typeof(bool));
+        method.ReturnType.States(typeof(bool));
 
     private static bool IsTree(Artifact artifact) =>
         artifact.Descriptor.Id.Type is "entity" or "scaffolding";

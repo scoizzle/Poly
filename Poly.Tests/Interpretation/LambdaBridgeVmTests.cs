@@ -10,13 +10,13 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class LambdaBridgeVmTests {
     private static Member Probe(string name) =>
-        new(ClrTypeReferences.Of(typeof(LambdaBridgeProbe)), name);
+        new(TypeReference.Of(typeof(LambdaBridgeProbe)), name);
 
     [Test]
     public async Task CapturingDelegate_SeesMutationAfterCreation() {
         LambdaBridgeProbe.Reset();
         var threshold = new Variable("threshold");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, threshold));
         var node = new Block([
             new Assignment(threshold, new Constant(1L)),
@@ -35,7 +35,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ActionBody_WriteToCapturedVariable_IsVisibleAfterCall() {
         var threshold = new Variable("threshold");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var body = new Lambda([x], new Block([new Assignment(threshold, x)]));
         var node = new Block([
             new Assignment(threshold, new Constant(0L)),
@@ -52,7 +52,7 @@ public class LambdaBridgeVmTests {
     public async Task DelegateInvokedAfterExecution_StateAlive_SeesLiveCapture() {
         LambdaBridgeProbe.Reset();
         var threshold = new Variable("threshold");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, threshold));
         var node = new Block([
             new Assignment(threshold, new Constant(1L)),
@@ -69,7 +69,7 @@ public class LambdaBridgeVmTests {
 
     [Test]
     public async Task CaptureFree_Func_Int_Bool_PassedToClr_Invokes() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, new Constant(0L)));
 
         using var exec = Interpreter.Execute(Interpreter.Compile(
@@ -81,7 +81,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task Capturing_Func_Int_Bool_PassedToClr_SeesCapturedValue() {
         var threshold = new Variable("threshold");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, threshold));
         var node = new Block([
             new Assignment(threshold, new Constant(2L)),
@@ -95,7 +95,7 @@ public class LambdaBridgeVmTests {
 
     [Test]
     public async Task Expression_Func_Int_Bool_PassedToQueryable_Executes() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, new Constant(1L)));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
 
@@ -108,7 +108,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task CapturingExpression_Func_Int_Bool_PassedToQueryable_SeesCapturedValue() {
         var threshold = new Variable("threshold");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, threshold));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
         var node = new Block([
@@ -125,11 +125,11 @@ public class LambdaBridgeVmTests {
     public async Task Action_Int_Consumer_ForEach_RunsBody() {
         var source = new Variable("source");
         var sink = new Variable("sink");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var body = new Lambda([x], new Invoke(new Member(sink, nameof(List<int>.Add)), x));
         var node = new Block([
-            new Assignment(source, new New(ClrTypeReferences.Of(typeof(List<int>)))),
-            new Assignment(sink, new New(ClrTypeReferences.Of(typeof(List<int>)))),
+            new Assignment(source, new New(TypeReference.Of(typeof(List<int>)))),
+            new Assignment(sink, new New(TypeReference.Of(typeof(List<int>)))),
             new Invoke(new Member(source, nameof(List<int>.Add)), new Constant(1)),
             new Invoke(new Member(source, nameof(List<int>.Add)), new Constant(2)),
             new Invoke(new Member(source, nameof(List<int>.Add)), new Constant(3)),
@@ -145,10 +145,10 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ValueBody_ToAction_Throws() {
         var list = new Variable("list");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var body = new Lambda([x], new Add(x, new Constant(1L)));
         var node = new Block([
-            new Assignment(list, new New(ClrTypeReferences.Of(typeof(List<int>)))),
+            new Assignment(list, new New(TypeReference.Of(typeof(List<int>)))),
             new Invoke(new Member(list, nameof(List<int>.ForEach)), body)
         ], [list]);
 
@@ -159,8 +159,8 @@ public class LambdaBridgeVmTests {
 
     [Test]
     public async Task ImpureExpressionBody_Throws() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
-        var created = new New(ClrTypeReferences.Of(typeof(List<int>)));
+        var x = new Parameter("x", TypeReference.To<int>());
+        var created = new New(TypeReference.Of(typeof(List<int>)));
         var body = new Lambda([x], new Equal(new Member(created, nameof(List<int>.Count)), x));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
 
@@ -174,7 +174,7 @@ public class LambdaBridgeVmTests {
     public async Task StoredDelegate_FromVariable_PassedToClr_Invokes() {
         var threshold = new Variable("threshold");
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, threshold));
         var node = new Block([
             new Assignment(threshold, new Constant(2L)),
@@ -193,7 +193,7 @@ public class LambdaBridgeVmTests {
     public async Task StoredExpressionLambda_FromVariable_PassedToQueryable_Quotes() {
         var threshold = new Variable("threshold");
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, threshold));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
         var node = new Block([
@@ -230,7 +230,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ConditionallyReassignedStoredExpression_Throws() {
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
         var second = new Lambda([x], new GreaterThan(x, new Constant(1L)));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
@@ -248,7 +248,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ProducedStoredLambda_IsNotQuoted() {
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var producer = new Lambda([], new Lambda([x], new GreaterThan(x, new Constant(1L))));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
         var node = new Block([
@@ -264,7 +264,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ProducedStoredLambda_AtDelegatePosition_UsesTheLiveClosure() {
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var producer = new Lambda([], new Lambda([x], new GreaterThan(x, new Constant(0L))));
         var node = new Block([
             new Assignment(declaration, new Invoke(producer)),
@@ -279,7 +279,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task CapturedReassignmentOfStoredExpression_Throws() {
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
         var second = new Lambda([x], new GreaterThan(x, new Constant(1L)));
         var mutator = new Lambda([], new Assignment(new Variable("pred"), second));
@@ -298,7 +298,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ConditionallyReassignedStoredDelegate_UsesTheLiveClosure() {
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
         var second = new Lambda([x], new GreaterThan(x, new Constant(0L)));
         var node = new Block([
@@ -314,7 +314,7 @@ public class LambdaBridgeVmTests {
 
     [Test]
     public async Task ForwardedHostDelegate_ThroughInlineParameter_Invokes() {
-        var pred = new Parameter("pred", ClrTypeReferences.To<Func<int, bool>>());
+        var pred = new Parameter("pred", TypeReference.To<Func<int, bool>>());
         var body = new Lambda([pred], new Invoke(
             Probe(nameof(LambdaBridgeProbe.CountIf)),
             new Variable("pred"),
@@ -328,7 +328,7 @@ public class LambdaBridgeVmTests {
 
     [Test]
     public async Task DelegateReturningDouble_BitcastsTheIeeeSlot() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         // A computed double body (not a constant) exercises the body metadata path.
         var body = new Lambda([x], new Add(new Constant(1.5), new Constant(0.5)));
         using var exec = Interpreter.Execute(Interpreter.Compile(
@@ -340,7 +340,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task NestedExpressionCapture_QuotesFromTheCell() {
         var threshold = new Variable("threshold");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var inner = new Lambda([x], new GreaterThan(x, threshold));
         var any = new Invoke(Probe(nameof(LambdaBridgeProbe.Any)),
             new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery))), inner);
@@ -360,7 +360,7 @@ public class LambdaBridgeVmTests {
         // A reader emits a fresh Variable per identifier: the invoke's callee is not
         // the declaration node. The stored lambda must resolve through the binding.
         var declaration = new Variable("fn");
-        var x = new Parameter("x", ClrTypeReferences.To<long>());
+        var x = new Parameter("x", TypeReference.To<long>());
         var node = new Block([
             new Assignment(declaration, new Lambda([x], new Add(x, new Constant(1L)))),
             new Invoke(new Variable("fn"), new Constant(6L))
@@ -374,7 +374,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ForInitStoredLambda_ReassignedInBody_IsNotQuoted() {
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
         var second = new Lambda([x], new GreaterThan(x, new Constant(1L)));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
@@ -398,7 +398,7 @@ public class LambdaBridgeVmTests {
     public async Task ForInitStoredLambda_SoleLambdaAtExpressionPosition_IsQuoted() {
         var declaration = new Variable("pred");
         var result = new Variable("result");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, new Constant(1L)));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
         var loop = new ForLoop(
@@ -423,7 +423,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ForInitStoredLambda_ReassignedInIncrement_IsNotQuoted() {
         var declaration = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
         var second = new Lambda([x], new GreaterThan(x, new Constant(1L)));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
@@ -445,7 +445,7 @@ public class LambdaBridgeVmTests {
 
     [Test]
     public async Task Overload_ObjectVsExpression_PrefersTheExpressionParameter() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, new Constant(1L)));
 
         using var exec = Interpreter.Execute(Interpreter.Compile(
@@ -456,7 +456,7 @@ public class LambdaBridgeVmTests {
 
     [Test]
     public async Task ProducedClosureAtExpressionPosition_Throws() {
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var producer = new Lambda([], new Lambda([x], new GreaterThan(x, new Constant(1L))));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
         var node = new Invoke(
@@ -470,11 +470,11 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ModuleLambdaForwardedThroughExpressionParameter_Throws() {
         var pred = new Parameter(
-            "pred", ClrTypeReferences.To<System.Linq.Expressions.Expression<Func<int, bool>>>());
+            "pred", TypeReference.To<System.Linq.Expressions.Expression<Func<int, bool>>>());
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
         var body = new Lambda([pred], new Invoke(
             Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred")));
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var argument = new Lambda([x], new GreaterThan(x, new Constant(1L)));
 
         await Assert.That(() => Interpreter.Compile(new Invoke(body, argument)))
@@ -484,9 +484,9 @@ public class LambdaBridgeVmTests {
 
     [Test]
     public async Task StoredLambda_CapturingParameter_QuotesFromTheParameter() {
-        var threshold = new Parameter("threshold", ClrTypeReferences.To<int>());
+        var threshold = new Parameter("threshold", TypeReference.To<int>());
         var pred = new Variable("pred");
-        var x = new Parameter("x", ClrTypeReferences.To<int>());
+        var x = new Parameter("x", TypeReference.To<int>());
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
         var body = new Block([
             new Assignment(pred, new Lambda(

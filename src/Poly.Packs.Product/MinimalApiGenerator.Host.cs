@@ -67,9 +67,9 @@ public sealed partial class MinimalApiGenerator {
             "StatusProblem",
             new TypeReference("IResult"),
             Parameters: [
-                new Parameter("status", ClrTypeReferences.Of(typeof(int))),
-                new Parameter("title", ClrTypeReferences.Of(typeof(string))),
-                new Parameter("detail", new OptionalTypeReference(ClrTypeReferences.Of(typeof(string))), new Constant(null!)),
+                new Parameter("status", TypeReference.Of(typeof(int))),
+                new Parameter("title", TypeReference.Of(typeof(string))),
+                new Parameter("detail", new OptionalTypeReference(TypeReference.Of(typeof(string))), new Constant(null!)),
             ],
             Body: new Block(
                 new Return(new Invoke(

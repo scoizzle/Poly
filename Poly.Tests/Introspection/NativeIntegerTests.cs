@@ -172,8 +172,8 @@ internal static class NativeIntegerGrid {
 
     public static Cell Evaluate(OperatorKind kind, Type left, Type? right) {
         var oracle = CSharpOperatorOracle.Answer(kind, left, right);
-        var a = new Parameter("a", ClrTypeReferences.Of(left));
-        var b = right is null ? null : new Parameter("b", ClrTypeReferences.Of(right));
+        var a = new Parameter("a", TypeReference.Of(left));
+        var b = right is null ? null : new Parameter("b", TypeReference.Of(right));
         var node = Build(kind, a, b);
         AnalysisResult analysis;
         try {
@@ -241,7 +241,7 @@ internal static class NativeIntegerGrid {
 public class NativeIntegerTests {
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    private static Parameter Param(string name, Type type) => new(name, ClrTypeReferences.Of(type));
+    private static Parameter Param(string name, Type type) => new(name, TypeReference.Of(type));
 
     private static string PreT18aPath() =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "Introspection", "NativeIntegerPreT18a.txt");
@@ -516,7 +516,7 @@ public class NativeIntegerTests {
     /// <summary>The writer prints the C# keyword for a native-integer type reference, never the enum member name.</summary>
     [Test]
     public async Task Writer_PrintsTheNativeKeyword() {
-        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), ClrTypeReferences.Of(typeof(nint))));
+        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), TypeReference.Of(typeof(nint))));
         await Assert.That(printed).Contains("(nint)");
         await Assert.That(printed).DoesNotContain("NInt");
         await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(typeof(nuint))).IsEqualTo("nuint");
@@ -619,8 +619,8 @@ public class NativeIntegerTests {
     public async Task TypeDefinitionNode_NativeIntegerProperty_ResolvesToTheNativeType() {
         var holder = new TypeDefinitionNode("NativeHolder",
             Properties: [
-                new PropertyDefinitionNode("Signed", ClrTypeReferences.Of(typeof(nint)), Getter: new PropertyGetterDefinitionNode()),
-                new PropertyDefinitionNode("Unsigned", ClrTypeReferences.Of(typeof(nuint)), Getter: new PropertyGetterDefinitionNode())
+                new PropertyDefinitionNode("Signed", TypeReference.Of(typeof(nint)), Getter: new PropertyGetterDefinitionNode()),
+                new PropertyDefinitionNode("Unsigned", TypeReference.Of(typeof(nuint)), Getter: new PropertyGetterDefinitionNode())
             ]);
         var context = Poly.Analysis.AnalysisContext.CreateDefault();
         new Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer().Analyze(context, holder);
@@ -688,7 +688,7 @@ internal static class NativeConversionGrid {
         public string Line => $"{Key} | {Class} | {Detail}";
     }
 
-    private static Parameter Param(string name, Type type) => new(name, ClrTypeReferences.Of(type));
+    private static Parameter Param(string name, Type type) => new(name, TypeReference.Of(type));
 
     private static string Errors(AnalysisResult analysis) =>
         string.Join("; ", analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message));
@@ -736,7 +736,7 @@ internal static class NativeConversionGrid {
     private static object[] ValuesOf(Type type) => [NativeIntegerGrid.Values[type].Stress, NativeIntegerGrid.Values[type].Plain];
 
     public static Cell EvaluateCast(Type from, Type to) {
-        var node = new TypeCast(Param("a", from), ClrTypeReferences.Of(to));
+        var node = new TypeCast(Param("a", from), TypeReference.Of(to));
         var (cls, detail) = Run(node, ValuesOf(from).Select(v => (new object?[] { v }, Expected(CSharpOperatorOracle.ConversionValue(from, to, v, implicitOnly: false)))), to);
         return new($"({CSharpOperatorOracle.Keyword(to)}){CSharpOperatorOracle.Keyword(from)}", from, to, cls, detail);
     }

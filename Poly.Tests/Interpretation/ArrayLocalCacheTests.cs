@@ -39,7 +39,7 @@ public class ArrayLocalCacheTests {
     public async Task PromotedAccess_HasNoHeapDeref(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = ArrayProgram(
-            new NewArray(ClrTypeReferences.To<long>(), new Constant(4L)), cols,
+            new NewArray(TypeReference.To<long>(), new Constant(4L)), cols,
             new Assignment(new IndexAccess(cols, new Constant(0L)), new Constant(7L)),
             new Assignment(new IndexAccess(cols, new Constant(1L)), new Constant(5L)),
             new IndexAccess(cols, new Constant(1L)));
@@ -73,7 +73,7 @@ public class ArrayLocalCacheTests {
     public async Task Promotion_AllocatesOnce(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = ArrayProgram(
-            new NewArray(ClrTypeReferences.To<long>(), new Constant(4L)), cols,
+            new NewArray(TypeReference.To<long>(), new Constant(4L)), cols,
             new Assignment(new IndexAccess(cols, new Constant(0L)), new Constant(7L)),
             new IndexAccess(cols, new Constant(0L)));
 
@@ -96,7 +96,7 @@ public class ArrayLocalCacheTests {
     public async Task ScopeExit_NullsTheCache(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = ArrayProgram(
-            new NewArray(ClrTypeReferences.To<long>(), new Constant(4L)), cols,
+            new NewArray(TypeReference.To<long>(), new Constant(4L)), cols,
             new Assignment(new IndexAccess(cols, new Constant(0L)), new Constant(7L)),
             new IndexAccess(cols, new Constant(0L)));
 
@@ -128,10 +128,10 @@ public class ArrayLocalCacheTests {
         var first = new Variable("first");
         var second = new Variable("second");
         var program = new Block([
-            ArrayProgram(new NewArray(ClrTypeReferences.To<long>(), new Constant(3L)), first,
+            ArrayProgram(new NewArray(TypeReference.To<long>(), new Constant(3L)), first,
                 new Assignment(new IndexAccess(first, new Constant(0L)), new Constant(11L)),
                 new IndexAccess(first, new Constant(0L))),
-            ArrayProgram(new NewArray(ClrTypeReferences.To<long>(), new Constant(3L)), second,
+            ArrayProgram(new NewArray(TypeReference.To<long>(), new Constant(3L)), second,
                 new Assignment(new IndexAccess(second, new Constant(0L)), new Constant(22L)),
                 new IndexAccess(second, new Constant(0L))),
         ]);
@@ -164,9 +164,9 @@ public class ArrayLocalCacheTests {
     [Test, Timeout(10_000)]
     public async Task EscapingUse_KeepsTheHeapPath(CancellationToken ct) {
         var cols = new Variable("cols");
-        var xs = new Parameter("xs", ClrTypeReferences.To<long[]>());
+        var xs = new Parameter("xs", TypeReference.To<long[]>());
         var program = new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(3L))),
             new Invoke(new Lambda([xs], new Member(xs, "Length")), cols),
         ], [cols]);
 
@@ -190,7 +190,7 @@ public class ArrayLocalCacheTests {
         var cols = new Variable("cols");
         var program = new Block([
             new IndexAccess(cols, new Constant(0L)),
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(3L))),
         ], [cols]);
 
         var scan = Scan(program);
@@ -206,7 +206,7 @@ public class ArrayLocalCacheTests {
         var cols = new Variable("cols");
         var fn = new Variable("fn");
         var program = new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(3L))),
             new Assignment(new IndexAccess(cols, new Constant(0L)), new Constant(9L)),
             new Assignment(fn, new Lambda([], new IndexAccess(cols, new Constant(0L)))),
             new Invoke(fn),
@@ -227,8 +227,8 @@ public class ArrayLocalCacheTests {
     public async Task ReassignedArray_KeepsTheHeapPath(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = new Block([
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(3L))),
-            new Assignment(cols, new NewArray(ClrTypeReferences.To<long>(), new Constant(5L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(3L))),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(5L))),
             new Assignment(new IndexAccess(cols, new Constant(4L)), new Constant(9L)),
             new IndexAccess(cols, new Constant(4L)),
         ], [cols]);
@@ -246,7 +246,7 @@ public class ArrayLocalCacheTests {
     public async Task LengthUse_KeepsTheHeapPath(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = ArrayProgram(
-            new NewArray(ClrTypeReferences.To<long>(), new Constant(3L)), cols,
+            new NewArray(TypeReference.To<long>(), new Constant(3L)), cols,
             new Member(cols, "Length"));
 
         var scan = Scan(program);
@@ -263,7 +263,7 @@ public class ArrayLocalCacheTests {
     public async Task DoublesArray_ReadsIeeeElements(CancellationToken ct) {
         var values = new Variable("values");
         var program = ArrayProgram(
-            new NewArray(ClrTypeReferences.To<double>(), new Constant(3L)), values,
+            new NewArray(TypeReference.To<double>(), new Constant(3L)), values,
             new Assignment(new IndexAccess(values, new Constant(0L)), new Constant(1.5)),
             new IndexAccess(values, new Constant(0L)));
 
@@ -288,7 +288,7 @@ public class ArrayLocalCacheTests {
     public async Task PromotedOutOfRange_ThrowsIndexOutOfRange(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = ArrayProgram(
-            new NewArray(ClrTypeReferences.To<long>(), new Constant(3L)), cols,
+            new NewArray(TypeReference.To<long>(), new Constant(3L)), cols,
             new IndexAccess(cols, new Constant(999L)));
 
         await Assert.That(Scan(program).ArrayCacheAccesses.Count).IsEqualTo(1)

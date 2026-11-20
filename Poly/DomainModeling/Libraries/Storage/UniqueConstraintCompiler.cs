@@ -209,7 +209,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private static Node TypeReferenceTo(ITypeSystem? provider, Type type) =>
         provider?.ClrDefinitionOf(type) is { } definition
             ? new TypeDefinitionReference(definition)
-            : ClrTypeReferences.Of(type);
+            : TypeReference.Of(type);
 
     private sealed class AssignWalk {
         private readonly string _typeName;

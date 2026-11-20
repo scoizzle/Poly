@@ -449,8 +449,10 @@ internal sealed class ActionReadsWalker {
         var simple = SimpleName(fullName);
         if (simple is "object" or "Object" or "dynamic")
             return UnknownType.Instance;
+        // The port is the platform's IStoragePort, which Classify asks of a stated definition (Denotes, I8m); a type that
+        // only shares its name is not the port, and the walk cannot type it.
         if (simple == nameof(IStoragePort))
-            return PortType.Instance;
+            return UnknownType.Instance;
         if (arguments.Count == 0)
             return _domainTypes.TryGetValue(name, out var domainType) && !IsScalarDomainType(domainType, [])
                 ? UnknownType.Instance

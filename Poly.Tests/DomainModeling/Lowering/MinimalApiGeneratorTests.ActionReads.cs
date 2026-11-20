@@ -812,6 +812,36 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(call.Message).Contains("which the walk does not know on a result");
     }
 
+    /// <summary>A type is the port because it is the platform's <c>IStoragePort</c>, not because its name is: a
+    /// parameter whose stated definition merely shares the name has a type the walk cannot type, and refuses.</summary>
+    [Test]
+    public async Task ActionReads_ParameterOfAnotherTypeNamedIStoragePort_IsNotThePort() {
+        var compile = CompileForHost(PortPoly);
+        var catalog = new ArtifactCatalog();
+        var types = compile.Catalog.Artifacts.Select(a => a.Descriptor.Id.Type).Distinct().ToList();
+        foreach (var type in types)
+            catalog.DeclareType(type, types);
+        var lookalike = ClrTypeReferences.Of(typeof(Lookalike.IStoragePort));
+        foreach (var artifact in compile.Catalog.Artifacts) {
+            if (artifact.Descriptor.Id.Type == "entity" && artifact.Descriptor.Id.Segments[^1] == "Widget") {
+                var replaced = ((IReadOnlyList<TypeDefinitionNode>)artifact.Payload!)
+                    .Select(t => t.Name != "Widget" ? t : t with {
+                        Methods = [.. t.Methods!.Select(m => m.Name != "Recode" ? m : m with {
+                            Parameters = [.. m.Parameters!.Select(p => p.Name == "db" ? p with { TypeReference = lookalike } : p)],
+                        })],
+                    })
+                    .ToList();
+                catalog.Register(artifact with { Payload = replaced });
+            }
+            else
+                catalog.Register(artifact);
+        }
+
+        var refusal = Assert.Throws<ActionReadsRefusedException>(() => HostGenerator(compile with { Catalog = catalog }).ReadsOf("Widget", "Recode"));
+
+        await Assert.That(refusal.Message).Contains("parameter 'db', whose type the walk cannot type");
+    }
+
     /// <summary>The port takes values only: an entity argument refuses.</summary>
     [Test]
     public async Task ActionReads_StoragePortWithAnEntity_IsRefused() {

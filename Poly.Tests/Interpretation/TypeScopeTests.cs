@@ -74,4 +74,11 @@ public class TypeScopeTests {
         var (_, importedErrors) = Run("using System.Text;\nnew StringBuilder().Length == 0;");
         await Assert.That(importedErrors).IsEmpty();
     }
+
+    [Test]
+    public async Task AliasDirective_IsNotInTheLanguage_AndFailsAtParse() {
+        // #998 S2: alias directives are not read. The grammar's only using directive is `using name;`, so an alias is
+        // refused where it is written rather than read as something else.
+        await Assert.That(() => CSharpLanguage.Read("using Num = System.Int64;\nNum.MaxValue;")).Throws<FormatException>();
+    }
 }

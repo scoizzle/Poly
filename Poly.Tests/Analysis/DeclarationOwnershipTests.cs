@@ -35,6 +35,26 @@ public class DeclarationOwnershipTests {
     }
 
     [Test]
+    public async Task BareImportedName_IsOneDefinition_AtADeclarationAndAnExpressionSite() {
+        // #998: a unit's scope is one of the analysis' own sources, and every pass looks a name up against it rather
+        // than reading a node bound once. That is the end state only if no pass sees another answer: the declaration's
+        // member type is resolved by the pass that runs before the scope opens, the expression by a later one.
+        var memberType = new NamedTypeReference("StringBuilder");
+        var created = new New(new NamedTypeReference("StringBuilder"));
+        var holder = new TypeDefinitionNode("Holder", Properties: [new PropertyDefinitionNode("Text", memberType)]);
+        var stringBuilder = Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared
+            .GetTypeDefinition(typeof(System.Text.StringBuilder));
+
+        var analysis = Poly.Interpretation.Interpreter.Analyze(new CompilationUnitNode(["System.Text"], null, [holder], [created]));
+
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(DefinitionOf(analysis, holder).Properties.Single().MemberTypeDefinition)
+            .IsSameReferenceAs(stringBuilder).Because("the declaration's member is bound through the unit's using");
+        await Assert.That(analysis.GetResolvedType(created.Type)).IsSameReferenceAs(stringBuilder)
+            .Because("the expression site, resolved by a later pass, asks the same scope and gets the same definition");
+    }
+
+    [Test]
     public async Task DeclaredCollection_IsTheLayers_ClrCollectionIsCSharps() {
         var order = new TypeDefinitionNode("Order");
         var shelf = new TypeDefinitionNode(

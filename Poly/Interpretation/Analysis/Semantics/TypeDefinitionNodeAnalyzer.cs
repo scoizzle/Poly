@@ -695,6 +695,7 @@ internal static class AstTypeReferenceResolver {
             return constructed;
 
         var open = LookupOpenGeneric(named, args.Length, resolver)
+            ?? LookupClrOpenGeneric(named, args.Length, resolver)
             ?? LookupNamed(named, resolver, system, enclosing, allowTypeParameter: false);
         if (open is null)
             return null;
@@ -751,6 +752,18 @@ internal static class AstTypeReferenceResolver {
         var shortKey = AstTypeRegistry.Key(named.TypeName, arity);
         return resolver.Lookup(shortKey) as AstTypeDefinition;
     }
+
+    /// <summary>The CLR's open generic of this name and arity (<c>Action`1</c> for <c>Action&lt;int&gt;</c>), asked through
+    /// the scope before the bare name is (#998 S2): the non-generic type of the same name is a different type, and a
+    /// type that exists only with arguments (<c>Dictionary</c>) has no bare name at all. An arity key names only an
+    /// open generic, so any CLR answer to it is one.</summary>
+    private static ITypeDefinition? LookupClrOpenGeneric(
+        NamedTypeReference named,
+        int arity,
+        ITypeNameLookup resolver) =>
+        resolver.Lookup(AstTypeRegistry.Key(named.FullName, arity)) is ClrTypeDefinition open
+            ? open
+            : null;
 
     private static bool TryCollectionKind(string typeName, out CollectionKind kind) {
         switch (typeName) {

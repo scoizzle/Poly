@@ -182,6 +182,24 @@ public class DeclarationOwnershipTests {
     }
 
     [Test]
+    public async Task GenericName_IsLookedUpWithItsArity_NeverAsTheNonGenericTypeOfThatName() {
+        // #998 S2: `Action<int>` and `Action` are different types, and `Dictionary` exists only with two arguments. A
+        // generic name is asked with its arity, so the non-generic type of the same name never answers for it.
+        var holder = new TypeDefinitionNode("Holder", Properties: [
+            new PropertyDefinitionNode("Callback", new NamedTypeReference("Action", TypeArguments: [TypeReference.To<int>()])),
+            new PropertyDefinitionNode("Plain", new NamedTypeReference("Action")),
+            new PropertyDefinitionNode("Counts", new NamedTypeReference("Dictionary", TypeArguments: [TypeReference.To<string>(), TypeReference.To<int>()])),
+        ]);
+
+        var analysis = Poly.Interpretation.Interpreter.Analyze(new CompilationUnitNode([], null, [holder], null));
+        var properties = DefinitionOf(analysis, holder).Properties.ToDictionary(static property => property.Name, static property => property.MemberTypeDefinition.GetRuntimeType());
+
+        await Assert.That(properties["Callback"]).IsEqualTo(typeof(Action<int>));
+        await Assert.That(properties["Plain"]).IsEqualTo(typeof(Action));
+        await Assert.That(properties["Counts"]).IsEqualTo(typeof(Dictionary<string, int>));
+    }
+
+    [Test]
     public async Task DeclaredClassWithoutBase_InheritsTheTargetsTopType_ElseNothing() {
         var declared = new TypeDefinitionNode("Order");
 

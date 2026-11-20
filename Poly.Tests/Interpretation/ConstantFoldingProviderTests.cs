@@ -6,10 +6,10 @@ using System.Text.RegularExpressions;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -169,8 +169,8 @@ internal static class ConstantFoldGrid {
 
     /// <summary>The unfolded VM: the same operator over Parameter operands, run with the row's values, as the ledger runs it.</summary>
     public static string UnfoldedVm(FoldGridRow row) {
-        var a = new Parameter("a", new ClrTypeReference(row.Left.Clr!));
-        var b = row.Right is null ? null : new Parameter("b", new ClrTypeReference(row.Right.Clr!));
+        var a = new Parameter("a", TypeReference.To(row.Left.Clr!));
+        var b = row.Right is null ? null : new Parameter("b", TypeReference.To(row.Right.Clr!));
         var node = Build(row.Op, a, b);
         try {
             var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
@@ -185,8 +185,7 @@ internal static class ConstantFoldGrid {
     }
 
     public static ITypeOperator? Resolution(FoldGridRow row) =>
-        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Left.Clr!).GetOperator(row.Op,
-            row.Right is null ? null : ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Right.Clr!));
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Left.Clr!).GetOperator(row.Op, row.Right is null ? null : ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(row.Right.Clr!), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
     /// <summary>
     /// The C# value through the runtime binder: each operand converted to the parameter type of the operator the provider
@@ -299,7 +298,7 @@ public class ConstantFoldingProviderTests {
 
     private static bool IsPolicyShift(FoldGridRow row) =>
         row.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
-        && row.Right?.Clr?.GetPrimitiveType() is { } count && ClrBuiltInRules.IsPolicyShiftCount(count);
+        && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(row.Right?.Clr));
 
     private static string[] MasterUndefinedRowsAsOnMaster() =>
         [.. ConstantFoldGrid.Rows.Where(IsMasterUndefinedFold).Select(static row => IsMismatchedEquality(row)
@@ -327,8 +326,8 @@ public class ConstantFoldingProviderTests {
         await Assert.That(MasterUnfoldedValues.Value.Keys.Order(StringComparer.Ordinal).ToArray())
             .IsEquivalentTo(rows.Select(static row => row.Key).Order(StringComparer.Ordinal).ToArray());
         foreach (var row in rows) {
-            var a = new Parameter("a", new ClrTypeReference(row.Left.Clr!));
-            var b = new Parameter("b", new ClrTypeReference(row.Right!.Clr!));
+            var a = new Parameter("a", TypeReference.To(row.Left.Clr!));
+            var b = new Parameter("b", TypeReference.To(row.Right!.Clr!));
             await Assert.That(ConstantFoldGrid.UnfoldedVm(row)).IsEqualTo("throws InvalidOperationException");
             await Assert.That(() => Interpreter.Compile(ConstantFoldGrid.Build(row.Op, a, b)))
                 .Throws<InvalidOperationException>().WithMessageContaining("comparison between incompatible types");
@@ -688,7 +687,7 @@ public class ConstantFoldingProviderTests {
     // ---- the delta: folds that stop (provider-undefined) and the named new folds ----
 
     private static ITypeOperator? Operator<TLeft, TRight>(OperatorKind kind) =>
-        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TLeft)).GetOperator(kind, ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TRight)));
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TLeft)).GetOperator(kind, ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TRight)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
     [Test]
     public async Task DecimalWithInt32OrInt64_Folds() {

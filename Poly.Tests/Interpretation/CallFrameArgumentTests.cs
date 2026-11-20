@@ -1,11 +1,8 @@
-using Poly.Ast.Nodes;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
-using Poly.Introspection;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -62,12 +59,12 @@ public class CallFrameArgumentTests {
         var typeNode = new TypeDefinitionNode(
             "Widget",
             "Sample",
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))],
+            Properties: [new PropertyDefinitionNode("Count", TypeReference.To(typeof(long)))],
             Constructors: [
                 new ConstructorDefinitionNode(
                     [
-                        new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
-                        new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int64)),
+                        new Parameter("name", TypeReference.To(typeof(string))),
+                        new Parameter("count", TypeReference.To(typeof(long))),
                     ],
                     new Block([new Assignment(new Member(new ThisReference(), "Count"), new Constant(1L))])),
             ]);
@@ -75,7 +72,7 @@ public class CallFrameArgumentTests {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, typeNode);
-        var analysis = Interpreter.Analyze(newNode, context.TypeDefinitions);
+        var analysis = Interpreter.Analyze(newNode, context.Declarations());
 
         var scan = VmTree.Read(AbiEmitter.Build(newNode, analysis, CompilationMode.NoDebug).Expression);
 
@@ -135,15 +132,15 @@ public class CallFrameArgumentTests {
         var typeNode = new TypeDefinitionNode(
             "Boom",
             "Sample",
-            Properties: [new PropertyDefinitionNode("Last", new PrimitiveTypeReference(PrimitiveType.Int64))],
+            Properties: [new PropertyDefinitionNode("Last", TypeReference.To(typeof(long)))],
             Constructors: [new ConstructorDefinitionNode()],
             Methods: [
                 new MethodDefinitionNode(
                     "Blow",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
-                    [new Parameter("v", new PrimitiveTypeReference(PrimitiveType.Int64))],
+                    TypeReference.To(typeof(long)),
+                    [new Parameter("v", TypeReference.To(typeof(long)))],
                     new Block([
-                        new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)))),
+                        new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)))),
                     ]),
                     IsStatic: false),
             ]);
@@ -160,14 +157,14 @@ public class CallFrameArgumentTests {
                 new Invoke(new Member(boom, "Blow"), new Constant(1L)),
                 CatchClauses: [
                     new CatchClause(
-                        new ClrTypeReference(typeof(InvalidOperationException)),
+                        TypeReference.To(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(caught, new Constant(1L)))
                 ]),
             caught
         ], [boom, caught]);
 
-        using var exec = Interpreter.Execute(Interpreter.Compile(node, context.TypeDefinitions));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, context.Declarations()));
 
         await Assert.That(exec.RawValue).IsEqualTo(1L)
             .Because("the throw reached the caller's catch, so the callee frame was unwound and "

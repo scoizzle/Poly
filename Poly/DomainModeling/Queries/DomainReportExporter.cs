@@ -1,6 +1,3 @@
-using System.Globalization;
-using System.Text;
-
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 

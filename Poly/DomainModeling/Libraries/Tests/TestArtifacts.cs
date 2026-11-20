@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Libraries.Tests;

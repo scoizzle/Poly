@@ -11,6 +11,12 @@ namespace Poly.Introspection;
 /// </remarks>
 public interface ITypeDefinition {
     /// <summary>
+    /// The type system that made this definition, and whose rules decide its identity and its relations (#998 T9,
+    /// decision §2.4). Two systems never share a definition.
+    /// </summary>
+    ITypeSystem System { get; }
+
+    /// <summary>
     /// Gets the simple (non-qualified) name of the type.
     /// </summary>
     /// <example>"String", "List`1"</example>
@@ -21,11 +27,6 @@ public interface ITypeDefinition {
     /// </summary>
     /// <example>"System", "System.Collections.Generic", null</example>
     string? Namespace { get; }
-
-    /// <summary>
-    /// Gets the visibility of the type.
-    /// </summary>
-    AccessModifier AccessModifier { get; }
 
     /// <summary>
     /// Gets the fully-qualified name combining <see cref="Namespace"/> and <see cref="Name"/>.
@@ -51,29 +52,10 @@ public interface ITypeDefinition {
     IEnumerable<IParameter> GenericParameters { get; }
 
     /// <summary>
-    /// Gets all members (fields, properties, methods) defined on the type.
+    /// Gets every member the type declares: fields, properties, methods and constructors (#998 T11). The typed views
+    /// (<c>Fields</c>, <c>Properties</c>, <c>Methods</c>, <c>Constructors</c>) are extensions over it.
     /// </summary>
     IEnumerable<ITypeMember> Members { get; }
-
-    /// <summary>
-    /// Gets all field members defined on the type.
-    /// </summary>
-    IEnumerable<ITypeField> Fields { get; }
-
-    /// <summary>
-    /// Gets all property members defined on the type.
-    /// </summary>
-    IEnumerable<ITypeProperty> Properties { get; }
-
-    /// <summary>
-    /// Gets all method members defined on the type.
-    /// </summary>
-    IEnumerable<ITypeMethod> Methods { get; }
-
-    /// <summary>
-    /// Gets all constructors defined on the type.
-    /// </summary>
-    IEnumerable<ITypeConstructor> Constructors { get; }
 
     /// <summary>
     /// Gets the operators that apply to operands of this type. A platform decides which: a .NET primitive lists the
@@ -82,49 +64,10 @@ public interface ITypeDefinition {
     IEnumerable<ITypeOperator> Operators { get; }
 
     /// <summary>
-    /// Gets the conversions this type states: the operators it declares (either end, which is why an item names both
-    /// types) and the ones the platform applies with this type as the source (no method). A conversion into this type
-    /// that the other end declares, and what a type defined later may add, are <see cref="ResolveConversionFrom"/>.
-    /// Optionality is the caller's (T-06), so the lift into a nullable target is not listed, and reference conversions
-    /// are assignability, not conversion.
+    /// Gets the conversions this type declares: the operators it declares (either end, which is why an item names both
+    /// types) and, until T10, the ones the platform applies with this type as the source (no method). Which conversion
+    /// applies is the type system's <see cref="ITypeSystem.Conversion"/>. Optionality is the caller's (T-06), so the lift
+    /// into a nullable target is not listed, and reference conversions are assignability, not conversion.
     /// </summary>
     internal IEnumerable<ITypeConversion> Conversions { get; }
-
-    /// <summary>
-    /// Gets the primitive type identifier if this type is a primitive type, null otherwise.
-    /// Primitive types are the atomic building blocks from which all other types are composed.
-    /// </summary>
-    PrimitiveType? PrimitiveType { get; }
-
-    /// <summary>
-    /// Gets the shape of this type. Exactly one kind, so a type cannot be in two
-    /// shapes at once. A <see cref="TypeKind.Primitive"/> always carries a
-    /// <see cref="PrimitiveType"/> and every other kind reports null.
-    /// </summary>
-    TypeKind Kind { get; }
-
-    /// <summary>
-    /// The conversion from <paramref name="source"/> to this type that the platform defines, or null.
-    /// Declared operators and built-in rules both answer here: a conversion that states a method is a declared
-    /// operator, one with no method is applied by the platform itself. Which conversions are candidates and how one is
-    /// chosen is the platform's rule.
-    /// </summary>
-    internal ITypeConversion? ResolveConversionFrom(ITypeDefinition source);
-
-    /// <summary>
-    /// True when a value of <paramref name="source"/> is a value of this type with no conversion applied:
-    /// the same type, a base type or an interface, or whatever the platform adds on top of that (for .NET variance,
-    /// array covariance, the lift from <c>T</c> to <c>T?</c> and the box into <c>object</c>). A declared conversion
-    /// operator is not in this set, and neither is a built-in numeric conversion: those are
-    /// <see cref="ResolveConversionFrom"/>. Assignment, casts, type tests and the emitter read this through
-    /// <see cref="TypeDefinitionExtensions.IsAssignableFrom"/>, which widening would loosen.
-    /// </summary>
-    internal bool IsAssignableWithoutConversion(ITypeDefinition source) => TypeDefinitionExtensions.IsAssignableByHierarchy(this, source);
-
-    /// <summary>
-    /// The operator <paramref name="kind"/> applied to this type and <paramref name="right"/> (null for a unary kind),
-    /// or null when none applies or several do. Which operators are candidates and how one is chosen is the platform's
-    /// rule; consumers ask through <see cref="TypeDefinitionOperatorExtensions.GetOperator"/>.
-    /// </summary>
-    internal ITypeOperator? ResolveOperator(OperatorKind kind, ITypeDefinition? right);
 }

@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -206,7 +205,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 Multiply => Introspection.OperatorKind.Multiply,
                 _ => Introspection.OperatorKind.Divide,
             };
-            return left.Definition!.GetOperator(kind, right.Definition) is { } resolution
+            return context.TypeSystem.Operator(kind, left.Definition!, right.Definition) is { } resolution
                 ? new ExprType(resolution.ResultTypeDefinition, Optional: false, DomainName: null).AsOptional(absent)
                 : ExprType.Unresolved;
         }
@@ -427,7 +426,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             // The model resolves a name first-wins, so an entity declared before an enum of the same name
             // hides it; the declared enum is still the enum (as it was before the move).
             if (context.GetTypeLookup()?.Domain is { } domain
-                && new DomainTypeModel(new Domain(domain.Name, [declaredEnum]), RuntimeAnalysisCache.Session(domain).TypeMaps)
+                && new DomainTypeModel(new Domain(domain.Name, [declaredEnum]), RuntimeAnalysisCache.Session(domain).TypeMaps, context.TypeSystem)
                     .Resolve(name) is { IsResolved: true } own)
                 return own;
             return new ExprType(null, false, name);

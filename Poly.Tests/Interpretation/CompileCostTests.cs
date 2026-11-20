@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Poly.Compile;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
 
 namespace Poly.Tests.Interpretation;

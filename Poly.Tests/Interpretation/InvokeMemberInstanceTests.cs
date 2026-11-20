@@ -1,10 +1,8 @@
 using System.Collections;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
-using Poly.Interpretation.Vm;
 using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
@@ -45,13 +43,13 @@ public class InvokeMemberInstanceTests {
         IEnumerator IEnumerable.GetEnumerator() => _values.GetEnumerator();
     }
 
-    private static ITypeDefinitionProvider BuildNotifyTypeDef(string typeName = "Person") {
+    private static ITypeSource BuildNotifyTypeDef(string typeName = "Person") {
         var typeDef = new TypeDefinitionNode(
             Name: typeName,
             Properties: [
                 new PropertyDefinitionNode(
                     "CurrentStage",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode())
             ],
             Methods: [
@@ -59,7 +57,7 @@ public class InvokeMemberInstanceTests {
                     "Notify",
                     new TypeReference("void"),
                     Parameters: [new Parameter("stageName",
-                        new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String))],
+                        TypeReference.To(typeof(string)))],
                     Body: new Block([])),
                 new MethodDefinitionNode(
                     "Bounce",
@@ -69,7 +67,7 @@ public class InvokeMemberInstanceTests {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeDef);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     private static Invoke NotifyInvoke(string typeName = "Person") =>
@@ -145,7 +143,7 @@ public class InvokeMemberInstanceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Ping",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+                    TypeReference.To(typeof(long)),
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -154,7 +152,7 @@ public class InvokeMemberInstanceTests {
         var bag = new Dictionary<string, object?>();
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Ping"));
-        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
+        var program = Interpreter.Compile(invoke, ctx.Declarations());
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { bag }));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
     }
@@ -167,7 +165,7 @@ public class InvokeMemberInstanceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Ping",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+                    TypeReference.To(typeof(long)),
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -175,7 +173,7 @@ public class InvokeMemberInstanceTests {
         analyzer.Analyze(ctx, typeDef);
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Ping"));
-        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
+        var program = Interpreter.Compile(invoke, ctx.Declarations());
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { new Dictionary<string, object?>() }));
         // The callee writes its result word at slots[FramePos]; the caller moves it.
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
@@ -210,7 +208,7 @@ public class InvokeMemberInstanceTests {
         analyzer.Analyze(ctx, typeDef);
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Reset"));
-        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
+        var program = Interpreter.Compile(invoke, ctx.Declarations());
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { new Dictionary<string, object?>() }));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }

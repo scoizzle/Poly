@@ -1,19 +1,14 @@
 using System.Reflection;
 using System.Text;
 
-using Poly.Analysis;
-using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
-using Poly.DomainModeling.Runtime;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Packs.Sqlite;
 using Poly.Tests.Docs;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -83,7 +78,8 @@ internal static class CompatibilitySweep {
             return text.Append("lower throws ").Append(ex.GetType().Name).Append(": ").AppendLine(ex.Message).ToString();
         }
         var module = (IReadOnlyList<TypeDefinitionNode>)ModuleField.GetValue(executor)!;
-        var types = (ITypeDefinitionProvider)TypesField.GetValue(executor)!;
+        var types = (IReadOnlyList<ITypeSource>)TypesField.GetValue(executor)!;
+        var declarations = types.OfType<AstTypeRegistry>().Single();
         foreach (var type in module) {
             foreach (var method in type.Methods ?? []) {
                 if (method.Body is not { } body)
@@ -93,7 +89,7 @@ internal static class CompatibilitySweep {
                 var parameters = method.Parameters ?? [];
                 AnalysisResult analysis;
                 try {
-                    var entityType = types.GetTypeDefinition(type.Name);
+                    var entityType = declarations.GetTypeDefinition(type.Name);
                     analysis = Interpreter.Analyze(body, types, setup: ctx => {
                         if (entityType is not null)
                             AnnotateThis.Invoke(null, [ctx, body, entityType]);

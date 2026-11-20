@@ -1,6 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Lowering;

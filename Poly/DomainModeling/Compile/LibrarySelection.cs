@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Libraries.Storage;
-using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Compile;
 

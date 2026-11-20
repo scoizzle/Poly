@@ -1,6 +1,4 @@
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -22,7 +20,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         var leftKind = model.KindOf(leftType);
         var rightKind = model.KindOf(rightType);
         if (leftKind is NumericKind.None || rightKind is NumericKind.None) return;
-        if (leftType.Definition!.GetOperator(kind, rightType.Definition) is not { } resolution) return;
+        if (context.TypeSystem.Operator(kind, leftType.Definition!, rightType.Definition) is not { } resolution) return;
 
         var result = new ExprType(resolution.ResultTypeDefinition, Optional: false, DomainName: null);
         var integer = leftKind is NumericKind.Integer64 && rightKind is NumericKind.Integer64;

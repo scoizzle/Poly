@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;

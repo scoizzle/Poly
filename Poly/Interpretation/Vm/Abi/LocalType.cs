@@ -1,11 +1,7 @@
 using System.Collections.Concurrent;
-using System.Linq.Expressions;
 using System.Reflection;
 
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
@@ -52,7 +48,7 @@ internal abstract record LocalType(Type Clr) {
 
     /// <summary>The frame word for a runtime value stored where <paramref name="declared"/> is the static type, encoded
     /// by the declared type only. For a value type, a value of another runtime type converts where C# converts it
-    /// implicitly at a call site (the platform's answer, <c>ResolveConversionFrom</c>); any other value is refused, and
+    /// implicitly at a call site (the type system's answer, <c>ITypeSystem.Conversion</c>); any other value is refused, and
     /// so is null for a non-nullable value type. A reference-typed declaration takes the reference as its handle (a
     /// host object passed for an AST type is dispatched by name); null is the absent sentinel.</summary>
     public static long Write(object? value, Type declared, VmManagedObjectHeap heap) {
@@ -70,11 +66,12 @@ internal abstract record LocalType(Type Clr) {
     }
 
     /// <summary><paramref name="value"/> as <paramref name="target"/> by C#'s implicit conversion: a declared
-    /// <c>op_Implicit</c> runs, a built-in numeric widening converts. There is no other conversion.</summary>
+    /// <c>op_Implicit</c> runs, a built-in numeric widening converts. There is no other conversion. The VM runs CLR
+    /// values, so the rule is the C# system's (#998 T4c): a run-time store has no analysis to name another.</summary>
     private static object ConvertImplicitly(object value, Type target) {
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var conversion = ((ITypeDefinition)registry.GetTypeDefinition(target))
-            .ResolveConversionFrom(registry.GetTypeDefinition(value.GetType()));
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(
+            registry.GetTypeDefinition(value.GetType()), registry.GetTypeDefinition(target));
         if (conversion is { Kind: ConversionOperatorKind.Implicit }) {
             if (conversion.Method is ClrMethod declaredMethod)
                 return declaredMethod.MethodInfo.Invoke(null, [value])!;

@@ -1,5 +1,3 @@
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.DomainModeling.Runtime;
 
 /// <summary>

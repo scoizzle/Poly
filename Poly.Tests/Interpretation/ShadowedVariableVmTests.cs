@@ -124,7 +124,7 @@ public class ShadowedVariableVmTests {
     }
 
     private static Member Probe(string name) =>
-        new(new ClrTypeReference(typeof(ShadowProbe)), name);
+        new(TypeReference.To(typeof(ShadowProbe)), name);
 
     public static class ShadowProbe {
         public static long Apply(System.Linq.Expressions.Expression<Func<long, long>> body, long value) =>

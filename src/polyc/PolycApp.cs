@@ -1,6 +1,5 @@
 using Poly.Compile;
 using Poly.DomainModeling.Compile;
-using Poly.Packs.Product;
 
 namespace Polyc;
 

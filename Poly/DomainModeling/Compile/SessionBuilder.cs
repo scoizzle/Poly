@@ -1,5 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
@@ -259,6 +257,17 @@ public sealed class SessionBuilder {
         return this;
     }
 
+    /// <summary>The type system the session's analysis decides operators and conversions by (#998 T4d); with none, the
+    /// domain language layered on C#
+    /// over the CLR.</summary>
+    public SessionBuilder WithTargetTypeSystem(Poly.Introspection.ITypeSystem system) {
+        ArgumentNullException.ThrowIfNull(system);
+        _targetTypeSystem = system;
+        return this;
+    }
+
+    private Poly.Introspection.ITypeSystem? _targetTypeSystem;
+
     /// <summary>Freezes the loaded libraries into a session.</summary>
     public DomainSession Build(Domain? domain = null) =>
         Build(SessionOptions.Bare(ExtensionCatalog.Core), domain);
@@ -287,6 +296,7 @@ public sealed class SessionBuilder {
             _constraintCompilers.ToArray(),
             _observedFlows,
             _diagnosticAllowances,
-            _contracts.ToArray());
+            _contracts.ToArray(),
+            _targetTypeSystem);
     }
 }

@@ -4,7 +4,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
@@ -302,8 +301,6 @@ internal static class NodeFactCorpus {
 
         yield return Sample<AttributedNode>("LanguageSurfaceTests.AnalysisOnlyKinds_AreNotScriptEntry",
             new AttributedNode(new Constant(1L), [new AttributeNode("Key", [])]));
-        yield return Sample<ClrTypeReference>("LanguageSurfaceTests.CompileRejectKinds_FailLoud",
-            new ClrTypeReference(typeof(string)));
         yield return Sample<ParameterReference>("LanguageSurfaceTests.CompileRejectKinds_FailLoud",
             new ParameterReference());
         yield return Sample<ResolvedTypeReference>(

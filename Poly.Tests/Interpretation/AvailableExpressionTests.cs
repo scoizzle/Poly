@@ -1,6 +1,5 @@
-using Poly.Analysis;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 

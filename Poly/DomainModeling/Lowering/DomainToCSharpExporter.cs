@@ -1,10 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
-using Poly.DomainModeling.Runtime;
+using Poly.Interpretation.CSharp;
 
-using AccessModifier = Poly.Introspection.AccessModifier;
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
@@ -169,7 +166,7 @@ public sealed partial class DomainToCSharpExporter {
     /// </summary>
     private static void AddActionScopeMembers(
         List<PropertyDefinitionNode> props, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
-        var objectType = new ClrTypeReference(typeof(object));
+        var objectType = TypeReference.To(typeof(object));
         var optionalObject = new OptionalTypeReference(objectType);
         var slots = new List<ScopeSlot>();
         foreach (var prop in props.Where(static p => p.Setter is not null && p.Getter?.Body is null && !p.IsStatic))
@@ -226,7 +223,7 @@ public sealed partial class DomainToCSharpExporter {
                 default: {
                         if (IsOptionalSet(type, out var setType)) {
                             var enumerable = new NamedTypeReference(
-                                "IEnumerable", TypeArguments: [new PrimitiveTypeReference(PrimType.String)]);
+                                "IEnumerable", TypeArguments: [TypeReference.To(typeof(string))]);
                             snapshot.Add(new Assignment(Slot(snapshotArray), new Syntactic.Conditional(
                                 new Equal(Field(name), new Constant(null)),
                                 new Constant(null),
@@ -254,7 +251,7 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>The synthetic entity-list type has no <c>Clear</c>; the cast to <c>IList</c> reaches the real one.</summary>
     private static Node ClearList(Node list) =>
-        new Invoke(new Member(new TypeCast(list, new ClrTypeReference(typeof(System.Collections.IList))), "Clear"));
+        new Invoke(new Member(new TypeCast(list, TypeReference.To(typeof(System.Collections.IList))), "Clear"));
 
     private readonly record struct ScopeSlot(string Name, Node Type);
 
@@ -283,8 +280,8 @@ public sealed partial class DomainToCSharpExporter {
         // Enum types and entity references both emit NamedTypeReference(typeName):
         // the catalog is the single source of truth and no tree scan is performed (amu-w3-1).
         var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
-        if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
-            return new PrimitiveTypeReference(prim);
+        if (DomainTypeMapping.TryClrType(clr, out var ground))
+            return TypeReference.To(ground);
         return new NamedTypeReference(typeName);
     }
 

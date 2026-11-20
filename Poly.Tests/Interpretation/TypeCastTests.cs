@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
+using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.Introspection;
 
 namespace Poly.Tests.Interpretation;
@@ -228,11 +229,13 @@ public class TypeCastTests {
         var operand = Wrap((object)"hello");
 
         // Act
-        var isNode = operand.Is(TypeReference.To<string>());
-        var asNode = operand.As(TypeReference.To<string>());
+        var target = TypeReference.To<string>();
+        var isNode = operand.Is(target);
+        var asNode = operand.As(target);
 
-        // Assert
-        await Assert.That(isNode.TargetTypeReference).IsTypeOf<TypeReference>();
-        await Assert.That(asNode.TargetTypeReference).IsTypeOf<TypeReference>();
+        // Assert: a type position is a type node, so the node that was passed is the node the operator carries.
+        // Asserting a specific node type would pin one platform's choice of type node, which is not the contract.
+        await Assert.That(isNode.TargetTypeReference).IsSameReferenceAs(target);
+        await Assert.That(asNode.TargetTypeReference).IsSameReferenceAs(target);
     }
 }

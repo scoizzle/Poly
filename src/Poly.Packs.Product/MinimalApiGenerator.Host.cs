@@ -4,8 +4,6 @@ using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.Interpretation.CSharp;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
-
 namespace Poly.Packs.Product;
 
 // MinimalApiGenerator (Host) — Program.cs host wiring: provider registration, seeding, failure status.
@@ -67,9 +65,9 @@ public sealed partial class MinimalApiGenerator {
             "StatusProblem",
             new TypeReference("IResult"),
             Parameters: [
-                new Parameter("status", new PrimitiveTypeReference(ClrPrimitive.Int32)),
-                new Parameter("title", new PrimitiveTypeReference(ClrPrimitive.String)),
-                new Parameter("detail", new OptionalTypeReference(new PrimitiveTypeReference(ClrPrimitive.String)), new Constant(null!)),
+                new Parameter("status", TypeReference.To(typeof(int))),
+                new Parameter("title", TypeReference.To(typeof(string))),
+                new Parameter("detail", new OptionalTypeReference(TypeReference.To(typeof(string))), new Constant(null!)),
             ],
             Body: new Block(
                 new Return(new Invoke(

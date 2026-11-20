@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling.Compile;

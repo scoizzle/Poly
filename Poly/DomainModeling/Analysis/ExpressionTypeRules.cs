@@ -1,15 +1,9 @@
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using Add = Poly.DomainModeling.Ontology.Add;
-using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
-using Not = Poly.DomainModeling.Ontology.Not;
-using Or = Poly.DomainModeling.Ontology.Or;
-using Prim = Poly.Introspection.PrimitiveType;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
-using TypeKind = Poly.Introspection.TypeKind;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -28,23 +22,22 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static TypeFamily? Family(ExprType type) {
         if (type.IsNullLiteral) return TypeFamily.Null;
         if (type.Definition is not { } definition) return null;
-        if (definition.Kind is TypeKind.Enum) return TypeFamily.Enum;
-        if (definition.PrimitiveType is null) {
-            return definition.Kind switch {
-                TypeKind.Class => TypeFamily.Entity,
-                TypeKind.Struct => TypeFamily.Value,
-                _ => null,
-            };
+        // The domain's own declarations are families of their own; any other definition is in the family its domain
+        // word binds, or in none (#998 T8: never what the definition answers about itself).
+        switch (type.Declared) {
+            case DomainDeclaration.Enum: return TypeFamily.Enum;
+            case DomainDeclaration.Value: return TypeFamily.Value;
+            case DomainDeclaration.Entity: return TypeFamily.Entity;
         }
-        return definition.PrimitiveType switch {
-            Prim.String => TypeFamily.Text,
-            Prim.Int32 or Prim.Int64 or Prim.Float32 or Prim.Float64 or Prim.Decimal => TypeFamily.Number,
-            Prim.Boolean => TypeFamily.Boolean,
-            Prim.DateOnly or Prim.DateTime => TypeFamily.Date,
-            Prim.TimeOnly => TypeFamily.Time,
-            Prim.TimeSpan => TypeFamily.Duration,
-            Prim.Guid => TypeFamily.Guid,
-            Prim.ByteArray => TypeFamily.Binary,
+        return DomainTypeSystem.WordOf(definition) switch {
+            "Text" => TypeFamily.Text,
+            "Int32" or "Number" or "Float32" or "Float" or "Decimal" => TypeFamily.Number,
+            "Boolean" => TypeFamily.Boolean,
+            "Date" or "DateTime" => TypeFamily.Date,
+            "Time" => TypeFamily.Time,
+            "Duration" => TypeFamily.Duration,
+            "Uuid" => TypeFamily.Guid,
+            "Binary" => TypeFamily.Binary,
             _ => null,
         };
     }
@@ -56,15 +49,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private static bool IsDate(ExprType type) => Family(type) is TypeFamily.Date;
 
-    private static bool IsDateOnly(ExprType type) => type.Definition?.PrimitiveType is Prim.DateOnly;
+    private static bool IsDateOnly(ExprType type) => DomainTypeSystem.WordOf(type.Definition) is "Date";
 
-    private static bool IsDateTime(ExprType type) => type.Definition?.PrimitiveType is Prim.DateTime;
+    private static bool IsDateTime(ExprType type) => DomainTypeSystem.WordOf(type.Definition) is "DateTime";
 
     /// <summary>A type as a message names it. Only typed values reach a message: an untyped one is DMSEM006's.</summary>
     private static string Describe(ExprType t) => Family(t) switch {
         TypeFamily.Text => "Text",
         // Only Decimal is distinct (#581); Float and Int32 keep the family name (removing row T-08).
-        TypeFamily.Number => t.Definition?.PrimitiveType is Prim.Decimal ? "Decimal" : "Number",
+        TypeFamily.Number => DomainTypeSystem.WordOf(t.Definition) is "Decimal" ? "Decimal" : "Number",
         TypeFamily.Boolean => "Boolean",
         TypeFamily.Date => $"Date ({t.DomainName ?? "date"})",
         TypeFamily.Time => $"Time ({t.DomainName ?? "time"})",

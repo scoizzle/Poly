@@ -1,5 +1,5 @@
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 
@@ -12,12 +12,12 @@ public class ThisReferenceTests {
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Name", new PrimitiveTypeReference(PrimitiveType.String))
+                new PropertyDefinitionNode("Name", TypeReference.To(typeof(string)))
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "GetName",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Body: memberAccess)
             ]);
 
@@ -68,7 +68,7 @@ public class ThisReferenceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Body: thisReference,
                     IsStatic: true)
             ]);
@@ -95,10 +95,10 @@ public class ThisReferenceTests {
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Name", new PrimitiveTypeReference(PrimitiveType.String)),
+                new PropertyDefinitionNode("Name", TypeReference.To(typeof(string))),
                 new PropertyDefinitionNode(
                     "DisplayName",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode(memberAccess))
             ]);
 
@@ -127,7 +127,7 @@ public class ThisReferenceTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Bad",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Initializer: new PropertyInitializerDefinitionNode(thisReference),
                     IsStatic: true)
             ]);

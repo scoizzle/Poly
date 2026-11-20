@@ -1,7 +1,5 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

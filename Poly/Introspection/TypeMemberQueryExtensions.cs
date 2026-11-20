@@ -17,14 +17,10 @@ public static class TypeMemberQueryExtensions {
         }
 
         /// <summary>
-        /// Filters the given members to those whose parameter types best match the specified argument types.
+        /// Filters the given members to those whose parameter types best match the specified argument types, ranked by
+        /// <paramref name="system"/>'s assignability and conversions (#998 T4b, T9).
         /// </summary>
-        /// <typeparam name="T">The type of the type member.</typeparam>
-        /// <param name="members">The members to filter.</param>
-        /// <param name="parameterTypes">The parameter types to match against.</param>
-        /// <returns>The best-matching members, or an empty set if none found.</returns
-        public IEnumerable<T> WithParameterTypes(
-            params IEnumerable<ITypeDefinition> parameterTypes) {
+        public IEnumerable<T> WithParameterTypes(ITypeSystem system, IEnumerable<ITypeDefinition> parameterTypes) {
             ArgumentNullException.ThrowIfNull(members);
             ArgumentNullException.ThrowIfNull(parameterTypes);
 
@@ -33,7 +29,7 @@ public static class TypeMemberQueryExtensions {
             var arguments = parameterTypes.ToList();
 
             foreach (var member in members) {
-                switch (CalculateParameterScore(member, arguments)) {
+                switch (CalculateParameterScore(member, arguments, system)) {
                     case null:
                         continue;
                     case int score when score > bestScore:
@@ -60,7 +56,7 @@ public static class TypeMemberQueryExtensions {
         /// <param name="arguments">The argument types to match against.</param>
         /// <param name="score">The calculated score if compatible.</param>
         /// <returns>True if the member is compatible; otherwise, false.</returns>
-        private static int? CalculateParameterScore(T member, List<ITypeDefinition> arguments) {
+        private static int? CalculateParameterScore(T member, List<ITypeDefinition> arguments, ITypeSystem system) {
             var score = 0;
             var parameters = member.Parameters ?? [];
 
@@ -74,10 +70,10 @@ public static class TypeMemberQueryExtensions {
                         continue; // Skip optional parameters when no argument provided
                     case (_, _) when TypeDefinitionExtensions.IsSameType(parameter.ParameterTypeDefinition, argument):
                         continue;
-                    case (_, _) when parameter.ParameterTypeDefinition.IsAssignableFrom(argument):
+                    case (_, _) when parameter.ParameterTypeDefinition.IsAssignableFrom(argument, system):
                         score++; // Assignable but not exact match
                         continue;
-                    case (_, _) when parameter.ParameterTypeDefinition.ResolveConversionFrom(argument) is { Kind: ConversionOperatorKind.Implicit }:
+                    case (_, _) when TypeDefinitionExtensions.ConversionInto(parameter.ParameterTypeDefinition, argument, system) is { Kind: ConversionOperatorKind.Implicit }:
                         score += 2; // A conversion the platform applies itself ranks below assignable (a declared one is assignable)
                         continue;
                     default:

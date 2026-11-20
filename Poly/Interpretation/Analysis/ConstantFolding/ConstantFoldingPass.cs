@@ -61,15 +61,18 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// <summary>The name a <c>nameof(arg)</c> yields: the last identifier of the argument,
     /// following the argument's replacement (a dotted CLR type name is rewritten).</summary>
     private static string? NameOfArgument(AnalysisContext context, Node argument) {
+        // A type keyword is the name the source wrote (`nameof(int)` is "int"); a dotted type name rewritten to the
+        // same definition keeps its last identifier (`nameof(System.Int32)` is "Int32").
+        if (argument is TypeDefinitionReference keyword
+            && Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(keyword.TypeDefinition) is { } spelled)
+            return spelled;
         var effective = context.GetNodeReplacement(argument) ?? argument;
         return effective switch {
             Variable v => v.Name,
             Parameter p => p.Name,
             Member m => m.MemberName,
-            ClrTypeReference c => c.RuntimeType.Name,
             NamedTypeReference n => LastNameSegment(n.FullName),
             TypeReference t => LastNameSegment(t.TypeName),
-            PrimitiveTypeReference prim => prim.PrimitiveId.GetCSharpKeyword(),
             _ => null
         };
     }
@@ -178,7 +181,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (resolvedType is null)
             return replacement;
 
-        if (context.TypeDefinitions.GetTypeDefinition(c.Value.GetType()) is { } valueType
+        if (context.TypeSystem.ClrDefinitionOf(c.Value.GetType()) is { } valueType
             && TypeDefinitionExtensions.IsSameType(valueType, resolvedType))
             return replacement;
 
@@ -319,8 +322,18 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return mask is null ? null : new BitwiseAnd(mod.LeftHandValue, mask);
     }
 
+    // C#'s simple type of the operand, asked of the analysis' target (#998 T6a): a target that is not C#, or a definition
+    // that is no C# simple type, answers none, and nothing is reduced.
+    private static Poly.Interpretation.CSharp.SimpleType? SimpleTypeOf(AnalysisContext context, Node node) =>
+        context.GetResolvedType(node) is { } definition
+            ? context.TypeSystem.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>()?.SimpleTypeOf(definition)
+            : null;
+
     private static bool IsIntegerOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node)?.PrimitiveType is { } primitive && primitive.IsInteger();
+        SimpleTypeOf(context, node) is Poly.Interpretation.CSharp.SimpleType.SByte or Poly.Interpretation.CSharp.SimpleType.Byte
+            or Poly.Interpretation.CSharp.SimpleType.Short or Poly.Interpretation.CSharp.SimpleType.UShort
+            or Poly.Interpretation.CSharp.SimpleType.Int or Poly.Interpretation.CSharp.SimpleType.UInt
+            or Poly.Interpretation.CSharp.SimpleType.Long or Poly.Interpretation.CSharp.SimpleType.ULong;
 
     /// <summary>
     /// True only for an unsigned integral operand. <c>x &gt;&gt; n</c> and <c>x &amp; (2^n - 1)</c> equal
@@ -329,15 +342,15 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// complement bits, so the two disagree for every negative dividend.
     /// </summary>
     private static bool IsUnsignedOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node)?.PrimitiveType is
-            PrimitiveType.UInt8 or PrimitiveType.UInt16 or PrimitiveType.UInt32 or PrimitiveType.UInt64;
+        SimpleTypeOf(context, node) is Poly.Interpretation.CSharp.SimpleType.Byte or Poly.Interpretation.CSharp.SimpleType.UShort
+            or Poly.Interpretation.CSharp.SimpleType.UInt or Poly.Interpretation.CSharp.SimpleType.ULong;
 
     private static Constant? BuildMaskConstant(AnalysisContext context, Node left, long mask) {
-        object? value = context.GetResolvedType(left)?.PrimitiveType switch {
-            PrimitiveType.UInt8 => (byte)mask,
-            PrimitiveType.UInt16 => (ushort)mask,
-            PrimitiveType.UInt32 => (uint)mask,
-            PrimitiveType.UInt64 => (ulong)mask,
+        object? value = SimpleTypeOf(context, left) switch {
+            Poly.Interpretation.CSharp.SimpleType.Byte => (byte)mask,
+            Poly.Interpretation.CSharp.SimpleType.UShort => (ushort)mask,
+            Poly.Interpretation.CSharp.SimpleType.UInt => (uint)mask,
+            Poly.Interpretation.CSharp.SimpleType.ULong => (ulong)mask,
             _ => (object?)null
         };
         return value is null ? null : new Constant(value);
@@ -556,11 +569,11 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (!handled && !sameTypeEquality)
             return FoldResult.NotFoldable;
 
-        var leftDefinition = context.TypeDefinitions.GetTypeDefinition(leftType);
-        var rightDefinition = rightType is null ? null : context.TypeDefinitions.GetTypeDefinition(rightType);
+        var leftDefinition = context.TypeSystem.ClrDefinitionOf(leftType);
+        var rightDefinition = rightType is null ? null : context.TypeSystem.ClrDefinitionOf(rightType);
         if (leftDefinition is null || (right is not null && rightDefinition is null))
             return FoldResult.NotFoldable;
-        if (leftDefinition.GetOperator(kind, rightDefinition) is not { } resolution)
+        if (context.TypeSystem.Operator(kind, leftDefinition, rightDefinition) is not { } resolution)
             return sameTypeEquality ? Equality(kind, Equals(leftValue, rightValue)) : FoldResult.NotFoldable;
         // A declared operator outside the handled cells is never run at analysis time.
         if (!handled)

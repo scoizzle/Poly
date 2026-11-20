@@ -25,6 +25,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (resolvedType != null) {
             context.SetResolvedType(node, resolvedType!);
         }
+        if (node is NamedTypeReference generic
+            && AstTypeReferenceResolver.DeclaredWithAnotherArity(generic, context.Layer, context.TypeSystem) is { } declared) {
+            context.ReportError(generic,
+                $"'{declared.Name}' is declared with {declared.GenericParameters.Count()} type parameter(s) and cannot be used with {generic.TypeArguments!.Count} type argument(s)");
+        }
 
         this.AnalyzeChildren(context, node);
 
@@ -48,7 +53,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                     Analyze(context, clause.ExceptionType);
                     exType = context.GetResolvedType(clause.ExceptionType);
                 }
-                exType ??= context.TypeDefinitions.GetTypeDefinition(typeof(Exception));
+                exType ??= context.TypeSystem.ClrDefinitionOf(typeof(Exception));
                 if (exType is not null
                     && context.GetMetadata<CatchBindingMetadata>(clause.Body) is { } binding)
                     context.SetResolvedType(binding.Declaration, exType);
@@ -181,8 +186,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (context.GetNodeReplacement(node) is { } replaced && replaced != node)
             return ResolveNodeType(context, replaced);
         return node switch {
-            Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
-            InterpolatedString => context.TypeDefinitions.GetTypeDefinition(typeof(string)),
+            Constant c => context.TypeSystem.ClrDefinitionOf(c.Value?.GetType() ?? typeof(object)),
+            InterpolatedString => context.TypeSystem.ClrDefinitionOf(typeof(string)),
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
             Variable v => ResolveVariableType(context, v),
@@ -192,32 +197,28 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Divide div => ResolveOperatorResultType(context, OperatorKind.Divide, div.LeftHandValue, div.RightHandValue),
             Modulo mod => ResolveOperatorResultType(context, OperatorKind.Modulo, mod.LeftHandValue, mod.RightHandValue),
             UnaryMinus minus => ResolveUnaryResultType(context, OperatorKind.UnaryMinus, minus.Operand),
-            And => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            Or => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            Not => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            Equal => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            NotEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            LessThan => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            LessThanOrEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            GreaterThan => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            GreaterThanOrEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
+            And => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
+            Or => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
+            Not => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
+            Equal => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
+            NotEqual => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
+            LessThan => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
+            LessThanOrEqual => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
+            GreaterThan => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
+            GreaterThanOrEqual => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
             Member memberAccess => ResolveMemberAccessType(context, memberAccess),
             Invoke methodInv => ResolveMethodInvocationType(context, methodInv),
             New @new => ResolveConstructorInvocationType(context, @new),
             NewArray newArr => ResolveNewArrayType(context, newArr),
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
-            ClrTypeReference clrTypeRef => context.TypeDefinitions.GetTypeDefinition(clrTypeRef.RuntimeType),
             NamedTypeReference named =>
-                AstTypeReferenceResolver.TryResolve(named, context.TypeDefinitions),
+                AstTypeReferenceResolver.TryResolve(named, context.Layer, context.TypeSystem),
             OptionalTypeReference optional => ResolveOptionalType(context, optional),
-            PrimitiveTypeReference prim => prim.PrimitiveId.GetClrType() is { } clr
-                ? context.TypeDefinitions.GetTypeDefinition(clr)
-                : null,
-            TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
+            TypeReference typeRef => context.TypeSystem.Resolve(typeRef.TypeName),
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
             Default d => d.TargetType is null ? null : ResolveNodeType(context, d.TargetType),
-            TypeIs => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
+            TypeIs => context.TypeSystem.ClrDefinitionOf(typeof(bool)),
             TypeAs asType => ResolveAsType(context, asType.TargetTypeReference),
             Conditional cond => ResolveConditionalType(context, cond),
             Coalesce coal => ResolveNodeType(context, coal.RightHandValue),
@@ -233,7 +234,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ShiftLeft sl => ResolveOperatorResultType(context, OperatorKind.ShiftLeft, sl.LeftHandValue, sl.RightHandValue),
             ShiftRight sr => ResolveOperatorResultType(context, OperatorKind.ShiftRight, sr.LeftHandValue, sr.RightHandValue),
             BitwiseNot bn => ResolveUnaryResultType(context, OperatorKind.BitwiseNot, bn.Operand),
-            PopCount => context.TypeDefinitions.GetTypeDefinition(typeof(int)),
+            PopCount => context.TypeSystem.ClrDefinitionOf(typeof(int)),
             UsingStatement => null,
             TryCatchFinally tcf => ResolveNodeType(context, tcf.TryBlock),
             SwitchStatement swt => swt.Cases.Count > 0
@@ -257,7 +258,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
 
         var nullableType = typeof(Nullable<>).MakeGenericType(runtimeType);
-        return context.TypeDefinitions.GetTypeDefinition(nullableType) ?? targetType;
+        return context.TypeSystem.ClrDefinitionOf(nullableType) ?? targetType;
     }
 
     /// <summary>The type of an <c>await</c> is the awaiter's <c>GetResult()</c>.
@@ -274,8 +275,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         var result = binding.GetResult.ReturnType;
         if (result == typeof(void))
-            return context.TypeDefinitions.GetTypeDefinition(typeof(void));
-        return context.TypeDefinitions.GetTypeDefinition(result);
+            return context.TypeSystem.ClrDefinitionOf(typeof(void));
+        return context.TypeSystem.ClrDefinitionOf(result);
     }
 
     private static ITypeDefinition? ResolveForEachLoopType(
@@ -287,7 +288,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             && context.GetResolvedMember(member) is AstPropertyDefinition astProp) {
             elementType = astProp.TryGetCollectionElementType();
         }
-        elementType ??= collectionType?.GetElementType();
+        elementType ??= collectionType is null ? null : context.TypeSystem.ElementType(collectionType);
 
         // Publish the element type so the compatibility check and the emitter agree on it.
         context.SetMetadata(foreachLoop, new ForEachElementTypeMetadata(elementType));
@@ -297,7 +298,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (foreachLoop.DeclaredType is not null) {
             declaredType = ResolveNodeType(context, foreachLoop.DeclaredType);
             if (declaredType is null)
-                return context.TypeDefinitions.GetTypeDefinition(typeof(void));
+                return context.TypeSystem.ClrDefinitionOf(typeof(void));
             context.SetResolvedType(foreachLoop.DeclaredType, declaredType);
         }
 
@@ -305,7 +306,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (loopType != null)
             context.SetResolvedType(foreachLoop.LoopVariable, loopType);
 
-        return context.TypeDefinitions.GetTypeDefinition(typeof(void));
+        return context.TypeSystem.ClrDefinitionOf(typeof(void));
     }
 
     private static ITypeDefinition? ResolveThisReferenceType(AnalysisContext context, ThisReference thisReference) =>
@@ -328,7 +329,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (ResolveNodeType(context, operand) is not { } operandType)
             return null;
         var underlying = PeelNullable(context, operandType);
-        var result = underlying.GetOperator(kind, null)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, underlying, null);
+        var result = context.TypeSystem.Operator(kind, underlying, null)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, underlying, null);
         return result is null ? null : Lift(context, result, IsNullableType(operandType));
     }
 
@@ -349,13 +350,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                 context.GetEffectiveNode(right), rightType.GetRuntimeType())) {
             var native = leftUnderlying.GetRuntimeType() == typeof(nuint) || rightUnderlying.GetRuntimeType() == typeof(nuint)
                 || context.GetEffectiveNode(left) is Constant { Value: nuint } || context.GetEffectiveNode(right) is Constant { Value: nuint };
-            result = context.TypeDefinitions.GetTypeDefinition(native ? typeof(nuint) : typeof(ulong));
+            result = context.TypeSystem.ClrDefinitionOf(native ? typeof(nuint) : typeof(ulong));
         }
-        else if (leftType.GetRuntimeType() is { } leftRuntime && rightType.GetRuntimeType() is { } rightRuntime
-            && DateOffsetRule.Applies(kind, leftRuntime, rightRuntime))
+        else if (DateOffsetRule.Applies(context.TypeSystem, kind, leftType, rightType))
             result = leftUnderlying;
         else
-            result = leftUnderlying.GetOperator(kind, rightUnderlying)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying);
+            result = context.TypeSystem.Operator(kind, leftUnderlying, rightUnderlying)?.ResultTypeDefinition ?? EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying);
         return result is null ? null : Lift(context, result, lift);
     }
 
@@ -363,7 +363,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (!lift || result.GetRuntimeType() is not { IsValueType: true } runtime
             || Nullable.GetUnderlyingType(runtime) is not null)
             return result;
-        return context.TypeDefinitions.GetTypeDefinition(typeof(Nullable<>).MakeGenericType(runtime))
+        return context.TypeSystem.ClrDefinitionOf(typeof(Nullable<>).MakeGenericType(runtime))
             ?? result;
     }
 
@@ -374,7 +374,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (type.GetRuntimeType() is not { } runtime
             || Nullable.GetUnderlyingType(runtime) is not { } underlying)
             return type;
-        return context.TypeDefinitions.GetTypeDefinition(underlying) ?? type;
+        return context.TypeSystem.ClrDefinitionOf(underlying) ?? type;
     }
 
     /// <summary>A value-type optional is <c>Nullable&lt;T&gt;</c>. A reference optional
@@ -385,7 +385,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (inner?.GetRuntimeType() is not { IsValueType: true } runtime
             || Nullable.GetUnderlyingType(runtime) is not null)
             return inner;
-        return context.TypeDefinitions.GetTypeDefinition(typeof(Nullable<>).MakeGenericType(runtime));
+        return context.TypeSystem.ClrDefinitionOf(typeof(Nullable<>).MakeGenericType(runtime));
     }
 
     private static ITypeDefinition? ResolveMemberAccessType(
@@ -408,7 +408,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             if (DottedTypeNames.TryResolveType(context, memberAccess, out var clr)) {
                 // Rewrite this member node to the type; the access above it becomes a
                 // static member access (the emitter follows the replacement).
-                var typeRef = new ClrTypeReference(clr.RuntimeType);
+                var typeRef = new TypeDefinitionReference(clr);
                 context.SetNodeReplacement(memberAccess, typeRef);
                 context.SetResolvedType(memberAccess, clr);
                 return clr;
@@ -416,7 +416,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return null;
         }
 
-        var member = instanceType.Members.WithName(memberAccess.MemberName).FirstOrDefault();
+        // A constructor is a member (#998 T11) named after its type, but member access never reaches one.
+        var member = instanceType.Members.WithName(memberAccess.MemberName).FirstOrDefault(static m => m is not ITypeConstructor);
         if (member is null)
             context.ReportError(memberAccess, $"Type '{instanceType.Name}' does not contain a member named '{memberAccess.MemberName}'.");
         else
@@ -490,9 +491,9 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         var elemType = ResolveNodeType(context, newArr.ElementType);
         var lengthType = ResolveNodeType(context, newArr.Length);
         if (elemType is Introspection.CommonLanguageRuntime.ClrTypeDefinition elemClr)
-            return context.TypeDefinitions.GetTypeDefinition(elemClr.RuntimeType.MakeArrayType());
+            return context.TypeSystem.ClrDefinitionOf(elemClr.RuntimeType.MakeArrayType());
         if (elemType?.FullName is { } fn)
-            return context.TypeDefinitions.GetTypeDefinition(fn + "[]");
+            return context.TypeSystem.Resolve(fn + "[]");
         return null;
     }
 
@@ -509,19 +510,19 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         // Also store the resolved indexer member (merged from MemberResolver)
         if (argumentTypes.All(static type => type is not null)) {
-            var matchedIndexer = instanceType.FindMatchingIndexers(argumentTypes!).FirstOrDefault();
+            var matchedIndexer = instanceType.FindMatchingIndexers(argumentTypes!, context.TypeSystem).FirstOrDefault();
             if (matchedIndexer is not null)
                 context.SetResolvedMember(indexAccess, matchedIndexer);
             // An array's synthetic indexer takes Int32, but C# accepts any integral
-            // index; fall back to the element type when no indexer signature matches.
-            return instanceType.GetElementType(argumentTypes!) ?? instanceType.GetElementType();
+            // index; fall back to the target's element type when no indexer signature matches.
+            return instanceType.GetElementType(context.TypeSystem, argumentTypes!) ?? context.TypeSystem.ElementType(instanceType);
         }
 
         var fallbackIndexer = instanceType.Properties
             .FirstOrDefault(static property => property.Parameters is { } parameters && parameters.Any());
         if (fallbackIndexer is not null)
             context.SetResolvedMember(indexAccess, fallbackIndexer);
-        return instanceType.GetElementType();
+        return context.TypeSystem.ElementType(instanceType);
     }
 
     /// <summary>
@@ -648,7 +649,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return fromReturn;
         // A statement tail yields nothing; the block is a statement, not a value.
         return IsVoidYieldNode(last)
-            ? context.TypeDefinitions.GetTypeDefinition(typeof(void))
+            ? context.TypeSystem.ClrDefinitionOf(typeof(void))
             : lastType;
     }
 
@@ -772,22 +773,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         var yieldClr = yieldType?.GetRuntimeType();
         Type delType;
         try {
-            if (yieldClr is null || yieldClr == typeof(void)) {
-                delType = paramClr.Length == 0
-                    ? typeof(Action)
-                    : System.Linq.Expressions.Expression.GetActionType(paramClr);
-            }
-            else {
-                var funcArgs = new Type[paramClr.Length + 1];
-                paramClr.CopyTo(funcArgs, 0);
-                funcArgs[^1] = yieldClr;
-                delType = System.Linq.Expressions.Expression.GetFuncType(funcArgs);
-            }
+            delType = ClrDelegateTypes.Of(paramClr, yieldClr);
         }
         catch (ArgumentException) {
-            return context.TypeDefinitions.GetTypeDefinition(typeof(object));
+            return context.TypeSystem.ClrDefinitionOf(typeof(object));
         }
-        return context.TypeDefinitions.GetTypeDefinition(delType);
+        return context.TypeSystem.ClrDefinitionOf(delType);
     }
 
     private static Type? RuntimeTypeOf(AnalysisContext context, Node node) =>
@@ -808,7 +799,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         // An untyped parameter is `object`: it compiles as object (AstParameterDefinition) and its frame slot holds a
         // handle. A lambda's untyped parameter is the exception: its type is the delegate's, settled where it converts.
         return context.GetMetadata<LambdaParameterMetadata>(declaration) is null
-            ? context.TypeDefinitions.GetTypeDefinition(typeof(object))
+            ? context.TypeSystem.ClrDefinitionOf(typeof(object))
             : null;
     }
 
@@ -986,7 +977,7 @@ internal static class MethodInvocationSemanticResolver {
         }
 
         var matches = targetType
-            .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes)
+            .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes, context.TypeSystem)
             .ToList();
         // A lambda argument's natural type is its Func/Action shape, not the
         // delegate or Expression<D> the parameter declares. Ordinary matching may
@@ -1016,7 +1007,7 @@ internal static class MethodInvocationSemanticResolver {
     }
 
     private static bool IsTypeName(Node node) => node is
-        NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference;
+        NamedTypeReference or TypeReference;
 
     /// <summary>True when every lambda-shaped argument of <paramref name="method"/> is
     /// accepted by its parameter as a delegate or <c>Expression&lt;D&gt;</c>.</summary>
@@ -1093,7 +1084,7 @@ internal static class MethodInvocationSemanticResolver {
             var argumentType = context.GetResolvedType(argument);
             if (argumentType is not null
                 && (ReferenceEquals(parameterType, argumentType)
-                    || parameterType.IsAssignableFrom(argumentType))) {
+                    || parameterType.IsAssignableFrom(argumentType, context.TypeSystem))) {
                 if (!ReferenceEquals(parameterType, argumentType))
                     score++;
                 continue;
@@ -1132,7 +1123,13 @@ internal static class MethodInvocationSemanticResolver {
 
     private static Type? DeclaredParameterType(AnalysisContext context, Parameter parameter) =>
         ClrTypeResolution.Resolve(
-            parameter.TypeReference, parameter, context.GetResolvedType);
+            parameter.TypeReference, parameter,
+            // A lambda's own parameter is not in the module the type pass walks, so the table has no entry for its
+            // type reference: resolve that reference through the provider instead of reading the shape as absent.
+            node => context.GetResolvedType(node)
+                ?? (ReferenceEquals(node, parameter.TypeReference)
+                    ? AstTypeReferenceResolver.TryResolve(node, context.Layer, context.TypeSystem)
+                    : null));
 }
 
 internal static class ConstructorInvocationSemanticResolver {
@@ -1163,10 +1160,10 @@ internal static class ConstructorInvocationSemanticResolver {
             var complete = new ITypeDefinition[argumentTypes.Length];
             for (var i = 0; i < argumentTypes.Length; i++)
                 complete[i] = argumentTypes[i]!;
-            return targetType.FindMatchingConstructors(complete).FirstOrDefault();
+            return targetType.FindMatchingConstructors(complete, context.TypeSystem).FirstOrDefault();
         }
 
-        return MatchIncompleteConstructor(targetType, @new, argumentTypes);
+        return MatchIncompleteConstructor(context.TypeSystem, targetType, @new, argumentTypes);
     }
 
     /// <summary>
@@ -1175,12 +1172,12 @@ internal static class ConstructorInvocationSemanticResolver {
     /// and whose null literals fit a reference or <c>Nullable&lt;T&gt;</c> parameter.
     /// </summary>
     private static ITypeConstructor? MatchIncompleteConstructor(
-        ITypeDefinition targetType, New @new, ITypeDefinition?[] argumentTypes) {
+        ITypeSystem system, ITypeDefinition targetType, New @new, ITypeDefinition?[] argumentTypes) {
         ITypeConstructor? best = null;
         var bestScore = int.MaxValue;
         var ties = 0;
         foreach (var constructor in targetType.Constructors) {
-            if (!TryScoreConstructor(constructor, @new, argumentTypes, out var score))
+            if (!TryScoreConstructor(system, constructor, @new, argumentTypes, out var score))
                 continue;
             if (score < bestScore) {
                 bestScore = score;
@@ -1196,7 +1193,7 @@ internal static class ConstructorInvocationSemanticResolver {
     }
 
     private static bool TryScoreConstructor(
-        ITypeConstructor constructor, New @new, ITypeDefinition?[] argumentTypes, out int score) {
+        ITypeSystem system, ITypeConstructor constructor, New @new, ITypeDefinition?[] argumentTypes, out int score) {
         score = 0;
         var parameters = constructor.Parameters?.ToArray() ?? [];
         if (!SyntaxTypeCompatibilityAnalyzer.CallFits(parameters, argumentTypes.Length))
@@ -1223,7 +1220,7 @@ internal static class ConstructorInvocationSemanticResolver {
                 continue;
             if (paramType == argType)
                 continue;
-            if (paramType.IsAssignableFrom(argType)) {
+            if (paramType.IsAssignableFrom(argType, system)) {
                 score++;
                 continue;
             }

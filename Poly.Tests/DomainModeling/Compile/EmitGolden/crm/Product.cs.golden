@@ -110,5 +110,5 @@ internal class Product : Poly.Runtime.IActionScoped
         this.Name = (string)__saved[1]!;
         this.ListPrice = (decimal)__saved[2]!;
     }
-    public static System.Boolean ExistsWithSku(Poly.Runtime.IStoragePort db, System.String sku) => db.Exists("Product", "Sku", sku);
+    public static bool ExistsWithSku(Poly.Runtime.IStoragePort db, string sku) => db.Exists("Product", "Sku", sku);
 }

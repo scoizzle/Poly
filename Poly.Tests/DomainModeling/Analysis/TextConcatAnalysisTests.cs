@@ -1,6 +1,5 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 

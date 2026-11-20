@@ -4,6 +4,7 @@ using System.Reflection;
 using Microsoft.CSharp.RuntimeBinder;
 
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
@@ -307,7 +308,7 @@ internal static class BridgeGrid {
             }
             foreach (var method in new[] { nameof(BridgeProbeTargets.TakeUInt32), nameof(BridgeProbeTargets.TakeUInt64) }) {
                 yield return new("constant-parameter", $"{method}({ConstantName(constant)})", null, int32, null, typeof(object),
-                    (_, _) => new Invoke(new Member(new ClrTypeReference(typeof(BridgeProbeTargets)), method), new Constant(constant)),
+                    (_, _) => new Invoke(new Member(TypeReference.To(typeof(BridgeProbeTargets)), method), new Constant(constant)),
                     [new("S1", 7, null)]);
             }
         }
@@ -392,19 +393,19 @@ internal static class BridgeGrid {
             var right = c.Right is null ? null : registry.GetTypeDefinition(c.Right.Underlying);
             if (c.Right is not null && right is null)
                 return null;
-            return left.GetOperator(kind, right) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var result) ? result : null;
+            return left.GetOperator(kind, right, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var result) ? result : null;
         }
         if (c.Right is { } armType) {
             if (armType.Clr == c.Left.Clr)
                 return c.Left.Clr;
             return registry.GetTypeDefinition(armType.Underlying) is { } arm
-                && new[] { left, arm }.GetCommonType() is { } common && common.TryGetRuntimeType(out var commonType) ? commonType : null;
+                && new[] { left, arm }.GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { } common && common.TryGetRuntimeType(out var commonType) ? commonType : null;
         }
         if (c.Return == c.Left.Clr)
             return c.Return;
         ITypeDefinition? target = registry.GetTypeDefinition(c.Return);
         return target is not null
-            && target.ResolveConversionFrom(left) is { Kind: ConversionOperatorKind.Implicit } ? c.Return : null;
+            && Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(left, target) is { Kind: ConversionOperatorKind.Implicit } ? c.Return : null;
     }
 
     /// <summary>
@@ -448,10 +449,10 @@ internal static class BridgeGrid {
     /// body is a function-table entry the main emitter compiles; the positive control of the stage harness.
     /// </summary>
     public static BridgeOutcome Evaluate(BridgeCase c, bool asDelegate = false) {
-        var a = new Parameter("a", new ClrTypeReference(c.Left.Clr));
-        var b = c.Right is null ? null : new Parameter("b", new ClrTypeReference(c.Right.Clr));
-        var x = new Parameter("x", new ClrTypeReference(c.Left.Clr));
-        var y = c.Right is null ? null : new Parameter("y", new ClrTypeReference(c.Right.Clr));
+        var a = new Parameter("a", TypeReference.To(c.Left.Clr));
+        var b = c.Right is null ? null : new Parameter("b", TypeReference.To(c.Right.Clr));
+        var x = new Parameter("x", TypeReference.To(c.Left.Clr));
+        var y = c.Right is null ? null : new Parameter("y", TypeReference.To(c.Right.Clr));
         var body = c.Body(x, y);
         var lambda = new Lambda(y is null ? [x] : [x, y], body);
         if (asDelegate && y is null)
@@ -461,7 +462,7 @@ internal static class BridgeGrid {
             : y is null
                 ? typeof(BridgeProbe<,>).MakeGenericType(c.Left.Clr, c.Return)
                 : typeof(BridgeProbe<,,>).MakeGenericType(c.Left.Clr, c.Right!.Clr, c.Return);
-        var apply = new Member(new ClrTypeReference(probe), "Apply");
+        var apply = new Member(TypeReference.To(probe), "Apply");
         Node call = b is null ? new Invoke(apply, lambda, a) : new Invoke(apply, lambda, a, b);
 
         AnalysisResult analysis;
@@ -824,7 +825,8 @@ internal static class BridgeGrid {
     /// <summary>A shift whose count is a wider integer type: Poly's shift-count policy (C# rejects it, Poly defines it).</summary>
     public static bool IsPolicyShift(BridgeCase c) =>
         c.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
-        && c.Right?.Underlying.GetPrimitiveType() is { } count && ClrBuiltInRules.IsPolicyShiftCount(count);
+        && Poly.Interpretation.CSharp.CSharpBuiltIns.IsPolicyShiftCount(
+            Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(c.Right?.Underlying));
 
     /// <summary>Every cell of the shift-count policy: a policy shift, or an int constant shifted by a uint <c>x</c>.</summary>
     public static bool IsPolicyCell(BridgeCase c) =>
@@ -863,7 +865,7 @@ internal static class BridgeGrid {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var left = registry.GetTypeDefinition(c.Left.Underlying)!;
         var right = c.Right is null ? null : registry.GetTypeDefinition(c.Right.Underlying)!;
-        return left.GetOperator(c.Op!.Value, right) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var type) ? type : null;
+        return left.GetOperator(c.Op!.Value, right, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) is { } resolution && resolution.ResultTypeDefinition.TryGetRuntimeType(out var type) ? type : null;
     }
 
     /// <summary>
@@ -1224,7 +1226,7 @@ public class LambdaBridgeProviderTests {
             static (_, _) => new Constant(null), [new("S1", 5, null)]);
         await Assert.That(BridgeGrid.Evaluate(ret).Observed).IsEqualTo("ran; Int32?; S1=null");
         var argument = new BridgeCase("named", "Echo(null)", null, int32, null, typeof(object),
-            static (_, _) => new Invoke(new Member(new ClrTypeReference(typeof(BridgeProbeTargets)), nameof(BridgeProbeTargets.Echo)), new Constant(null)),
+            static (_, _) => new Invoke(new Member(TypeReference.To(typeof(BridgeProbeTargets)), nameof(BridgeProbeTargets.Echo)), new Constant(null)),
             [new("S1", 5, null)]);
         await Assert.That(BridgeGrid.Evaluate(argument).Observed).IsEqualTo("ran; Int32?; S1=null");
         var coalesce = new BridgeCase("named", "Int32? ?? null", null, nullable, null, typeof(object),

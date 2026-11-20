@@ -1,5 +1,3 @@
-using Poly.DomainModeling;
-using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;

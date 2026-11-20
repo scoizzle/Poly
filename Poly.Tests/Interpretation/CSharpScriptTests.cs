@@ -931,6 +931,18 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_Nameof_OfATypeKeyword_ReturnsTheKeyword() {
+        // A keyword is the name the source wrote; its qualified spelling names the same type by another name.
+        foreach (var keyword in new[] { "int", "string", "bool", "object", "long", "decimal" }) {
+            var result = CSharpScript.Run($"nameof({keyword})");
+            await Assert.That(result.Success).IsTrue().Because(string.Join("; ", result.Diagnostics));
+            await Assert.That(result.Value).IsEqualTo($"\"{keyword}\"");
+        }
+        var qualified = CSharpScript.Run("nameof(System.Int32)");
+        await Assert.That(qualified.Value).IsEqualTo("\"Int32\"");
+    }
+
+    [Test]
     public async Task Run_Nameof_Concatenates() {
         var r = CSharpScript.Run("var x = 1;\n\"a\" + nameof(x)");
         await Assert.That(r.Success).IsTrue();
@@ -1144,8 +1156,7 @@ public class CSharpScriptTests {
         await Assert.That(assignment.Destination).IsTypeOf<Variable>();
         await Assert.That(((Variable)assignment.Destination).Name).IsEqualTo("x");
         var value = (Default)assignment.Value;
-        await Assert.That(((PrimitiveTypeReference)value.TargetType!).PrimitiveId)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
+        await Assert.That(value.TargetType!.States(typeof(int))).IsTrue();
         await Assert.That(block.Variables).Count().IsEqualTo(1);
     }
 

@@ -9,7 +9,6 @@ using ModelContextProtocol.Server;
 
 using Poly.Mcp;
 using Poly.Mcp.Surface;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 

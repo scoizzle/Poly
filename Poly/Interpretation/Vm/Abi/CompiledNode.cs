@@ -1,7 +1,3 @@
-using System.Linq.Expressions;
-
-using Poly.Ast.Nodes;
-
 namespace Poly.Interpretation.Vm.Abi;
 
 /// <summary>

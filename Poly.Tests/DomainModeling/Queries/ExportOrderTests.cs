@@ -1,10 +1,8 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-using Poly.DomainModeling;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Queries;
-using Poly.Tests.TestHelpers;
 
 using TUnit.Assertions.Enums;
 

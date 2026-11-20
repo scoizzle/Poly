@@ -1,9 +1,4 @@
-using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
 using Poly.Packs.Product;
 
 using static Poly.Tests.DomainModeling.Parsing.ModelKit;

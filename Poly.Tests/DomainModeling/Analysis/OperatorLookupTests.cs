@@ -1,11 +1,9 @@
 using System.Globalization;
 
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
-using Poly.DomainModeling.Libraries.Temporal;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -27,18 +25,21 @@ internal static class OperatorOperands {
     public static DomainTypeModel Model() {
         var maps = new TypeMappingRegistry();
         TemporalTypeMaps.Apply(maps);
-        return new DomainTypeModel(BuildDomain(), maps);
+        return new DomainTypeModel(BuildDomain(), maps, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
     }
 
     public static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 }
 
-/// <summary>Modeled definitions declared by hand, so a test controls every operator and conversion member.</summary>
-internal sealed class ModeledTypeSet : ITypeDefinitionProvider {
+/// <summary>
+/// Modeled definitions declared by hand, so a test controls every operator and conversion member. It is also the scope
+/// its definitions resolve their member type names through (#998 T12b); every other question is C#'s.
+/// </summary>
+internal sealed class ModeledTypeSet : ITypeSystem, ITypeNameLookup {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
     public AstTypeDefinition Add(string name, params MethodDefinitionNode[] methods) {
-        var definition = new AstTypeDefinition(new TypeDefinitionNode(name, Kind: TypeKind.Struct, Methods: methods), this);
+        var definition = new AstTypeDefinition(new TypeDefinitionNode(name, Form: TypeDeclarationForm.Struct, Methods: methods), this, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         _types[name] = definition;
         return definition;
     }
@@ -46,6 +47,33 @@ internal sealed class ModeledTypeSet : ITypeDefinitionProvider {
     public ITypeDefinition? GetTypeDefinition(string name) => _types.GetValueOrDefault(name);
 
     public ITypeDefinition? GetTypeDefinition(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
+
+    public IEnumerable<ITypeDefinition> Types => _types.Values;
+
+    // ── The scope the modeled definitions resolve through, and the system they are analysed by ──
+
+    public TypeSystemRules Rules => CSharpTypeSystem.Shared.Rules;
+    public ITypeSystem? Target => CSharpTypeSystem.Shared;
+    public IReadOnlyList<ITypeSource> Sources => CSharpTypeSystem.Shared.Sources;
+    public ITypeDefinition? Resolve(string qualifiedName) => GetTypeDefinition(qualifiedName) ?? CSharpTypeSystem.Shared.Resolve(qualifiedName);
+    public ITypeDefinition? Bind(string word) => CSharpTypeSystem.Shared.Bind(word);
+    public string? Spell(ITypeDefinition definition) => CSharpTypeSystem.Shared.Spell(definition);
+    public bool IsSame(ITypeDefinition a, ITypeDefinition b) => CSharpTypeSystem.Shared.IsSame(a, b);
+    public ITypeDefinition? NullableOf(ITypeDefinition definition) => CSharpTypeSystem.Shared.NullableOf(definition);
+    public ITypeDefinition? ElementType(ITypeDefinition definition) => CSharpTypeSystem.Shared.ElementType(definition);
+
+    public bool IsAssignableWithoutConversion(ITypeDefinition destination, ITypeDefinition source) =>
+        CSharpTypeSystem.Shared.IsAssignableWithoutConversion(destination, source);
+
+    public ITypeConversion? Conversion(ITypeDefinition source, ITypeDefinition destination) =>
+        CSharpTypeSystem.Shared.Conversion(source, destination);
+
+    public ITypeOperator? Operator(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right) =>
+        CSharpTypeSystem.Shared.Operator(kind, left, right);
+
+    public TRule? Rule<TRule>() where TRule : class, ITypeSystemRule => CSharpTypeSystem.Shared.Rule<TRule>();
+
+    ITypeDefinition? ITypeNameLookup.Lookup(string name) => GetTypeDefinition(name);
 
     /// <summary>A static member: <c>static result name(parameters)</c>.</summary>
     public static MethodDefinitionNode Static(string name, string result, params string[] parameters) =>
@@ -72,7 +100,7 @@ public class OperatorLookupTests {
     private static ITypeDefinition Def(string name) => Model.Resolve(name).Definition!;
 
     private static ITypeOperator? Op(string left, OperatorKind kind, string? right) =>
-        Def(left).GetOperator(kind, right is null ? null : Def(right));
+        Def(left).GetOperator(kind, right is null ? null : Def(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
     private static ITypeDefinition[] ParametersOf(ITypeOperator resolution) =>
         [.. resolution.Parameters.Select(static p => p.ParameterTypeDefinition)];
@@ -111,7 +139,7 @@ public class OperatorLookupTests {
         var operands = new[] { Def("Decimal"), Def("Number") };
         var parameters = ParametersOf(resolution);
         await Assert.That(ReferenceEquals(parameters[0], operands[0])).IsTrue();
-        var conversion = parameters[1].ResolveConversionFrom(operands[1]);
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(operands[1], parameters[1]);
         await Assert.That(conversion).IsNotNull();
         await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }
@@ -176,13 +204,13 @@ public class OperatorLookupTests {
     public async Task Float32_Add_IsFloat32_AndItsComparisonIsPlatformApplied() {
         // T-24 flipped this pin: Float32 arithmetic is built in, and the CLR-declared comparison is subsumed.
         var single = OperatorOperands.Clr(typeof(float));
-        await AssertResult(single.GetOperator(OperatorKind.Add, single), single);
-        await AssertResult(single.GetOperator(OperatorKind.Multiply, single), single);
-        var comparison = single.GetOperator(OperatorKind.LessThan, single);
+        await AssertResult(single.GetOperator(OperatorKind.Add, single, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), single);
+        await AssertResult(single.GetOperator(OperatorKind.Multiply, single, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), single);
+        var comparison = single.GetOperator(OperatorKind.LessThan, single, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await AssertResult(comparison, OperatorOperands.Clr(typeof(bool)));
         await Assert.That(comparison!.Method).IsNull();
         // The sibling: Float32 with Float64 is Float64.
-        await AssertResult(single.GetOperator(OperatorKind.Add, OperatorOperands.Clr(typeof(double))), OperatorOperands.Clr(typeof(double)));
+        await AssertResult(single.GetOperator(OperatorKind.Add, OperatorOperands.Clr(typeof(double)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), OperatorOperands.Clr(typeof(double)));
     }
 
     // ---- text and boolean ----
@@ -229,8 +257,8 @@ public class OperatorLookupTests {
         await Assert.That(Op("Decimal", OperatorKind.Or, "Decimal")).IsNull();
         // BigInteger declares op_BitwiseAnd, which is BitwiseAnd, not logical-and: And has no reflected name.
         var big = OperatorOperands.Clr(typeof(System.Numerics.BigInteger));
-        await Assert.That(big.GetOperator(OperatorKind.And, big)).IsNull();
-        await AssertResult(big.GetOperator(OperatorKind.BitwiseAnd, big), big);
+        await Assert.That(big.GetOperator(OperatorKind.And, big, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
+        await AssertResult(big.GetOperator(OperatorKind.BitwiseAnd, big, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), big);
         await AssertResult(Op("Boolean", OperatorKind.And, "Boolean"), OperatorOperands.Clr(typeof(bool)));
     }
 
@@ -267,7 +295,7 @@ public class OperatorLookupTests {
     [Test]
     public async Task ValueTypeOperatorMember_Clr_IsFoundOnTheValueType_WithNoRegistry() {
         var vec = OperatorOperands.Clr(typeof(Vec));
-        var resolution = vec.GetOperator(OperatorKind.Add, vec);
+        var resolution = vec.GetOperator(OperatorKind.Add, vec, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await AssertResult(resolution, vec);
         await Assert.That(resolution!.Method).IsNotNull();
         await Assert.That(resolution.Method!.DeclaringTypeDefinition).IsSameReferenceAs(vec);
@@ -277,12 +305,12 @@ public class OperatorLookupTests {
     public async Task ValueTypeOperatorMember_Modeled_IsFoundOnTheDeclaringDefinition() {
         var set = new ModeledTypeSet();
         var vec = set.Add("Vec", ModeledTypeSet.Operator(OperatorKind.Add, "Vec", "Vec", "Vec"));
-        var resolution = ((ITypeDefinition)vec).GetOperator(OperatorKind.Add, vec);
+        var resolution = ((ITypeDefinition)vec).GetOperator(OperatorKind.Add, vec, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await AssertResult(resolution, vec);
         await Assert.That(resolution!.Method).IsNotNull();
         await Assert.That(resolution.Method!.DeclaringTypeDefinition).IsSameReferenceAs(vec);
         // The sibling: an operator the type does not declare is none.
-        await Assert.That(((ITypeDefinition)vec).GetOperator(OperatorKind.Subtract, vec)).IsNull();
+        await Assert.That(((ITypeDefinition)vec).GetOperator(OperatorKind.Subtract, vec, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
     }
 
     [Test]
@@ -292,16 +320,16 @@ public class OperatorLookupTests {
         var y = set.Add("Y", ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "Y", "R"));
         var l = set.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "X", "X", "R"));
         var r = set.Add("R", ModeledTypeSet.Operator(OperatorKind.Add, "Y", "L", "Y"));
-        await Assert.That(((ITypeDefinition)x).ResolveConversionFrom(l)).IsNotNull();
-        await Assert.That(((ITypeDefinition)y).ResolveConversionFrom(r)).IsNotNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(l, ((ITypeDefinition)x))).IsNotNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(r, ((ITypeDefinition)y))).IsNotNull();
         // (X, R) needs L to X; (L, Y) needs R to Y. Both apply and neither is all-identity.
-        await Assert.That(((ITypeDefinition)l).GetOperator(OperatorKind.Add, r)).IsNull();
+        await Assert.That(((ITypeDefinition)l).GetOperator(OperatorKind.Add, r, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
         // The sibling: with the second candidate gone the first is the only one.
         var set2 = new ModeledTypeSet();
         set2.Add("X", ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "X", "L"));
         var l2 = set2.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "X", "X", "R"));
         var r2 = set2.Add("R");
-        await AssertResult(((ITypeDefinition)l2).GetOperator(OperatorKind.Add, r2), set2.GetTypeDefinition("X")!);
+        await AssertResult(((ITypeDefinition)l2).GetOperator(OperatorKind.Add, r2, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), set2.GetTypeDefinition("X")!);
     }
 
     [Test]
@@ -309,12 +337,12 @@ public class OperatorLookupTests {
         var set = new ModeledTypeSet();
         var l = set.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "L", "L", "R"));
         var r = set.Add("R", ModeledTypeSet.Operator(OperatorKind.Add, "R", "L", "R"));
-        await Assert.That(((ITypeDefinition)l).GetOperator(OperatorKind.Add, r)).IsNull();
+        await Assert.That(((ITypeDefinition)l).GetOperator(OperatorKind.Add, r, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
         // The sibling: one identity candidate wins.
         var set2 = new ModeledTypeSet();
         var l2 = set2.Add("L", ModeledTypeSet.Operator(OperatorKind.Add, "L", "L", "R"));
         var r2 = set2.Add("R");
-        await AssertResult(((ITypeDefinition)l2).GetOperator(OperatorKind.Add, r2), l2);
+        await AssertResult(((ITypeDefinition)l2).GetOperator(OperatorKind.Add, r2, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), l2);
     }
 
     // ---- temporal: what the CLR declares, and what it does not ----
@@ -354,21 +382,21 @@ public class OperatorLookupTests {
 
     [Test]
     public async Task GetOperator_Null_Throws() {
-        await Assert.That(() => ((ITypeDefinition)null!).GetOperator(OperatorKind.Add, Def("Number")))
+        await Assert.That(() => ((ITypeDefinition)null!).GetOperator(OperatorKind.Add, Def("Number"), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared))
             .ThrowsExactly<ArgumentNullException>();
-        await Assert.That(() => Def("Number").GetOperator(OperatorKind.Add, null))
+        await Assert.That(() => Def("Number").GetOperator(OperatorKind.Add, null, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared))
             .ThrowsExactly<ArgumentNullException>();
     }
 
     [Test]
     public async Task GetOperator_UndefinedKind_Throws() {
-        await Assert.That(() => Def("Number").GetOperator((OperatorKind)99, Def("Number")))
+        await Assert.That(() => Def("Number").GetOperator((OperatorKind)99, Def("Number"), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared))
             .ThrowsExactly<ArgumentOutOfRangeException>();
     }
 
     [Test]
     public async Task GetOperator_ArityMismatch_Throws() {
-        await Assert.That(() => Def("Boolean").GetOperator(OperatorKind.Not, Def("Boolean")))
+        await Assert.That(() => Def("Boolean").GetOperator(OperatorKind.Not, Def("Boolean"), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared))
             .ThrowsExactly<ArgumentException>();
         // The sibling: the right arity is accepted.
         await AssertResult(Op("Boolean", OperatorKind.Not, null), OperatorOperands.Clr(typeof(bool)));
@@ -382,7 +410,7 @@ public class OperatorLookupTests {
         var boolean = Def("Boolean");
         foreach (var kind in Enum.GetValues<OperatorKind>()) {
             var unary = UnaryKinds.Contains(kind);
-            var call = () => boolean.GetOperator(kind, unary ? null : boolean);
+            var call = () => boolean.GetOperator(kind, unary ? null : boolean, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
             await Assert.That(call).ThrowsNothing();
         }
     }
@@ -427,7 +455,7 @@ public class OperatorLookupTests {
         typeof(long), typeof(ulong), typeof(char), typeof(float), typeof(double), typeof(decimal), typeof(string)
     ];
 
-    private static string NameOf(Type type) => type.GetPrimitiveType()?.GetDisplayName() ?? type.Name;
+    private static string NameOf(Type type) => type.Name;
 
     /// <summary>A boxed value of <paramref name="type"/>. Boolean is false for Or and true otherwise, so neither conditional operator short-circuits.</summary>
     private static object One(Type type, OperatorKind kind) =>
@@ -477,7 +505,7 @@ public class OperatorLookupTests {
                     }
                     var expected = Binder(kind, One(left, kind), right is null ? null : One(right, kind));
                     var operands = right is null ? new[] { OperatorOperands.Clr(left) } : [OperatorOperands.Clr(left), OperatorOperands.Clr(right)];
-                    var resolution = operands[0].GetOperator(kind, right is null ? null : operands[1]);
+                    var resolution = operands[0].GetOperator(kind, right is null ? null : operands[1], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
                     if (expected is null) {
                         undefined++;
                         if (resolution is { } extra)
@@ -497,7 +525,7 @@ public class OperatorLookupTests {
                         if (!parameters[i].TryGetRuntimeType(out var parameter) || parameter != bound[i])
                             mismatches.Add($"{cell}: parameter {i} C# {(bound[i] is { } b ? NameOf(b) : "?")}, provider {parameters[i].Name}");
                         else if (!ReferenceEquals(parameters[i], operands[i])
-                            && parameters[i].ResolveConversionFrom(operands[i]) is not { Kind: ConversionOperatorKind.Implicit })
+                            && Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(operands[i], parameters[i]) is not { Kind: ConversionOperatorKind.Implicit })
                             mismatches.Add($"{cell}: operand {i} does not convert implicitly to {parameters[i].Name}");
                     }
                 }
@@ -513,10 +541,10 @@ public class OperatorLookupTests {
 
     private static bool IsPolicyShift(OperatorKind kind, Type? count) =>
         kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
-        && count?.GetPrimitiveType() is { } primitive && ClrBuiltInRules.IsPolicyShiftCount(primitive);
+        && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(count));
 
     private static ITypeOperator? ClrOp(Type left, OperatorKind kind, Type? right) =>
-        OperatorOperands.Clr(left).GetOperator(kind, right is null ? null : OperatorOperands.Clr(right));
+        OperatorOperands.Clr(left).GetOperator(kind, right is null ? null : OperatorOperands.Clr(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
     private static async Task AssertParameters(ITypeOperator? resolution, params Type[] expected) {
         await Assert.That(resolution).IsNotNull();
@@ -625,7 +653,7 @@ public class OperatorLookupTests {
         await AssertResult(resolution, text);
         await Assert.That(resolution!.Method).IsNull();
         await AssertParameters(resolution, typeof(string), typeof(object));
-        var boxing = OperatorOperands.Clr(typeof(object)).ResolveConversionFrom(OperatorOperands.Clr(typeof(int)));
+        var boxing = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(OperatorOperands.Clr(typeof(int)), OperatorOperands.Clr(typeof(object)));
         await Assert.That(boxing?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(boxing!.Method).IsNull();
         // The mirror, and the sibling: Text + Text stays (String, String).
@@ -640,21 +668,21 @@ public class OperatorLookupTests {
         // Beside an operand that is not one of the simple numeric types, Int64 offers its own (Int64, Int64) addition.
         // A modeled type that converts implicitly to Int64 relies on that: the operand converts and the operator applies, as in C#.
         var set = new ModeledTypeSet();
-        ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", new ClrTypeReference(typeof(long)),
+        ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", TypeReference.To(typeof(long)),
             [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true) { Conversion = ConversionOperatorKind.Implicit });
         var number = OperatorOperands.Clr(typeof(long));
-        var offered = ((ClrTypeDefinition)number).OperatorsBeside(OperatorKind.Add, cents).Single();
+        var offered = CSharpBuiltIns.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, cents).Single();
         await Assert.That(offered.Method).IsNull();
         await Assert.That(offered.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, number))).IsTrue();
-        await Assert.That(number.ResolveConversionFrom(cents)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        var resolution = number.GetOperator(OperatorKind.Add, cents);
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(cents, number)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        var resolution = number.GetOperator(OperatorKind.Add, cents, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await AssertResult(resolution, number);
         await AssertParameters(resolution, typeof(long), typeof(long));
-        await AssertResult(cents.GetOperator(OperatorKind.Add, number), number);
+        await AssertResult(cents.GetOperator(OperatorKind.Add, number, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared), number);
         // The sibling: without the conversion the same operator is offered and does not apply.
         ITypeDefinition plain = set.Add("Plain");
-        await Assert.That(((ClrTypeDefinition)number).OperatorsBeside(OperatorKind.Add, plain).Count).IsEqualTo(1);
-        await Assert.That(number.GetOperator(OperatorKind.Add, plain)).IsNull();
+        await Assert.That(CSharpBuiltIns.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, plain).Count).IsEqualTo(1);
+        await Assert.That(number.GetOperator(OperatorKind.Add, plain, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
     }
 
     [Test]

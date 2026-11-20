@@ -1,8 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-using Poly.DomainModeling.Compile;
-
 using Artifact = Poly.DomainModeling.Compile.Artifact;
 
 namespace Poly.Tests.DomainModeling.Compile;
@@ -284,7 +282,7 @@ public sealed class ArtifactCatalogTests {
 
     [Test]
     public async Task Descriptor_EqualWhenIdProducerAndReferencesMatch_AndHashesAlike() {
-        ArtifactDescriptor Make(params string[] refs) =>
+        static ArtifactDescriptor Make(params string[] refs) =>
             new(ArtifactId.Parse("A#method"), "Test", [.. refs.Select(ArtifactId.Parse)]);
 
         await Assert.That(Make("X#type", "Y#type")).IsEqualTo(Make("X#type", "Y#type"));

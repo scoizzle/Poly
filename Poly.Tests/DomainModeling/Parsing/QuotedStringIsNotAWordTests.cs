@@ -1,7 +1,5 @@
 using Poly.Compile;
-using Poly.DomainModeling.Language;
 using Poly.Packs.Product;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -98,7 +96,7 @@ public sealed class QuotedStringIsNotAWordTests {
     [Test]
     public async Task EditTopKind_QuotedEnum_IsPlacedAsAnEntityLikeANumber() {
         const string source = "domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n";
-        string Add(string dsl) {
+        static string Add(string dsl) {
             var outcome = PolyEdit.Apply(source,
                 "[{\"op\":\"add\",\"parent\":\"\",\"dsl\":" + System.Text.Json.JsonSerializer.Serialize(dsl) + "}]");
             return outcome.Applied[0].Line.ToString();

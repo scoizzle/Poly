@@ -1,9 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
-using Poly.DomainModeling.Runtime;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;

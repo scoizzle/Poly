@@ -1,6 +1,3 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
 

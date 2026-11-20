@@ -1,5 +1,4 @@
 using Poly.Analysis;
-using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;

@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 

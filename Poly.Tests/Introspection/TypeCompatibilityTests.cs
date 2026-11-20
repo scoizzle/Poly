@@ -45,8 +45,8 @@ public class TypeCompatibilityTests {
         var registry = new ClrTypeDefinitionRegistry();
         var dateTime = registry.GetTypeDefinition(typeof(DateTime));
         var dateOnly = registry.GetTypeDefinition(typeof(DateOnly));
-        await Assert.That(dateTime.IsAssignableFrom(dateOnly)).IsFalse();
-        await Assert.That(dateOnly.IsAssignableTo(dateTime)).IsFalse();
+        await Assert.That(dateTime.IsAssignableFrom(dateOnly, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
+        await Assert.That(dateOnly.IsAssignableTo(dateTime, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
@@ -54,8 +54,8 @@ public class TypeCompatibilityTests {
         var registry = new ClrTypeDefinitionRegistry();
         var dateTime = registry.GetTypeDefinition(typeof(DateTime));
         var dateOnly = registry.GetTypeDefinition(typeof(DateOnly));
-        await Assert.That(dateOnly.IsAssignableFrom(dateTime)).IsFalse();
-        await Assert.That(dateTime.IsAssignableTo(dateOnly)).IsFalse();
+        await Assert.That(dateOnly.IsAssignableFrom(dateTime, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
+        await Assert.That(dateTime.IsAssignableTo(dateOnly, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
@@ -63,8 +63,8 @@ public class TypeCompatibilityTests {
         var registry = new ClrTypeDefinitionRegistry();
         var dateOnly = registry.GetTypeDefinition(typeof(DateOnly));
         var nullable = registry.GetTypeDefinition(typeof(DateOnly?));
-        await Assert.That(nullable.IsAssignableFrom(dateOnly)).IsTrue();
-        await Assert.That(dateOnly.IsAssignableFrom(nullable)).IsFalse();
+        await Assert.That(nullable.IsAssignableFrom(dateOnly, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(dateOnly.IsAssignableFrom(nullable, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
@@ -72,7 +72,7 @@ public class TypeCompatibilityTests {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
-        var result = stringType.IsAssignableFrom(stringType);
+        var result = stringType.IsAssignableFrom(stringType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(result).IsTrue();
     }
@@ -83,7 +83,7 @@ public class TypeCompatibilityTests {
         var exceptionType = registry.GetTypeDefinition<Exception>();
         var argumentExceptionType = registry.GetTypeDefinition<ArgumentException>();
 
-        var result = exceptionType.IsAssignableFrom(argumentExceptionType);
+        var result = exceptionType.IsAssignableFrom(argumentExceptionType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(result).IsTrue();
     }
@@ -94,7 +94,7 @@ public class TypeCompatibilityTests {
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
 
-        var result = stringType.IsAssignableFrom(intType);
+        var result = stringType.IsAssignableFrom(intType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(result).IsFalse();
     }
@@ -105,7 +105,7 @@ public class TypeCompatibilityTests {
         var enumerableType = registry.GetTypeDefinition<IEnumerable<int>>();
         var listType = registry.GetTypeDefinition<List<int>>();
 
-        var result = enumerableType.IsAssignableFrom(listType);
+        var result = enumerableType.IsAssignableFrom(listType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(result).IsTrue();
     }
@@ -116,8 +116,8 @@ public class TypeCompatibilityTests {
         var exceptionType = registry.GetTypeDefinition<Exception>();
         var argumentExceptionType = registry.GetTypeDefinition<ArgumentException>();
 
-        var assignableFrom = exceptionType.IsAssignableFrom(argumentExceptionType);
-        var assignableTo = argumentExceptionType.IsAssignableTo(exceptionType);
+        var assignableFrom = exceptionType.IsAssignableFrom(argumentExceptionType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+        var assignableTo = argumentExceptionType.IsAssignableTo(exceptionType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(assignableTo).IsEqualTo(assignableFrom);
     }
@@ -158,7 +158,7 @@ public class TypeCompatibilityTests {
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
 
-        await Assert.That(objectType.IsAssignableFrom(stringType)).IsTrue();
+        await Assert.That(objectType.IsAssignableFrom(stringType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -172,7 +172,7 @@ public class TypeCompatibilityTests {
         var objectType = (ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<object>();
 
         await Assert.That(astType).IsNotNull();
-        await Assert.That(objectType.IsAssignableFrom(astType!)).IsTrue();
+        await Assert.That(objectType.IsAssignableFrom(astType!, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -181,7 +181,7 @@ public class TypeCompatibilityTests {
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
 
-        await Assert.That(stringType.IsAssignableFrom(objectType)).IsFalse();
+        await Assert.That(stringType.IsAssignableFrom(objectType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
@@ -190,7 +190,7 @@ public class TypeCompatibilityTests {
         var comparableType = (ITypeDefinition)registry.GetTypeDefinition(typeof(IComparable));
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
 
-        await Assert.That(comparableType.IsAssignableFrom(stringType)).IsTrue();
+        await Assert.That(comparableType.IsAssignableFrom(stringType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -199,7 +199,7 @@ public class TypeCompatibilityTests {
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
         var intType = (ITypeDefinition)registry.GetTypeDefinition<int>();
 
-        await Assert.That(stringType.IsAssignableFrom(intType)).IsFalse();
+        await Assert.That(stringType.IsAssignableFrom(intType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
@@ -208,7 +208,7 @@ public class TypeCompatibilityTests {
         var exceptionType = (ITypeDefinition)registry.GetTypeDefinition<Exception>();
         var argNullExType = (ITypeDefinition)registry.GetTypeDefinition<ArgumentNullException>();
 
-        await Assert.That(exceptionType.IsAssignableFrom(argNullExType)).IsTrue();
+        await Assert.That(exceptionType.IsAssignableFrom(argNullExType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -217,7 +217,7 @@ public class TypeCompatibilityTests {
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
 
-        await Assert.That(stringType.IsAssignableTo(objectType)).IsTrue();
+        await Assert.That(stringType.IsAssignableTo(objectType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -226,7 +226,7 @@ public class TypeCompatibilityTests {
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
 
-        await Assert.That(objectType.IsAssignableTo(stringType)).IsFalse();
+        await Assert.That(objectType.IsAssignableTo(stringType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
@@ -235,7 +235,7 @@ public class TypeCompatibilityTests {
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
         var comparableType = (ITypeDefinition)registry.GetTypeDefinition(typeof(IComparable));
 
-        await Assert.That(stringType.IsAssignableTo(comparableType)).IsTrue();
+        await Assert.That(stringType.IsAssignableTo(comparableType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -244,7 +244,7 @@ public class TypeCompatibilityTests {
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
         var intType = (ITypeDefinition)registry.GetTypeDefinition<int>();
 
-        await Assert.That(objectType.IsAssignableFrom(intType)).IsTrue();
+        await Assert.That(objectType.IsAssignableFrom(intType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -254,9 +254,9 @@ public class TypeCompatibilityTests {
         var ioExceptionType = (ITypeDefinition)registry.GetTypeDefinition(typeof(IOException));
         var fileNotFoundType = (ITypeDefinition)registry.GetTypeDefinition(typeof(FileNotFoundException));
 
-        await Assert.That(exceptionType.IsAssignableFrom(ioExceptionType)).IsTrue();
-        await Assert.That(exceptionType.IsAssignableFrom(fileNotFoundType)).IsTrue();
-        await Assert.That(ioExceptionType.IsAssignableFrom(fileNotFoundType)).IsTrue();
+        await Assert.That(exceptionType.IsAssignableFrom(ioExceptionType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(exceptionType.IsAssignableFrom(fileNotFoundType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(ioExceptionType.IsAssignableFrom(fileNotFoundType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -289,7 +289,7 @@ public class TypeCompatibilityTests {
         var baseType = (ITypeDefinition)registry.GetTypeDefinition(typeof(GenericBase<string>));
         var derivedType = (ITypeDefinition)registry.GetTypeDefinition(typeof(GenericLeaf<string>));
 
-        await Assert.That(baseType.IsAssignableFrom(derivedType)).IsTrue();
+        await Assert.That(baseType.IsAssignableFrom(derivedType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
     }
 
     [Test]
@@ -297,9 +297,9 @@ public class TypeCompatibilityTests {
         var registry = new ClrTypeDefinitionRegistry();
         ITypeDefinition meters = registry.GetTypeDefinition(typeof(Meters));
         ITypeDefinition dbl = registry.GetTypeDefinition(typeof(double));
-        await Assert.That(meters.IsAssignableFrom(dbl)).IsTrue();
-        await Assert.That(dbl.IsAssignableTo(meters)).IsTrue();
-        var implicitOp = meters.ResolveConversionFrom(dbl);
+        await Assert.That(meters.IsAssignableFrom(dbl, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(dbl.IsAssignableTo(meters, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        var implicitOp = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(dbl, meters);
         await Assert.That(implicitOp?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(implicitOp?.Method!.Name).IsEqualTo("op_Implicit");
         await Assert.That(implicitOp?.Method!.IsStatic).IsTrue();
@@ -310,9 +310,9 @@ public class TypeCompatibilityTests {
         var registry = new ClrTypeDefinitionRegistry();
         ITypeDefinition meters = registry.GetTypeDefinition(typeof(Meters));
         ITypeDefinition dbl = registry.GetTypeDefinition(typeof(double));
-        await Assert.That(dbl.IsAssignableFrom(meters)).IsFalse();
-        await Assert.That(meters.IsAssignableTo(dbl)).IsFalse();
-        var explicitOp = dbl.ResolveConversionFrom(meters);
+        await Assert.That(dbl.IsAssignableFrom(meters, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
+        await Assert.That(meters.IsAssignableTo(dbl, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
+        var explicitOp = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(meters, dbl);
         await Assert.That(explicitOp?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(explicitOp?.Method!.Name).IsEqualTo("op_Explicit");
     }
@@ -322,11 +322,11 @@ public class TypeCompatibilityTests {
         var registry = new ClrTypeDefinitionRegistry();
         ITypeDefinition dateTime = registry.GetTypeDefinition(typeof(DateTime));
         ITypeDefinition offset = registry.GetTypeDefinition(typeof(DateTimeOffset));
-        await Assert.That(offset.IsAssignableFrom(dateTime)).IsTrue();
-        await Assert.That(dateTime.IsAssignableFrom(offset)).IsFalse();
-        await Assert.That(offset.ResolveConversionFrom(dateTime)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(offset.ResolveConversionFrom(dateTime)?.Method!.Name).IsEqualTo("op_Implicit");
-        await Assert.That(dateTime.ResolveConversionFrom(offset)).IsNull();
+        await Assert.That(offset.IsAssignableFrom(dateTime, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(dateTime.IsAssignableFrom(offset, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(dateTime, offset)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(dateTime, offset)?.Method!.Name).IsEqualTo("op_Implicit");
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(offset, dateTime)).IsNull();
     }
 
     [Test]
@@ -334,8 +334,8 @@ public class TypeCompatibilityTests {
         var registry = new ClrTypeDefinitionRegistry();
         ITypeDefinition stringType = registry.GetTypeDefinition<string>();
         ITypeDefinition intType = registry.GetTypeDefinition<int>();
-        await Assert.That(stringType.ResolveConversionFrom(intType)).IsNull();
-        await Assert.That(intType.ResolveConversionFrom(stringType)).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(intType, stringType)).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(stringType, intType)).IsNull();
     }
 
     public readonly struct Meters {

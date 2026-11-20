@@ -1,13 +1,9 @@
 using System.Globalization;
 
-using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
-using Poly.DomainModeling.Runtime;
-using Poly.Tests.TestHelpers;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 

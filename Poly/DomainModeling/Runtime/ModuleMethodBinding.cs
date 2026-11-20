@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-
 namespace Poly.DomainModeling.Runtime;
 
 /// <summary>
@@ -77,7 +75,6 @@ internal static class ModuleMethodBinding {
                 Parameter p when typed.TryGetValue(p.Name, out var bound) => bound,
                 ThisReference or Parameter or Variable or Constant
                     or NamedTypeReference or TypeReference
-                    or PrimitiveTypeReference or ClrTypeReference
                     or OptionalTypeReference or CollectionTypeReference or MapTypeReference => node,
                 _ => throw new InvalidOperationException(
                     $"Cannot bind typed parameters on {node.GetType().Name}.")

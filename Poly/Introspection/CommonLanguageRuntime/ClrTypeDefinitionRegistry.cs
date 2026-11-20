@@ -7,7 +7,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Thread-safe registry and provider for CLR-backed <see cref="ClrTypeDefinition"/> instances.
 /// Caches definitions by fully-qualified name and supports deferred resolution.
 /// </summary>
-internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
+internal sealed class ClrTypeDefinitionRegistry : IQualifiedNameSource, ITypeNameLookup {
     public static readonly ClrTypeDefinitionRegistry Shared = new();
     private readonly ConcurrentDictionary<string, ClrTypeDefinition> _types = new();
 
@@ -30,6 +30,10 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
     /// Gets or creates a definition for <typeparamref name="T"/>.
     /// </summary>
     public ClrTypeDefinition GetTypeDefinition<T>() => GetTypeDefinition(typeof(T));
+
+    /// <summary>The definitions this registry has resolved so far. The CLR's universe is open, so this is a cache
+    /// snapshot, never a claim that no other CLR type exists.</summary>
+    public IEnumerable<ITypeDefinition> Types => _types.Values;
 
     /// <summary>
     /// Gets or creates a definition for a runtime <see cref="Type"/>.
@@ -69,6 +73,11 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
     /// </summary>
     public ITypeDefinition? GetTypeDefinition(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        // A bare name is a scope's to bind (#998 S2): only a qualified name is looked up, in the cache or across the
+        // loaded assemblies, so what a name means never depends on which type another caller happened to resolve or
+        // load.
+        if (!name.Contains('.', StringComparison.Ordinal))
+            return null;
         if (_types.TryGetValue(name, out var existing)) {
             return existing;
         }
@@ -78,8 +87,6 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
             LoadReferencedAssemblies(typeof(ClrTypeDefinitionRegistry).Assembly);
             clrType = ResolveLoadedAssemblyType(name);
         }
-        if (clrType is null && Enum.TryParse<PrimitiveType>(name, ignoreCase: false, out var prim))
-            clrType = prim.GetClrType();
         if (clrType is null) {
             return null;
         }
@@ -88,6 +95,20 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
         _types.TryAdd(name, created);
         return created;
     }
+
+    /// <summary>The loaded assemblies as one source: what each declares in <paramref name="namespace"/>.</summary>
+    public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) =>
+        AppDomain.CurrentDomain.GetAssemblies()
+            .Where(static assembly => !assembly.IsDynamic)
+            .SelectMany(assembly => Sources.GetValue(assembly, static a => new ClrAssemblySource(a)).TypesIn(@namespace))
+            .Distinct();
+
+    /// <summary>The type a namespace of the loaded assemblies declares under <paramref name="name"/>. The global
+    /// namespace answers nothing: a bare name is never looked up across the process.</summary>
+    public ITypeDefinition? TypeIn(string? @namespace, string name) =>
+        @namespace is null ? null : GetTypeDefinition($"{@namespace}.{name}");
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, ClrAssemblySource> Sources = [];
 
     /// <summary>
     /// Loads <paramref name="assembly"/>'s references that are not loaded yet, so a bare-name
@@ -118,5 +139,7 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
         return null;
     }
 
-    ITypeDefinition? ITypeDefinitionProvider.GetTypeDefinition(Type type) => GetTypeDefinition(type);
+    ITypeDefinition? IQualifiedNameSource.ByQualifiedName(string name) => GetTypeDefinition(name);
+
+    ITypeDefinition? ITypeNameLookup.Lookup(string name) => GetTypeDefinition(name);
 }

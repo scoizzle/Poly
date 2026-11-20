@@ -1,9 +1,5 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Dispatch;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
 
 using Syntactic = Poly.Ast.Nodes;
 

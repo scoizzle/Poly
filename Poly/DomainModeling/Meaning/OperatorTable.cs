@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
 
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;

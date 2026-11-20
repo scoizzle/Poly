@@ -45,7 +45,7 @@ public class CSharpWriterUnitTests {
             new FieldDefinitionNode(
                 "Items",
                 new NamedTypeReference("List", TypeArguments: [
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32),
+                    TypeReference.To(typeof(int)),
                 ])),
             new FieldDefinitionNode("PlacedOn", new NamedTypeReference("DateOnly")),
         ]);
@@ -227,7 +227,7 @@ public class CSharpWriterUnitTests {
         var text = WriteCart(
             new FieldDefinitionNode("PlacedOn", new NamedTypeReference("DateOnly")),
             new FieldDefinitionNode("Items", new NamedTypeReference("List", TypeArguments: [
-                new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32),
+                TypeReference.To(typeof(int)),
             ])));
 
         await AssertHeader(
@@ -461,14 +461,6 @@ public class CSharpWriterUnitTests {
     private const string RoundTripRow = "issue 822, row E-11";
 
     private static readonly Dictionary<string, string> KnownRoundTripFindings = new(StringComparer.Ordinal) {
-        ["Poly.Tests/DomainModeling/Compile/EmitGolden/university/Enrollment.cs.golden"] =
-            RoundTripRow + ": DateTime.UtcNow re-prints as System.DateTime.UtcNow",
-        ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm/Activity.cs.golden"] =
-            RoundTripRow + ": DateTime.UtcNow re-prints as System.DateTime.UtcNow",
-        ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm/Opportunity.cs.golden"] =
-            RoundTripRow + ": DateTime.UtcNow re-prints as System.DateTime.UtcNow",
-        ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm-dslcompiler/CrmDbContext.cs.golden"] =
-            RoundTripRow + ": with Microsoft.EntityFrameworkCore loaded the reader binds PropertyAccessMode and DeleteBehavior and re-prints them qualified (SetPropertyAccessMode(Microsoft.EntityFrameworkCore.PropertyAccessMode.Field), first difference line 105)",
         ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm-dslcompiler/Program.cs.golden"] =
             RoundTripRow + ": the [Range(typeof(decimal), ...)] attribute (first difference, line 1366) does not round-trip",
     };

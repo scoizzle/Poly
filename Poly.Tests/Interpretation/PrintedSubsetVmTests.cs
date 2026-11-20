@@ -1,7 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
@@ -38,8 +37,6 @@ public class PrintedSubsetVmTests {
         [typeof(ParameterReference)] = PrintForm.Name,
         [typeof(NamedTypeReference)] = PrintForm.Name,
         [typeof(TypeReference)] = PrintForm.Name,
-        [typeof(ClrTypeReference)] = PrintForm.Name,
-        [typeof(PrimitiveTypeReference)] = PrintForm.Name,
         [typeof(TypeDefinitionReference)] = PrintForm.Name,
         [typeof(SuspendNode)] = PrintForm.Erased,
         [typeof(StridedSetBits)] = PrintForm.Rejected,

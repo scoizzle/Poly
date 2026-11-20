@@ -1,9 +1,8 @@
-using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
@@ -18,7 +17,7 @@ public sealed partial class DomainToCSharpExporter {
     /// so a module compiled with storage never reaches this failure.
     /// </summary>
     private static MethodDefinitionNode EnsureUniqueAssignMethod(Entity entity) {
-        var propertyName = new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String));
+        var propertyName = new Parameter("propertyName", TypeReference.To(typeof(string)));
         var value = new Parameter("value", StoreJobObjectType());
         var nodes = new List<Node> {
             new IfStatement(
@@ -32,7 +31,7 @@ public sealed partial class DomainToCSharpExporter {
                 new Syntactic.And(
                     new Equal(propertyName, new Constant(prop.Name)),
                     new Invoke(
-                        new Member(new ClrTypeReference(typeof(object)), "Equals"),
+                        new Member(TypeReference.To(typeof(object)), "Equals"),
                         new Member(new ThisReference(), prop.Name),
                         value)),
                 new Block([DomainResultSuccess()])));
@@ -76,7 +75,7 @@ public sealed partial class DomainToCSharpExporter {
                 policyBodies?.Add((entity.Name, policy.Name), body);
             methods.Add(new MethodDefinitionNode(
                 policy.Name,
-                new PrimitiveTypeReference(PrimType.Boolean),
+                TypeReference.To(typeof(bool)),
                 Body: body,
                 AccessModifier: AccessModifier.Public
             ));

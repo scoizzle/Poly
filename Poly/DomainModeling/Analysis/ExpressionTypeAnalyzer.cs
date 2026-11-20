@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -66,7 +65,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
         if (node is Domain domain) {
             context.SetMetadata(domain, new DomainTypeModelMetadata(
-                new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps)));
+                new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps, context.TypeSystem)));
             AnalyzeObservedFlows(context, domain);
             FunctionAnalysis.CheckDeclarations(context, domain);
             AnalyzeFunctionBodies(context, domain);

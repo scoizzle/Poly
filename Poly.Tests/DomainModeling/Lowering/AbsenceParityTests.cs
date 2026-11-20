@@ -1,9 +1,7 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
-using Poly.Tests.TestHelpers;
 
 using SN = Poly.Ast.Nodes;
 

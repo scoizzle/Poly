@@ -1,10 +1,7 @@
 using System.Globalization;
 
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
 
 namespace Poly.Tests.TestHelpers;
 

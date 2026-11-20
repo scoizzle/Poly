@@ -1,8 +1,5 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
 using Poly.Grammar;
 
 using ValueType = Poly.DomainModeling.Ontology.ValueType;

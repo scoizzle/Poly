@@ -1,7 +1,5 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -36,57 +34,86 @@ public class DomainTypeModelTests {
         var maps = new TypeMappingRegistry();
         TemporalTypeMaps.Apply(maps);
         configure?.Invoke(maps);
-        return new DomainTypeModel(BuildDomain(), maps);
+        return new DomainTypeModel(BuildDomain(), maps, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
     }
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)!;
+
+    [Test]
+    public async Task DomainSynthetic_BelongsToTheSystemItsModelWasBuiltWith() {
+        // #998 T12c (owner rulings 10, 13): a domain's own declarations are not the shared C# system's; inside an
+        // analysis the model is built with that analysis' layer, so its entities are the layer's.
+        var maps = new TypeMappingRegistry();
+        TemporalTypeMaps.Apply(maps);
+        var layer = new Poly.Analysis.AnalysisTypeSystem(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+        var model = new DomainTypeModel(BuildDomain(), maps, layer);
+
+        await Assert.That(model.Resolve("Order").Definition!.System).IsSameReferenceAs(layer);
+        await Assert.That(model.Resolve("Status").Definition!.System).IsSameReferenceAs(layer);
+    }
+
+    [Test]
+    public async Task DomainSynthetic_UnderTheDomainsOwnSystem_KeepsObjectsMembers() {
+        // A domain session's analysis decides by a layer over DomainTypeSystem, whose words are the domain's; the
+        // entity's implicit top type is its chain's object, as before #998 T12c.
+        var maps = new TypeMappingRegistry();
+        TemporalTypeMaps.Apply(maps);
+        var layer = new Poly.Analysis.AnalysisTypeSystem(
+            new Poly.DomainModeling.Meaning.DomainTypeSystem(maps, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared));
+        var model = new DomainTypeModel(BuildDomain(), maps, layer);
+
+        await Assert.That(model.Resolve("Order").Definition!.Methods.WithName("ToString").Any()).IsTrue();
+    }
 
     [Test]
     public async Task Resolve_DecimalAndNumber_AreDistinctDefinitions() {
         var model = Model();
         var decimalType = model.Resolve("Decimal");
         var number = model.Resolve("Number");
-        await Assert.That(decimalType.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.Decimal);
-        await Assert.That(number.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.Int64);
+        await Assert.That(decimalType.Definition!.GetRuntimeType()).IsEqualTo(typeof(decimal));
+        await Assert.That(number.Definition!.GetRuntimeType()).IsEqualTo(typeof(long));
         await Assert.That(ReferenceEquals(decimalType.Definition, number.Definition)).IsFalse();
     }
 
     [Test]
-    [Arguments("Number", Poly.Introspection.PrimitiveType.Int64)]
-    [Arguments("Int", Poly.Introspection.PrimitiveType.Int64)]
-    [Arguments("Int64", Poly.Introspection.PrimitiveType.Int64)]
-    [Arguments("Int32", Poly.Introspection.PrimitiveType.Int32)]
-    [Arguments("Text", Poly.Introspection.PrimitiveType.String)]
-    [Arguments("String", Poly.Introspection.PrimitiveType.String)]
-    [Arguments("Boolean", Poly.Introspection.PrimitiveType.Boolean)]
-    [Arguments("Bool", Poly.Introspection.PrimitiveType.Boolean)]
-    [Arguments("Float", Poly.Introspection.PrimitiveType.Float64)]
-    [Arguments("Double", Poly.Introspection.PrimitiveType.Float64)]
-    [Arguments("Uuid", Poly.Introspection.PrimitiveType.Guid)]
-    [Arguments("Guid", Poly.Introspection.PrimitiveType.Guid)]
-    [Arguments("Date", Poly.Introspection.PrimitiveType.DateOnly)]
-    [Arguments("Time", Poly.Introspection.PrimitiveType.TimeOnly)]
-    [Arguments("DateTime", Poly.Introspection.PrimitiveType.DateTime)]
-    [Arguments("Duration", Poly.Introspection.PrimitiveType.TimeSpan)]
-    public async Task Resolve_Aliases_MatchToClrTypeName(string name, Poly.Introspection.PrimitiveType expected) {
+    [Arguments("Number", typeof(long))]
+    [Arguments("Int", typeof(long))]
+    [Arguments("Int64", typeof(long))]
+    [Arguments("Int32", typeof(int))]
+    [Arguments("Text", typeof(string))]
+    [Arguments("String", typeof(string))]
+    [Arguments("Boolean", typeof(bool))]
+    [Arguments("Bool", typeof(bool))]
+    [Arguments("Float", typeof(double))]
+    [Arguments("Double", typeof(double))]
+    [Arguments("Uuid", typeof(Guid))]
+    [Arguments("Guid", typeof(Guid))]
+    [Arguments("Date", typeof(DateOnly))]
+    [Arguments("Time", typeof(TimeOnly))]
+    [Arguments("DateTime", typeof(DateTime))]
+    [Arguments("Duration", typeof(TimeSpan))]
+    public async Task Resolve_Aliases_MatchToClrTypeName(string name, Type expected) {
         var resolved = Model().Resolve(name);
         await Assert.That(resolved.IsResolved).IsTrue();
-        await Assert.That(resolved.Definition!.PrimitiveType).IsEqualTo(expected);
+        await Assert.That(resolved.Definition!.GetRuntimeType()).IsEqualTo(expected);
         await Assert.That(resolved.DomainName).IsEqualTo(name);
     }
 
     [Test]
     public async Task Resolve_Enum_IsSyntheticEnumDefinition() {
         var status = Model().Resolve("Status");
-        await Assert.That(status.Definition!.Kind).IsEqualTo(TypeKind.Enum);
+        await Assert.That(status.Declared).IsEqualTo(Poly.DomainModeling.Meaning.DomainDeclaration.Enum)
+            .Because("the domain declared it an enum (#998 T8)");
         await Assert.That(status.DomainName).IsEqualTo("Status");
     }
 
     [Test]
     public async Task Resolve_EntityAndValueType_AreSyntheticClassAndStruct() {
         var model = Model();
-        await Assert.That(model.Resolve("Order").Definition!.Kind).IsEqualTo(TypeKind.Class);
-        await Assert.That(model.Resolve("Money").Definition!.Kind).IsEqualTo(TypeKind.Struct);
+        await Assert.That(model.Resolve("Order").Declared).IsEqualTo(Poly.DomainModeling.Meaning.DomainDeclaration.Entity);
+        await Assert.That(model.Resolve("Money").Declared).IsEqualTo(Poly.DomainModeling.Meaning.DomainDeclaration.Value);
+        await Assert.That(model.Resolve("Cents").Declared).IsNull().Because("a declared primitive is a word, not a declaration of its own");
+        await Assert.That(model.Resolve("Decimal").Declared).IsNull();
     }
 
     [Test]
@@ -111,29 +138,29 @@ public class DomainTypeModelTests {
     public async Task Resolve_DeclaredCustomNamedDecimalPrimitive_IsDecimal() {
         var cents = Model().Resolve("Cents");
         await Assert.That(cents.IsResolved).IsTrue();
-        await Assert.That(cents.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.Decimal);
+        await Assert.That(cents.Definition!.GetRuntimeType()).IsEqualTo(typeof(decimal));
     }
 
     [Test]
     public async Task Resolve_Binary_IsResolved() {
         var blob = Model().Resolve("Blob");
         await Assert.That(blob.IsResolved).IsTrue();
-        await Assert.That(blob.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.ByteArray);
-        await Assert.That(Model().Resolve("Binary").Definition!.PrimitiveType)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.ByteArray);
+        await Assert.That(blob.Definition!.GetRuntimeType()).IsEqualTo(typeof(byte[]));
+        await Assert.That(Model().Resolve("Binary").Definition!.GetRuntimeType())
+            .IsEqualTo(typeof(byte[]));
     }
 
     [Test]
     public async Task Resolve_PackOverrideOfDate_IsHonoured() {
         var model = Model(maps => maps.OverrideClrTypeName("Date", "DateTime"));
-        await Assert.That(model.Resolve("Date").Definition!.PrimitiveType)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.DateTime);
+        await Assert.That(model.Resolve("Date").Definition!.GetRuntimeType())
+            .IsEqualTo(typeof(DateTime));
     }
 
     [Test]
     public async Task Resolve_DeclaredTemporalPrimitive_GoesThroughSemanticsName() {
         var moment = Model().Resolve("Moment");
-        await Assert.That(moment.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.DateTime);
+        await Assert.That(moment.Definition!.GetRuntimeType()).IsEqualTo(typeof(DateTime));
     }
 
     [Test]
@@ -196,7 +223,7 @@ public class DomainTypeModelTests {
     [Test]
     public async Task Resolve_UnknownDomainTypeSubclass_Throws() {
         var domain = DomainTestFactory.Create("Odd", [new UnknownDomainType()], []);
-        var model = new DomainTypeModel(domain, new TypeMappingRegistry());
+        var model = new DomainTypeModel(domain, new TypeMappingRegistry(), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(() => model.Resolve("Odd")).ThrowsExactly<InvalidOperationException>();
         // The sibling: the four known shapes still resolve.
         await Assert.That(Model().Resolve("Order").IsResolved).IsTrue();
@@ -205,7 +232,7 @@ public class DomainTypeModelTests {
     [Test]
     public async Task Assign_NumberToDecimal_IsWidening() {
         var model = Model();
-        var door = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(long)));
+        var door = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(long)), Clr(typeof(decimal)));
         await Assert.That(door?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(model.Assign(model.Resolve("Number"), model.Resolve("Decimal"))).IsEqualTo(Assignability.Widening);
     }
@@ -246,7 +273,7 @@ public class DomainTypeModelTests {
         var decimalType = model.Resolve("Decimal");
         // The first assertion used to pin the rank table's disagreement (it called Float64 -> Decimal widening). The
         // member is gone; the provider's own answer is stronger: explicit, through the declared decimal.op_Explicit(double).
-        var conversion = decimalType.Definition!.ResolveConversionFrom(floatType.Definition!);
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(floatType.Definition!, decimalType.Definition!);
         await Assert.That(conversion?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(conversion?.Method?.Name).IsEqualTo("op_Explicit");
         await Assert.That(model.Assign(floatType, decimalType)).IsEqualTo(Assignability.RoundingNarrowing);

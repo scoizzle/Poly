@@ -1,6 +1,4 @@
 using Poly.Compile;
-using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.Packs.Sqlite;

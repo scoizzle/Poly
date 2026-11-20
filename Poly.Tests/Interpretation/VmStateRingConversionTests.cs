@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 
@@ -21,10 +22,10 @@ public class VmStateRingConversionTests {
         await Assert.That(LocalType.Write((ushort)40000, typeof(ushort), heap)).IsEqualTo(40000L);
     }
 
-    private static Parameter ObjectParameter(string name) => new(name, new ClrTypeReference(typeof(object)));
+    private static Parameter ObjectParameter(string name) => new(name, TypeReference.To(typeof(object)));
 
     private static Invoke Call(Type type, string method, Node argument) =>
-        new(new Member(new ClrTypeReference(type), method), argument);
+        new(new Member(TypeReference.To(type), method), argument);
 
     [Test]
     [Arguments(7, "7")]
@@ -47,8 +48,8 @@ public class VmStateRingConversionTests {
     [Arguments(true, "True")]
     [Arguments("x", "x")]
     public async Task CastToObject_OfATypedParameter_ReachesACallAsThatValue(object argument, string expected) {
-        var x = new Parameter("x", new ClrTypeReference(argument.GetType()));
-        var cast = new TypeCast(x, new ClrTypeReference(typeof(object)));
+        var x = new Parameter("x", TypeReference.To(argument.GetType()));
+        var cast = new TypeCast(x, TypeReference.To(typeof(object)));
         using var text = Interpreter.Execute(Interpreter.Compile(Call(typeof(Convert), nameof(Convert.ToString), cast)), argument);
         await Assert.That(text.GetValue<string>()).IsEqualTo(expected);
     }
@@ -60,7 +61,7 @@ public class VmStateRingConversionTests {
     [Arguments(true)]
     [Arguments("x")]
     public async Task CastFromObject_IsTheValueItHolds(object argument) {
-        var unbox = new TypeCast(ObjectParameter("o"), new ClrTypeReference(argument.GetType()));
+        var unbox = new TypeCast(ObjectParameter("o"), TypeReference.To(argument.GetType()));
         using var exec = Interpreter.Execute(Interpreter.Compile(new Equal(unbox, new Constant(argument))), argument);
         await Assert.That(exec.GetValue<bool>()).IsTrue();
     }
@@ -68,13 +69,13 @@ public class VmStateRingConversionTests {
     /// <summary>A constant boxed and unboxed in one tree, and a date (a word that is not a number) boxed for a call.</summary>
     [Test]
     public async Task CastToObject_ConstantAndDate_RoundTrip() {
-        var boxed = new TypeCast(new Constant(7), new ClrTypeReference(typeof(object)));
+        var boxed = new TypeCast(new Constant(7), TypeReference.To(typeof(object)));
         using (var text = Interpreter.Execute(Interpreter.Compile(Call(typeof(Convert), nameof(Convert.ToString), boxed))))
             await Assert.That(text.GetValue<string>()).IsEqualTo("7");
         using (var back = Interpreter.Execute(Interpreter.Compile(new TypeCast(boxed, TypeReference.To<int>()))))
             await Assert.That(back.GetValue<int>()).IsEqualTo(7);
         var date = new Parameter("d", TypeReference.To<DateOnly>());
-        var dateText = Call(typeof(Convert), nameof(Convert.ToString), new TypeCast(date, new ClrTypeReference(typeof(object))));
+        var dateText = Call(typeof(Convert), nameof(Convert.ToString), new TypeCast(date, TypeReference.To(typeof(object))));
         using (var text = Interpreter.Execute(Interpreter.Compile(dateText), new DateOnly(2024, 2, 28)))
             await Assert.That(text.GetValue<string>()).IsEqualTo(Convert.ToString((object)new DateOnly(2024, 2, 28)));
     }
@@ -90,7 +91,7 @@ public class VmStateRingConversionTests {
     }
 
     private static T Root<T>(object? argument) {
-        using var exec = Interpreter.Execute(Interpreter.Compile(new Parameter("p", new ClrTypeReference(typeof(T)))), argument);
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Parameter("p", TypeReference.To(typeof(T)))), argument);
         return exec.GetValue<T>()!;
     }
 
@@ -147,7 +148,7 @@ public class VmStateRingConversionTests {
     [Arguments(typeof(decimal), 1.5)]
     [Arguments(typeof(DayOfWeek), 1)]
     public async Task RootArgument_WithNoImplicitConversion_IsRefusedNamingBothTypes(Type declared, object given) {
-        var program = Interpreter.Compile(new Parameter("p", new ClrTypeReference(declared)));
+        var program = Interpreter.Compile(new Parameter("p", TypeReference.To(declared)));
         var ex = Assert.Throws<InvalidOperationException>(() => {
             using var exec = Interpreter.Execute(program, given);
         });
@@ -167,11 +168,11 @@ public class VmStateRingConversionTests {
     private static T? Coalesced<T>(T zero, T other) where T : struct => (T?)zero ?? other;
 
     private static async Task PresentZero<T>(T zero, T other) where T : struct {
-        var cast = new TypeCast(new Parameter("x", new ClrTypeReference(typeof(T))), new ClrTypeReference(typeof(T?)));
-        var fallback = new TypeCast(new Constant(other), new ClrTypeReference(typeof(T?)));
+        var cast = new TypeCast(new Parameter("x", TypeReference.To(typeof(T))), TypeReference.To(typeof(T?)));
+        var fallback = new TypeCast(new Constant(other), TypeReference.To(typeof(T?)));
         using (var coalesce = Interpreter.Execute(Interpreter.Compile(new Coalesce(cast, fallback)), zero))
             await Assert.That(coalesce.GetValue<T>()).IsEqualTo(Coalesced(zero, other)!.Value);
-        var isNull = new TypeCast(new Parameter("x", new ClrTypeReference(typeof(T))), new ClrTypeReference(typeof(T?)));
+        var isNull = new TypeCast(new Parameter("x", TypeReference.To(typeof(T))), TypeReference.To(typeof(T?)));
         using var compared = Interpreter.Execute(Interpreter.Compile(new Equal(isNull, new Constant(null))), zero);
         T? present = zero;
         await Assert.That(compared.GetValue<bool>()).IsEqualTo(!present.HasValue);
@@ -188,13 +189,13 @@ public class VmStateRingConversionTests {
     }
 
     private static string Text(Node value, params object?[] args) {
-        using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(new Member(new ClrTypeReference(typeof(Convert)), nameof(Convert.ToString)), value)), args);
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(new Member(TypeReference.To(typeof(Convert)), nameof(Convert.ToString)), value)), args);
         return exec.GetValue<string>()!;
     }
 
     private static string RoundTrip<T>(T value) {
-        var boxed = new TypeCast(new Parameter("x", new ClrTypeReference(typeof(T))), new ClrTypeReference(typeof(object)));
-        return Text(new TypeCast(new TypeCast(boxed, new ClrTypeReference(typeof(T))), new ClrTypeReference(typeof(object))), value);
+        var boxed = new TypeCast(new Parameter("x", TypeReference.To(typeof(T))), TypeReference.To(typeof(object)));
+        return Text(new TypeCast(new TypeCast(boxed, TypeReference.To(typeof(T))), TypeReference.To(typeof(object))), value);
     }
 
     /// <summary>Box and unbox for the representations the int rows do not cover: an IEEE word, a decimal handle, an

@@ -1,7 +1,7 @@
 using System.Globalization;
 
-using Poly.Ast.Nodes;
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation.Analysis;
@@ -19,11 +19,11 @@ public class DateOffsetNestingTests {
         public static int TakesInt(int value) => value;
     }
 
-    private static Parameter P(string name, Type type) => new(name, new ClrTypeReference(type));
+    private static Parameter P(string name, Type type) => new(name, TypeReference.To(type));
 
     private static Node K(object value) => new Constant(value);
 
-    private static Node Call(string method, Node argument) => new Invoke(new Member(new ClrTypeReference(typeof(Calls)), method), argument);
+    private static Node Call(string method, Node argument) => new Invoke(new Member(TypeReference.To(typeof(Calls)), method), argument);
 
     private static string Format(object? value) => value switch {
         DateTime dateTime => dateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),

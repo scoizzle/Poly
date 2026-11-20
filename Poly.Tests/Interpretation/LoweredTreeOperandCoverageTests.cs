@@ -1,7 +1,9 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Lowering;
 
 using static Poly.Tests.Interpretation.OperandExpect;
@@ -72,7 +74,7 @@ public class LoweredTreeOperandCoverageTests {
     static Parameter NumArray(string name = "arr") => P<long[]>(name);
     static Node Wrap(params Node[] nodes) => new Block(nodes);
     static Node Pick(Node condition, Node ifTrue, Node ifFalse) => Wrap(new Conditional(condition, ifTrue, ifFalse));
-    static Node Call(string method, Node argument) => Wrap(new Invoke(new Member(new ClrTypeReference(typeof(Probe)), method), argument));
+    static Node Call(string method, Node argument) => Wrap(new Invoke(new Member(TypeReference.To(typeof(Probe)), method), argument));
 
     static Node Assign2(Node first, Node second) {
         var x = new Variable("x");
@@ -262,7 +264,7 @@ public class LoweredTreeOperandCoverageTests {
 
     /// <summary>A modelled struct with no declared operator, as a lowered value type is.</summary>
     static readonly Lazy<ITypeDefinition> ModelledStruct = new(static () =>
-        new AstTypeDefinition(new TypeDefinitionNode("InterimMoney", Kind: Poly.Introspection.TypeKind.Struct), Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared));
+        new AstTypeDefinition(new TypeDefinitionNode("InterimMoney", Form: TypeDeclarationForm.Struct), Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared));
 
     public sealed class Holder {
         public static List<long> Items { get; } = [];
@@ -301,7 +303,7 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(UnaryMinus), "Enum", Rejects, () => Wrap(new UnaryMinus(P<DayOfWeek>("a"))), [DayOfWeek.Monday]),
         Row(typeof(Equal), "ClrStructWithoutEquality", Rejects, () => Wrap(new Equal(P<KeyValuePair<int, int>>("a"), P<KeyValuePair<int, int>>("b"))), [new KeyValuePair<int, int>(1, 2), new KeyValuePair<int, int>(1, 2)]),
         Row(typeof(LessThan), "ModelledStruct", Rejects, () => Wrap(new LessThan(new Parameter("a", new TypeDefinitionReference(ModelledStruct.Value)), new Parameter("b", new TypeDefinitionReference(ModelledStruct.Value)))), [null, null]),
-        Row(typeof(Equal), "VoidCallWithNumber", Rejects, () => Wrap(new Equal(new Invoke(new Member(new Member(new ClrTypeReference(typeof(Holder)), nameof(Holder.Items)), "Clear")), new Constant(0L))), []),
+        Row(typeof(Equal), "VoidCallWithNumber", Rejects, () => Wrap(new Equal(new Invoke(new Member(new Member(TypeReference.To(typeof(Holder)), nameof(Holder.Items)), "Clear")), new Constant(0L))), []),
         Row(typeof(Add), "NullWithNumber", Rejects, () => Wrap(new Add(new Constant(null), new Constant(1))), []),
         Row(typeof(UnaryMinus), "Null", Rejects, () => Wrap(new UnaryMinus(new Constant(null))), []),
         Row(typeof(Add), "TextWithUnresolved", Rejects, () => Wrap(new Add(new Constant("a"), new Default(null))), []),
@@ -346,12 +348,10 @@ public class LoweredTreeOperandCoverageTests {
         [typeof(PropertyInitializerDefinitionNode)] = Declaration,
         [typeof(PropertySetterDefinitionNode)] = Declaration,
         [typeof(TypeDefinitionNode)] = Declaration,
-        [typeof(ClrTypeReference)] = TypeReferenceReason,
         [typeof(CollectionTypeReference)] = TypeReferenceReason,
         [typeof(MapTypeReference)] = TypeReferenceReason,
         [typeof(NamedTypeReference)] = TypeReferenceReason,
         [typeof(OptionalTypeReference)] = TypeReferenceReason,
-        [typeof(PrimitiveTypeReference)] = TypeReferenceReason,
         [typeof(ResolvedTypeReference)] = TypeReferenceReason,
         [typeof(TypeDefinitionReference)] = TypeReferenceReason,
         [typeof(TypeReference)] = TypeReferenceReason,
@@ -503,14 +503,14 @@ public class LoweredTreeOperandCoverageTests {
             var node = Walk(root).First(candidate => candidate.GetType() == row.Kind);
             var operands = node.Children.Where(static child => child is not null).Take(2)
                 .Select(child => analysis.GetResolvedType(child!)
-                    ?? (child is Constant { Value: { } value } ? analysis.TypeDefinitions.GetTypeDefinition(value.GetType()) : null))
+                    ?? (child is Constant { Value: { } value } ? analysis.TypeSystem.ClrDefinitionOf(value.GetType()) : null))
                 .ToArray();
             checkedRows++;
             if (operands.Any(static operand => operand is null)) {
                 problems.Add($"{row}: an operand has no type");
                 continue;
             }
-            var common = operands.Cast<ITypeDefinition>().GetCommonType()?.GetRuntimeType();
+            var common = operands.Cast<ITypeDefinition>().GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)?.GetRuntimeType();
             if (common != row.OperandCommonType)
                 problems.Add($"{row}: GetCommonType {common?.Name ?? "none"}, literal {row.OperandCommonType?.Name ?? "none"}");
         }

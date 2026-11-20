@@ -2,8 +2,8 @@ using System.Globalization;
 
 using Microsoft.CSharp.RuntimeBinder;
 
-using Poly.Analysis;
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
@@ -64,7 +64,7 @@ internal static class NullableCharGrid {
                     foreach (var right in ExtraOperandGrid.Operands) {
                         if (!RuleApplies(kind, left, right))
                             continue;
-                        var resolution = Clr(Unwrap(left)).GetOperator(kind, Clr(Unwrap(right)));
+                        var resolution = Clr(Unwrap(left)).GetOperator(kind, Clr(Unwrap(right)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
                         if (resolution is null)
                             continue;
                         // String concatenation and enum comparisons were judged before the rule, and still are.
@@ -72,7 +72,7 @@ internal static class NullableCharGrid {
                             continue;
                         if (!Arithmetic(kind) && (Unwrap(left).IsEnum || Unwrap(right).IsEnum))
                             continue;
-                        var node = ExtraOperandGrid.Build(kind, new Parameter("a", new ClrTypeReference(left)), new Parameter("b", new ClrTypeReference(right)));
+                        var node = ExtraOperandGrid.Build(kind, new Parameter("a", TypeReference.To(left)), new Parameter("b", TypeReference.To(right)));
                         var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
                         cells.Add(new Cell(left, kind, right, Classify(kind, left, right, node, analysis, resolution)));
                     }

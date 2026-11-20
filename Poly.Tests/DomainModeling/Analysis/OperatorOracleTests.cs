@@ -5,13 +5,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -117,10 +116,10 @@ internal static class OperatorOracle {
 
     private static OracleCell Evaluate(OracleOperand left, OperatorKind kind, OracleOperand? right) {
         var divergences = new List<OracleDivergence>();
-        var resolution = Def(left).GetOperator(kind, right is null ? null : Def(right));
+        var resolution = Def(left).GetOperator(kind, right is null ? null : Def(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         var tree = DescribeTree(left, right, resolution);
 
-        // Poly's shift-count policy (ClrBuiltInRules.IsPolicyShiftCount): the tree defines the cell, and C# (Roslyn for a
+        // Poly's shift-count policy (CSharpBuiltIns.IsPolicyShiftCount): the tree defines the cell, and C# (Roslyn for a
         // native operand, the runtime binder otherwise) rejects it. That is the policy's whole difference from C#.
         if (resolution is not null && IsPolicyShiftCell(kind, right) && CSharpRejectsShift(kind, left.Clr!, right!.Clr!))
             divergences.Add(new(OracleKind.PolicyDefinesWhatCSharpRejects, "C# rejects a shift count that is not int; Poly converts it to int unchecked"));
@@ -142,7 +141,7 @@ internal static class OperatorOracle {
     /// <summary>A shift whose count is one of the policy's wider integer types: long, uint, ulong, nint, nuint.</summary>
     private static bool IsPolicyShiftCell(OperatorKind kind, OracleOperand? right) =>
         kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
-        && right?.Clr is { } count && count.GetPrimitiveType() is { } primitive && ClrBuiltInRules.IsPolicyShiftCount(primitive);
+        && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(right?.Clr));
 
     /// <summary>C#'s verdict on the shift, from Roslyn for a native operand and from the runtime binder otherwise.</summary>
     private static bool CSharpRejectsShift(OperatorKind kind, Type left, Type count) {
@@ -178,7 +177,7 @@ internal static class OperatorOracle {
             var parameter = parameters[i];
             conversions.Add(ReferenceEquals(parameter, operand)
                 ? "id"
-                : parameter.ResolveConversionFrom(operand) is { } c ? $"{c.Kind}{(c.Method is null ? "/intrinsic" : "/declared")}" : "?");
+                : Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(operand, parameter) is { } c ? $"{c.Kind}{(c.Method is null ? "/intrinsic" : "/declared")}" : "?");
         }
         return $"{found.ResultTypeDefinition.Name}{(found.Method is null ? " [platform]" : " [declared]")} conv({string.Join(",", conversions)})";
     }
@@ -272,8 +271,8 @@ internal static class OperatorOracle {
 
     private static (string Lowered, string Abi) RunVm(
         OracleOperand left, OperatorKind kind, OracleOperand? right, ITypeOperator? resolution, List<OracleDivergence> divergences) {
-        var a = new Parameter("a", new ClrTypeReference(left.Clr!));
-        var b = right is null ? null : new Parameter("b", new ClrTypeReference(right.Clr!));
+        var a = new Parameter("a", TypeReference.To(left.Clr!));
+        var b = right is null ? null : new Parameter("b", TypeReference.To(right.Clr!));
         var node = Build(kind, a, b);
         var expectedType = resolution is { } found && found.ResultTypeDefinition.TryGetRuntimeType(out var tree) ? tree : null;
 
@@ -392,7 +391,7 @@ internal static class OperatorOracle {
             // Poly's shift-count policy: C#'s shift by the count converted to int unchecked (Roslyn's int-count cell for a
             // native left operand, the runtime binder otherwise).
             if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
-                && rightType?.GetPrimitiveType() is { } countType && ClrBuiltInRules.IsPolicyShiftCount(countType)) {
+                && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(rightType))) {
                 var count = PolicyCount(rightValue!);
                 if (CSharpOperatorOracle.IsNativeForm(leftType)) {
                     var answer = CSharpOperatorOracle.Value(kind, leftType, typeof(int), leftValue, count);
@@ -561,7 +560,7 @@ public class OperatorOracleTests {
 
     /// <summary>
     /// Permanent, not a gap (owner ruling, #677, 2026-11-13): Poly accepts a shift count of any built-in integer type and
-    /// converts it to int unchecked (<c>ClrBuiltInRules.IsPolicyShiftCount</c>); C# accepts only a count that converts
+    /// converts it to int unchecked (<c>CSharpBuiltIns.IsPolicyShiftCount</c>); C# accepts only a count that converts
     /// implicitly to int. The 11 integral lefts by the 5 wider counts by the 2 shifts.
     /// </summary>
     private static readonly LedgerRule[] PolicyRules = [

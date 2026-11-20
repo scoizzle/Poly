@@ -3,6 +3,7 @@ using BenchmarkDotNet.Attributes;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 
 namespace Poly.Benchmarks;

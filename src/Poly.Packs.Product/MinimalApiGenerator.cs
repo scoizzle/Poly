@@ -2,12 +2,9 @@ using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
 namespace Poly.Packs.Product;
 
@@ -239,7 +236,7 @@ public sealed partial class MinimalApiGenerator {
                     new Member(new TypeReference(BuilderVar), "Services"),
                     "AddScoped")) {
                 TypeArguments = [
-                    new ClrTypeReference(typeof(IStoragePort)),
+                    TypeReference.To(typeof(IStoragePort)),
                     new TypeReference(dbContextName)
                 ]
             });
@@ -387,24 +384,24 @@ public sealed partial class MinimalApiGenerator {
     /// <summary><see cref="ClrTypeNode"/> with the nullable annotation (<c>T?</c>).</summary>
     private static Node NullableClrTypeNode(string clrType) => new OptionalTypeReference(ClrTypeNode(clrType));
 
-    /// <summary>CLR keyword names stay <see cref="PrimitiveTypeReference"/> so a
+    /// <summary>CLR keyword names are the CLR definitions the keywords name, so a
     /// domain type of the same name can print with <c>@</c> in type position.</summary>
     private static Node ClrTypeNode(string clrType) => clrType switch {
-        "bool" => new PrimitiveTypeReference(ClrPrimitive.Boolean),
-        "byte" => new PrimitiveTypeReference(ClrPrimitive.UInt8),
-        "char" => new PrimitiveTypeReference(ClrPrimitive.Char),
-        "decimal" => new PrimitiveTypeReference(ClrPrimitive.Decimal),
-        "double" => new PrimitiveTypeReference(ClrPrimitive.Float64),
-        "float" => new PrimitiveTypeReference(ClrPrimitive.Float32),
-        "int" => new PrimitiveTypeReference(ClrPrimitive.Int32),
-        "long" => new PrimitiveTypeReference(ClrPrimitive.Int64),
-        "object" => new PrimitiveTypeReference(ClrPrimitive.Structure),
-        "sbyte" => new PrimitiveTypeReference(ClrPrimitive.Int8),
-        "short" => new PrimitiveTypeReference(ClrPrimitive.Int16),
-        "string" => new PrimitiveTypeReference(ClrPrimitive.String),
-        "uint" => new PrimitiveTypeReference(ClrPrimitive.UInt32),
-        "ulong" => new PrimitiveTypeReference(ClrPrimitive.UInt64),
-        "ushort" => new PrimitiveTypeReference(ClrPrimitive.UInt16),
+        "bool" => TypeReference.To(typeof(bool)),
+        "byte" => TypeReference.To(typeof(byte)),
+        "char" => TypeReference.To(typeof(char)),
+        "decimal" => TypeReference.To(typeof(decimal)),
+        "double" => TypeReference.To(typeof(double)),
+        "float" => TypeReference.To(typeof(float)),
+        "int" => TypeReference.To(typeof(int)),
+        "long" => TypeReference.To(typeof(long)),
+        "object" => TypeReference.To(typeof(object)),
+        "sbyte" => TypeReference.To(typeof(sbyte)),
+        "short" => TypeReference.To(typeof(short)),
+        "string" => TypeReference.To(typeof(string)),
+        "uint" => TypeReference.To(typeof(uint)),
+        "ulong" => TypeReference.To(typeof(ulong)),
+        "ushort" => TypeReference.To(typeof(ushort)),
         _ => new TypeReference(clrType),
     };
 }

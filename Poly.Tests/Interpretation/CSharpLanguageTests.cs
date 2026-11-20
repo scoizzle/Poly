@@ -45,8 +45,8 @@ public class CSharpLanguageTests {
     [Test]
     public async Task Write_GenericType_ClosesNestedTypeArguments() {
         var type = new NamedTypeReference("Dictionary", TypeArguments: [
-            new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
-            new CollectionTypeReference(new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64)),
+            TypeReference.To(typeof(string)),
+            new CollectionTypeReference(TypeReference.To(typeof(long))),
         ]);
         var field = new FieldDefinitionNode("Prices", type);
         var text = CSharpLanguage.Write([new TypeDefinitionNode("Ledger", Fields: [field])]);
@@ -176,10 +176,10 @@ public class CSharpLanguageTests {
         var tree = CSharpSyntaxTree.ParseText(text);
         var root = tree.GetRoot();
 
-        await Assert.That(unit.Types.Count(t => t.EffectiveKind != Poly.Introspection.TypeKind.Enum))
+        await Assert.That(unit.Types.Count(t => t.Form != TypeDeclarationForm.Enum))
             .IsEqualTo(root.DescendantNodes().OfType<TypeDeclarationSyntax>().Count())
             .Because($"{Path.GetFileName(path)} type declarations");
-        await Assert.That(unit.Types.Count(t => t.EffectiveKind == Poly.Introspection.TypeKind.Enum))
+        await Assert.That(unit.Types.Count(t => t.Form == TypeDeclarationForm.Enum))
             .IsEqualTo(root.DescendantNodes().OfType<EnumDeclarationSyntax>().Count())
             .Because($"{Path.GetFileName(path)} enum declarations");
 
@@ -302,7 +302,7 @@ public class CSharpLanguageTests {
         var objectCreations = 0;
         var lambdas = 0;
         foreach (var type in unit.Types) {
-            if (type.EffectiveKind is Poly.Introspection.TypeKind.Enum) {
+            if (type.Form is TypeDeclarationForm.Enum) {
                 enumMembers += type.Fields?.Count ?? 0;
                 continue;
             }

@@ -1,8 +1,6 @@
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
-using Poly.Tests.Polyc;
-
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>

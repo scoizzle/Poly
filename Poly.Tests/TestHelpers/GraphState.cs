@@ -3,8 +3,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 
-using Poly.DomainModeling.Runtime;
-using Poly.Runtime;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.TestHelpers;
 
@@ -189,8 +188,7 @@ public static class ModuleScopeOnly {
         var callArgs = new object?[parameters.Count];
         for (var i = 0; i < parameters.Count; i++) {
             var parameter = parameters[i];
-            if (parameter.TypeReference is Poly.Ast.Nodes.ClrTypeReference clr
-                && typeof(IStoragePort).IsAssignableFrom(clr.RuntimeType)) {
+            if (parameter.TypeReference.Denotes(typeof(IStoragePort))) {
                 callArgs[i] = port;
                 continue;
             }

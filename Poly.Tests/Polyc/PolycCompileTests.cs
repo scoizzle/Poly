@@ -1,6 +1,4 @@
 using Poly.Compile;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Ontology.Contract;
 using Poly.Packs.Product;
 
 namespace Poly.Tests.Polyc;

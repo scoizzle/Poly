@@ -1,6 +1,5 @@
 using System.Xml.Linq;
 
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Runtime;

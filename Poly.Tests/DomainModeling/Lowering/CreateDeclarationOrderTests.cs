@@ -1,12 +1,9 @@
 using System.Reflection;
 
-using Poly.Ast.Nodes;
-using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
-using Poly.Tests.TestHelpers;
 
 using TUnit.Assertions.Enums;
 
@@ -229,7 +226,7 @@ public sealed class CreateDeclarationOrderTests {
             foreach (var entity in result.Domain.Types.OfType<Entity>()) {
                 var create = module.Single(t => t.Name == entity.Name).Methods!.Single(m => m.Name == "Create");
                 var lowered = (create.Parameters ?? [])
-                    .Where(p => p.TypeReference is not ClrTypeReference { RuntimeType: var t } || t != typeof(Poly.Runtime.IStoragePort))
+                    .Where(p => !p.TypeReference.Denotes(typeof(Poly.Runtime.IStoragePort)))
                     .Select(p => p.Name);
                 var slots = result.Analysis.GetStructure(entity)!.CreateSlots.Select(s => DomainToCSharpExporter.ToCamelCase(s.Name));
                 if (!lowered.SequenceEqual(slots))
@@ -256,4 +253,5 @@ public sealed class CreateDeclarationOrderTests {
             .Where(m => m.Name == "Create")
             .OrderByDescending(m => m.GetParameters().Length)
             .First();
+
 }

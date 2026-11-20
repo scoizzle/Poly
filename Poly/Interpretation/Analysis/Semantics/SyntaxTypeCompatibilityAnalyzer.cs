@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Globalization;
 
+using Poly.Interpretation.CSharp;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;
@@ -65,8 +66,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             [typeof(TypeAs)] = static (a, c, n) => a.CheckTypeAs(c, (TypeAs)n),
             [typeof(New)] = static (a, c, n) => a.CheckNew(c, (New)n),
             [typeof(Not)] = static (a, c, n) => {
-                var operand = ClrTypeOf(c, ((Not)n).Value);
-                if (operand is not null && operand != typeof(bool) && CategoryOf(operand) is not (Cat.Unknown or Cat.Null))
+                var operand = DefinitionOf(c, ((Not)n).Value);
+                if (operand is not null && !IsBool(c.TypeSystem, operand)
+                    && CategoryOf(c.TypeSystem, operand) is not (Cat.Unknown or Cat.Null))
                     a.Report(c, n, $"'not' requires a Boolean operand (got '{operand.Name}')");
             },
             [typeof(And)] = static (a, c, n) => { var x = (And)n; a.CheckBooleanOperands(c, x.LeftHandValue, x.RightHandValue); },
@@ -107,8 +109,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             Report(context, loop, "cannot resolve the foreach loop variable's declared type");
             return;
         }
-        var element = context.GetMetadata<ForEachElementTypeMetadata>(loop)?.ElementType?.GetRuntimeType();
-        if (element is null || CanConvert(element, declared))
+        var elementDef = context.GetMetadata<ForEachElementTypeMetadata>(loop)?.ElementType;
+        var element = elementDef?.GetRuntimeType();
+        if (element is null || declaredDef is null || CanConvert(context.TypeSystem, elementDef!, declaredDef))
             return;
         Report(context, loop,
             $"cannot convert each element of type '{element.Name}' to the loop variable type '{declared.Name}'");
@@ -116,54 +119,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     /// <summary>A declared <c>foreach (V x in …)</c> loop variable needs an implicit
     /// conversion from the element type to <c>V</c>, as in C#.</summary>
-    private static bool CanConvert(Type from, Type to) => IsImplicitlyConvertible(from, to);
+    private static bool CanConvert(ITypeSystem system, ITypeDefinition from, ITypeDefinition to) => IsImplicitlyConvertible(system, from, to);
 
-    /// <summary>True when C# converts <paramref name="from"/> to <paramref name="to"/>
-    /// implicitly: identity, reference/boxing, nullable lifting, or a built-in numeric
-    /// conversion. This is a language rule, not a storage rule.</summary>
-    internal static bool IsImplicitlyConvertible(Type from, Type to) {
-        if (from == to)
-            return true;
-        if (Nullable.GetUnderlyingType(to) is { } targetUnderlying) {
-            if (from == targetUnderlying)
-                return true;
-            if (Nullable.GetUnderlyingType(from) is { } sourceUnderlying)
-                return IsImplicitNumeric(sourceUnderlying, targetUnderlying);
-            return IsImplicitNumeric(from, targetUnderlying);
-        }
-        if (Nullable.GetUnderlyingType(from) is not null)
-            return false;
-        if (to.IsAssignableFrom(from))
-            return true;
-        return IsImplicitNumeric(from, to);
-    }
-
-    private static bool IsImplicitNumeric(Type from, Type to) {
-        if (from.IsEnum || to.IsEnum || from.IsPointer || to.IsPointer)
-            return false;
-        return (Type.GetTypeCode(from), Type.GetTypeCode(to)) switch {
-            (TypeCode.SByte, TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64
-                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Byte, TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32
-                or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
-                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Int16, TypeCode.Int32 or TypeCode.Int64
-                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.UInt16, TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64
-                or TypeCode.UInt64 or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Int32, TypeCode.Int64 or TypeCode.Single or TypeCode.Double
-                or TypeCode.Decimal) => true,
-            (TypeCode.UInt32, TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
-                or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Int64, TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.UInt64, TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Char, TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32
-                or TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
-                or TypeCode.Double or TypeCode.Decimal) => true,
-            (TypeCode.Single, TypeCode.Double) => true,
-            _ => false,
-        };
-    }
+    /// <summary>True when <paramref name="system"/> converts <paramref name="from"/> to <paramref name="to"/> implicitly:
+    /// identity, reference/boxing, nullable lifting, or a built-in numeric conversion. The target type system answers it
+    /// (<see cref="ITypeSystem.IsAssignableWithoutConversion"/>, <see cref="ITypeSystem.Conversion"/>), so the analysis
+    /// keeps no CLR type table of its own. This is a language rule, not a storage rule.</summary>
+    internal static bool IsImplicitlyConvertible(ITypeSystem system, ITypeDefinition from, ITypeDefinition to) =>
+        system.IsAssignableWithoutConversion(to, from)
+        || system.Conversion(from, to) is { Kind: ConversionOperatorKind.Implicit };
 
 
     /// <summary>
@@ -194,10 +158,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
 
         // Date-offset fence (T-10): the interim DateOffsetRule, which the resolver reads for the offset's stamp too.
-        if (left is not null && right is not null && DateOffsetRule.Applies(kind, left, right)) {
+        if (DateOffsetRule.Applies(context.TypeSystem, kind, leftDefinition, rightDefinition)) {
             if (!RewriteDateOffset(context, parent, leftNode, rightNode, negate: kind is OperatorKind.Subtract))
                 Report(context, leftNode,
-                    $"temporal offset requires a date type with AddDays (got '{left.Name}')");
+                    $"temporal offset requires a date type with AddDays (got '{leftDefinition.Name}')");
             return;
         }
 
@@ -210,21 +174,21 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var rightUnderlying = Underlying(context, rightDefinition);
 
         if (comparison) {
-            if (EnumOperandRule(leftUnderlying, rightUnderlying) is { } sameEnum) {
+            if (EnumOperandRule(context.TypeSystem, leftUnderlying, rightUnderlying) is { } sameEnum) {
                 if (!sameEnum)
                     Report(context, leftNode, noOperator);
                 return;
             }
-            if (left is not null && right is not null && NullableDateRule(left, right)) {
+            if (NullableDateRule(context.TypeSystem, leftDefinition, rightDefinition)) {
                 Report(context, leftNode, incompatible);
                 return;
             }
-            if (left is not null && right is not null && TextAndBooleanOrderingRule(kind, left, right))
+            if (TextAndBooleanOrderingRule(context.TypeSystem, kind, leftDefinition, rightDefinition))
                 return;
         }
 
-        if (leftUnderlying.GetOperator(kind, rightUnderlying) is not { } resolution) {
-            if ((comparison && UndeclaredComparisonRule(kind, leftUnderlying, rightUnderlying))
+        if (context.TypeSystem.Operator(kind, leftUnderlying, rightUnderlying) is not { } resolution) {
+            if ((comparison && UndeclaredComparisonRule(context.TypeSystem, kind, leftUnderlying, rightUnderlying))
                 || EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying) is not null)
                 return;
             Report(context, leftNode, noOperator);
@@ -257,26 +221,32 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (OperandDefinition(context, operandNode) is not { } definition)
             return;
         var underlying = Underlying(context, definition);
-        if (underlying.GetOperator(kind, null) is not null || EnumBitwiseRule.Of(kind, underlying, null) is not null)
+        if (context.TypeSystem.Operator(kind, underlying, null) is not null || EnumBitwiseRule.Of(kind, underlying, null) is not null)
             return;
         Report(context, operandNode, $"operator {kind} is not defined for '{NameOf(definition)}': no {kind} operator for this type");
     }
 
     /// <summary>
-    /// Poly's shift-count policy (<see cref="ClrBuiltInRules.IsPolicyShiftCount"/>): a count of a wider integer type is
-    /// converted to <c>int</c> unchecked, and the tree states it. The shift node is replaced by one whose count is that cast
-    /// (lifted to <c>int?</c> for a nullable count), so the emitter shifts by an <c>int</c> and decides nothing.
+    /// Poly's shift-count policy (<see cref="Poly.Interpretation.CSharp.CSharpBuiltIns.IsPolicyShiftCount"/>): a count of a wider integer type is converted to
+    /// <c>int</c> unchecked, and the tree states it. The shift node is replaced by one whose count is that cast (lifted to
+    /// <c>int?</c> for a nullable count), so the emitter shifts by an <c>int</c> and decides nothing.
     /// </summary>
     private static void StatePolicyShiftCount(
         AnalysisContext context, Node shift, Node count, ITypeDefinition countDefinition, ITypeOperator resolution) {
         var parameters = resolution.Parameters.ToArray();
-        if (parameters.Length != 2 || parameters[1].ParameterTypeDefinition.PrimitiveType is not { } countType
-            || !ClrBuiltInRules.IsPolicyShiftCount(countType))
+        if (parameters.Length != 2
+            || !Poly.Interpretation.CSharp.CSharpBuiltIns.IsPolicyShiftCount(
+                context.TypeSystem.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>()?.SimpleTypeOf(parameters[1].ParameterTypeDefinition)))
             return;
         var target = countDefinition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null ? typeof(int?) : typeof(int);
-        var cast = new TypeCast(count, new ClrTypeReference(target));
-        context.SetResolvedType(cast, context.TypeDefinitions.GetTypeDefinition(target)
-            ?? throw new InvalidOperationException($"the type provider has no definition for '{target}'"));
+        var targetDefinition = context.TypeSystem.ClrDefinitionOf(target)
+            ?? throw new InvalidOperationException($"the type provider has no definition for '{target}'");
+        // The target node is minted here, so it carries its resolved type with it: the reference has no type of its
+        // own, and the emitter reads a type node's CLR type from the analysis.
+        var targetNode = TypeReference.To(target);
+        context.SetResolvedType(targetNode, targetDefinition);
+        var cast = new TypeCast(count, targetNode);
+        context.SetResolvedType(cast, targetDefinition);
         Node stated = shift switch {
             ShiftLeft left => left with { RightHandValue = cast },
             ShiftRight right => right with { RightHandValue = cast },
@@ -297,32 +267,47 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (effective is Constant { Value: null })
             return null;
         var definition = context.GetResolvedType(effective)
-            ?? (effective is Constant { Value: { } value } ? context.TypeDefinitions.GetTypeDefinition(value.GetType()) : null);
+            ?? (effective is Constant { Value: { } value } ? context.TypeSystem.ClrDefinitionOf(value.GetType()) : null);
         return definition?.GetRuntimeType() == typeof(void) ? null : definition;
     }
 
     /// <summary>The definition with a <c>Nullable&lt;T&gt;</c> peeled to <c>T</c>.</summary>
     private static ITypeDefinition Underlying(AnalysisContext context, ITypeDefinition definition) =>
         definition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is { } underlying
-            ? context.TypeDefinitions.GetTypeDefinition(underlying) ?? definition
+            ? context.TypeSystem.ClrDefinitionOf(underlying) ?? definition
             : definition;
 
     private static string NameOf(ITypeDefinition definition) => definition.GetRuntimeType()?.Name ?? definition.Name;
 
-    private static bool IsEnum(ITypeDefinition definition) => definition.Kind is TypeKind.Enum;
 
-    private static bool IsText(ITypeDefinition definition) =>
-        definition.GetRuntimeType() is { } runtime && (runtime == typeof(string) || runtime == typeof(char));
+    // C#'s rules as the analysis' target states them (#998 T6b; owner rulings 2026-11-19): a simple type, an enum or a
+    // value type is the target's C# rule; string is the definition the target's own word "string" binds; a target that
+    // is not C# states none of them. Date and Guid are the CLR host's own definitions (ClrBuiltInRules), the category
+    // table's interim removed by I8b (#972).
+    private static Poly.Interpretation.CSharp.ICSharpTypeRules? CSharpRules(ITypeSystem system) => system.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>();
+
+    private static Poly.Interpretation.CSharp.SimpleType? SimpleTypeOf(ITypeSystem system, ITypeDefinition? definition) =>
+        definition is null ? null : CSharpRules(system)?.SimpleTypeOf(definition);
+
+    private static bool IsEnumType(ITypeSystem system, ITypeDefinition definition) => CSharpRules(system)?.IsEnumType(definition) ?? false;
+
+    private static bool IsBool(ITypeSystem system, ITypeDefinition definition) => SimpleTypeOf(system, definition) is Poly.Interpretation.CSharp.SimpleType.Bool;
+
+    private static bool IsString(ITypeSystem system, ITypeDefinition definition) =>
+        CSharpRules(system) is not null && system.Bind("string") is { } text && system.IsSame(text, definition);
+
+    private static bool IsText(ITypeSystem system, ITypeDefinition definition) =>
+        SimpleTypeOf(system, definition) is Poly.Interpretation.CSharp.SimpleType.Char || IsString(system, definition);
 
     /// <summary>
     /// Enum comparisons, which the provider leaves undefined (T-24's deliberate none): two enums compare when they are
     /// the same type, and an enum compares with Text (its member name). A modeled enum counts as an enum. Null when
     /// neither applies. Removed by T-25; the Text allowance by T-07.
     /// </summary>
-    private static bool? EnumOperandRule(ITypeDefinition left, ITypeDefinition right) {
-        if (IsEnum(left) && IsEnum(right))
+    private static bool? EnumOperandRule(ITypeSystem system, ITypeDefinition left, ITypeDefinition right) {
+        if (IsEnumType(system, left) && IsEnumType(system, right))
             return TypeDefinitionExtensions.IsSameType(left, right);
-        if ((IsEnum(left) && IsText(right)) || (IsEnum(right) && IsText(left)))
+        if ((IsEnumType(system, left) && IsText(system, right)) || (IsEnumType(system, right) && IsText(system, left)))
             return true;
         return null;
     }
@@ -336,12 +321,17 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// declares no <c>op_Equality</c>) of one type or of types related by inheritance; and ordering of two operands of one
     /// modeled type, which the domain analyzer accepts under T-07's ordering-legality rule.
     /// </summary>
-    private static bool UndeclaredComparisonRule(OperatorKind kind, ITypeDefinition left, ITypeDefinition right) {
+    /// <summary>A value type that is neither a primitive nor an enumeration: the struct a declared equality is asked of.</summary>
+    private static bool IsPlainValueType(ITypeSystem system, ITypeDefinition definition) =>
+        CSharpRules(system)?.HasValueSemantics(definition) == true && SimpleTypeOf(system, definition) is null
+        && !ClrBuiltInRules.IsCalendarType(definition) && !ClrBuiltInRules.IsGuid(definition) && !IsEnumType(system, definition);
+
+    private static bool UndeclaredComparisonRule(ITypeSystem system, OperatorKind kind, ITypeDefinition left, ITypeDefinition right) {
         var equality = kind is OperatorKind.Equal or OperatorKind.NotEqual;
         var same = TypeDefinitionExtensions.IsSameType(left, right);
         if (left is ClrTypeDefinition || right is ClrTypeDefinition)
-            return equality && left.Kind is TypeKind.Struct && same;
-        return equality ? same || left.IsAssignableFrom(right) || right.IsAssignableFrom(left) : same;
+            return equality && IsPlainValueType(system, left) && same;
+        return equality ? same || left.IsAssignableFrom(right, system) || right.IsAssignableFrom(left, system) : same;
     }
 
     /// <summary>
@@ -351,22 +341,23 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// (<c>DateOnly?</c> beside <c>DateOnly</c>) is C#'s lifted comparison and runs. Interim: removed with its cells in
     /// <c>KnownInterimRules</c> by row T-21b, when the VM converts in a nullable compare.
     /// </summary>
-    private static bool NullableDateRule(Type left, Type right) =>
-        (IsNullableDate(left) || IsNullableDate(right))
-        && (Nullable.GetUnderlyingType(left) ?? left) != (Nullable.GetUnderlyingType(right) ?? right);
+    private static bool NullableDateRule(ITypeSystem system, ITypeDefinition left, ITypeDefinition right) =>
+        (IsNullableDate(system, left) || IsNullableDate(system, right))
+        && !TypeDefinitionExtensions.IsSameType(system.NullableOf(left) ?? left, system.NullableOf(right) ?? right);
 
-    private static bool IsNullableDate(Type type) =>
-        Nullable.GetUnderlyingType(type) is { } underlying && CategoryOf(underlying) is Cat.Date;
+    private static bool IsNullableDate(ITypeSystem system, ITypeDefinition definition) =>
+        system.NullableOf(definition) is { } underlying && CategoryOf(system, underlying) is Cat.Date;
 
     /// <summary>
     /// Ordering of two exact <c>string</c> or two exact <c>bool</c> operands: the DSL accepts it and the interpreter
     /// orders Text (the emitter refuses Boolean ordering itself); the provider defines neither. Removed by T-07 (#631).
     /// </summary>
-    private static bool TextAndBooleanOrderingRule(OperatorKind kind, Type left, Type right) {
+    private static bool TextAndBooleanOrderingRule(ITypeSystem system, OperatorKind kind, ITypeDefinition left, ITypeDefinition right) {
         if (kind is not (OperatorKind.LessThan or OperatorKind.LessThanOrEqual or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual))
             return false;
-        var (l, r) = (Nullable.GetUnderlyingType(left) ?? left, Nullable.GetUnderlyingType(right) ?? right);
-        return l == r && (l == typeof(string) || l == typeof(bool));
+        var (l, r) = (system.NullableOf(left) ?? left, system.NullableOf(right) ?? right);
+        return TypeDefinitionExtensions.IsSameType(l, r)
+            && (IsString(system, l) || IsBool(system, l));
     }
 
     /// <summary>
@@ -378,14 +369,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         resolution.Method is null
         || (resolution.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
 
-    /// <summary>True when the type takes part in a cast as a number. <c>char</c> is
-    /// <see cref="Cat.Text"/> (string concatenation needs that) but converts as a number, as in C#.
-    /// Only <see cref="CheckTypeCast"/> reads it; removed by T-28.</summary>
-    private static bool IsNumericLike(Type t) => t == typeof(char) || CategoryOf(t) is Cat.Number;
-
     private void CheckTypeAs(AnalysisContext context, TypeAs typeAs) {
-        var target = ClrTypeOf(context, typeAs)
-            ?? (typeAs.TargetTypeReference is ClrTypeReference ctr ? ctr.RuntimeType : null);
+        var target = ClrTypeOf(context, typeAs);
         if (target is null)
             return;
         if (target.IsValueType)
@@ -411,11 +396,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
     private void CheckBooleanOperands(AnalysisContext context, Node leftNode, Node rightNode) {
-        var left = ClrTypeOf(context, leftNode);
-        var right = ClrTypeOf(context, rightNode);
+        var left = DefinitionOf(context, leftNode);
+        var right = DefinitionOf(context, rightNode);
         if (left is null || right is null) return;
-        var lc = CategoryOf(left);
-        var rc = CategoryOf(right);
+        var lc = CategoryOf(context.TypeSystem, left);
+        var rc = CategoryOf(context.TypeSystem, right);
         if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
         if (lc is not Cat.Boolean || rc is not Cat.Boolean)
             Report(context, leftNode,
@@ -501,7 +486,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static bool ArgumentMatches(
         AnalysisContext context, IParameter parameter, ITypeDefinition argType, Node arg) {
         var paramType = parameter.ParameterTypeDefinition;
-        if (ReferenceEquals(paramType, argType) || paramType.IsAssignableFrom(argType))
+        if (ReferenceEquals(paramType, argType) || paramType.IsAssignableFrom(argType, context.TypeSystem))
             return true;
         var shape = arg as Lambda
             ?? (StoredLambdaBinding.TryGet(context, arg, out var storedShape)
@@ -509,15 +494,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 : null);
         if (shape is not null && MethodInvocationSemanticResolver.AcceptsLambdaArgument(context, shape, paramType))
             return true;
-        if (paramType.ResolveConversionFrom(argType) is { Kind: ConversionOperatorKind.Implicit })
+        if (context.TypeSystem.Conversion(argType, paramType) is { Kind: ConversionOperatorKind.Implicit })
             return true;
-        if (paramType.Kind == TypeKind.Enum && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
+        if (IsEnumType(context.TypeSystem, paramType) && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
             return true; // projected enums are string-valued consts (BuildEnumTypeDef)
         if (arg is Constant { Value: null })
             return AcceptsNull(paramType);
         if (NullableValueAccepts(paramType, argType))
             return true;
-        if (CollectionsMatch(paramType, argType))
+        if (CollectionsMatch(context.TypeSystem, paramType, argType))
             return true;
         return OptionalNullBoxMatches(context, parameter, paramType, argType, arg);
     }
@@ -537,9 +522,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return underlying is not null && (argRuntime == underlying || underlying.IsAssignableFrom(argRuntime));
     }
 
-    private static bool CollectionsMatch(ITypeDefinition paramType, ITypeDefinition argType) {
-        var paramElement = ElementOf(paramType);
-        var argElement = ElementOf(argType);
+    private static bool CollectionsMatch(ITypeSystem system, ITypeDefinition paramType, ITypeDefinition argType) {
+        var paramElement = ElementOf(system, paramType);
+        var argElement = ElementOf(system, argType);
         if (paramElement is null || argElement is null)
             return false;
         if (ReferenceEquals(paramElement, argElement))
@@ -552,14 +537,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return false;
     }
 
-    private static ITypeDefinition? ElementOf(ITypeDefinition type) {
+    private static ITypeDefinition? ElementOf(ITypeSystem system, ITypeDefinition type) {
         if (type is AstCollectionTypeDefinition collection)
             return collection.ElementType;
         if (type.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(string))
             return null;
-        if (!TypeDefinitionExtensions.IsCollectionShape(type))
+        // byte[] is binary, not a collection (owner ruling 9); string was excluded above.
+        if (ClrBuiltInRules.IsByteArray(type))
             return null;
-        var element = type.GetElementType();
+        var element = system.ElementType(type);
         return element is not null && !IsUniversalObject(element) ? element : null;
     }
 
@@ -605,7 +591,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 var resolved = context.GetResolvedType(node);
                 if (resolved is null || IsUniversalObject(resolved))
                     return false;
-                return ReferenceEquals(paramType, resolved) || paramType.IsAssignableFrom(resolved);
+                return ReferenceEquals(paramType, resolved) || paramType.IsAssignableFrom(resolved, context.TypeSystem);
         }
     }
 
@@ -615,13 +601,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             target = optional.InnerType;
         if (context.GetResolvedType(target) is { } resolved
             && !IsUniversalObject(resolved)
-            && (ReferenceEquals(paramType, resolved) || paramType.IsAssignableFrom(resolved)))
+            && (ReferenceEquals(paramType, resolved) || paramType.IsAssignableFrom(resolved, context.TypeSystem)))
             return true;
         if (target is NamedTypeReference named)
             return string.Equals(named.TypeName, paramType.Name, StringComparison.Ordinal)
                 && (named.Namespace is null || string.Equals(named.Namespace, paramType.Namespace, StringComparison.Ordinal));
-        if (target is PrimitiveTypeReference primitive)
-            return paramType.TryGetRuntimeType(out var runtimeType) && primitive.PrimitiveId.GetClrType() == runtimeType;
         return false;
     }
 
@@ -689,21 +673,22 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (priorType == rhsType)
             return;
 
-        var destDef = context.TypeDefinitions.GetTypeDefinition(priorType);
-        var srcDef = context.TypeDefinitions.GetTypeDefinition(rhsType);
+        var destDef = context.TypeSystem.ClrDefinitionOf(priorType);
+        var srcDef = context.TypeSystem.ClrDefinitionOf(rhsType);
         // An implicit native-integer conversion has no method: the tree states it as a cast, which the emitter executes
         // through the word type (a nuint widening to double or decimal is unsigned; a decimal store is a handle).
-        if (destDef is not null && srcDef is not null && !destDef.IsAssignableFrom(srcDef)
-            && destDef.NativeIntegerConversionFrom(srcDef) is ConversionOperatorKind.Implicit) {
-            var cast = new TypeCast(assignment.Value, new ClrTypeReference(priorType));
+        if (destDef is not null && srcDef is not null && !destDef.IsAssignableFrom(srcDef, context.TypeSystem)
+            && Poly.Interpretation.CSharp.CSharpBuiltIns.NativeIntegerConversionFrom(destDef, srcDef, context.TypeSystem) is ConversionOperatorKind.Implicit) {
+            var cast = new TypeCast(assignment.Value, new TypeDefinitionReference(destDef));
             context.SetResolvedType(cast, destDef);
             var stated = assignment with { Value = cast };
             context.SetResolvedType(stated, destDef);
             Replace(context, assignment, stated);
             return;
         }
-        bool convertible = IsImplicitlyConvertible(rhsType, priorType)
-            || (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef));
+        bool convertible = rhsType == priorType
+            || (destDef is not null && srcDef is not null
+                && (IsImplicitlyConvertible(context.TypeSystem, srcDef, destDef) || destDef.IsAssignableFrom(srcDef, context.TypeSystem)));
         if (convertible) {
             if (destDef is not null && srcDef is not null)
                 RewriteAssignmentConversion(context, assignment, destDef, srcDef);
@@ -720,17 +705,18 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var target = ClrTypeOf(context, destination);
         var rhs = ClrTypeOf(context, assignment.Value);
         if (target is null || rhs is null) return;
-        var destDef = context.TypeDefinitions.GetTypeDefinition(target);
-        var srcDef = context.TypeDefinitions.GetTypeDefinition(rhs);
-        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef)) {
+        var destDef = context.TypeSystem.ClrDefinitionOf(target);
+        var srcDef = context.TypeSystem.ClrDefinitionOf(rhs);
+        if (destDef is null || srcDef is null) return;
+        if (destDef.IsAssignableFrom(srcDef, context.TypeSystem)) {
             RewriteAssignmentConversion(context, assignment, destDef, srcDef);
             return;
         }
-        var tc = CategoryOf(target);
-        var rc = CategoryOf(rhs);
+        var tc = CategoryOf(context.TypeSystem, destDef);
+        var rc = CategoryOf(context.TypeSystem, srcDef);
         if (tc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
         if (tc is Cat.Enum && rc is Cat.Text) return;
-        if (!AssignCategoryRule(tc, target, rc, rhs))
+        if (!AssignCategoryRule(context.TypeSystem, tc, destDef, rc, srcDef))
             Report(context, destination,
                 $"cannot assign '{rhs.Name}' to '{destination.MemberName}' (type '{target.Name}')");
     }
@@ -738,73 +724,67 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private void CheckTypeCast(AnalysisContext context, TypeCast typeCast) {
         var source = ClrTypeOf(context, typeCast.Operand);
         var dest = ClrTypeOf(context, typeCast);
-        var destDef = typeCast.TargetTypeReference is ClrTypeReference destClr
-                ? context.TypeDefinitions.GetTypeDefinition(destClr.RuntimeType)
-                : typeCast.TargetTypeReference is PrimitiveTypeReference primRef
-                    && primRef.PrimitiveId.GetClrType() is { } primClr
-                    ? context.TypeDefinitions.GetTypeDefinition(primClr)
-                : context.GetResolvedType(typeCast.TargetTypeReference)
+        var destDef = context.GetResolvedType(typeCast.TargetTypeReference)
                     ?? context.GetResolvedType(typeCast)
-                    ?? (dest is not null ? context.TypeDefinitions.GetTypeDefinition(dest) : null);
+                    ?? (dest is not null ? context.TypeSystem.ClrDefinitionOf(dest) : null);
         var srcDef = context.GetResolvedType(typeCast.Operand)
-            ?? (source is not null ? context.TypeDefinitions.GetTypeDefinition(source) : null);
+            ?? (source is not null ? context.TypeSystem.ClrDefinitionOf(source) : null);
         if (destDef is not null && srcDef is not null) {
             // A native-integer cast is the platform's own conversion: the emitter converts through the word type, never
             // through IntPtr's declared operator or a Convert.To* overload pick.
-            if (destDef.NativeIntegerConversionFrom(srcDef) is not null)
+            if (Poly.Interpretation.CSharp.CSharpBuiltIns.NativeIntegerConversionFrom(destDef, srcDef, context.TypeSystem) is not null)
                 return;
             if (RewriteOperatorConversion(context, typeCast, typeCast.Operand, destDef, srcDef, implicitOnly: false))
                 return;
-            if (destDef.IsAssignableFrom(srcDef))
+            if (destDef.IsAssignableFrom(srcDef, context.TypeSystem))
                 return;
-            if (srcDef.IsAssignableFrom(destDef))
+            if (srcDef.IsAssignableFrom(destDef, context.TypeSystem))
                 return;
-            var srcCat = source is not null ? CategoryOf(source) : Cat.Unknown;
-            var destCat = dest is not null ? CategoryOf(dest)
-                : destDef is IClrTypeDefinition cd ? CategoryOf(cd.RuntimeType) : Cat.Unknown;
-            bool srcNumeric = source is not null && IsNumericLike(source);
-            bool destNumeric = dest is not null && IsNumericLike(dest);
+            var srcCat = CategoryOf(context.TypeSystem, srcDef);
+            var destCat = CategoryOf(context.TypeSystem, destDef);
+            bool srcNumeric = IsNumericLike(context.TypeSystem, srcDef);
+            bool destNumeric = IsNumericLike(context.TypeSystem, destDef);
             if ((srcNumeric && destNumeric)
                 || (srcCat is Cat.Enum && destNumeric)
                 || (srcNumeric && destCat is Cat.Enum)) {
                 // Convert.ToInt16 throws. An unchecked C# cast wraps, and the emitter
                 // compiles that cast. A checked cast keeps Convert.To*, which throws.
-                if (UncheckedIntegerCast(typeCast, source, dest))
+                if (UncheckedIntegerCast(context.TypeSystem, typeCast, srcDef, destDef))
                     return;
                 if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                     return;
             }
         }
-        if (source is null || dest is null || source == dest)
+        if (srcDef is null || destDef is null)
+            return;
+        if (TypeDefinitionExtensions.IsSameType(srcDef, destDef))
             return;
 
-        var sc = CategoryOf(source);
-        var dc = CategoryOf(dest);
+        var sc = CategoryOf(context.TypeSystem, srcDef);
+        var dc = CategoryOf(context.TypeSystem, destDef);
         if (sc is Cat.Unknown or Cat.Null || dc is Cat.Unknown or Cat.Null)
             return;
         if (sc is Cat.Number && dc is Cat.Number) {
-            if (UncheckedIntegerCast(typeCast, source, dest))
+            if (UncheckedIntegerCast(context.TypeSystem, typeCast, srcDef, destDef))
                 return;
-            if (destDef is not null && srcDef is not null
-                && TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
+            if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                 return;
             Report(context, typeCast,
-                $"cannot convert '{source.Name}' to '{dest.Name}'");
+                $"cannot convert '{srcDef.Name}' to '{destDef.Name}'");
             return;
         }
         if (dc is Cat.Enum && sc is Cat.Number)
             return;
         if (sc is Cat.Enum && dc is Cat.Number) {
-            if (destDef is not null && srcDef is not null
-                && TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
+            if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                 return;
             Report(context, typeCast,
-                $"cannot convert '{source.Name}' to '{dest.Name}'");
+                $"cannot convert '{srcDef.Name}' to '{destDef.Name}'");
             return;
         }
 
         Report(context, typeCast,
-            $"cannot convert '{source.Name}' to '{dest.Name}'");
+            $"cannot convert '{srcDef.Name}' to '{destDef.Name}'");
     }
 
     private void RewriteInvokeArgumentConversions(AnalysisContext context, Invoke invoke) {
@@ -823,9 +803,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             var destDef = parameters[i].ParameterTypeDefinition;
             var srcDef = context.GetResolvedType(arg)
                 ?? (ClrTypeOf(context, arg) is { } clr
-                    ? context.TypeDefinitions.GetTypeDefinition(clr)
+                    ? context.TypeSystem.ClrDefinitionOf(clr)
                     : null);
-            if (destDef is null || srcDef is null || !destDef.IsAssignableFrom(srcDef))
+            if (destDef is null || srcDef is null || !destDef.IsAssignableFrom(srcDef, context.TypeSystem))
                 continue;
             if (TryConversionInvoke(context, arg, destDef, srcDef, implicitOnly: true) is not { } converted)
                 continue;
@@ -870,10 +850,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         ITypeDefinition destDef,
         ITypeDefinition srcDef,
         bool implicitOnly) {
-        if (destDef.IsAssignableWithoutConversion(srcDef))
+        if (context.TypeSystem.IsAssignableWithoutConversion(destDef, srcDef))
             return null;
         // A conversion with no method is applied by the platform: no node states it, so none is added here.
-        if (destDef.ResolveConversionFrom(srcDef) is not { Method: { } method } conversion)
+        if (context.TypeSystem.Conversion(srcDef, destDef) is not { Method: { } method } conversion)
             return null;
         if (implicitOnly && conversion.Kind is not ConversionOperatorKind.Implicit)
             return null;
@@ -899,7 +879,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static bool RewriteStringConcat(
         AnalysisContext context, Node parent, Node left, Node right) {
-        var stringDef = context.TypeDefinitions.GetTypeDefinition(typeof(string));
+        var stringDef = context.TypeSystem.ClrDefinitionOf(typeof(string));
         if (stringDef is null)
             return false;
         var parts = new List<Node>();
@@ -921,11 +901,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (parts.Count <= 4) {
             // A part that is not a string takes the object overload; the emitter boxes the
             // integer into the object argument (`"a" + x`, `x` an int).
-            var objectDef = context.TypeDefinitions.GetTypeDefinition(typeof(object)) ?? stringDef;
+            var objectDef = context.TypeSystem.ClrDefinitionOf(typeof(object)) ?? stringDef;
             var argTypes = parts
                 .Select(p => ClrTypeOf(context, p) == typeof(string) ? stringDef : objectDef)
                 .ToArray();
-            method = stringDef.FindMatchingMethodOverloads("Concat", argTypes).FirstOrDefault();
+            method = stringDef.FindMatchingMethodOverloads("Concat", argTypes, context.TypeSystem).FirstOrDefault();
         }
         else {
             method = FindConcatEnumerable(stringDef, allStrings ? typeof(string) : typeof(object));
@@ -940,7 +920,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static void CollectStringConcatParts(AnalysisContext context, Node node, List<Node> parts) {
         var effective = context.GetNodeReplacement(node) ?? node;
-        if (IsStringConcatInvoke(effective) && effective is Invoke concat) {
+        if (IsStringConcatInvoke(context.TypeSystem, effective) && effective is Invoke concat) {
             foreach (var arg in concat.Arguments)
                 CollectStringConcatParts(context, arg, parts);
             return;
@@ -958,9 +938,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         parts.Add(effective);
     }
 
-    private static bool IsStringConcatInvoke(Node node) =>
-        node is Invoke { Delegate: Member { MemberName: "Concat", Value: ClrTypeReference { RuntimeType: var t } } }
-        && t == typeof(string);
+    private static bool IsStringConcatInvoke(ITypeSystem system, Node node) =>
+        node is Invoke { Delegate: Member { MemberName: "Concat", Value: var receiver } }
+        && IsStringType(system, receiver);
+
+    /// <summary>True when a type node states the string primitive: by the shared vocabulary or by a definition.</summary>
+    private static bool IsStringType(ITypeSystem system, Node? node) => node switch {
+        TypeDefinitionReference stated => IsString(system, stated.TypeDefinition),
+        _ => false
+    };
 
     private static ITypeMethod? FindConcatEnumerable(ITypeDefinition stringDef, Type elementType) {
         var arrayType = elementType.MakeArrayType();
@@ -1002,7 +988,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return false;
         var leftArg = ConvertOperand(context, left, parameters[0].ParameterTypeDefinition) ?? left;
         var rightArg = ConvertOperand(context, right, parameters[1].ParameterTypeDefinition) ?? right;
-        var method = decimalDef.FindMatchingMethodOverloads(name, [decimalDef, decimalDef]).FirstOrDefault();
+        var method = decimalDef.FindMatchingMethodOverloads(name, [decimalDef, decimalDef], context.TypeSystem).FirstOrDefault();
         if (method is null)
             return false;
         var invoke = StampStaticInvoke(context, method, leftArg, rightArg);
@@ -1014,13 +1000,13 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static Node? ConvertOperand(AnalysisContext context, Node operand, ITypeDefinition parameter) {
         var source = context.GetResolvedType(operand)
             ?? (ClrTypeOf(context, operand) is { } clr
-                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                ? context.TypeSystem.ClrDefinitionOf(clr)
                 : null);
         if (source is null)
             return null;
         if (TypeDefinitionExtensions.IsSameType(parameter, source))
             return operand;
-        if (parameter.ResolveConversionFrom(source) is not { Kind: ConversionOperatorKind.Implicit } conversion)
+        if (context.TypeSystem.Conversion(source, parameter) is not { Kind: ConversionOperatorKind.Implicit } conversion)
             return null;
         return conversion.Method is null
             ? operand
@@ -1031,7 +1017,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         AnalysisContext context, Node parent, Node date, Node offset, bool negate) {
         var dateDef = context.GetResolvedType(date)
             ?? (ClrTypeOf(context, date) is { } clr
-                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                ? context.TypeSystem.ClrDefinitionOf(clr)
                 : null);
         if (dateDef is null)
             return false;
@@ -1046,7 +1032,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             amount = new UnaryMinus(offset);
             var offsetType = context.GetResolvedType(offset)
                 ?? (ClrTypeOf(context, offset) is { } ot
-                    ? context.TypeDefinitions.GetTypeDefinition(ot)
+                    ? context.TypeSystem.ClrDefinitionOf(ot)
                     : null);
             if (offsetType is not null)
                 context.SetResolvedType(amount, offsetType);
@@ -1066,32 +1052,33 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (destClr is null)
             return false;
         var underlying = Nullable.GetUnderlyingType(destClr) ?? destClr;
-        if (ConvertMethodName(underlying) is not { } name)
+        if (ClrConvertMethods.NameOf(underlying) is not { } name)
             return false;
-        var convertDef = context.TypeDefinitions.GetTypeDefinition(typeof(Convert));
+        var convertDef = context.TypeSystem.ClrDefinitionOf(typeof(Convert));
         if (convertDef is null)
             return false;
         Node source = value;
         var sourceDef = srcDef;
-        if (srcClr is not null && IsIeeeFloating(srcClr) && IsIntegerType(underlying)) {
-            var doubleDef = context.TypeDefinitions.GetTypeDefinition(typeof(double));
-            var mathDef = context.TypeDefinitions.GetTypeDefinition(typeof(Math));
+        var underlyingDefinition = context.TypeSystem.NullableOf(destDef) ?? destDef;
+        if (srcClr is not null && IsIeeeFloating(context.TypeSystem, srcDef) && IsIntegerType(context.TypeSystem, underlyingDefinition)) {
+            var doubleDef = context.TypeSystem.ClrDefinitionOf(typeof(double));
+            var mathDef = context.TypeSystem.ClrDefinitionOf(typeof(Math));
             if (doubleDef is null || mathDef is null)
                 return false;
             if (srcClr != typeof(double)) {
-                var toDouble = convertDef.FindMatchingMethodOverloads("ToDouble", [srcDef]).FirstOrDefault();
+                var toDouble = convertDef.FindMatchingMethodOverloads("ToDouble", [srcDef], context.TypeSystem).FirstOrDefault();
                 if (toDouble is null)
                     return false;
                 source = StampStaticInvoke(context, toDouble, value);
                 sourceDef = doubleDef;
             }
-            var truncate = mathDef.FindMatchingMethodOverloads("Truncate", [doubleDef]).FirstOrDefault();
+            var truncate = mathDef.FindMatchingMethodOverloads("Truncate", [doubleDef], context.TypeSystem).FirstOrDefault();
             if (truncate is null)
                 return false;
             source = StampStaticInvoke(context, truncate, source);
             sourceDef = doubleDef;
         }
-        var method = convertDef.FindMatchingMethodOverloads(name, [sourceDef]).FirstOrDefault();
+        var method = convertDef.FindMatchingMethodOverloads(name, [sourceDef], context.TypeSystem).FirstOrDefault();
         if (method is null)
             return false;
         var invoke = StampStaticInvoke(context, method, source);
@@ -1099,7 +1086,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             Replace(context, original, invoke);
             return true;
         }
-        var nullableDef = context.TypeDefinitions.GetTypeDefinition(destClr);
+        var nullableDef = context.TypeSystem.ClrDefinitionOf(destClr);
         if (nullableDef is not null
             && TryConversionInvoke(context, invoke, nullableDef, method.MemberTypeDefinition, implicitOnly: true)
                 is { } boxed) {
@@ -1116,41 +1103,43 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             context.SetResolvedType(original, resolved);
     }
 
-    private static bool IsIeeeFloating(Type type) =>
-        type == typeof(double) || type == typeof(float);
+    private static bool IsIeeeFloating(ITypeSystem system, ITypeDefinition? definition) =>
+        SimpleTypeOf(system, definition) is Poly.Interpretation.CSharp.SimpleType.Float or Poly.Interpretation.CSharp.SimpleType.Double;
 
     /// <summary>An unchecked cast between integer widths. The emitter narrows it;
     /// <see cref="Convert"/> would throw instead of wrapping.</summary>
-    private static bool UncheckedIntegerCast(TypeCast typeCast, Type? source, Type? dest) =>
+    private static bool UncheckedIntegerCast(ITypeSystem system, TypeCast typeCast, ITypeDefinition? source, ITypeDefinition? dest) =>
         !typeCast.IsChecked && source is not null && dest is not null
-        && IsIntegerType(source) && IsIntegerType(dest);
+        && IsIntegerType(system, source) && IsIntegerType(system, dest);
 
-    private static bool IsIntegerType(Type type) =>
-        type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte)
-        || type == typeof(sbyte) || type == typeof(uint) || type == typeof(ulong) || type == typeof(ushort)
-        || type == typeof(char);
+    /// <summary>An integer width, char included, and an enum (an enum is integral: its underlying type is an integer).
+    /// The platform names the primitive, so this is not a CLR listing.</summary>
+    private static bool IsIntegerType(ITypeSystem system, ITypeDefinition? definition) =>
+        definition is not null
+        && (SimpleTypeOf(system, definition) is Poly.Interpretation.CSharp.SimpleType.SByte or Poly.Interpretation.CSharp.SimpleType.Byte or Poly.Interpretation.CSharp.SimpleType.Short
+                or Poly.Interpretation.CSharp.SimpleType.UShort or Poly.Interpretation.CSharp.SimpleType.Int or Poly.Interpretation.CSharp.SimpleType.UInt or Poly.Interpretation.CSharp.SimpleType.Long
+                or Poly.Interpretation.CSharp.SimpleType.ULong or Poly.Interpretation.CSharp.SimpleType.Char
+            || IsEnumType(system, definition));
 
     /// <summary>The Date-offset fence's amount conversion; its <c>Convert.To*</c> fallback is a private conversion rule. Removed by T-10.</summary>
     private static Node? CoerceTo(AnalysisContext context, Node value, ITypeDefinition destDef) {
         var srcDef = context.GetResolvedType(value)
             ?? (ClrTypeOf(context, value) is { } clr
-                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                ? context.TypeSystem.ClrDefinitionOf(clr)
                 : null);
         if (srcDef is null)
             return null;
-        if (destDef is IClrTypeDefinition d && srcDef is IClrTypeDefinition s
-            && d.RuntimeType.IsAssignableFrom(s.RuntimeType))
+        if (context.TypeSystem.IsAssignableWithoutConversion(destDef, srcDef))
             return value;
         if (TryConversionInvoke(context, value, destDef, srcDef, implicitOnly: true) is { } conv)
             return conv;
-        var destClr = destDef.GetRuntimeType() ?? (destDef as IClrTypeDefinition)?.RuntimeType;
-        if (destClr is not null && ConvertMethodName(destClr) is { } name) {
-            var convertDef = context.TypeDefinitions.GetTypeDefinition(typeof(Convert));
-            var method = convertDef?.FindMatchingMethodOverloads(name, [srcDef]).FirstOrDefault();
+        if (ClrConvertMethods.NameOf(destDef) is { } name) {
+            var convertDef = context.TypeSystem.Resolve("System.Convert");
+            var method = convertDef?.FindMatchingMethodOverloads(name, [srcDef], context.TypeSystem).FirstOrDefault();
             if (method is not null)
                 return StampStaticInvoke(context, method, value);
         }
-        return destDef.IsAssignableFrom(srcDef) ? value : null;
+        return destDef.IsAssignableFrom(srcDef, context.TypeSystem) ? value : null;
     }
 
     private static Invoke StampStaticInvoke(AnalysisContext context, ITypeMethod method, params Node[] args) {
@@ -1161,27 +1150,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return invoke;
     }
 
-    private static string? ConvertMethodName(Type dest) {
-        if (dest == typeof(double)) return "ToDouble";
-        if (dest == typeof(float)) return "ToSingle";
-        if (dest == typeof(decimal)) return "ToDecimal";
-        if (dest == typeof(int)) return "ToInt32";
-        if (dest == typeof(long)) return "ToInt64";
-        if (dest == typeof(short)) return "ToInt16";
-        if (dest == typeof(byte)) return "ToByte";
-        if (dest == typeof(sbyte)) return "ToSByte";
-        if (dest == typeof(uint)) return "ToUInt32";
-        if (dest == typeof(ulong)) return "ToUInt64";
-        if (dest == typeof(ushort)) return "ToUInt16";
-        if (dest == typeof(char)) return "ToChar";
-        if (dest == typeof(bool)) return "ToBoolean";
-        return null;
-    }
-
-    private static Node TypeRef(ITypeDefinition def) =>
-        def is IClrTypeDefinition clr
-            ? new ClrTypeReference(clr.RuntimeType)
-            : new TypeDefinitionReference(def);
+    private static Node TypeRef(ITypeDefinition def) => new TypeDefinitionReference(def);
 
     private static void StampConversion(
         AnalysisContext context,
@@ -1197,7 +1166,16 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private void Report(AnalysisContext context, Node node, string message) =>
         context.ReportError(node, message, DiagnosticCode);
 
-    private enum Cat { Text, Number, Boolean, Date, Enum, Guid, Null, Unknown }
+    internal enum Cat { Text, Number, Boolean, Date, Enum, Guid, Null, Unknown }
+
+    /// <summary>The definition a node's type resolves to, or null. Constants resolve through their value's type.</summary>
+    private static ITypeDefinition? DefinitionOf(AnalysisContext context, Node node) {
+        var effective = context.GetNodeReplacement(node) ?? node;
+        return context.GetResolvedType(effective)
+            ?? (effective is Constant { Value: not null } constant
+                ? context.TypeSystem.ClrDefinitionOf(constant.Value.GetType())
+                : null);
+    }
 
     private static Type? ClrTypeOf(AnalysisContext context, Node node) {
         var effective = context.GetNodeReplacement(node) ?? node;
@@ -1207,37 +1185,51 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 : null);
     }
 
-    /// <summary>True for a CLR date, time or timestamp type (the Date category), nullable included.</summary>
-    internal static bool IsDateCategory(Type type) => CategoryOf(type) is Cat.Date;
-
-    /// <summary>True for a CLR numeric primitive or decimal (the Number category), nullable included.</summary>
-    internal static bool IsNumberCategory(Type type) => CategoryOf(type) is Cat.Number;
-
-    private static Cat CategoryOf(Type type) {
-        if (type == typeof(bool)) return Cat.Boolean;
-        if (type == typeof(string) || type == typeof(char)) return Cat.Text;
-        if (type == typeof(DateTime) || type == typeof(DateTimeOffset)
-            || type == typeof(DateOnly) || type == typeof(TimeOnly) || type == typeof(TimeSpan))
-            return Cat.Date;
-        if (type.IsEnum) return Cat.Enum;
-        if (type == typeof(Guid)) return Cat.Guid;
-        if (type.IsPrimitive || type == typeof(decimal)) return Cat.Number;
-        if (type.IsValueType && Nullable.GetUnderlyingType(type) is { } underlying)
-            return CategoryOf(underlying);
-        return Cat.Unknown;
+    /// <summary>
+    /// The category a definition belongs to, asked of the target's C# rule (simple types, enums), the target's word
+    /// <c>string</c>, and the CLR host's own calendar and Guid definitions (#998 T6b), through
+    /// <see cref="ITypeSystem.NullableOf"/>; never what the definition answers about itself. A type that is none of
+    /// them, or any type under a target with no C# rule, is <see cref="Cat.Unknown"/>.
+    /// </summary>
+    internal static Cat CategoryOf(ITypeSystem system, ITypeDefinition definition) {
+        ArgumentNullException.ThrowIfNull(system);
+        ArgumentNullException.ThrowIfNull(definition);
+        var underlying = system.NullableOf(definition) ?? definition;
+        if (CSharpRules(system) is null) return Cat.Unknown;
+        var simple = SimpleTypeOf(system, underlying);
+        if (simple is Poly.Interpretation.CSharp.SimpleType.Bool) return Cat.Boolean;
+        if (simple is Poly.Interpretation.CSharp.SimpleType.Char || IsString(system, underlying)) return Cat.Text;
+        if (ClrBuiltInRules.IsCalendarType(underlying)) return Cat.Date;
+        if (ClrBuiltInRules.IsGuid(underlying)) return Cat.Guid;
+        if (simple is not null) return Cat.Number;
+        return IsEnumType(system, underlying) ? Cat.Enum : Cat.Unknown;
     }
 
+    /// <summary>True for the date, time and timestamp primitives (the Date category), nullable included.</summary>
+    internal static bool IsDateCategory(ITypeSystem system, ITypeDefinition definition) => CategoryOf(system, definition) is Cat.Date;
+
+    internal static bool IsNumberCategory(ITypeSystem system, ITypeDefinition definition) => CategoryOf(system, definition) is Cat.Number;
+
+    /// <summary>A timestamp is exactly <c>DateTime</c> or <c>DateTimeOffset</c>; a nullable form is not one, as before.</summary>
+    internal static bool IsTimestamp(ITypeSystem system, ITypeDefinition definition) =>
+        CSharpRules(system) is not null && ClrBuiltInRules.IsTimestamp(definition);
+
+    /// <summary>A number for a cast: <c>char</c> is <see cref="Cat.Text"/> but converts as a number, and so does a number;
+    /// a nullable <c>char</c> is not numeric, as before.</summary>
+    internal static bool IsNumericLike(ITypeSystem system, ITypeDefinition definition) =>
+        SimpleTypeOf(system, definition) is Poly.Interpretation.CSharp.SimpleType.Char || CategoryOf(system, definition) is Cat.Number;
+
     /// <summary>Member assignment by CLR-type category, as before T-18 (no provider verdict yet). Removed by T-27.</summary>
-    private static bool AssignCategoryRule(Cat lc, Type left, Cat rc, Type right) {
+    private static bool AssignCategoryRule(ITypeSystem system, Cat lc, ITypeDefinition left, Cat rc, ITypeDefinition right) {
         if (lc == rc && lc is not Cat.Date) return true;
         if (lc == rc && lc is Cat.Date)
-            return left == right || (IsClrTimestamp(left) && IsClrTimestamp(right));
+            return TypeDefinitionExtensions.IsSameType(left, right) || (IsTimestamp(system, left) && IsTimestamp(system, right));
         if (lc is Cat.Enum && rc is Cat.Text) return true;
         if (rc is Cat.Enum && lc is Cat.Text) return true;
         return false;
     }
 
-    private static bool IsClrTimestamp(Type type) =>
+    internal static bool IsClrTimestamp(Type type) =>
         type == typeof(DateTime) || type == typeof(DateTimeOffset);
 }
 

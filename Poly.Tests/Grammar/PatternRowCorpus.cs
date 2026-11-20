@@ -1,12 +1,8 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Ontology.Contract;
 using Poly.Grammar;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 using Poly.Packs.Product;
 using Poly.Tests.Interpretation;
 
@@ -89,8 +85,8 @@ internal static class PatternRowCorpus {
 
     /// <summary>Code-built types no source text carries: an empty enum (a null <c>Fields</c>) and a body-less method.</summary>
     public static IReadOnlyList<(string Name, TypeDefinitionNode Type)> CSharpTypes { get; } = [
-        ("empty-enum", new TypeDefinitionNode("Empty", Kind: TypeKind.Enum)),
-        ("negative-enum", new TypeDefinitionNode("Negative", Kind: TypeKind.Enum, Fields: [
+        ("empty-enum", new TypeDefinitionNode("Empty", Form: TypeDeclarationForm.Enum)),
+        ("negative-enum", new TypeDefinitionNode("Negative", Form: TypeDeclarationForm.Enum, Fields: [
             new FieldDefinitionNode("A", TypeReference.To<int>(), new Constant(-1), IsStatic: true, IsConst: true),
         ])),
         ("body-less-method", new TypeDefinitionNode("Shell", Methods: [

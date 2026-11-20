@@ -2,7 +2,6 @@ using System.Text.RegularExpressions;
 
 using Poly.Mcp.Surface;
 using Poly.Tests.Docs;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 

@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
@@ -353,6 +351,9 @@ internal static class ContributedMethods {
         }
         else {
             string? resolved = member.Value switch {
+                // The CLR host's primitive types (`string`, `int`, `object`) are never module types: nothing threads
+                // through them (#998 T8: the host's own table, not what a definition answers about itself).
+                TypeDefinitionReference primitive when Poly.Introspection.CommonLanguageRuntime.ClrBuiltInRules.IsPrimitive(primitive.TypeDefinition) => null,
                 NamedTypeReference named => named.TypeName,
                 TypeReference type => type.TypeName,
                 _ => null

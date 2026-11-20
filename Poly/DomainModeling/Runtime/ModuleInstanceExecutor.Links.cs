@@ -1,8 +1,5 @@
-using System.Collections;
-
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Runtime;
 

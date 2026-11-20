@@ -1,11 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
-using Poly.Mcp.Sessions;
-using Poly.Mcp.Tools;
 
 namespace Poly.Tests.DomainModeling.Compile;
 

@@ -1,6 +1,3 @@
-using Poly.Ast.Nodes;
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>

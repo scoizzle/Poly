@@ -1,7 +1,6 @@
 using System.Globalization;
 
 using Poly.Grammar;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.CSharp;
@@ -30,14 +29,11 @@ public static class CSharpReader {
 
         private readonly CSharpTokenizer _reader;
         private readonly Matcher<CSharpToken, CSharpTokenKind> _matcher;
-        private readonly string _text;
         private readonly List<string> _usings = [];
         private readonly IReadOnlyList<CSharpComment> _comments;
         private int _nextComment;
-        private HashSet<string>? _valueNames;
 
         public Parser(string text) {
-            _text = text;
             _reader = new CSharpTokenizer(text);
             // Every comment must be known before folding: blocks are built while matching, and a
             // comment after the current token would otherwise be invisible to them.
@@ -79,24 +75,6 @@ public static class CSharpReader {
                 statements.Add(FoldStatement(Take("statement", "statement")));
             }
             return new CompilationUnitNode(_usings, ns, types, statements.Count > 0 ? statements : null);
-        }
-
-        /// <summary>Names the text also spells somewhere other than before a <c>.</c> — a
-        /// declaration or a value use. Every declaration form in the exported subset leaves its
-        /// name before a non-<c>.</c> token (<c>x =</c>, <c>x;</c>, <c>x,</c>, <c>x)</c>,
-        /// <c>x in</c>, <c>x =&gt;</c>), so a declared name is always in this set and a local, field
-        /// or parameter can never be mistaken for a type. A name the text spells only as a
-        /// receiver may name a type.</summary>
-        private static HashSet<string> ValueNames(string text) {
-            var scanner = new CSharpTokenizer(text);
-            var names = new HashSet<string>(StringComparer.Ordinal);
-            while (scanner.Peek(0).Kind != CSharpTokenKind.EndOfFile) {
-                var token = scanner.Peek(0);
-                if (token.Kind == CSharpTokenKind.Identifier && scanner.Peek(1).Kind != CSharpTokenKind.Dot)
-                    names.Add(token.Text);
-                scanner.Consume(1);
-            }
-            return names;
         }
 
         private bool AtTypeDeclaration() => Current.Kind is
@@ -218,7 +196,7 @@ public static class CSharpReader {
             var typeDef = match.PatternName switch {
                 "enum" => new TypeDefinitionNode(name,
                     Fields: FoldEnumFields(Child(match, "enum-body")),
-                    Kind: TypeKind.Enum,
+                    Form: TypeDeclarationForm.Enum,
                     AccessModifier: modifiers.Access),
                 "interface" => new TypeDefinitionNode(name,
                     Properties: FoldProperties(body),
@@ -226,7 +204,7 @@ public static class CSharpReader {
                     BaseType: baseType,
                     Interfaces: interfaces,
                     GenericParameters: genericParameters,
-                    Kind: TypeKind.Interface,
+                    Form: TypeDeclarationForm.Interface,
                     AccessModifier: modifiers.Access),
                 "record-semi" or "record" => new TypeDefinitionNode(name,
                     Constructors: FoldConstructors(body),
@@ -288,7 +266,7 @@ public static class CSharpReader {
                     : member.Children[0];
                 fields.Add(new FieldDefinitionNode(
                     Capture(target, "name"),
-                    new PrimitiveTypeReference(PrimitiveType.Int32),
+                    TypeReference.To(typeof(int)),
                     new Constant(FoldEnumValue(target)),
                     IsStatic: true,
                     IsConst: true));
@@ -523,21 +501,21 @@ public static class CSharpReader {
             switch (match.PatternName) {
                 case "void":
                     return new TypeReference("void");
-                case "bool": return Primitive(PrimitiveType.Boolean);
-                case "byte": return Primitive(PrimitiveType.UInt8);
-                case "sbyte": return Primitive(PrimitiveType.Int8);
-                case "short": return Primitive(PrimitiveType.Int16);
-                case "ushort": return Primitive(PrimitiveType.UInt16);
-                case "int": return Primitive(PrimitiveType.Int32);
-                case "uint": return Primitive(PrimitiveType.UInt32);
-                case "long": return Primitive(PrimitiveType.Int64);
-                case "ulong": return Primitive(PrimitiveType.UInt64);
-                case "float": return Primitive(PrimitiveType.Float32);
-                case "double": return Primitive(PrimitiveType.Float64);
-                case "decimal": return Primitive(PrimitiveType.Decimal);
-                case "char": return Primitive(PrimitiveType.Char);
-                case "string": return Primitive(PrimitiveType.String);
-                case "object": return Primitive(PrimitiveType.Structure);
+                case "bool": return Primitive(typeof(bool));
+                case "byte": return Primitive(typeof(byte));
+                case "sbyte": return Primitive(typeof(sbyte));
+                case "short": return Primitive(typeof(short));
+                case "ushort": return Primitive(typeof(ushort));
+                case "int": return Primitive(typeof(int));
+                case "uint": return Primitive(typeof(uint));
+                case "long": return Primitive(typeof(long));
+                case "ulong": return Primitive(typeof(ulong));
+                case "float": return Primitive(typeof(float));
+                case "double": return Primitive(typeof(double));
+                case "decimal": return Primitive(typeof(decimal));
+                case "char": return Primitive(typeof(char));
+                case "string": return Primitive(typeof(string));
+                case "object": return Primitive(typeof(object));
                 case "named": {
                         var name = FoldName(match.Children[0]);
                         var argsMatch = MaybeChild(match, "type-args");
@@ -556,7 +534,7 @@ public static class CSharpReader {
             }
         }
 
-        private static PrimitiveTypeReference Primitive(PrimitiveType type) => new(type);
+        private static Node Primitive(Type type) => TypeReference.To(type);
 
         // ── statements ───────────────────────────────────────────────────────
 
@@ -916,30 +894,7 @@ public static class CSharpReader {
         private Node FoldPostfix(MatchResult<CSharpToken, CSharpTokenKind> match) {
             var acc = FoldExpr(match.Children[0]);
             var tails = match.Children.Skip(1).ToArray();
-            if (tails.Length > 0 && tails[0].PatternName == "member")
-                acc = UsingScopedType(acc);
             return FoldPostfixTails(acc, tails, 0);
-        }
-
-        /// <summary>Binds a receiver that names a type imported by a <c>using</c> directive to
-        /// that type, so <c>using System.Numerics;</c> and <c>BitOperations.PopCount(x)</c> reach
-        /// the same static call its qualified spelling does. Using scope is read from the unit's
-        /// own directives; a name the text also spells as a value is left alone, so a local,
-        /// field or parameter always wins over the imported type. The first directive naming the
-        /// type wins, as a C# namespace import does; alias usings are not in the grammar. A type
-        /// reference is not a value: analysis binds it as the receiver of the access above it.</summary>
-        private Node UsingScopedType(Node receiver) {
-            if (_usings.Count == 0 || receiver is not Variable variable)
-                return receiver;
-            var valueNames = _valueNames ??= ValueNames(_text);
-            if (valueNames.Contains(variable.Name))
-                return receiver;
-            foreach (var ns in _usings) {
-                if (ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(ns + "." + variable.Name) is null)
-                    continue;
-                return new NamedTypeReference(variable.Name, ns);
-            }
-            return receiver;
         }
 
         /// <summary>Folds the postfix tails from <paramref name="index"/> onto
@@ -992,16 +947,16 @@ public static class CSharpReader {
         /// member access.
         /// </summary>
         private static Node QualifiedConstant(Node receiver, string member) {
-            if (receiver is not PrimitiveTypeReference type)
+            if (receiver is not TypeDefinitionReference { TypeDefinition: var definition } || !definition.TryGetRuntimeType(out var type))
                 return new Member(receiver, member);
-            var value = (type.PrimitiveId, member) switch {
-                (PrimitiveType.Int64, "MinValue") => (object)long.MinValue,
-                (PrimitiveType.Float64, "NaN") => double.NaN,
-                (PrimitiveType.Float64, "PositiveInfinity") => double.PositiveInfinity,
-                (PrimitiveType.Float64, "NegativeInfinity") => double.NegativeInfinity,
-                (PrimitiveType.Float32, "NaN") => float.NaN,
-                (PrimitiveType.Float32, "PositiveInfinity") => float.PositiveInfinity,
-                (PrimitiveType.Float32, "NegativeInfinity") => float.NegativeInfinity,
+            object? value = member switch {
+                "MinValue" when type == typeof(long) => long.MinValue,
+                "NaN" when type == typeof(double) => double.NaN,
+                "PositiveInfinity" when type == typeof(double) => double.PositiveInfinity,
+                "NegativeInfinity" when type == typeof(double) => double.NegativeInfinity,
+                "NaN" when type == typeof(float) => float.NaN,
+                "PositiveInfinity" when type == typeof(float) => float.PositiveInfinity,
+                "NegativeInfinity" when type == typeof(float) => float.NegativeInfinity,
                 _ => null,
             };
             return value is null ? new Member(receiver, member) : new Constant(value);

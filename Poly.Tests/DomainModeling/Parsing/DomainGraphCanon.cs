@@ -3,8 +3,6 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 
-using Poly.Ast;
-
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>

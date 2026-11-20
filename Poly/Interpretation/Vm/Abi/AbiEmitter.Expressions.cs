@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using System.Reflection;
 
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
@@ -417,7 +416,7 @@ public static partial class AbiEmitter {
     /// <summary>Member access via CLR reflection: resolve from analysis metadata
     /// and emit a property getter, field read, or method call.</summary>
     private static bool IsTypeNameReceiver(Node node, Context ctx) =>
-        node is NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference
+        node is NamedTypeReference or TypeReference
         || (ctx.Analysis?.GetNodeReplacement(node) is { } replaced && replaced != node
             && IsTypeNameReceiver(replaced, ctx));
 
@@ -517,8 +516,7 @@ public static partial class AbiEmitter {
     /// stays nullable: converting it through <c>FromClr</c> reads <c>.Value</c> and
     /// throws when the member is null.</summary>
     private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, Context ctx) {
-        var clrType = resolved.MemberTypeDefinition.GetRuntimeType()
-            ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
+        var clrType = resolved.MemberTypeDefinition.GetRuntimeType();
         if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
             return NullableMemberRead(readCall, clrType);
         // A dictionary property arrives as object. Null is unset (the bag stores
@@ -578,7 +576,7 @@ public static partial class AbiEmitter {
         var ring = ctx.OpenRing();
         var resultSlot = ring.AddValue(CompileNode(t.Operand, ctx));
 
-        // The reader folds `x is T` to a primitive/named reference, not a ClrTypeReference,
+        // The reader folds `x is T` to a primitive or named reference,
         // and analysis resolves the TypeIs node itself to bool — so resolve the target from
         // the type reference, never from the node. An unresolvable target (an array or map
         // reference, an unknown name, `void`) fails closed instead of testing against bool.

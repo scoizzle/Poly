@@ -1,7 +1,4 @@
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Libraries.Http;
-using Poly.DomainModeling.Ontology;
-using Poly.DslCompiler;
 using Poly.Packs.Sqlite;
 
 using GoldenEmitTests = Poly.Tests.DomainModeling.Compile.EmitGoldenTests;

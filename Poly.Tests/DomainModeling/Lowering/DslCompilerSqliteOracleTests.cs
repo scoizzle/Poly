@@ -1,8 +1,4 @@
-using Poly.DomainModeling;
-using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
-using Poly.DomainModeling.Ontology;
 using Poly.Packs.Sqlite;
 
 using CompileMode = Poly.DslCompiler.CompileMode;

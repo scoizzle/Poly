@@ -2,9 +2,11 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.Interpretation.CSharp;
+using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
 namespace Poly.Packs.Product;
 
@@ -129,7 +131,7 @@ internal sealed class ActionReadsWalker {
             typeof(LabelDeclaration), typeof(YieldStatement), typeof(StridedSetBits)
         ]),
         (NodeKindClass.TypeName, [
-            typeof(TypeReference), typeof(ClrTypeReference), typeof(NamedTypeReference), typeof(PrimitiveTypeReference),
+            typeof(TypeReference), typeof(NamedTypeReference),
             typeof(OptionalTypeReference), typeof(CollectionTypeReference), typeof(MapTypeReference),
             typeof(UnionTypeReference), typeof(ResolvedTypeReference), typeof(TypeDefinitionReference)
         ]),
@@ -177,6 +179,9 @@ internal sealed class ActionReadsWalker {
     private static readonly HashSet<string> CollectionTypeNames = new(StringComparer.Ordinal) {
         "List", "IList", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection", "ICollection", "HashSet", "ISet",
     };
+
+    // The product pack emits C# for ASP.NET: its target type system is C#'s by construction (#998 T6c).
+    private static readonly ITypeSystem Target = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
 
     private readonly CatalogIndex _catalog;
     private readonly IReadOnlyDictionary<string, StorageEntity> _storage;
@@ -398,10 +403,26 @@ internal sealed class ActionReadsWalker {
     private sealed record EntityCollectionType(string Element) : TypeClass;
     private sealed record UnknownType : TypeClass { public static readonly UnknownType Instance = new(); }
 
+    /// <summary>The target's top type: the definition its word <c>object</c> binds.</summary>
+    internal static bool IsTopDefinition(ITypeSystem system, ITypeDefinition definition) =>
+        system.Bind("object") is { } top && system.IsSame(top, definition);
+
+    /// <summary>A value a request carries as one field: a C# simple type, string, or the CLR's calendar types, Guid and
+    /// byte[] (owner rulings 2026-11-19). Asked of the target's C# rules and words; a foreign definition is no scalar.</summary>
+    internal static bool IsScalarDefinition(ITypeSystem system, ITypeDefinition definition) =>
+        system.Rule<Poly.Interpretation.CSharp.ICSharpTypeRules>() is { } csharp
+        && (csharp.SimpleTypeOf(definition) is not null
+            || (system.Bind("string") is { } text && system.IsSame(text, definition))
+            || ClrBuiltInRules.IsCalendarType(definition) || ClrBuiltInRules.IsGuid(definition)
+            || ClrBuiltInRules.IsByteArray(definition));
+
     private TypeClass Classify(Node? type) => type switch {
         OptionalTypeReference optional => Classify(optional.InnerType),
-        PrimitiveTypeReference primitive => primitive.PrimitiveId == ClrPrimitive.Structure ? UnknownType.Instance : ScalarType.Instance,
-        ClrTypeReference clr => ClassifyClr(clr.RuntimeType),
+        TypeDefinitionReference top when IsTopDefinition(Target, top.TypeDefinition) => UnknownType.Instance,
+        TypeDefinitionReference ground when IsScalarDefinition(Target, ground.TypeDefinition) => ScalarType.Instance,
+        TypeDefinitionReference statesThePort when statesThePort.Denotes(typeof(IStoragePort)) =>
+            PortType.Instance,
+        TypeDefinitionReference resolved => ClassifyNamed(resolved.TypeDefinition.Name, resolved.TypeDefinition.FullName, []),
         NamedTypeReference named => ClassifyNamed(named.TypeName, named.FullName, named.TypeArguments ?? []),
         TypeReference reference => ClassifyNamed(reference.TypeName, reference.TypeName, []),
         CollectionTypeReference collection => Classify(collection.ElementType) switch {
@@ -428,8 +449,10 @@ internal sealed class ActionReadsWalker {
         var simple = SimpleName(fullName);
         if (simple is "object" or "Object" or "dynamic")
             return UnknownType.Instance;
+        // The port is the platform's IStoragePort, which Classify asks of a stated definition (Denotes, I8m); a type that
+        // only shares its name is not the port, and the walk cannot type it.
         if (simple == nameof(IStoragePort))
-            return PortType.Instance;
+            return UnknownType.Instance;
         if (arguments.Count == 0)
             return _domainTypes.TryGetValue(name, out var domainType) && !IsScalarDomainType(domainType, [])
                 ? UnknownType.Instance
@@ -466,7 +489,7 @@ internal sealed class ActionReadsWalker {
     }
 
     private static string? TypeNameOf(Node node) => node switch {
-        ClrTypeReference clr => clr.RuntimeType.FullName,
+        TypeDefinitionReference resolved => resolved.TypeDefinition.FullName,
         NamedTypeReference named => named.FullName,
         TypeReference reference => reference.TypeName,
         _ => null,

@@ -1,6 +1,6 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
@@ -19,20 +19,20 @@ public class InvokeResultConventionTests {
     /// <summary>A type definition declaring <c>Half()</c> returning <c>double</c> with no
     /// body: analysis resolves the member, emit cannot compile its body, so the call takes
     /// the name-dispatched path to the live instance.</summary>
-    private static ITypeDefinitionProvider HalfTypeDef() {
+    private static ITypeSource HalfTypeDef() {
         var typeDef = new TypeDefinitionNode(
             "Fraction",
             "Sample",
             Methods: [
                 new MethodDefinitionNode(
                     "Half",
-                    new PrimitiveTypeReference(PrimitiveType.Float64),
+                    TypeReference.To(typeof(double)),
                     Body: new Block([]))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeDef);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     [Test]

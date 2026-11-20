@@ -1,6 +1,5 @@
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
 
@@ -58,7 +57,7 @@ public class ConditionalArmsTests {
 
     // Every other site that merges two arm values into one word (A11): a coalesce and a switch.
 
-    private static Node Coalesced(TypeReference leftType, Node right) =>
+    private static Node Coalesced(Node leftType, Node right) =>
         new Block([new Coalesce(new Parameter("left", leftType), right)]);
 
     [Test]

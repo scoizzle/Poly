@@ -1,6 +1,6 @@
-using Poly.Ast.Nodes;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.Introspection;
@@ -27,7 +27,7 @@ public class ArithmeticResultTypingTests {
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    private static Parameter Param(string name, Type type) => new(name, new ClrTypeReference(type));
+    private static Parameter Param(string name, Type type) => new(name, TypeReference.To(type));
 
     private static Type? Stamp(OperatorKind kind, Node left, Node? right, out Poly.Analysis.AnalysisResult analysis) {
         var node = NativeIntegerGrid.Build(kind, left, right);
@@ -50,7 +50,7 @@ public class ArithmeticResultTypingTests {
             foreach (var left in Operands)
                 foreach (var right in Operands) {
                     cells++;
-                    var expected = Clr(left).GetOperator(kind, Clr(right))?.ResultTypeDefinition.GetRuntimeType();
+                    var expected = Clr(left).GetOperator(kind, Clr(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)?.ResultTypeDefinition.GetRuntimeType();
                     answered += expected is null ? 0 : 1;
                     var actual = Stamp(kind, Param("a", left), Param("b", right));
                     if (actual != expected)
@@ -180,7 +180,7 @@ public class ArithmeticResultTypingTests {
         foreach (var kind in ComparisonKinds)
             foreach (var left in Operands)
                 foreach (var right in Operands) {
-                    var resolution = Clr(left).GetOperator(kind, Clr(right));
+                    var resolution = Clr(left).GetOperator(kind, Clr(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
                     if (resolution is null)
                         continue;
                     answered++;
@@ -270,7 +270,7 @@ public class ArithmeticResultTypingTests {
     [Arguments(typeof(KeyValuePair<int, int>), "KeyValuePair`2")]
     public async Task UndefinedArithmetic_IsRefusedAtTheNode_InEveryPosition(Type operand, string name) {
         Node Sum() => new Add(Param("o", operand), new Constant(1));
-        Node Call(string method) => new Invoke(new Member(new ClrTypeReference(typeof(TypedCalls)), method), Sum());
+        Node Call(string method) => new Invoke(new Member(TypeReference.To(typeof(TypedCalls)), method), Sum());
         foreach (var node in new[] { Sum(), Call(nameof(TypedCalls.TakesInt)), Call(nameof(TypedCalls.TakesObject)), new Block([new Return(Sum())]) }) {
             var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
             await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray())

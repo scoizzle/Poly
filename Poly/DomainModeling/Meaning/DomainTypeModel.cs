@@ -1,9 +1,6 @@
-using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
 
-using Prim = Poly.Introspection.PrimitiveType;
 
 namespace Poly.DomainModeling.Meaning;
 
@@ -14,14 +11,18 @@ namespace Poly.DomainModeling.Meaning;
 /// </summary>
 internal sealed class DomainTypeModel {
     private readonly DomainTypeDefinitionProvider _provider;
+    private readonly ITypeSystem _system;
 
-    public DomainTypeModel(Domain domain, TypeMappingRegistry typeMaps) {
-        _provider = new DomainTypeDefinitionProvider(domain, typeMaps);
+    /// <param name="system">The type system that decides assignment (#998 T4d): the analysis' target.</param>
+    public DomainTypeModel(Domain domain, TypeMappingRegistry typeMaps, ITypeSystem system) {
+        ArgumentNullException.ThrowIfNull(system);
+        _provider = new DomainTypeDefinitionProvider(domain, typeMaps, system);
+        _system = system;
     }
 
     public ExprType Resolve(string domainName) =>
         _provider.GetTypeDefinition(domainName) is { } definition
-            ? new ExprType(definition, Optional: false, domainName)
+            ? new ExprType(definition, Optional: false, domainName, _provider.DeclarationOf(domainName))
             : ExprType.Unresolved;
 
     public ExprType OfProperty(Property property) {
@@ -42,8 +43,8 @@ internal sealed class DomainTypeModel {
         if (ReferenceEquals(source, target))
             return Assignability.Identity;
 
-        // ResolveConversionFrom is the door: Float64 to Decimal is explicit there, as the C# specification has it.
-        if (target.ResolveConversionFrom(source) is { } conversion) {
+        // The target system decides: Float64 to Decimal is explicit in C#, as the C# specification has it.
+        if (_system.Conversion(source, target) is { } conversion) {
             return conversion.Kind is ConversionOperatorKind.Implicit
                 ? Assignability.Widening
                 : Assignability.RoundingNarrowing;
@@ -87,16 +88,16 @@ internal sealed class DomainTypeModel {
     /// </summary>
     internal static DomainTypeModel Of(AnalysisContext context, Domain domain) {
         if (context.GetMetadata<DomainTypeModelMetadata>(domain) is { } stamped) return stamped.Model;
-        var model = new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps);
+        var model = new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps, context.TypeSystem);
         context.SetMetadata(domain, new DomainTypeModelMetadata(model));
         return model;
     }
 
-    public NumericKind KindOf(ExprType type) => type.Definition?.PrimitiveType switch {
+    public NumericKind KindOf(ExprType type) => DomainTypeSystem.WordOf(type.Definition) switch {
         // Int32 → Integer64 is a judgement V-02 may revisit (T-02 A1: Int32 bounds parse as decimal).
-        Prim.Int32 or Prim.Int64 => NumericKind.Integer64,
-        Prim.Float64 => NumericKind.Float64,
-        Prim.Decimal => NumericKind.Decimal,
+        "Int32" or "Number" => NumericKind.Integer64,
+        "Float" => NumericKind.Float64,
+        "Decimal" => NumericKind.Decimal,
         _ => NumericKind.None
     };
 }

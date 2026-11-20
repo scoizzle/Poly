@@ -2,10 +2,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
-using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -144,10 +143,10 @@ public class VmSnapshotCorpusTests {
         return new Block([
             new Assignment(caught, new Constant(0L)),
             new TryCatchFinally(
-                new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)))),
+                new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)))),
                 CatchClauses: [
                     new CatchClause(
-                        new ClrTypeReference(typeof(InvalidOperationException)),
+                        TypeReference.To(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(caught, new Constant(1L))),
                 ]),

@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
@@ -10,20 +11,20 @@ namespace Poly.Tests.Interpretation.Vm.Abi;
 /// and a required scalar cannot be omitted.
 /// </summary>
 public class AbiEmitterOptionalScalarTests {
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeSource Analyze(TypeDefinitionNode typeNode) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, typeNode);
-        return context.TypeDefinitions;
+        return context.Declarations();
     }
 
-    private static ITypeDefinitionProvider ProbeType(Parameter age, Node body) =>
+    private static ITypeSource ProbeType(Parameter age, Node body) =>
         Analyze(new TypeDefinitionNode(
             "ProbeLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Probe",
-                    new PrimitiveTypeReference(PrimitiveType.Boolean),
+                    TypeReference.To(typeof(bool)),
                     Parameters: [age],
                     Body: new Return(body),
                     IsStatic: true)
@@ -32,7 +33,7 @@ public class AbiEmitterOptionalScalarTests {
     private static Node Call(params Node[] arguments) =>
         new Invoke(new Member(new TypeReference("Branch.ProbeLot"), "Probe"), arguments);
 
-    private static bool Run(ITypeDefinitionProvider types, params Node[] arguments) {
+    private static bool Run(ITypeSource types, params Node[] arguments) {
         using var exec = Interpreter.Execute(Interpreter.Compile(Call(arguments), types));
         return exec.GetValue<bool>();
     }

@@ -1,8 +1,4 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 

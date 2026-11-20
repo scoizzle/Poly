@@ -4,8 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

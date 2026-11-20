@@ -2,7 +2,6 @@ using System.Text.Json.Nodes;
 
 using Poly.Compile;
 using Poly.DomainModeling.Language;
-using Poly.Packs.Product;
 
 namespace Polyc.Lsp;
 

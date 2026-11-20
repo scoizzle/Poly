@@ -1,5 +1,3 @@
-using Poly.Mcp.Tools;
-
 namespace Poly.Tests.Mcp;
 
 /// <summary>

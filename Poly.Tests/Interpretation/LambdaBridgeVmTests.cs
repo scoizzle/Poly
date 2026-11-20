@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 
@@ -9,7 +10,7 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class LambdaBridgeVmTests {
     private static Member Probe(string name) =>
-        new(new ClrTypeReference(typeof(LambdaBridgeProbe)), name);
+        new(TypeReference.To(typeof(LambdaBridgeProbe)), name);
 
     [Test]
     public async Task CapturingDelegate_SeesMutationAfterCreation() {
@@ -127,8 +128,8 @@ public class LambdaBridgeVmTests {
         var x = new Parameter("x", TypeReference.To<int>());
         var body = new Lambda([x], new Invoke(new Member(sink, nameof(List<int>.Add)), x));
         var node = new Block([
-            new Assignment(source, new New(new ClrTypeReference(typeof(List<int>)))),
-            new Assignment(sink, new New(new ClrTypeReference(typeof(List<int>)))),
+            new Assignment(source, new New(TypeReference.To(typeof(List<int>)))),
+            new Assignment(sink, new New(TypeReference.To(typeof(List<int>)))),
             new Invoke(new Member(source, nameof(List<int>.Add)), new Constant(1)),
             new Invoke(new Member(source, nameof(List<int>.Add)), new Constant(2)),
             new Invoke(new Member(source, nameof(List<int>.Add)), new Constant(3)),
@@ -147,7 +148,7 @@ public class LambdaBridgeVmTests {
         var x = new Parameter("x", TypeReference.To<int>());
         var body = new Lambda([x], new Add(x, new Constant(1L)));
         var node = new Block([
-            new Assignment(list, new New(new ClrTypeReference(typeof(List<int>)))),
+            new Assignment(list, new New(TypeReference.To(typeof(List<int>)))),
             new Invoke(new Member(list, nameof(List<int>.ForEach)), body)
         ], [list]);
 
@@ -159,7 +160,7 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ImpureExpressionBody_Throws() {
         var x = new Parameter("x", TypeReference.To<int>());
-        var created = new New(new ClrTypeReference(typeof(List<int>)));
+        var created = new New(TypeReference.To(typeof(List<int>)));
         var body = new Lambda([x], new Equal(new Member(created, nameof(List<int>.Count)), x));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
 

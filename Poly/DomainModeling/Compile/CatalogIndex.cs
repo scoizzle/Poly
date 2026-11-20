@@ -1,4 +1,4 @@
-using Poly.Ast.Nodes;
+using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
 namespace Poly.DomainModeling.Compile;
@@ -74,8 +74,7 @@ public sealed class CatalogIndex {
                 foreach (var type in types) {
                     foreach (var method in type.Methods ?? []) {
                         foreach (var parameter in method.Parameters ?? []) {
-                            if (parameter.TypeReference is ClrTypeReference reference
-                                && typeof(IStoragePort).IsAssignableFrom(reference.RuntimeType))
+                            if (parameter.TypeReference.Denotes(typeof(IStoragePort)))
                                 return true;
                         }
                     }

@@ -1,14 +1,9 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
-using Poly.Runtime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

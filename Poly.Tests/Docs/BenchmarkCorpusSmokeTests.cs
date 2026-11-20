@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 
 using Poly.Benchmarks;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Docs;
 

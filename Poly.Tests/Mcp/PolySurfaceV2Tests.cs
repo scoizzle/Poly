@@ -9,7 +9,6 @@ using ModelContextProtocol.Server;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Surface;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 

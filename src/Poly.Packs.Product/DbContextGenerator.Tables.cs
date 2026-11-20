@@ -2,6 +2,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
 namespace Poly.Packs.Product;
@@ -56,7 +57,7 @@ public sealed partial class DbContextGenerator {
             new Member(bParam, "Property"),
             new Constant(shadowKey)
         ) {
-            TypeArguments = [new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32)]
+            TypeArguments = [TypeReference.To(typeof(int))]
         });
         bodyNodes.Add(new Invoke(
             new Member(bParam, "HasKey"),

@@ -1,7 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
-using Poly.Interpretation.Vm;
 using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
@@ -13,18 +12,18 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class ParameterBindingTests {
     private static Member Probe(string name) =>
-        new(new ClrTypeReference(typeof(ParameterBindingTests)), name);
+        new(TypeReference.To(typeof(ParameterBindingTests)), name);
 
     public static int CountIf(Func<int, bool> predicate, int value) =>
         predicate(value) ? 1 : 0;
 
     public static Func<int, bool> HostPredicate() => value => value > 0;
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode type) {
+    private static ITypeSource Analyze(TypeDefinitionNode type) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, type);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     [Test]

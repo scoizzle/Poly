@@ -1,7 +1,5 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation.CSharp;
-using Poly.Runtime;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

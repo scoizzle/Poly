@@ -1,5 +1,3 @@
-using Poly.DomainModeling.Runtime;
-
 namespace Poly.DomainModeling.Ontology;
 
 /// <summary>

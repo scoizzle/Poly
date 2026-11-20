@@ -1,6 +1,5 @@
 using System.Globalization;
 
-using Poly.DomainModeling;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.TestHelpers;

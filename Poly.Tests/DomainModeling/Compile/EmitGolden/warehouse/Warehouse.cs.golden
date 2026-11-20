@@ -317,5 +317,5 @@ internal class Warehouse : Poly.Runtime.IActionScoped
             this._trucks.Add(__item6);
         }
     }
-    public static System.Boolean ExistsWithCode(Poly.Runtime.IStoragePort db, System.String code) => db.Exists("Warehouse", "Code", code);
+    public static bool ExistsWithCode(Poly.Runtime.IStoragePort db, string code) => db.Exists("Warehouse", "Code", code);
 }

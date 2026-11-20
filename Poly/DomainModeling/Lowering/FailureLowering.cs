@@ -1,4 +1,4 @@
-using Poly.Ast.Nodes;
+using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
 namespace Poly.DomainModeling.Lowering;
@@ -8,7 +8,7 @@ namespace Poly.DomainModeling.Lowering;
 /// <c>DomainResult.Failure("…")</c> string by hand: it asks this seam for the
 /// <c>Poly.Runtime.DomainFailure.&lt;Kind&gt;(message[, path[, guard]])</c> call, so the kind,
 /// the element path and the guard travel with the message.
-/// The receiver is a <see cref="ClrTypeReference"/>, so it prints fully qualified and
+/// The receiver is a resolved CLR type reference, so it prints fully qualified and
 /// needs no using, but the leading <c>Poly</c> is a simple name in expression position, so a
 /// member named <c>Poly</c> would shadow it: <c>ReservedNames</c> reserves <c>Poly</c> as a
 /// generated-reference member name. Trailing null arguments are omitted: the VM and
@@ -21,7 +21,7 @@ internal static class FailureLowering {
 
     /// <summary><c>Poly.Runtime.DomainFailure.&lt;Kind&gt;(message[, path[, guard]])</c>.</summary>
     internal static Node Call(Spec spec) {
-        var factory = new Member(new ClrTypeReference(typeof(DomainFailure)), spec.Kind.ToString());
+        var factory = new Member(TypeReference.To(typeof(DomainFailure)), spec.Kind.ToString());
         if (spec.Guard is not null)
             return new Invoke(factory, spec.Message, new Constant(spec.ElementPath), new Constant(spec.Guard));
         if (spec.ElementPath is not null)

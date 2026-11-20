@@ -1,5 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
@@ -8,166 +6,93 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Tests.Introspection;
 
 /// <summary>
-/// Proves the two providers agree on type kind, that a closed <see cref="TypeKind"/>
-/// cannot express an illegal combination, and that no producer or printer invents a
-/// kind. A core attribute that depends on which provider answered is the defect this
-/// file guards.
+/// The two providers agree on what a type is: C#'s rule states the same shape facts (enum, value semantics) for the
+/// same shape whichever provider built the definition (#998 T8), no producer invents one, and the writer fails closed
+/// on a declaration form it cannot print. A core attribute that depends on which
+/// provider answered is the defect this file guards. (Formerly stated over the closed <c>TypeKind</c> enum.)
 /// </summary>
 public class TypeKindProviderAgreementTests {
+    /// <summary>The shape facts C#'s rule states for a definition, as one comparable line.</summary>
+    private static string Shape(ITypeDefinition definition) => string.Join("+", new[] {
+        Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(definition) ? "enumeration" : null,
+        Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.HasValueSemantics(definition) ? "value" : null,
+    }.Where(static fact => fact is not null));
+
+    private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
+
     [Test]
     public async Task PrimitiveType_Boolean_ReportsBooleanShape() {
-        ITypeDefinition boolean = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(bool));
+        var boolean = Clr(typeof(bool));
 
-        await Assert.That(boolean.PrimitiveType).IsEqualTo(PrimitiveType.Boolean);
-        await Assert.That(boolean.Kind).IsEqualTo(TypeKind.Primitive);
+        await Assert.That(CSharpTypeSystem.Shared.SimpleTypeOf(boolean)).IsEqualTo(SimpleType.Bool);
+        await Assert.That(Shape(boolean)).IsEqualTo("value");
     }
 
     [Test]
     public async Task ClrProvider_Object_IsTheStructurePrimitive() {
-        await Assert.That(typeof(object).GetPrimitiveType()).IsEqualTo(PrimitiveType.Structure);
+        await Assert.That(ClrBuiltInRules.IsPrimitive(Clr(typeof(object)))).IsTrue();
+        await Assert.That(CSharpTypeSystem.Shared.SimpleTypeOf(Clr(typeof(object)))).IsNull()
+            .Because("object is no C# simple type; identity is what C# names it by");
     }
 
     [Test]
-    public async Task ClrProvider_EveryPrimitive_ReportsPrimitiveKindAndItself() {
-        foreach (var primitive in Enum.GetValues<PrimitiveType>()) {
-            var clrType = primitive.GetClrType();
-            await Assert.That(clrType).IsNotNull().Because($"'{primitive}' has no CLR mapping");
-            ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(clrType!);
+    public async Task ClrProvider_EveryPrimitiveItMaps_ReportsItself() {
+        // The CLR host's own table: every entry is a CLR type, and its definition is a ground type that reports it.
+        foreach (var type in ClrBuiltInTypes.All) {
+            var definition = Clr(type);
 
-            await Assert.That(definition.Kind).IsEqualTo(TypeKind.Primitive)
-                .Because($"'{primitive}' must report Primitive");
-            await Assert.That(definition.PrimitiveType).IsEqualTo(primitive)
-                .Because($"'{primitive}' must report its own id");
+            await Assert.That(definition.GetRuntimeTypeOrThrow()).IsEqualTo(type)
+                .Because($"'{type}' must be its own definition");
+            await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsEnumType(definition)).IsFalse();
+            await Assert.That(ClrBuiltInRules.IsPrimitive(definition)).IsTrue().Because($"'{type}' is one of the CLR host's primitives");
         }
     }
 
     [Test]
-    public async Task ClrProvider_PrimitiveTypeNonNull_Iff_PrimitiveKind() {
-        Type[] samples = [
-            typeof(int), typeof(string), typeof(object), typeof(DateTime),
-            typeof(Uri), typeof(KeyValuePair<int, int>), typeof(IDisposable), typeof(DayOfWeek), typeof(Action),
+    public async Task ClrProvider_StatesTheShapeOfEachSample() {
+        (Type Sample, string Shape)[] samples = [
+            (typeof(int), "value"), (typeof(string), ""), (typeof(object), ""), (typeof(DateTime), "value"),
+            (typeof(Uri), ""), (typeof(KeyValuePair<int, int>), "value"), (typeof(IDisposable), ""),
+            (typeof(DayOfWeek), "enumeration+value"), (typeof(System.Action), ""),
         ];
 
-        foreach (var sample in samples) {
-            ITypeDefinition definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(sample);
-            await Assert.That(definition.PrimitiveType is not null)
-                .IsEqualTo(definition.Kind == TypeKind.Primitive)
-                .Because($"'{sample}' must agree on primitive-ness");
-        }
+        foreach (var (sample, shape) in samples)
+            await Assert.That(Shape(Clr(sample))).IsEqualTo(shape).Because($"'{sample}' states its shape");
     }
 
     [Test]
-    public async Task AstProvider_PrimitiveTypeNonNull_Iff_PrimitiveKind() {
-        TypeDefinitionNode[] nodes = [
-            new("Plain", Namespace: "Sample"),
-            new("Status", Kind: TypeKind.Enum),
-            new("IWidget", Kind: TypeKind.Interface),
-            new("Atomic", PrimitiveTypeId: PrimitiveType.Int32),
-        ];
-
-        foreach (var node in nodes) {
-            var definition = Resolve(node);
-            await Assert.That(definition.PrimitiveType is not null)
-                .IsEqualTo(definition.Kind == TypeKind.Primitive)
-                .Because($"'{node.Name}' must agree on primitive-ness");
-        }
+    public async Task AstProvider_StatesTheShapeItsDeclarationFormDeclares() {
+        await Assert.That(Shape(Resolve(new TypeDefinitionNode("Plain", Namespace: "Sample")))).IsEqualTo("");
+        await Assert.That(Shape(Resolve(new TypeDefinitionNode("Status", Form: TypeDeclarationForm.Enum)))).IsEqualTo("enumeration");
+        await Assert.That(Shape(Resolve(new TypeDefinitionNode("IWidget", Form: TypeDeclarationForm.Interface)))).IsEqualTo("");
+        await Assert.That(Shape(Resolve(new TypeDefinitionNode("Money", Form: TypeDeclarationForm.Struct)))).IsEqualTo("value");
     }
 
     [Test]
-    public async Task TypeKind_DefaultIsNotPrimitive() {
-        // A zero-initialized field must not claim the one kind that requires a
-        // PrimitiveType. Class is the safe default.
-        TypeKind uninitialized = new();
-        await Assert.That(uninitialized is TypeKind.Primitive).IsFalse();
+    public async Task DeclarationForm_DefaultIsClass() {
+        // A declaration that states no form is a class: the zero value must not claim a narrower shape.
+        TypeDeclarationForm unstated = default;
+        await Assert.That(unstated).IsEqualTo(TypeDeclarationForm.Class);
+        await Assert.That(new TypeDefinitionNode("Plain").Form).IsEqualTo(TypeDeclarationForm.Class);
     }
 
     [Test]
-    public async Task AstProvider_PrimitiveKindWithoutPrimitiveId_Throws() {
-        var node = new TypeDefinitionNode("Broken", Kind: TypeKind.Primitive);
-
-        await Assert.That(() => Resolve(node).Kind).Throws<InvalidOperationException>();
-    }
-
-    [Test]
-    public async Task TypeKind_IsClosedSet_NoIllegalCombination() {
-        var kinds = Enum.GetValues<TypeKind>();
-
-        await Assert.That(kinds.Length).IsEqualTo(8);
-        await Assert.That(typeof(TypeKind).IsDefined(typeof(FlagsAttribute), inherit: false)).IsFalse();
-
-        // One distinct shape descriptor per value: every kind is its own shape, so
-        // "integer and floating point at once" has nowhere to live.
-        var shapes = kinds.Select(kind => kind switch {
-            TypeKind.Primitive => "atomic",
-            TypeKind.Class => "reference",
-            TypeKind.Struct => "value",
-            TypeKind.Interface => "interface",
-            TypeKind.Enum => "enum",
-            TypeKind.Delegate => "delegate",
-            TypeKind.Union => "union",
-            TypeKind.Tuple => "product",
-            _ => throw new InvalidOperationException($"Unmapped kind '{kind}'."),
-        }).ToArray();
-
-        await Assert.That(shapes.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(kinds.Length);
-    }
-
-    [Test]
-    public async Task AstProvider_ProducedKinds_AreReachable() {
-        await Assert.That(Resolve(new TypeDefinitionNode("Plain", Namespace: "Sample")).Kind)
-            .IsEqualTo(TypeKind.Class);
-        await Assert.That(Resolve(new TypeDefinitionNode("Status", Kind: TypeKind.Enum)).Kind)
-            .IsEqualTo(TypeKind.Enum);
-        await Assert.That(Resolve(new TypeDefinitionNode("IWidget", Kind: TypeKind.Interface)).Kind)
-            .IsEqualTo(TypeKind.Interface);
-        await Assert.That(Resolve(new TypeDefinitionNode("Atomic", PrimitiveTypeId: PrimitiveType.Int32)).Kind)
-            .IsEqualTo(TypeKind.Primitive);
-    }
-
-    [Test]
-    public async Task ClrProvider_StructAndDelegate_AreReachable() {
-        var registry = ClrTypeDefinitionRegistry.Shared;
-
-        // Object, string, and DateTime are primitives, never the CLR shape they look like.
-        await Assert.That(registry.GetTypeDefinition(typeof(Uri)).Kind).IsEqualTo(TypeKind.Class);
-        await Assert.That(registry.GetTypeDefinition(typeof(KeyValuePair<int, int>)).Kind).IsEqualTo(TypeKind.Struct);
-        await Assert.That(registry.GetTypeDefinition(typeof(Action)).Kind).IsEqualTo(TypeKind.Delegate);
-        await Assert.That(registry.GetTypeDefinition(typeof(object)).Kind).IsEqualTo(TypeKind.Primitive);
-        await Assert.That(registry.GetTypeDefinition(typeof(string)).Kind).IsEqualTo(TypeKind.Primitive);
-        await Assert.That(registry.GetTypeDefinition(typeof(DateTime)).Kind).IsEqualTo(TypeKind.Primitive);
-    }
-
-    [Test]
-    public async Task SyntheticAstTypes_ReportClass() {
-        ITypeDefinition collection = new AstCollectionTypeDefinition(
-            ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(int)), CollectionKind.List);
+    public async Task SyntheticAstTypes_StateNoShapeFact() {
+        ITypeDefinition collection = new AstCollectionTypeDefinition(Clr(typeof(int)), CollectionKind.List);
         ITypeDefinition parameter = new AstGenericParameterTypeDefinition(
             new TestParameter("T"), collection);
 
-        await Assert.That(collection.Kind).IsEqualTo(TypeKind.Class);
-        await Assert.That(collection.PrimitiveType).IsNull();
-        await Assert.That(parameter.Kind).IsEqualTo(TypeKind.Class);
-        await Assert.That(parameter.PrimitiveType).IsNull();
+        await Assert.That(Shape(collection)).IsEqualTo("");
+        await Assert.That(ClrBuiltInRules.IsPrimitive(collection)).IsFalse();
+        await Assert.That(Shape(parameter)).IsEqualTo("");
+        await Assert.That(ClrBuiltInRules.IsPrimitive(parameter)).IsFalse();
     }
 
     [Test]
-    public async Task Writer_StructKind_Throws() {
-        var node = new TypeDefinitionNode("Broken", Kind: TypeKind.Struct);
+    public async Task Writer_StructForm_Throws() {
+        var node = new TypeDefinitionNode("Broken", Form: TypeDeclarationForm.Struct);
 
         await Assert.That(() => new CSharpGenerator().Generate(node))
-            .Throws<InvalidOperationException>();
-    }
-
-    [Test]
-    public async Task Writer_NonPrintableKinds_Throw() {
-        // Union and Tuple are reserved: no producer exists, and the writer must fail
-        // closed rather than print them as a class. Delegate has a CLR producer but no
-        // reader or printer arm.
-        await Assert.That(() => new CSharpGenerator().Generate(new TypeDefinitionNode("Either", Kind: TypeKind.Union)))
-            .Throws<InvalidOperationException>();
-        await Assert.That(() => new CSharpGenerator().Generate(new TypeDefinitionNode("Pair", Kind: TypeKind.Tuple)))
-            .Throws<InvalidOperationException>();
-        await Assert.That(() => new CSharpGenerator().Generate(new TypeDefinitionNode("Callback", Kind: TypeKind.Delegate)))
             .Throws<InvalidOperationException>();
     }
 
@@ -175,13 +100,13 @@ public class TypeKindProviderAgreementTests {
     public async Task GetElementType_NoArguments_OnNonCollectionIndexer_ReturnsNull() {
         var indexerClass = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(ClrTypeIndexerTests.MultiParamIndexerClass));
 
-        await Assert.That(indexerClass.GetElementType()).IsNull();
+        await Assert.That(indexerClass.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
     }
 
     private static ITypeDefinition Resolve(TypeDefinitionNode node) {
         var context = AnalysisContext.CreateDefault();
         new TypeDefinitionNodeAnalyzer().Analyze(context, node);
-        return context.TypeDefinitions.GetTypeDefinition(node.Name)!;
+        return context.TypeSystem.Resolve(node.Name)!;
     }
 
     private sealed class TestParameter(string name) : IParameter {

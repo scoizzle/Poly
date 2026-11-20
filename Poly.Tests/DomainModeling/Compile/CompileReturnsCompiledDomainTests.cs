@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Compile;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Compile;

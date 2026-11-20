@@ -1,7 +1,5 @@
 using System.Linq.Expressions;
-using System.Reflection;
 
-using Poly.Analysis;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
@@ -73,8 +71,7 @@ public static partial class AbiEmitter {
                     Convert(instanceSlot.Read, typeof(int)));
 
             var memberTypeDef = resolved.MemberTypeDefinition;
-            var clrMemberType = memberTypeDef.GetRuntimeType()
-                ?? memberTypeDef.PrimitiveType?.GetClrType();
+            var clrMemberType = memberTypeDef.GetRuntimeType();
             Expression writeValue;
             if (clrMemberType is not null && Nullable.GetUnderlyingType(clrMemberType) is { } memberUnderlying) {
                 writeValue = NullableMemberWrite(a.Value, valueSlot.RingSlot, clrMemberType, memberUnderlying, ctx);

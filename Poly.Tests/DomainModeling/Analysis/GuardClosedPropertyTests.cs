@@ -1,10 +1,8 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 

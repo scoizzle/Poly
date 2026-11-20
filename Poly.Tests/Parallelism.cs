@@ -1,4 +1,3 @@
-using TUnit.Core;
 using TUnit.Core.Interfaces;
 
 [assembly: ParallelLimiter<Poly.Tests.TestParallelLimit>]

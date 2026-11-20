@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-using Poly.DomainModeling.Language;
 using Poly.Grammar;
 using Poly.Tests.Docs;
 

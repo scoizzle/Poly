@@ -1,6 +1,8 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -13,8 +15,8 @@ public class AstConstructorDefinitionTests {
             Constructors: [
                 new ConstructorDefinitionNode(),
                 new ConstructorDefinitionNode([
-                    new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
-                    new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int32), new Constant(5))
+                    new Parameter("name", TypeReference.To(typeof(string))),
+                    new Parameter("count", TypeReference.To(typeof(int)), new Constant(5))
                 ]),
             ]);
 
@@ -49,8 +51,8 @@ public class AstConstructorDefinitionTests {
             Constructors: [
                 new ConstructorDefinitionNode(),
                 new ConstructorDefinitionNode([
-                    new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
-                    new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int32), new Constant(2)),
+                    new Parameter("name", TypeReference.To(typeof(string))),
+                    new Parameter("count", TypeReference.To(typeof(int)), new Constant(2)),
                 ])
             ]);
         var newNode = new New(new TypeReference("Sample.Widget"), new Constant("alpha"));
@@ -84,7 +86,7 @@ public class AstConstructorDefinitionTests {
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
         var newNode = new New(new TypeReference("Sample.Widget"));
-        using var exec = Interpreter.Execute(Interpreter.Compile(newNode, ctx.TypeDefinitions));
+        using var exec = Interpreter.Execute(Interpreter.Compile(newNode, ctx.Declarations()));
         var bag = exec.GetValue<Dictionary<string, object?>>();
         await Assert.That(bag).IsNotNull();
         await Assert.That(bag!.Count).IsEqualTo(0);
@@ -98,7 +100,7 @@ public class AstConstructorDefinitionTests {
             "Sample",
             Constructors: [
                 new ConstructorDefinitionNode(
-                    Parameters: [new Parameter("total", new PrimitiveTypeReference(PrimitiveType.Int64))],
+                    Parameters: [new Parameter("total", TypeReference.To(typeof(long)))],
                     AccessModifier: AccessModifier.Private)
             ]);
         // An argument whose type does not resolve (an untyped parameter is object since T-21a).

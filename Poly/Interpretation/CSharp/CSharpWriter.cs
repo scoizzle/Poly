@@ -2,7 +2,7 @@ using System.Globalization;
 
 using Poly.Grammar;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.CSharp;
 
@@ -503,8 +503,6 @@ public sealed class CSharpWriter {
             var runtime = td.GetRuntimeType();
             if (runtime is not null)
                 return ToCSharpTypeName(runtime);
-            if (td.PrimitiveType is { } prim)
-                return prim.GetCSharpKeyword();
             if (!string.IsNullOrEmpty(td.Name))
                 return td.Name.Replace('`', '_');
         }
@@ -555,9 +553,7 @@ public sealed class CSharpWriter {
     };
 
     private static string? TypeRefName(Node? type) => type switch {
-        PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
-        ClrTypeReference c when c.RuntimeType.IsGenericType || c.RuntimeType == typeof(object) =>
-            ToCSharpTypeName(c.RuntimeType),
+        TypeDefinitionReference t when CSharpTypeNames.SpellingOf(t.TypeDefinition) is { } spelled => spelled,
         NamedTypeReference n when n.TypeArguments is { Count: > 0 } args =>
             n.TypeName + "<" + string.Join(", ", args.Select(a => TypeRefName(a) ?? "object")) + ">",
         NamedTypeReference n => n.TypeName,
@@ -604,6 +600,10 @@ public sealed class CSharpWriter {
             _ => type == typeof(object) ? "object" : ClrTypeName(type),
         };
     }
+
+    /// <summary>The text a CLR type prints as: a C# spelling for a generic or <c>object</c>, a full name otherwise.</summary>
+    private static string ClrTypeText(Type type) =>
+        type.IsGenericType || type == typeof(object) ? ToCSharpTypeName(type) : EscapeTypeName(ClrTypeName(type));
 
     /// <summary>A CLR type's own name with the reflection nesting separator written as the dot
     /// C# requires: <c>Outer+Inner</c> is <c>Outer.Inner</c>.</summary>
@@ -764,15 +764,15 @@ public sealed class CSharpWriter {
     // ── type definitions ─────────────────────────────────────────────────────
 
     private void WriteTypeDefinition(StringBuilder sb, TypeDefinitionNode typeDef, int indent) {
-        var kind = typeDef.EffectiveKind;
-        if (kind is not (TypeKind.Enum or TypeKind.Interface or TypeKind.Class))
-            throw new InvalidOperationException($"Cannot print type '{typeDef.Name}' of kind {kind}.");
+        var form = typeDef.Form;
+        if (form is not (TypeDeclarationForm.Enum or TypeDeclarationForm.Interface or TypeDeclarationForm.Class))
+            throw new InvalidOperationException($"Cannot print type '{typeDef.Name}' declared as {form}.");
 
         var attrs = AttributesText(typeDef.Attributes, indent);
         var mods = AccessModifierText(typeDef.AccessModifier).Trim();
         sb.Append(attrs);
 
-        if (kind is TypeKind.Enum) {
+        if (form is TypeDeclarationForm.Enum) {
             string? members = null;
             if (typeDef.Fields is { Count: > 0 } fields) {
                 var list = new StringBuilder();
@@ -798,7 +798,7 @@ public sealed class CSharpWriter {
             return;
         }
 
-        if (kind is TypeKind.Interface) {
+        if (form is TypeDeclarationForm.Interface) {
             var interfaceMembers = new List<(Node Member, string? CtorName)>();
             foreach (var property in typeDef.Properties ?? [])
                 interfaceMembers.Add((property, null));
@@ -1054,15 +1054,15 @@ public sealed class CSharpWriter {
                 return Render("expr-primary", "this");
             case TypeOf typeOf:
                 return Render("expr-primary", "typeof", TypeText(typeOf.Type));
-            case ClrTypeReference clr when clr.RuntimeType.IsGenericType || clr.RuntimeType == typeof(object):
-                return ToCSharpTypeName(clr.RuntimeType);
-            case ClrTypeReference clr:
-                return EscapeTypeName(ClrTypeName(clr.RuntimeType));
+            case TypeDefinitionReference { TypeDefinition: var ground } when CSharpTypeNames.SpellingOf(ground) is { } spelled:
+                // A ground type is written as C# spells it: `string.Concat`, `long.MaxValue`, `DateTime.UtcNow`.
+                return spelled;
+            case TypeDefinitionReference { TypeDefinition: IClrTypeDefinition { RuntimeType: var clr } }:
+                // The receiver of a static call: `object.Equals`, not `System.Object.Equals`.
+                return ClrTypeText(clr);
             case TypeReference typeRef:
                 // Callee position stays raw: nameof(...) and string.Concat.
                 return typeRef.TypeName;
-            case PrimitiveTypeReference prim:
-                return prim.PrimitiveId.GetCSharpKeyword() + (prim.IsNullable ? "?" : "");
             case NamedTypeReference named:
                 return EscapeTypeName(named.FullName) + (named.TypeArguments is { Count: > 0 }
                     ? "<" + string.Join(", ", named.TypeArguments.Select(TypeText)) + ">"
@@ -1179,7 +1179,7 @@ public sealed class CSharpWriter {
                 // parameter type, on the fully-qualified type the VM binds.
                 return Expr(new Invoke(
                     new Member(new NamedTypeReference("BitOperations", "System.Numerics"), "PopCount"),
-                    new TypeCast(popCount.Operand, new PrimitiveTypeReference(PrimitiveType.UInt64))));
+                    new TypeCast(popCount.Operand, TypeReference.To(typeof(ulong)))));
             case NewArray newArray:
                 return Render("expr-primary", "new-array", Fills.Of(("open", "["), ("close", "]")),
                     TypeText(newArray.ElementType), Expr(newArray.Length));
@@ -1642,22 +1642,78 @@ public sealed class CSharpWriter {
 
     // ── types / text helpers ─────────────────────────────────────────────────
 
-    private string TypeText(Node type) => type switch {
-        PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
-        ClrTypeReference c when c.RuntimeType.IsGenericType || c.RuntimeType == typeof(object) => ToCSharpTypeName(c.RuntimeType),
-        ClrTypeReference c => EscapeTypeName(ClrTypeName(c.RuntimeType)),
+    private string TypeText(Node type) => TypeText(type, asArgument: false);
+
+    /// <summary>
+    /// <paramref name="type"/> as C# text. <paramref name="asArgument"/> is the spelling a type gets inside a nullable,
+    /// a collection or a generic's arguments: a keyword or short name there, the full name at the top level. Both are
+    /// what a CLR reference prints as, so a stated definition prints the same.
+    /// </summary>
+    private string TypeText(Node type, bool asArgument) => type switch {
+        // A ground type is written as C# spells it in every position (`int`, `string`, `DateTime`); any other CLR type
+        // follows the rule a named reference follows.
+        TypeDefinitionReference t when CSharpTypeNames.SpellingOf(t.TypeDefinition) is { } spelled => spelled,
+        TypeDefinitionReference t when t.TypeDefinition is IClrTypeDefinition { RuntimeType: var clr } =>
+            asArgument ? ArgumentSpelling(ClrTypeName(clr)) : ClrTypeText(clr),
         TypeDefinitionReference t => EscapeTypeName(t.TypeName),
         TypeReference t => EscapeTypeName(t.TypeName),
-        NamedTypeReference n => EscapeTypeName(n.FullName) + (n.TypeArguments is { Count: > 0 }
-            ? "<" + string.Join(", ", n.TypeArguments.Select(TypeText)) + ">"
-            : ""),
-        OptionalTypeReference o => TypeText(o.InnerType) + "?",
-        CollectionTypeReference { Kind: CollectionKind.Array } c => TypeText(c.ElementType) + "[]",
-        CollectionTypeReference c => (c.Kind == CollectionKind.Set ? "ISet<" : "List<") + TypeText(c.ElementType) + ">",
-        MapTypeReference m => "Dictionary<" + TypeText(m.KeyType) + ", " + TypeText(m.ValueType) + ">",
+        NamedTypeReference n => NamedTypeText(n, asArgument),
+        OptionalTypeReference o => TypeText(o.InnerType, asArgument: true) + "?",
+        CollectionTypeReference { Kind: CollectionKind.Array } c => TypeText(c.ElementType, asArgument: true) + "[]",
+        CollectionTypeReference c => (c.Kind == CollectionKind.Set ? "ISet<" : "List<") + TypeText(c.ElementType, asArgument: true) + ">",
+        MapTypeReference m => "Dictionary<" + TypeText(m.KeyType, asArgument: true) + ", " + TypeText(m.ValueType, asArgument: true) + ">",
         ResolvedTypeReference r => EscapeTypeName(r.TypeDefinition.FullName),
         _ => type.ToString() ?? "object",
     };
+
+    /// <summary>A named reference: a generic prints its short head and its arguments, a plain type its full name at the
+    /// top level and its C# spelling as an argument.</summary>
+    private string NamedTypeText(NamedTypeReference reference, bool asArgument) {
+        if (reference.TypeArguments is { Count: > 0 } arguments) {
+            // A CLR-erased generic name carries a backtick ("Func`2"); its head is the short name. A name already
+            // written as C# ("System.Func") keeps its qualification.
+            var head = reference.FullName.Contains('`', StringComparison.Ordinal)
+                ? ShortTypeHead(reference.FullName)
+                : string.Concat(ArgumentSpelling(reference.FullName));
+            return head + "<"
+                + string.Join(", ", arguments.Select(argument => TypeText(argument, asArgument: true))) + ">";
+        }
+        return asArgument ? ArgumentSpelling(reference.FullName) : EscapeTypeName(reference.FullName.Replace('+', '.'));
+    }
+
+    /// <summary>The unqualified, tick-stripped head of a generic type's full name: <c>List`1</c> is <c>List</c>.</summary>
+    private static string ShortTypeHead(string fullName) {
+        var name = fullName.Replace('+', '.');
+        var dot = name.LastIndexOf('.');
+        var head = dot >= 0 ? name[(dot + 1)..] : name;
+        var tick = head.IndexOf('`');
+        return tick >= 0 ? head[..tick] : head;
+    }
+
+    /// <summary>The C# spelling of a type named in an argument position: a keyword for a primitive, an array's
+    /// element spelling, or the full name.</summary>
+    private static string ArgumentSpelling(string fullName) {
+        if (fullName.EndsWith("[]", StringComparison.Ordinal))
+            return ArgumentSpelling(fullName[..^2]) + "[]";
+        return fullName switch {
+            "System.Boolean" => "bool",
+            "System.Byte" => "byte",
+            "System.SByte" => "sbyte",
+            "System.Int16" => "short",
+            "System.UInt16" => "ushort",
+            "System.Int32" => "int",
+            "System.UInt32" => "uint",
+            "System.Int64" => "long",
+            "System.UInt64" => "ulong",
+            "System.Single" => "float",
+            "System.Double" => "double",
+            "System.Decimal" => "decimal",
+            "System.Char" => "char",
+            "System.String" => "string",
+            "System.Object" => "object",
+            _ => EscapeTypeName(fullName.Replace('+', '.'))
+        };
+    }
 
     private string ParamsText(IReadOnlyList<Parameter>? parameters) =>
         Render("params", "list", ParamListText(parameters));

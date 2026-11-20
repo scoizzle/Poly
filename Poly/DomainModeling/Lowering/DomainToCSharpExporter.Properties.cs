@@ -1,9 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
@@ -39,7 +37,7 @@ public sealed partial class DomainToCSharpExporter {
     /// ctor leaves unset and would otherwise raise CS8618.
     /// </summary>
     private static bool IsNonNullableReferenceScalar(Node propRef) =>
-        propRef is PrimitiveTypeReference { PrimitiveId: PrimType.String };
+        propRef is TypeDefinitionReference stated && Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(stated.TypeDefinition) is "Text";
 
     private static bool IsDomainValueType(Domain domain, string typeName) =>
         domain.Types.OfType<ValueType>().Any(v =>

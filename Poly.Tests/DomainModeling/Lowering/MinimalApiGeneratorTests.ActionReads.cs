@@ -1,6 +1,7 @@
 using Poly.Compile;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
 using Poly.Tests.Docs;
 using Poly.Tests.DomainModeling.Analysis;
@@ -763,18 +764,18 @@ public partial class MinimalApiGeneratorTests {
     [MethodDataSource(nameof(WhitelistEntries))]
     public async Task ActionReads_WhitelistEntry_IsTheOnlyReasonTheCallIsFollowed(string entry) {
         var customer = new Member(new ThisReference(), "Customer");
-        var policy = new Invoke(new Member(new ClrTypeReference(typeof(DomainFailure)), "Policy"), new Constant("m"), customer);
+        var policy = new Invoke(new Member(TypeReference.To(typeof(DomainFailure)), "Policy"), new Constant("m"), customer);
         var resultOfCustomer = new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("Customer")]);
         var (call, expected) = entry switch {
-            "Poly.Runtime.ActionScope.*" => ((Node)new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), "Touch"), customer), "this{Customer}"),
-            "System.Object.ReferenceEquals" => (new Invoke(new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"), customer, customer), "this{Customer}"),
+            "Poly.Runtime.ActionScope.*" => ((Node)new Invoke(new Member(TypeReference.To(typeof(ActionScope)), "Touch"), customer), "this{Customer}"),
+            "System.Object.ReferenceEquals" => (new Invoke(new Member(TypeReference.To(typeof(object)), "ReferenceEquals"), customer, customer), "this{Customer}"),
             "Poly.Runtime.DomainResult.Success" => (new Assignment(new Variable("n"),
                 new Member(new Member(new Member(new Invoke(new Member(resultOfCustomer, "Success"), customer), "Value"), "Region"), "Name")),
                 "this{Customer{Region}}"),
             "Poly.Runtime.DomainResult.Failure" => (new Invoke(new Member(resultOfCustomer, "Failure"), customer), "this{Customer}"),
             "Poly.Runtime.DomainFailure.*" => (policy, "this{Customer}"),
             "Poly.Runtime.DomainFailure.At" => (new Invoke(new Member(
-                new Invoke(new Member(new ClrTypeReference(typeof(DomainFailure)), "Policy"), new Constant("m"), new Constant("p")), "At"), customer),
+                new Invoke(new Member(TypeReference.To(typeof(DomainFailure)), "Policy"), new Constant("m"), new Constant("p")), "At"), customer),
                 "this{Customer}"),
             "Poly.Runtime.IStoragePort.*" => (new Invoke(new Member(new Parameter("db"), "Exists"), new Constant("Widget"), new Constant("Code"), new Constant("x")), "this{}"),
             _ => throw new InvalidOperationException($"No test for whitelist entry '{entry}'."),
@@ -809,6 +810,36 @@ public partial class MinimalApiGeneratorTests {
 
         await Assert.That(member.Message).Contains("member 'Payload' of a result");
         await Assert.That(call.Message).Contains("which the walk does not know on a result");
+    }
+
+    /// <summary>A type is the port because it is the platform's <c>IStoragePort</c>, not because its name is: a
+    /// parameter whose stated definition merely shares the name has a type the walk cannot type, and refuses.</summary>
+    [Test]
+    public async Task ActionReads_ParameterOfAnotherTypeNamedIStoragePort_IsNotThePort() {
+        var compile = CompileForHost(PortPoly);
+        var catalog = new ArtifactCatalog();
+        var types = compile.Catalog.Artifacts.Select(a => a.Descriptor.Id.Type).Distinct().ToList();
+        foreach (var type in types)
+            catalog.DeclareType(type, types);
+        var lookalike = TypeReference.To(typeof(Lookalike.IStoragePort));
+        foreach (var artifact in compile.Catalog.Artifacts) {
+            if (artifact.Descriptor.Id.Type == "entity" && artifact.Descriptor.Id.Segments[^1] == "Widget") {
+                var replaced = ((IReadOnlyList<TypeDefinitionNode>)artifact.Payload!)
+                    .Select(t => t.Name != "Widget" ? t : t with {
+                        Methods = [.. t.Methods!.Select(m => m.Name != "Recode" ? m : m with {
+                            Parameters = [.. m.Parameters!.Select(p => p.Name == "db" ? p with { TypeReference = lookalike } : p)],
+                        })],
+                    })
+                    .ToList();
+                catalog.Register(artifact with { Payload = replaced });
+            }
+            else
+                catalog.Register(artifact);
+        }
+
+        var refusal = Assert.Throws<ActionReadsRefusedException>(() => HostGenerator(compile with { Catalog = catalog }).ReadsOf("Widget", "Recode"));
+
+        await Assert.That(refusal.Message).Contains("parameter 'db', whose type the walk cannot type");
     }
 
     /// <summary>The port takes values only: an entity argument refuses.</summary>
@@ -974,7 +1005,6 @@ public partial class MinimalApiGeneratorTests {
             "guide fence Cabin: entity {",
             "guide fence domain Shipping",
             "guide fence domain Tokens",
-            "guide fence // ✅ Correct — create is the final statement",
             "guide fence invoke Validate                              # self-only",
             "guide fence Renew: action {",
             "guide fence domain Board",

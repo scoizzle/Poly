@@ -1,6 +1,6 @@
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.Tests.TestHelpers;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -30,8 +30,7 @@ public class NowExpressionFormTests {
         await Assert.That(lowered).IsTypeOf<Member>();
         var member = (Member)lowered;
         await Assert.That(member.MemberName).IsEqualTo("UtcNow");
-        await Assert.That(member.Value).IsTypeOf<NamedTypeReference>();
-        await Assert.That(((NamedTypeReference)member.Value).TypeName).IsEqualTo("DateTime");
+        await Assert.That(member.Value.States(typeof(DateTime))).IsTrue();
     }
 
     [Test]

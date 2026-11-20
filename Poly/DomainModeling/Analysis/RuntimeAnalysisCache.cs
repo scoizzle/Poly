@@ -1,11 +1,5 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
-
-using AccessModifier = Poly.Introspection.AccessModifier;
-using PrimType = Poly.Introspection.PrimitiveType;
 
 namespace Poly.DomainModeling.Analysis;
 

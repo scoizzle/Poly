@@ -1,16 +1,13 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using Assignment = Poly.Ast.Nodes.Assignment;
 using Constant = Poly.Ast.Nodes.Constant;
 using DmPrimitive = Poly.DomainModeling.Ontology.PrimitiveType;
-using PrimType = Poly.Introspection.PrimitiveType;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -1031,7 +1028,7 @@ public class AnalysisGateParityTests {
 
         var typed = analysis.GetMetadata<TypedExpressionMetadata>(sum);
         await Assert.That(typed).IsNotNull().Because("analysis states the sum's type on the node");
-        await Assert.That(typed!.Type.Definition?.PrimitiveType).IsEqualTo(PrimType.Float64);
+        await Assert.That(typed!.Type.Definition?.GetRuntimeType()).IsEqualTo(typeof(double));
         await Assert.That(LoweredSeed(domain, analysis, sum)).IsEqualTo(0.0);
     }
 
@@ -1043,7 +1040,7 @@ public class AnalysisGateParityTests {
 
         var typed = analysis.GetMetadata<TypedExpressionMetadata>(sum);
         await Assert.That(typed).IsNotNull().Because("analysis states the sum's type on the node");
-        await Assert.That(typed!.Type.Definition?.PrimitiveType).IsEqualTo(PrimType.Decimal);
+        await Assert.That(typed!.Type.Definition?.GetRuntimeType()).IsEqualTo(typeof(decimal));
         await Assert.That(LoweredSeed(domain, analysis, sum)).IsEqualTo(0m);
     }
 

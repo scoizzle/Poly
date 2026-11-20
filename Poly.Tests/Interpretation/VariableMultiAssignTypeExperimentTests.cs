@@ -1,8 +1,8 @@
-using Poly.Analysis;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -54,8 +54,8 @@ public class VariableMultiAssignTypeExperimentTests {
     [Test]
     public async Task ExistingUnionTypeReference_MixedOptions_CollapseToObject() {
         var union = new UnionTypeReference([
-            new PrimitiveTypeReference(PrimitiveType.Int64),
-            new PrimitiveTypeReference(PrimitiveType.String)
+            TypeReference.To(typeof(long)),
+            TypeReference.To(typeof(string))
         ]);
         var prop = new PropertyDefinitionNode("Value", union);
         var typeDef = new TypeDefinitionNode("Holder", Properties: [prop]);

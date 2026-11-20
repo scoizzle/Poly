@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>

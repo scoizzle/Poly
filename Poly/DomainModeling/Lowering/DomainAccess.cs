@@ -1,7 +1,4 @@
-using Poly.Ast;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;

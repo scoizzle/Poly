@@ -1,8 +1,7 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
+using Poly.Interpretation.CSharp;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 namespace Poly.DomainModeling.Libraries.Storage;
@@ -28,8 +27,8 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     public ConstraintContribution Compile(ConstraintCompileRequest request) {
         ArgumentNullException.ThrowIfNull(request);
         var storage = request.RequireStorage();
-        var portType = new ClrTypeReference(typeof(IStoragePort));
-        var text = new ClrTypeReference(typeof(string));
+        var portType = request.TypeReference(typeof(IStoragePort));
+        var text = request.TypeReference(typeof(string));
 
         var entityName = storage.Name;
         var propertyName = request.Property.Name;
@@ -51,7 +50,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         var existsValue = new Parameter(parameterName, text);
         var exists = new MethodDefinitionNode(
             methodName,
-            new ClrTypeReference(typeof(bool)),
+            request.TypeReference(typeof(bool)),
             Parameters: [existsDb, existsValue],
             Body: new Block([
                 new Return(new Invoke(
@@ -102,17 +101,17 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
                 new ConstraintAnchor.Named(method.Name),
                 [],
                 [],
-                [new ImpliedParameter("db", PortType, ThreadToCallers: true)]));
+                [new ImpliedParameter("db", request.TypeReference(typeof(IStoragePort)), ThreadToCallers: true)]));
         }
         return obligations ?? [];
     }
 
-    public ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module) {
+    public ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module, ITypeSystem? provider) {
         ArgumentNullException.ThrowIfNull(module);
         var replaced = new List<(Node From, Node To)>();
         List<TypeDefinitionNode>? types = null;
         for (var i = 0; i < module.Count; i++) {
-            var next = RewriteType(module[i], replaced);
+            var next = RewriteType(module[i], replaced, provider);
             if (ReferenceEquals(next, module[i]))
                 continue;
             types ??= [.. module];
@@ -122,7 +121,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     }
 
     private static TypeDefinitionNode RewriteType(
-        TypeDefinitionNode type, List<(Node From, Node To)> replaced) {
+        TypeDefinitionNode type, List<(Node From, Node To)> replaced, ITypeSystem? provider) {
         if (type.Constructors is not null) {
             foreach (var ctor in type.Constructors) {
                 if (ContainsEnsureUnique(ctor.Body))
@@ -137,7 +136,9 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
             var method = type.Methods[i];
             if (method.Body is null)
                 continue;
-            var walk = new AssignWalk(type.Name, method.Name, replaced);
+            var walk = new AssignWalk(
+                type.Name, method.Name, replaced,
+                TypeReferenceTo(provider, typeof(IStoragePort)), TypeReferenceTo(provider, typeof(object)));
             var body = walk.Rewrite(method.Body);
             RejectRemaining(body, $"{type.Name}.{method.Name}");
             if (ReferenceEquals(body, method.Body))
@@ -199,18 +200,26 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private static string Violation(string entity, string property) =>
         $"Unique constraint violated: '{property}' value is already used on another '{entity}'.";
 
-    private static readonly ClrTypeReference PortType = new(typeof(IStoragePort));
+    /// <summary>A reference to <paramref name="type"/> the analysis can resolve: the type system's definition when its
+    /// chain has the type, else the CLR host's own.</summary>
+    private static Node TypeReferenceTo(ITypeSystem? provider, Type type) =>
+        provider?.ClrDefinitionOf(type) is { } definition
+            ? new TypeDefinitionReference(definition)
+            : TypeReference.To(type);
 
     private sealed class AssignWalk {
         private readonly string _typeName;
         private readonly string _methodName;
-        private readonly Parameter _db = new("db", PortType);
+        private readonly Parameter _db;
+        private readonly Node _objectType;
         private readonly List<(Node From, Node To)> _replaced;
 
-        public AssignWalk(string typeName, string methodName, List<(Node From, Node To)> replaced) {
+        public AssignWalk(string typeName, string methodName, List<(Node From, Node To)> replaced, Node portType, Node objectType) {
             _typeName = typeName;
             _methodName = methodName;
             _replaced = replaced;
+            _db = new("db", portType);
+            _objectType = objectType;
         }
 
         public Node Rewrite(Node node) => node switch {
@@ -331,8 +340,8 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
                     new Invoke(new Member(argument, "ToString")));
         }
 
-        private static Invoke ObjectEquals(Node left, Node right) =>
-            new(new Member(new ClrTypeReference(typeof(object)), "Equals"), left, right);
+        private Invoke ObjectEquals(Node left, Node right) =>
+            new(new Member(_objectType, "Equals"), left, right);
 
         private Return FailureReturn(Invoke failure, string property) {
             var call = new Invoke(failure.Delegate, FailureLowering.Call(UniqueFailure(_typeName, property)));
@@ -371,8 +380,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         string Property, Node Value, Node Destination, Invoke Failure);
 
     private static bool IsString(Node? type) => type switch {
-        ClrTypeReference clr => clr.RuntimeType == typeof(string),
-        PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType() == typeof(string),
+        TypeDefinitionReference stated => Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(stated.TypeDefinition) is "Text",
         NamedTypeReference named => string.Equals(named.TypeName, "Text", StringComparison.Ordinal),
         _ => false
     };

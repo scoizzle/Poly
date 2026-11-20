@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 
 using Poly.Mcp.Surface;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 

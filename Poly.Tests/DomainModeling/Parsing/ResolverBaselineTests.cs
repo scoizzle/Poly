@@ -5,12 +5,9 @@ using System.Security.Cryptography;
 using System.Text;
 
 using Poly.Compile;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Language;
 using Poly.Grammar;
 using Poly.Packs.Product;
 using Poly.Tests.Docs;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 

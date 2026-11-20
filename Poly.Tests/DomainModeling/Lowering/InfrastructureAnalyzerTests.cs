@@ -1,9 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
@@ -835,7 +833,7 @@ public class InfrastructurePipelineTests {
             Item: entity { Name: Text }
             """);
 
-        var context = new AnalysisContext(ClrTypeDefinitionRegistry.Shared);
+        var context = AnalysisContext.CreateDefault();
         var storagePass = new StoragePass();
         storagePass.Analyze(context, domain);
 

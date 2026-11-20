@@ -1,4 +1,5 @@
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
@@ -9,7 +10,7 @@ public class PropertyDefinitionNodeTests {
         var defaultValue = new Constant("alpha");
         var property = new PropertyDefinitionNode(
             "Name",
-            new PrimitiveTypeReference(PrimitiveType.String),
+            TypeReference.To(typeof(string)),
             DefaultValue: defaultValue);
 
         await Assert.That(property.DefaultValue).IsSameReferenceAs(defaultValue);
@@ -22,7 +23,7 @@ public class PropertyDefinitionNodeTests {
     public async Task Analyze_PropertyDefinition_InTypeDefinition_MapsProperty() {
         var property = new PropertyDefinitionNode(
             "Name",
-            new PrimitiveTypeReference(PrimitiveType.String),
+            TypeReference.To(typeof(string)),
             DefaultValue: new Constant("alpha"));
         var typeNode = new TypeDefinitionNode("Widget", "Sample", Properties: [property]);
         var analysis = new AnalyzerBuilder()

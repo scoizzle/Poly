@@ -1,7 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
-using Poly.Interpretation.Analysis.Semantics;
-
 namespace Poly.Interpretation.Vm.Abi;
 
 /// <summary>Describes how a value is represented in the VM's long ring slot.

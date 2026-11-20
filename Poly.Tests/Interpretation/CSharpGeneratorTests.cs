@@ -1,6 +1,5 @@
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -216,7 +215,7 @@ public class CSharpGeneratorTests {
     public async Task Generate_New_ProducesConstructorCall() {
         var node = new New(TypeReference.To<string>(), new Constant("hello"));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("new System.String(\"hello\");");
+        await Assert.That(result).IsEqualTo("new string(\"hello\");");
     }
 
     [Test]
@@ -244,21 +243,21 @@ public class CSharpGeneratorTests {
     public async Task Generate_TypeCast_ProducesCastExpression() {
         var node = new TypeCast(new Variable("x"), TypeReference.To<int>());
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("_ = (System.Int32)x;");
+        await Assert.That(result).IsEqualTo("_ = (int)x;");
     }
 
     [Test]
     public async Task Generate_TypeIs_ProducesIsExpression() {
         var node = new TypeIs(new Variable("x"), TypeReference.To<string>());
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("_ = x is System.String;");
+        await Assert.That(result).IsEqualTo("_ = x is string;");
     }
 
     [Test]
     public async Task Generate_TypeAs_ProducesAsExpression() {
         var node = new TypeAs(new Variable("x"), TypeReference.To<string>());
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("_ = x as System.String;");
+        await Assert.That(result).IsEqualTo("_ = x as string;");
     }
 
     [Test]
@@ -649,18 +648,18 @@ public class CSharpGeneratorTests {
             Fields: [
                 new FieldDefinitionNode(
                     "Technology",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     DefaultValue: new Constant("Technology"),
                     IsStatic: true,
                     IsConst: true),
                 new FieldDefinitionNode(
                     "Healthcare",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     DefaultValue: new Constant("Healthcare"),
                     IsStatic: true,
                     IsConst: true)
             ],
-            Kind: TypeKind.Enum);
+            Form: TypeDeclarationForm.Enum);
 
         var result = new CSharpGenerator().Generate(node);
 
@@ -696,7 +695,7 @@ public class CSharpGeneratorTests {
             Name: "Widget",
             Interfaces: [
                 new NamedTypeReference("IDisposable"),
-                new NamedTypeReference("IEnumerable", TypeArguments: [new PrimitiveTypeReference(PrimitiveType.String)])
+                new NamedTypeReference("IEnumerable", TypeArguments: [TypeReference.To(typeof(string))])
             ]);
 
         var result = new CSharpGenerator().Generate(node);
@@ -712,7 +711,7 @@ public class CSharpGeneratorTests {
         var node = new TypeDefinitionNode(
             Name: "WidgetCreated",
             PrimaryConstructorParameters: [
-                new Parameter("Name", new PrimitiveTypeReference(PrimitiveType.String))
+                new Parameter("Name", TypeReference.To(typeof(string)))
             ],
             Semantics: TypeDefinitionSemantics.ImmutableValue);
 
@@ -729,7 +728,7 @@ public class CSharpGeneratorTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Name",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode(),
                     Setter: new PropertySetterDefinitionNode(AccessModifier: AccessModifier.Protected))
             ]);
@@ -750,14 +749,14 @@ public class CSharpGeneratorTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "base",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode())
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "Create",
                     new TypeReference("void"),
-                    Parameters: [new Parameter("ref", new PrimitiveTypeReference(PrimitiveType.String))],
+                    Parameters: [new Parameter("ref", TypeReference.To(typeof(string)))],
                     Body: new Block([new Return()]))
             ]);
 
@@ -796,22 +795,22 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_PrimaryConstructorInitializerReferences_WritesParameterBackedInitializers() {
-        var nameParameter = new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String));
+        var nameParameter = new Parameter("name", TypeReference.To(typeof(string)));
         var node = new TypeDefinitionNode(
             Name: "Widget",
             PrimaryConstructorParameters: [nameParameter],
             Properties: [
                 new PropertyDefinitionNode(
                     "DisplayName",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode(),
-                    Initializer: new PropertyInitializerDefinitionNode(new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String))))
+                    Initializer: new PropertyInitializerDefinitionNode(new Parameter("name", TypeReference.To(typeof(string)))))
             ],
             Fields: [
                 new FieldDefinitionNode(
                     "_name",
-                    new PrimitiveTypeReference(PrimitiveType.String),
-                    new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
+                    TypeReference.To(typeof(string)),
+                    new Parameter("name", TypeReference.To(typeof(string))),
                     IsReadOnly: true,
                     AccessModifier: AccessModifier.Private)
             ],
@@ -924,7 +923,7 @@ public class CSharpGeneratorTests {
         var g = new CSharpGenerator();
         await Assert.That(g.Generate(new Default(TypeReference.To<int>()))).Contains("default");
         await Assert.That(g.Generate(new TypeOf(TypeReference.To<string>()))).Contains("typeof");
-        await Assert.That(g.Generate(new NewArray(TypeReference.To<long>(), new Constant(3L)))).Contains("Int64");
+        await Assert.That(g.Generate(new NewArray(TypeReference.To<long>(), new Constant(3L)))).Contains("long");
         await Assert.That(g.Generate(new SuspendNode(new Constant(1L), "bp"))).Contains("1");
     }
 
@@ -945,13 +944,13 @@ public class CSharpGeneratorTests {
     [Test]
     public async Task Generate_MapOptionalUnion_TypeRefs() {
         var g = new CSharpGenerator();
-        var optional = new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.Int32));
+        var optional = new OptionalTypeReference(TypeReference.To(typeof(int)));
         var map = new MapTypeReference(
-            new PrimitiveTypeReference(PrimitiveType.String),
-            new PrimitiveTypeReference(PrimitiveType.Int32));
+            TypeReference.To(typeof(string)),
+            TypeReference.To(typeof(int)));
         var union = new UnionTypeReference([
-            new PrimitiveTypeReference(PrimitiveType.Int32),
-            new PrimitiveTypeReference(PrimitiveType.String)
+            TypeReference.To(typeof(int)),
+            TypeReference.To(typeof(string))
         ]);
         await Assert.That(g.Generate(optional)).Contains("?");
         await Assert.That(g.Generate(map)).Contains("Dictionary");

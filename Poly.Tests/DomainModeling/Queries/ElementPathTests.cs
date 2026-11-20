@@ -1,14 +1,9 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Queries;
-using Poly.Tests.TestHelpers;
 
 using Entity = Poly.DomainModeling.Ontology.Entity;
-using EnumType = Poly.DomainModeling.Ontology.EnumType;
-using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.Tests.DomainModeling.Queries;
 

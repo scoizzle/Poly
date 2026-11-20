@@ -2,10 +2,8 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
-using Poly.DslCompiler;
+using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
-using Poly.Runtime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -263,9 +261,7 @@ public class DbContextGeneratorTests {
         await Assert.That(columnTypes.Any(t => t is "integer" or "INTEGER" or "int")).IsTrue();
         var conversion = omc.FindInvocations("HasConversion").Single();
         var typeArg = conversion.TypeArguments.Single();
-        await Assert.That(typeArg).IsTypeOf<PrimitiveTypeReference>();
-        await Assert.That(((PrimitiveTypeReference)typeArg).PrimitiveId)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
+        await Assert.That(typeArg.States(typeof(int))).IsTrue();
     }
 
     [Test]
@@ -282,18 +278,16 @@ public class DbContextGeneratorTests {
 
         var tryReserve = context.FindMethod("TryReserve");
         await Assert.That(tryReserve).IsNotNull();
-        await Assert.That(tryReserve!.ReturnType).IsTypeOf<PrimitiveTypeReference>();
-        await Assert.That(((PrimitiveTypeReference)tryReserve.ReturnType).PrimitiveId)
-            .IsEqualTo(Poly.Introspection.PrimitiveType.Boolean);
+        await Assert.That(tryReserve.ReturnType.States(typeof(bool))).IsTrue();
         await Assert.That(tryReserve.Parameters!.Count).IsEqualTo(3);
         await Assert.That(tryReserve.Parameters!.All(p =>
-            p.TypeReference is PrimitiveTypeReference { PrimitiveId: Poly.Introspection.PrimitiveType.String })).IsTrue();
+            p.TypeReference.States(typeof(string)))).IsTrue();
 
         foreach (var name in new[] { "Exists", "Record", "Release" }) {
             var body = context.FindMethod(name)!.Body!;
             var canonical = Descendants(body).OfType<Invoke>().Where(i =>
-                i.Delegate is Member { MemberName: "Canonical", Value: ClrTypeReference reference }
-                && reference.RuntimeType == typeof(KeyCodec)).ToList();
+                i.Delegate is Member { MemberName: "Canonical", Value: var receiver }
+                && receiver.Denotes(typeof(KeyCodec))).ToList();
             await Assert.That(canonical.Count).IsEqualTo(1).Because(name);
 
             var separators = Descendants(body).OfType<Constant>()
@@ -392,4 +386,5 @@ public class DbContextGeneratorTests {
                 yield return descendant;
         }
     }
+
 }

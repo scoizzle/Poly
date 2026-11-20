@@ -1,12 +1,10 @@
 using Poly.Compile;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
-using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
 using Poly.Tests.DomainModeling.Parsing;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Polyc;
 

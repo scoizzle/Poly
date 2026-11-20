@@ -1,5 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
@@ -25,7 +23,7 @@ internal static class ConstraintCompilation {
         var current = applied.Module;
         List<(Node From, Node To)>? replaced = null;
         foreach (var compiler in compilers) {
-            var rewrite = compiler.AfterApply(current);
+            var rewrite = compiler.AfterApply(current, analysis.TypeSystem);
             if (rewrite.Replaced.Count == 0 && ReferenceEquals(rewrite.Module, current))
                 continue;
             replaced ??= [.. applied.ReplacedBodies];
@@ -71,7 +69,7 @@ internal static class ConstraintCompilation {
                     // interleave with the enum checks or reach an assign.
                     if (match is BuiltinConstraintCompiler)
                         continue;
-                    var request = Request(entity, property, constraint, type, storage);
+                    var request = Request(entity, property, constraint, type, storage, analysis);
                     var compiled = match.Compile(request) with {
                         Provenance = $"{entity.Name}.{property.Name} ({constraint.GetType().Name})"
                     };
@@ -93,7 +91,7 @@ internal static class ConstraintCompilation {
 
     private static ConstraintCompileRequest Request(
         Entity entity, Property property, Constraint constraint, TypeDefinitionNode type,
-        StorageModel? storage) {
+        StorageModel? storage, AnalysisResult analysis) {
         var parameterName = DomainToCSharpExporter.ToCamelCase(property.Name);
         var parameters = new Dictionary<string, Parameter>(StringComparer.Ordinal);
         if (type.Methods is not null) {
@@ -104,7 +102,7 @@ internal static class ConstraintCompilation {
                     parameters[method.Name] = parameter;
             }
         }
-        return new ConstraintCompileRequest(entity, property, constraint, parameters, storage);
+        return new ConstraintCompileRequest(entity, property, constraint, parameters, storage, analysis.TypeSystem);
     }
 
     private static void Absorb(

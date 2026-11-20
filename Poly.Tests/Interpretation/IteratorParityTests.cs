@@ -1,7 +1,3 @@
-using Poly.Interpretation;
-using Poly.Interpretation.CSharp;
-using Poly.Interpretation.Vm;
-
 namespace Poly.Tests.Interpretation;
 
 /// <summary>

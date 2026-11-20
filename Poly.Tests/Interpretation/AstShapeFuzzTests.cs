@@ -1,5 +1,3 @@
-using Poly.Interpretation;
-
 namespace Poly.Tests.Interpretation;
 
 /// <summary>

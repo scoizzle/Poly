@@ -1,4 +1,3 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 
@@ -55,7 +54,7 @@ internal static class TargetTypeAdapter {
     /// </summary>
     internal static OptionalTypeReference? OptionalSlot(DomainTypeReference target, LoweringContext ctx) {
         var typed = DomainToCSharpExporter.TryResolveEnumType(ctx.Domain, ctx.Analysis, target.TypeName, out _)
-            || DomainTypeMapping.TryPrimitiveType(RuntimeAnalysisCache.ClrTypeName(ctx.Domain, target.TypeName), out _);
+            || DomainTypeMapping.TryClrType(RuntimeAnalysisCache.ClrTypeName(ctx.Domain, target.TypeName), out _);
         return typed
             ? new OptionalTypeReference(DomainToCSharpExporter.MapDomainTypeRef(target, ctx.Domain, ctx.Analysis))
             : null;

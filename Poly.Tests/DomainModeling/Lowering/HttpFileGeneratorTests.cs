@@ -1,9 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
-using Poly.DslCompiler;
 using Poly.Packs.Product;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -66,7 +64,7 @@ public class HttpFileGeneratorTests {
             Event: entity { Title: Text  day: Day }
             """));
 
-        string Member(string text, string name) =>
+        static string Member(string text, string name) =>
             System.Text.RegularExpressions.Regex.Match(text, "\"" + name + "\": ([^,\r\n]+)").Groups[1].Value;
         await Assert.That(Member(http, "CourseId")).IsEqualTo(Member(http, "Code")).Because(http);
         await Assert.That(Member(http, "ShelfId")).IsEqualTo(Member(http, "Slot")).Because(http);

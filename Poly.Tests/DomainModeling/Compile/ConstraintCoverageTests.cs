@@ -2,8 +2,6 @@ using System.Text.Json.Nodes;
 
 using Poly.Compile;
 using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Packs.Product;

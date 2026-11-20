@@ -444,5 +444,5 @@ internal class Guest : Poly.Runtime.IActionScoped
             this._reservations.Add(__item8);
         }
     }
-    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Guest", "Email", email);
+    public static bool ExistsWithEmail(Poly.Runtime.IStoragePort db, string email) => db.Exists("Guest", "Email", email);
 }

@@ -1,3 +1,5 @@
+using Poly.Introspection.CommonLanguageRuntime;
+
 namespace Poly.Interpretation.Analysis.Semantics;
 
 /// <summary>
@@ -230,10 +232,7 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
     }
 
     private static Type? ElementClrType(AnalysisContext context, Node element) =>
-        element switch {
-            PrimitiveTypeReference { IsNullable: false } prim => prim.PrimitiveId.GetClrType(),
-            _ => context.GetResolvedType(element)?.GetRuntimeType(),
-        };
+        (element is TypeDefinitionReference stated ? stated.TypeDefinition : context.GetResolvedType(element))?.GetRuntimeType();
 
     private static void Check(AnalysisContext context, YieldStatement yield, Scope scope) {
         if (scope.InLambda) {
@@ -259,11 +258,12 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
             Error(context, yield, "IT0004", "yield return cannot appear in a try block that has a catch clause.");
             return;
         }
-        var valueType = context.GetResolvedType(yield.Value)?.GetRuntimeType();
-        if (valueType is not null && scope.ElementType is { } element
-            && !SyntaxTypeCompatibilityAnalyzer.IsImplicitlyConvertible(valueType, element)) {
+        var valueDef = context.GetResolvedType(yield.Value);
+        if (valueDef is not null && scope.ElementType is { } element
+            && context.TypeSystem.ClrDefinitionOf(element) is { } elementDef
+            && !SyntaxTypeCompatibilityAnalyzer.IsImplicitlyConvertible(context.TypeSystem, valueDef, elementDef)) {
             Error(context, yield, "IT0006",
-                $"cannot yield a value of type '{valueType.Name}' from an iterator of '{element.Name}'.");
+                $"cannot yield a value of type '{valueDef.Name}' from an iterator of '{element.Name}'.");
         }
     }
 

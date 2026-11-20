@@ -1,6 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.Interpretation;
-using Poly.Introspection;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
@@ -19,7 +19,7 @@ public sealed class EmitRefusesVmErrorsTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    new PrimitiveTypeReference(PrimitiveType.Boolean),
+                    TypeReference.To(typeof(bool)),
                     Body: new Not(new Constant(42)))
             ]);
 
@@ -38,7 +38,7 @@ public sealed class EmitRefusesVmErrorsTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Flag",
-                    new PrimitiveTypeReference(PrimitiveType.Boolean),
+                    TypeReference.To(typeof(bool)),
                     Body: new Not(new Constant(false)))
             ]);
 
@@ -64,7 +64,7 @@ public sealed class EmitRefusesVmErrorsTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    new PrimitiveTypeReference(PrimitiveType.Boolean),
+                    TypeReference.To(typeof(bool)),
                     Body: new Not(new Constant(42)))
             ]);
         RuntimeAnalysisCache.ReplaceModule(domain, [broken]);

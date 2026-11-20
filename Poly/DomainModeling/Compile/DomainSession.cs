@@ -1,13 +1,8 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Libraries.Storage;
-using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Grammar;
 using Poly.Interpretation;
-using Poly.Interpretation.CSharp;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -154,8 +149,11 @@ public sealed partial class DomainSession {
         IReadOnlyList<IConstraintCompiler>? constraintCompilers = null,
         IReadOnlyList<ObservedFlow>? observedFlows = null,
         IReadOnlyList<DiagnosticAllowance>? diagnosticAllowances = null,
-        IReadOnlyList<ContractContribution>? contractContributions = null) {
+        IReadOnlyList<ContractContribution>? contractContributions = null,
+        Poly.Introspection.ITypeSystem? targetTypeSystem = null) {
         Domain = domain;
+        _explicitTargetTypeSystem = targetTypeSystem;
+        TargetTypeSystem = targetTypeSystem ?? new DomainTypeSystem(typeMaps, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         Extensions = extensions;
         Language = language;
         Annotations = annotations;
@@ -198,7 +196,7 @@ public sealed partial class DomainSession {
     private DomainSession Clone(Domain? domain, SessionOptions options) =>
         new(domain, Extensions, options, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions,
             Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers,
-            ObservedFlows, DiagnosticAllowances, ContractContributions);
+            ObservedFlows, DiagnosticAllowances, ContractContributions, _explicitTargetTypeSystem);
 
     /// <summary>The contract the library with <paramref name="libraryId"/> contributed, or null.</summary>
     public ContractContribution? FindContractContribution(string libraryId) =>
@@ -243,11 +241,19 @@ public sealed partial class DomainSession {
         if (SameExtensions(Extensions, domain.Extensions))
             return Clone(domain, Options);
         var reloaded = LibrarySelection.Load(domain.Extensions, Options);
-        return new DomainSession(domain, reloaded.Extensions, Options, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions);
+        return new DomainSession(domain, reloaded.Extensions, Options, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions, _explicitTargetTypeSystem);
     }
 
+    /// <summary>The type system the session's analysis decides by (<see cref="SessionBuilder.WithTargetTypeSystem"/>),
+    /// else the domain language layered on C# over the CLR (#998 T4d, T5).</summary>
+    public Poly.Introspection.ITypeSystem TargetTypeSystem { get; }
+
+    // The builder's target, if it named one. A session copy carries this, never the default: the default domain system
+    // binds the copy's own words (a reload for other `uses` has other type maps).
+    private readonly Poly.Introspection.ITypeSystem? _explicitTargetTypeSystem;
+
     /// <summary>
-    /// Analyzes <paramref name="domain"/> with this session's pipeline (type maps included).
+    /// Analyzes <paramref name="domain"/> with this session's pipeline (type maps included) and its target type system.
     /// The session is bound before the pipeline so passes that ask the cache for maps
     /// see this compilation, not a second session built from <see cref="ExtensionCatalog.Core"/>.
     /// </summary>
@@ -255,7 +261,7 @@ public sealed partial class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         RequireCoreLoaded();
         RuntimeAnalysisCache.Bind(domain, this);
-        var analysis = Analyzer.Analyze(domain);
+        var analysis = Analyzer.Analyze(domain, settings: AnalysisSettingsFor());
         RuntimeAnalysisCache.Bind(domain, this, analysis);
         return analysis;
     }
@@ -266,8 +272,10 @@ public sealed partial class DomainSession {
     /// </summary>
     internal AnalysisResult AnalyzeWithoutBind(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
-        return Analyzer.Analyze(domain);
+        return Analyzer.Analyze(domain, settings: AnalysisSettingsFor());
     }
+
+    private AnalysisSettings AnalysisSettingsFor() => AnalysisSettings.Default.With(TargetTypeSystem);
 
     /// <summary>
     /// Stage 3: one operation module (type definitions, action bodies,
@@ -405,14 +413,14 @@ public sealed partial class DomainSession {
 
     /// <summary>
     /// Analyzes a lowered operation module the way the runtime host does: the shared
-    /// <c>Poly.Runtime</c> result family is bound through <see cref="DomainResultTypeProvider"/>
-    /// over the default registry, and a module's own declarations still win over it.
+    /// <c>Poly.Runtime</c> result family is registered as the analysis' own source through
+    /// <see cref="DomainResultTypeProvider"/>, and a module's own declarations still win over it.
     /// </summary>
     public static AnalysisResult AnalyzeModule(IReadOnlyList<TypeDefinitionNode> module) {
         ArgumentNullException.ThrowIfNull(module);
         return Interpreter.Analyzer.Analyze(
             new CompilationUnitNode([], null, module, null),
-            typeDefinitions: DomainResultTypeProvider.Wrap(AnalysisContext.CreateDefault().TypeDefinitions));
+            setup: ctx => ctx.AddSource(DomainResultTypeProvider.Instance));
     }
 
     /// <summary>

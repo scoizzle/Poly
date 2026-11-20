@@ -3,7 +3,6 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.Tests.TestHelpers;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
 

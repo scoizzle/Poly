@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 

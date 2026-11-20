@@ -1,9 +1,5 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.Runtime;
-using Poly.Tests.TestHelpers;
 
 using D = Poly.Tests.DomainModeling.Lowering.InitialEntryDomains;
 

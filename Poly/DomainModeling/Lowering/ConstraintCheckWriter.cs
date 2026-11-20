@@ -1,11 +1,10 @@
 using System.Globalization;
 
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
@@ -76,7 +75,7 @@ internal static class ConstraintCheckWriter {
         PresencePolicy Presence,
         CheckOrder Order) {
         internal static readonly ConstraintCheckStyle Create = new(
-            () => new PrimitiveTypeReference(PrimType.String),
+            () => TypeReference.To(typeof(string)),
             () => new NamedTypeReference("System.Text.RegularExpressions.Regex"),
             NamesEnumValue: true,
             Presence: PresencePolicy.CreateSlot,
@@ -106,7 +105,7 @@ internal static class ConstraintCheckWriter {
         var required = structure.RequiredPropertyNames;
         if (!required.Contains(prop.Name))
             return false;
-        if (IsText(prop))
+        if (IsText(prop, domain))
             return true;
         return IsNullableDomainType(prop.Type.TypeName, domain);
     }
@@ -129,8 +128,15 @@ internal static class ConstraintCheckWriter {
         bool nullableValue,
         bool includeRequired) {
         var checks = new List<Check>();
-        var isText = IsText(prop);
-        var isNumber = IsNumber(prop);
+        var system = TargetOf(domain);
+        // Fail closed: a constraint whose applicability the target cannot decide is never silently left unguarded.
+        if (!system.DecidesConstraintApplicability()
+            && prop.Constraints.Any(static c => c is RangeConstraint or LengthConstraint or PatternConstraint))
+            throw new InvalidOperationException(
+                $"The target type system '{system.GetType().Name}' declares no constraint applicability, so the constraints on '{entity.Name}.{prop.Name}' cannot be guarded.");
+        var isText = system.LengthApplies(prop.Type.TypeName);
+        var isNumber = system.RangeApplies(prop.Type.TypeName);
+        var isBinaryFloat = isNumber && system.Bind(prop.Type.TypeName) is { } bound && system.Spell(bound) is "Float" or "Float32";
         var isAssign = style.Presence == PresencePolicy.AssignValue;
 
         // Optional slot (create, or assign to an optional property): value constraints only apply to a present value.
@@ -143,12 +149,12 @@ internal static class ConstraintCheckWriter {
         foreach (var constraint in prop.Constraints) {
             switch (constraint) {
                 case RangeConstraint r when isNumber:
-                    if (r.Minimum is not null && ToConstant(r.Minimum) is { } minVal)
+                    if (r.Minimum is not null && RangeBound(r.Minimum, isBinaryFloat) is { } minVal)
                         checks.Add(new Check(Kind.RangeMinimum,
                             new LessThan(value, minVal),
                             CreatePresence(),
                             new Constant($"'{prop.Name}' must be >= {FormatConstraintValue(r.Minimum)}.")));
-                    if (r.Maximum is not null && ToConstant(r.Maximum) is { } maxVal)
+                    if (r.Maximum is not null && RangeBound(r.Maximum, isBinaryFloat) is { } maxVal)
                         checks.Add(new Check(Kind.RangeMaximum,
                             new GreaterThan(value, maxVal),
                             CreatePresence(),
@@ -303,6 +309,14 @@ internal static class ConstraintCheckWriter {
     };
 
     /// <summary>Converts a constraint bound to a Syntax <see cref="Constant"/> (merged numeric converters).</summary>
+    /// <summary>
+    /// A range bound as the constant its guard compares against. A fractional bound is a decimal; beside a binary
+    /// floating property (Float, Double) there is no operator, so it is compared in the property's own number, as C#'s
+    /// explicit conversion would (#998 T7). The failure message keeps the declared bound.
+    /// </summary>
+    private static Constant? RangeBound(object value, bool binaryFloat) =>
+        binaryFloat && value is decimal fraction ? new Constant((double)fraction) : ToConstant(value);
+
     internal static Constant? ToConstant(object? value) {
         if (value is null) return null;
         if (value is long l) return new Constant(l);
@@ -329,14 +343,10 @@ internal static class ConstraintCheckWriter {
         _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "?"
     };
 
-    private static bool IsText(Property prop) =>
-        string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
-        || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
+    // The domain's session target decides which constraints apply (#998 T7); GuardClosedProperties asks the same one.
+    private static Poly.Introspection.ITypeSystem TargetOf(Domain domain) => RuntimeAnalysisCache.Session(domain).TargetTypeSystem;
 
-    private static bool IsNumber(Property prop) =>
-        string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
-        || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal)
-        || string.Equals(prop.Type.TypeName, "Decimal", StringComparison.Ordinal);
+    private static bool IsText(Property prop, Domain domain) => TargetOf(domain).LengthApplies(prop.Type.TypeName);
 
     /// <summary>True when the domain type maps to a nullable CLR type (string or reference type).</summary>
     private static bool IsNullableDomainType(string typeName, Domain domain) {

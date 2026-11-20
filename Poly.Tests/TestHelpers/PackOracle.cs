@@ -13,9 +13,6 @@ using Microsoft.CodeAnalysis.CSharp;
 
 using Poly.Compile;
 using Poly.Packs.Product;
-using Poly.Tests.DomainModeling.Lowering;
-
-using TUnit.Core;
 
 namespace Poly.Tests.TestHelpers;
 

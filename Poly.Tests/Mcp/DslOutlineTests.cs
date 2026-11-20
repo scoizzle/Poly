@@ -1,6 +1,3 @@
-using Poly.DomainModeling.Language;
-using Poly.Mcp.Surface;
-
 namespace Poly.Tests.Mcp;
 
 public class DslOutlineTests {

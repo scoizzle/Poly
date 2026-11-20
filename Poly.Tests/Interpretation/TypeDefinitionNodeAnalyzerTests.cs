@@ -1,5 +1,7 @@
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -14,16 +16,16 @@ public class TypeDefinitionNodeAnalyzerTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Item",
-                    new PrimitiveTypeReference(PrimitiveType.Int32),
-                    IndexParameters: [new Parameter("index", new PrimitiveTypeReference(PrimitiveType.Int32))])
+                    TypeReference.To(typeof(int)),
+                    IndexParameters: [new Parameter("index", TypeReference.To(typeof(int)))])
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "Format",
-                    new PrimitiveTypeReference(PrimitiveType.String),
+                    TypeReference.To(typeof(string)),
                     Parameters: [
-                        new Parameter("value", new PrimitiveTypeReference(PrimitiveType.String)),
-                        new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int32), new Constant(3))
+                        new Parameter("value", TypeReference.To(typeof(string))),
+                        new Parameter("count", TypeReference.To(typeof(int)), new Constant(3))
                     ])
             ],
             BaseType: new NamedTypeReference("Base", "Sample"),
@@ -153,7 +155,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(resolvedHolder).IsNotNull();
         await Assert.That(resolvedWidget).IsNotNull();
         var itemsType = resolvedHolder!.Properties.Single().MemberTypeDefinition;
-        await Assert.That(itemsType.GetElementType()).IsEqualTo(resolvedWidget);
+        await Assert.That(itemsType.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsEqualTo(resolvedWidget);
     }
 
     [Test]
@@ -205,8 +207,8 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode(
                     "Value",
                     new UnionTypeReference([
-                        new PrimitiveTypeReference(PrimitiveType.Int32),
-                        new PrimitiveTypeReference(PrimitiveType.Int32)
+                        TypeReference.To(typeof(int)),
+                        TypeReference.To(typeof(int))
                     ]))
             ]);
 
@@ -217,8 +219,8 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode(
                     "Value",
                     new UnionTypeReference([
-                        new PrimitiveTypeReference(PrimitiveType.Int32),
-                        new PrimitiveTypeReference(PrimitiveType.String)
+                        TypeReference.To(typeof(int)),
+                        TypeReference.To(typeof(string))
                     ]))
             ]);
 
@@ -246,28 +248,28 @@ public class TypeDefinitionNodeAnalyzerTests {
             "BaseWidget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("BaseOnly", new PrimitiveTypeReference(PrimitiveType.String)),
-                new PropertyDefinitionNode("Shared", new PrimitiveTypeReference(PrimitiveType.String))
+                new PropertyDefinitionNode("BaseOnly", TypeReference.To(typeof(string))),
+                new PropertyDefinitionNode("Shared", TypeReference.To(typeof(string)))
             ],
             Methods: [
-                new MethodDefinitionNode("BaseMethod", new PrimitiveTypeReference(PrimitiveType.String)),
-                new MethodDefinitionNode("SharedMethod", new PrimitiveTypeReference(PrimitiveType.String))
+                new MethodDefinitionNode("BaseMethod", TypeReference.To(typeof(string))),
+                new MethodDefinitionNode("SharedMethod", TypeReference.To(typeof(string)))
             ],
             Fields: [
-                new FieldDefinitionNode("BaseField", new PrimitiveTypeReference(PrimitiveType.String)),
-                new FieldDefinitionNode("SharedField", new PrimitiveTypeReference(PrimitiveType.String))
+                new FieldDefinitionNode("BaseField", TypeReference.To(typeof(string))),
+                new FieldDefinitionNode("SharedField", TypeReference.To(typeof(string)))
             ]);
         var subjectType = new TypeDefinitionNode(
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Shared", new PrimitiveTypeReference(PrimitiveType.String))
+                new PropertyDefinitionNode("Shared", TypeReference.To(typeof(string)))
             ],
             Methods: [
-                new MethodDefinitionNode("SharedMethod", new PrimitiveTypeReference(PrimitiveType.String))
+                new MethodDefinitionNode("SharedMethod", TypeReference.To(typeof(string)))
             ],
             Fields: [
-                new FieldDefinitionNode("SharedField", new PrimitiveTypeReference(PrimitiveType.String))
+                new FieldDefinitionNode("SharedField", TypeReference.To(typeof(string)))
             ],
             BaseType: new NamedTypeReference("BaseWidget", "Sample"));
 
@@ -293,8 +295,8 @@ public class TypeDefinitionNodeAnalyzerTests {
             "WidgetCreated",
             "Sample",
             PrimaryConstructorParameters: [
-                new Parameter("Name", new PrimitiveTypeReference(PrimitiveType.String)),
-                new Parameter("Version", new PrimitiveTypeReference(PrimitiveType.Int32))
+                new Parameter("Name", TypeReference.To(typeof(string))),
+                new Parameter("Version", TypeReference.To(typeof(int)))
             ],
             Semantics: TypeDefinitionSemantics.ImmutableValue);
 
@@ -319,12 +321,12 @@ public class TypeDefinitionNodeAnalyzerTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Maybe",
-                    new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.Int32))),
+                    new OptionalTypeReference(TypeReference.To(typeof(int)))),
                 new PropertyDefinitionNode(
                     "Dict",
                     new MapTypeReference(
-                        new PrimitiveTypeReference(PrimitiveType.String),
-                        new PrimitiveTypeReference(PrimitiveType.Int32))),
+                        TypeReference.To(typeof(string)),
+                        TypeReference.To(typeof(int)))),
             ]);
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
@@ -365,15 +367,15 @@ public class TypeDefinitionNodeAnalyzerTests {
                 new PropertyDefinitionNode("Plain", new NamedTypeReference("DomainResult")),
                 new PropertyDefinitionNode(
                     "Closed",
-                    new NamedTypeReference("DomainResult", TypeArguments: [new PrimitiveTypeReference(PrimitiveType.String)]))
+                    new NamedTypeReference("DomainResult", TypeArguments: [TypeReference.To(typeof(string))]))
             ]);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, new Block([plain, generic, holder]));
 
-        var plainDef = ctx.TypeDefinitions.GetTypeDefinition("DomainResult");
-        var genericDef = ctx.TypeDefinitions.GetTypeDefinition(AstTypeRegistry.Key("DomainResult", 1));
+        var plainDef = ctx.TypeSystem.Resolve("DomainResult");
+        var genericDef = ctx.TypeSystem.Resolve(AstTypeRegistry.Key("DomainResult", 1));
         await Assert.That(plainDef).IsNotNull();
         await Assert.That(genericDef).IsNotNull();
         await Assert.That(plainDef).IsNotSameReferenceAs(genericDef);

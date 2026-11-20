@@ -1,14 +1,9 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -131,7 +126,7 @@ public sealed class NameScopeTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var entityTypes = DomainProgramProjection.ToSyntax(domain, analysis)
-            .Where(t => t.Kind != Poly.Introspection.TypeKind.Enum)
+            .Where(t => t.Form != Poly.Ast.Nodes.TypeDeclarationForm.Enum)
             .ToList();
         await Assert.That(string.Join(",", entityTypes.Select(t => t.Name).Order(StringComparer.Ordinal)))
             .IsEqualTo("Group,Item");

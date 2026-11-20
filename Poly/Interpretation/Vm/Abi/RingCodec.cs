@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
 

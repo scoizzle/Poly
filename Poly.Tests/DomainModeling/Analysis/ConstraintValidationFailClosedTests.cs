@@ -1,7 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
 using DmPrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;

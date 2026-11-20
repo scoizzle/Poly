@@ -1,12 +1,10 @@
 using System.Reflection;
 
-using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
-
-using Prim = Poly.Introspection.PrimitiveType;
 
 namespace Poly.Tests.Introspection;
 
@@ -16,33 +14,33 @@ namespace Poly.Tests.Introspection;
 public class TypeRulesTests {
     /// <summary>
     /// B7: the public conversion door as it stood on master before T-03b, over every CLR primitive pair.
-    /// One row per destination, one cell per source in <see cref="Prim"/> order. A cell is three letters:
+    /// One row per destination, one cell per source in <see cref="ClrBuiltInTypes.All"/> order. A cell is three letters:
     /// GetConversionFrom (N none, I implicit, E explicit), IsAssignableFrom (T/F), IsNumericWideningFrom (T/F).
     /// Both of those members are gone (T-16); <see cref="ConversionDoor_ProviderReproducesTheMasterMatrix_ExceptTheRemovedWidenings"/>
     /// reads this text through the provider. Captured from origin/master 51b9453e; never regenerate it from the code under test.
     /// </summary>
-    private static readonly Dictionary<Prim, string> MasterDoorMatrix = new() {
-        [Poly.Introspection.PrimitiveType.Boolean] = "NTF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Int8] = "NFF NTT NFF NFF NFF NFT NFF NFF NFF NFF NFF EFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Int16] = "NFF NFT NTT NFF NFF NFT NFT NFF NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Int32] = "NFF NFT NFT NTT NFF NFT NFT NFT NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Int64] = "NFF NFT NFT NFT NTT NFT NFT NFT NFT NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.UInt8] = "NFF NFT NFF NFF NFF NTT NFF NFF NFF NFF NFF EFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.UInt16] = "NFF NFT NFT NFF NFF NFT NTT NFF NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.UInt32] = "NFF NFT NFT NFT NFF NFT NFT NTT NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.UInt64] = "NFF NFT NFT NFT NFT NFT NFT NFT NTT NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Float32] = "NFF NFT NFT NFT NFT NFT NFT NFT NFT NTT NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Float64] = "NFF NFT NFT NFT NFT NFT NFT NFT NFT NFT NTT EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Decimal] = "NFF ITT ITT ITT ITT ITT ITT ITT ITT EFT EFT NTT NFF ITT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.String] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Char] = "NFF NFT NFT NFF NFF NFT NFT NFF NFF NFF NFF EFF NFF NTT NFF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.DateTime] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.DateOnly] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.TimeOnly] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.TimeSpan] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF",
-        [Poly.Introspection.PrimitiveType.Guid] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF",
-        [Poly.Introspection.PrimitiveType.ByteArray] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF",
-        [Poly.Introspection.PrimitiveType.Structure] = "NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF",
+    private static readonly Dictionary<Type, string> MasterDoorMatrix = new() {
+        [typeof(bool)] = "NTF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(sbyte)] = "NFF NTT NFF NFF NFF NFT NFF NFF NFF NFF NFF EFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(short)] = "NFF NFT NTT NFF NFF NFT NFT NFF NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(int)] = "NFF NFT NFT NTT NFF NFT NFT NFT NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(long)] = "NFF NFT NFT NFT NTT NFT NFT NFT NFT NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(byte)] = "NFF NFT NFF NFF NFF NTT NFF NFF NFF NFF NFF EFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(ushort)] = "NFF NFT NFT NFF NFF NFT NTT NFF NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(uint)] = "NFF NFT NFT NFT NFF NFT NFT NTT NFF NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(ulong)] = "NFF NFT NFT NFT NFT NFT NFT NFT NTT NFF NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(float)] = "NFF NFT NFT NFT NFT NFT NFT NFT NFT NTT NFF EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(double)] = "NFF NFT NFT NFT NFT NFT NFT NFT NFT NFT NTT EFF NFF NFT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(decimal)] = "NFF ITT ITT ITT ITT ITT ITT ITT ITT EFT EFT NTT NFF ITT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(string)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(char)] = "NFF NFT NFT NFF NFF NFT NFT NFF NFF NFF NFF EFF NFF NTT NFF NFF NFF NFF NFF NFF NFF",
+        [typeof(DateTime)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF NFF",
+        [typeof(DateOnly)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF NFF",
+        [typeof(TimeOnly)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF NFF",
+        [typeof(TimeSpan)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF NFF",
+        [typeof(Guid)] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF NFF",
+        [typeof(byte[])] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF",
+        [typeof(object)] = "NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF",
     };
 
     /// <summary>
@@ -50,18 +48,17 @@ public class TypeRulesTests {
     /// a signed integral to an unsigned one, an unsigned one to its signed sibling, anything into Char, and
     /// Float32 or Float64 into Decimal (explicit). The provider answers none, so overload scoring stops counting them.
     /// </summary>
-    internal static readonly (Prim From, Prim To)[] RemovedWidenings = [
-        (Prim.UInt8, Prim.Int8), (Prim.UInt16, Prim.Int16), (Prim.UInt32, Prim.Int32), (Prim.UInt64, Prim.Int64), (Prim.Char, Prim.Int16),
-        (Prim.Int8, Prim.UInt8), (Prim.Int8, Prim.UInt16), (Prim.Int8, Prim.UInt32), (Prim.Int8, Prim.UInt64),
-        (Prim.Int16, Prim.UInt16), (Prim.Int16, Prim.UInt32), (Prim.Int16, Prim.UInt64),
-        (Prim.Int32, Prim.UInt32), (Prim.Int32, Prim.UInt64), (Prim.Int64, Prim.UInt64),
-        (Prim.Int8, Prim.Char), (Prim.Int16, Prim.Char), (Prim.UInt8, Prim.Char), (Prim.UInt16, Prim.Char),
-        (Prim.Float32, Prim.Decimal), (Prim.Float64, Prim.Decimal),
+    internal static readonly (Type From, Type To)[] RemovedWidenings = [
+        (typeof(byte), typeof(sbyte)), (typeof(ushort), typeof(short)), (typeof(uint), typeof(int)), (typeof(ulong), typeof(long)), (typeof(char), typeof(short)),
+        (typeof(sbyte), typeof(byte)), (typeof(sbyte), typeof(ushort)), (typeof(sbyte), typeof(uint)), (typeof(sbyte), typeof(ulong)),
+        (typeof(short), typeof(ushort)), (typeof(short), typeof(uint)), (typeof(short), typeof(ulong)),
+        (typeof(int), typeof(uint)), (typeof(int), typeof(ulong)), (typeof(long), typeof(ulong)),
+        (typeof(sbyte), typeof(char)), (typeof(short), typeof(char)), (typeof(byte), typeof(char)), (typeof(ushort), typeof(char)),
+        (typeof(float), typeof(decimal)), (typeof(double), typeof(decimal)),
     ];
 
-    private static bool IsRankedNumber(Prim primitive) => primitive is
-        Prim.Int8 or Prim.Int16 or Prim.Int32 or Prim.Int64 or Prim.UInt8 or Prim.UInt16 or Prim.UInt32 or Prim.UInt64
-        or Prim.Float32 or Prim.Float64 or Prim.Decimal or Prim.Char;
+    private static bool IsRankedNumber(Type type) => CSharpTypeSystem.SimpleTypeOf(type) is { } simple
+        && simple is not (SimpleType.Bool or SimpleType.NInt or SimpleType.NUInt);
 
     /// <summary>
     /// The matrix captured from master is the oracle; this reads it through the provider alone. Letter 1 is a declared
@@ -72,24 +69,24 @@ public class TypeRulesTests {
     [Test]
     public async Task ConversionDoor_ProviderReproducesTheMasterMatrix_ExceptTheRemovedWidenings() {
         // The 21 members the matrix was captured over, by ordinal; members appended later (T-18b's native integers) are not in it.
-        var prims = Enum.GetValues<Prim>().Where(MasterDoorMatrix.ContainsKey).ToArray();
+        var prims = ClrBuiltInTypes.All.Where(MasterDoorMatrix.ContainsKey).ToArray();
         await Assert.That(prims.Length).IsEqualTo(21);
-        await Assert.That(prims.Select(static p => (int)p).ToArray()).IsEquivalentTo(Enumerable.Range(0, 21).ToArray());
+        await Assert.That(prims).IsEquivalentTo(ClrBuiltInTypes.All.Take(21).ToArray());
         var removed = RemovedWidenings.ToHashSet();
         await Assert.That(removed.Count).IsEqualTo(21);
         var mismatches = new List<string>();
         foreach (var to in prims) {
             var cells = MasterDoorMatrix[to].Split(' ');
-            var target = Clr(to.GetClrType()!);
+            var target = Clr(to);
             for (var i = 0; i < prims.Length; i++) {
                 var from = prims[i];
-                var source = Clr(from.GetClrType()!);
-                var conversion = target.ResolveConversionFrom(source);
+                var source = Clr(from);
+                var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(source, target);
                 var declared = conversion is { Method: not null } stated
                     ? (stated.Kind == ConversionOperatorKind.Implicit ? 'I' : 'E')
                     : 'N';
-                var convertible = to != Prim.Structure && ((from == to && IsRankedNumber(from)) || conversion is { Kind: ConversionOperatorKind.Implicit });
-                var actual = string.Concat(declared, target.IsAssignableFrom(source) ? 'T' : 'F', convertible ? 'T' : 'F');
+                var convertible = to != typeof(object) && ((from == to && IsRankedNumber(from)) || conversion is { Kind: ConversionOperatorKind.Implicit });
+                var actual = string.Concat(declared, target.IsAssignableFrom(source, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared) ? 'T' : 'F', convertible ? 'T' : 'F');
                 var expected = string.Concat(cells[i][0], cells[i][1], cells[i][2] == 'T' && !removed.Contains((from, to)) ? 'T' : 'F');
                 if (actual != expected)
                     mismatches.Add($"{from} -> {to}: expected {expected}, was {actual}");
@@ -103,8 +100,11 @@ public class TypeRulesTests {
     private static ITypeDefinition[] ParametersOf(ITypeOperator declared) =>
         [.. declared.Parameters.Select(static p => p.ParameterTypeDefinition)];
 
-    private static ITypeOperator[] OperatorsOf(ITypeDefinition definition, OperatorKind kind) =>
-        [.. definition.Operators.Where(o => o.Kind == kind)];
+    // What C# offers for a CLR type beside itself: its built-ins and the type's declared operators (#998 T10; before
+    // T10 the definition's own Operators list carried the built-ins).
+    private static ITypeOperator[] OperatorsOf(ITypeDefinition definition, OperatorKind kind) => definition is ClrTypeDefinition clr
+        ? [.. CSharpBuiltIns.OperatorsBeside(clr, kind, null)]
+        : [.. definition.Operators.Where(o => o.Kind == kind)];
 
     // ---- ResolveConversionFrom: intrinsic conversions are reds on the stub, reflected ones are pins ----
 
@@ -116,7 +116,7 @@ public class TypeRulesTests {
     [Arguments(typeof(double), typeof(int), ConversionOperatorKind.Explicit)]
     [Arguments(typeof(long), typeof(int), ConversionOperatorKind.Explicit)]
     public async Task ResolveConversionFrom_ClosedNumericSet_IsIntrinsic(Type from, Type to, ConversionOperatorKind kind) {
-        var conversion = Clr(to).ResolveConversionFrom(Clr(from));
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(from), Clr(to));
         await Assert.That(conversion).IsNotNull();
         await Assert.That(conversion!.Kind).IsEqualTo(kind);
         await Assert.That(conversion.Method).IsNull();
@@ -124,7 +124,7 @@ public class TypeRulesTests {
 
     [Test]
     public async Task ResolveConversionFrom_Float64ToDecimal_IsExplicitReflected() {
-        var conversion = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(double)));
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(double)), Clr(typeof(decimal)));
         await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(conversion.Method).IsNotNull();
         await Assert.That(conversion.Method!.DeclaringTypeDefinition).IsSameReferenceAs(Clr(typeof(decimal)));
@@ -132,7 +132,7 @@ public class TypeRulesTests {
 
     [Test]
     public async Task ResolveConversionFrom_Int64ToDecimal_IsImplicitReflected() {
-        var conversion = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(long)));
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(long)), Clr(typeof(decimal)));
         await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(conversion.Method).IsNotNull();
     }
@@ -148,11 +148,11 @@ public class TypeRulesTests {
             (typeof(float), typeof(int), ConversionOperatorKind.Explicit),
             (typeof(float), typeof(long), ConversionOperatorKind.Explicit),
             (typeof(double), typeof(float), ConversionOperatorKind.Explicit) }) {
-            var conversion = Clr(to).ResolveConversionFrom(Clr(from));
+            var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(from), Clr(to));
             await Assert.That(conversion?.Kind).IsEqualTo(kind);
             await Assert.That(conversion!.Method).IsNull();
         }
-        await Assert.That(single.ResolveConversionFrom(single)).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(single, single)).IsNull();
     }
 
     // ---- T-24: the numeric conversion table, with the C# binder as the oracle ----
@@ -162,7 +162,7 @@ public class TypeRulesTests {
         typeof(long), typeof(ulong), typeof(char), typeof(float), typeof(double), typeof(decimal)
     ];
 
-    private static string NameOf(Type type) => type.GetPrimitiveType()?.GetDisplayName() ?? type.Name;
+    private static string NameOf(Type type) => type.Name;
 
     private static T ImplicitTo<T>(object value) {
         dynamic operand = value;
@@ -200,7 +200,7 @@ public class TypeRulesTests {
         var (implicitCount, explicitCount) = (0, 0);
         foreach (var from in NumericTypes) {
             foreach (var to in NumericTypes) {
-                var conversion = Clr(to).ResolveConversionFrom(Clr(from));
+                var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(from), Clr(to));
                 if (from == to) {
                     if (conversion is not null)
                         mismatches.Add($"{NameOf(from)} -> {NameOf(to)}: identity is not a conversion, provider {conversion.Kind}");
@@ -229,32 +229,32 @@ public class TypeRulesTests {
     public async Task ResolveConversionFrom_NothingConvertsImplicitlyIntoChar_AndInt32ToCharIsExplicit() {
         var character = Clr(typeof(char));
         foreach (var from in NumericTypes.Where(static t => t != typeof(char)))
-            await Assert.That(character.ResolveConversionFrom(Clr(from))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
-        var narrowing = character.ResolveConversionFrom(Clr(typeof(int)));
+            await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(from), character)?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
+        var narrowing = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), character);
         await Assert.That(narrowing?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(narrowing!.Method).IsNull();
         // The sibling: Char widens to Int32.
-        await Assert.That(Clr(typeof(int)).ResolveConversionFrom(character)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(character, Clr(typeof(int)))?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }
 
     [Test]
     public async Task ResolveConversionFrom_ClrToObject_IsImplicit() {
         var objectType = Clr(typeof(object));
         foreach (var source in new[] { typeof(int), typeof(string), typeof(Guid), typeof(DayOfWeek), typeof(List<int>) }) {
-            var conversion = objectType.ResolveConversionFrom(Clr(source));
+            var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(source), objectType);
             await Assert.That(conversion?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
             await Assert.That(conversion!.Method).IsNull();
         }
         // Identity is not a conversion, a modeled definition does not box, and nothing leaves Object implicitly.
-        await Assert.That(objectType.ResolveConversionFrom(objectType)).IsNull();
-        await Assert.That(objectType.ResolveConversionFrom(new ModeledTypeSet().Add("Money"))).IsNull();
-        await Assert.That(Clr(typeof(int)).ResolveConversionFrom(objectType)).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(objectType, objectType)).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(new ModeledTypeSet().Add("Money"), objectType)).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(objectType, Clr(typeof(int)))).IsNull();
     }
 
     [Test]
     public async Task ResolveConversionFrom_UnrelatedTypes_IsNone() {
-        await Assert.That(Clr(typeof(string)).ResolveConversionFrom(Clr(typeof(long)))).IsNull();
-        await Assert.That(Clr(typeof(bool)).ResolveConversionFrom(Clr(typeof(long)))).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(long)), Clr(typeof(string)))).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(long)), Clr(typeof(bool)))).IsNull();
     }
 
     [Test]
@@ -262,16 +262,16 @@ public class TypeRulesTests {
         var set = new ModeledTypeSet();
         var money = set.Add("Money", ModeledTypeSet.Conversion(ConversionOperatorKind.Implicit, "Money", "Cents"));
         var cents = set.Add("Cents");
-        var conversion = ((ITypeDefinition)money).ResolveConversionFrom(cents);
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(cents, ((ITypeDefinition)money));
         await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(conversion.Method).IsNotNull();
-        await Assert.That(((ITypeDefinition)cents).ResolveConversionFrom(money)).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(money, ((ITypeDefinition)cents))).IsNull();
     }
 
     // ---- Conversions: the one member, declared ends and platform built-ins ----
 
     [Test]
-    public async Task Conversions_ClrType_ListsItsDeclaredConversion_AndThePlatformsBuiltIns() {
+    public async Task Conversions_ClrType_ListsItsDeclaredConversion_AndCSharpAppliesTheBuiltIns() {
         var offset = (ITypeDefinition)Clr(typeof(DateTimeOffset));
         var conversions = offset.Conversions.ToArray();
         var declared = conversions.Single(conversion => conversion.Method is not null);
@@ -279,42 +279,39 @@ public class TypeRulesTests {
         await Assert.That(declared.Method!.Name).IsEqualTo("op_Implicit");
         await Assert.That(declared.SourceTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTime));
         await Assert.That(declared.ResultTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTimeOffset));
-        // The box is the platform's answer, with no method.
-        var box = conversions.Single(conversion => IsTo(conversion, typeof(object)));
+        await Assert.That(conversions.All(static conversion => conversion.Method is not null)).IsTrue()
+            .Because("a type lists only what it declares (#998 T10)");
+        // The box is C#'s answer, with no method.
+        var box = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(offset, Clr(typeof(object)));
+        await Assert.That(box!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(box.Method).IsNull();
         await Assert.That(box.SourceTypeDefinition.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(DateTimeOffset));
         // C# applies the numeric conversions itself; a simple type declares none.
-        await Assert.That(((ITypeDefinition)Clr(typeof(int))).Conversions.All(conversion => conversion.Method is null)).IsTrue();
-
-        static bool IsTo(ITypeConversion conversion, Type type) =>
-            conversion.ResultTypeDefinition.GetRuntimeTypeOrThrow() == type;
+        await Assert.That(((ITypeDefinition)Clr(typeof(int))).Conversions).IsEmpty();
     }
 
     // ---- Conversions: the platform-complete outbound view ----
 
     [Test]
-    public async Task Conversions_ClrInt32_StatesThePlatformConversions_NotOnlyDeclarations() {
-        // S2b: a type states what it converts to, not only what it declares. Int32 declares none, yet C# has
-        // Int32 -> Int64 implicit and Int32 -> Object implicit (a box), neither with a method.
+    public async Task Conversions_ClrInt32_DeclaresNone_CSharpAppliesItsBuiltIns() {
+        // Int32 declares no conversion (#998 T10: a type lists only what it declares), yet C# has Int32 -> Int64 implicit
+        // and Int32 -> Object implicit (a box), neither with a method.
         var conversions = ((ITypeDefinition)Clr(typeof(int))).Conversions.ToArray();
-        var toLong = conversions.Single(conversion => IsTo(conversion, typeof(long)));
+        await Assert.That(conversions).IsEmpty();
+        var toLong = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), Clr(typeof(long)))!;
         await Assert.That(toLong.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toLong.Method).IsNull();
-        var toObject = conversions.Single(conversion => IsTo(conversion, typeof(object)));
+        var toObject = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), Clr(typeof(object)))!;
         await Assert.That(toObject.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toObject.Method).IsNull();
-        // An explicit numeric conversion is stated too.
-        var toUInt32 = conversions.Single(conversion => IsTo(conversion, typeof(uint)));
+        // An explicit numeric conversion is C#'s too.
+        var toUInt32 = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), Clr(typeof(uint)))!;
         await Assert.That(toUInt32.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(toUInt32.Method).IsNull();
-        // A conversion the other end declares is the query's, not this member's: decimal owns Int32 -> Decimal.
-        await Assert.That(conversions.Any(conversion => IsTo(conversion, typeof(decimal)))).IsFalse();
-        var toDecimal = ((ITypeDefinition)Clr(typeof(decimal))).ResolveConversionFrom(Clr(typeof(int)));
+        // A conversion the other end declares is the query's: decimal owns Int32 -> Decimal.
+        var toDecimal = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), ((ITypeDefinition)Clr(typeof(decimal))));
         await Assert.That(toDecimal!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toDecimal.Method).IsNotNull();
-
-        static bool IsTo(ITypeConversion conversion, Type type) =>
-            conversion.ResultTypeDefinition.GetRuntimeTypeOrThrow() == type;
     }
 
     [Test]
@@ -425,7 +422,7 @@ public class TypeRulesTests {
         var set = new ModeledTypeSet();
         var vec = set.Add("Vec", ModeledTypeSet.Static("op_Addition", "Vec", "Vec", "Vec"));
         await Assert.That(((ITypeDefinition)vec).Operators).IsEmpty();
-        await Assert.That(((ITypeDefinition)vec).GetOperator(OperatorKind.Add, vec)).IsNull();
+        await Assert.That(((ITypeDefinition)vec).GetOperator(OperatorKind.Add, vec, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
     }
 
     [Test]
@@ -441,7 +438,7 @@ public class TypeRulesTests {
 
     // ---- GetCommonType (B9) ----
 
-    private static ITypeDefinition?[] Common(params Type[][] sets) => [.. sets.Select(set => set.Select(Clr).GetCommonType())];
+    private static ITypeDefinition?[] Common(params Type[][] sets) => [.. sets.Select(set => set.Select(Clr).GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared))];
 
     [Test]
     public async Task GetCommonType_NumericSets() {
@@ -472,8 +469,8 @@ public class TypeRulesTests {
 
     [Test]
     public async Task GetCommonType_NullInput_Throws() {
-        await Assert.That(() => ((IEnumerable<ITypeDefinition>)null!).GetCommonType()).ThrowsExactly<ArgumentNullException>();
-        await Assert.That(() => new ITypeDefinition[] { null! }.GetCommonType()).ThrowsExactly<ArgumentNullException>();
+        await Assert.That(() => ((IEnumerable<ITypeDefinition>)null!).GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).ThrowsExactly<ArgumentNullException>();
+        await Assert.That(() => new ITypeDefinition[] { null! }.GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).ThrowsExactly<ArgumentNullException>();
     }
 
     // ---- contract neutrality (R1, R6a) ----
@@ -481,8 +478,9 @@ public class TypeRulesTests {
     [Test]
     public async Task ConversionContract_ContainsNoRepresentationOrReflectionTypes() {
         var members = new List<MethodBase?> {
-            typeof(ITypeDefinition).GetMethod(nameof(ITypeDefinition.ResolveConversionFrom), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
-            typeof(ITypeDefinition).GetMethod(nameof(ITypeDefinition.ResolveOperator), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
+            // The conversion and operator questions are the type system's (#998 T9), not doors on the definition.
+            typeof(ITypeSystem).GetMethod(nameof(ITypeSystem.Conversion)),
+            typeof(ITypeSystem).GetMethod(nameof(ITypeSystem.Operator)),
             typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.Operators))?.GetMethod,
             typeof(ITypeDefinition).GetProperty(nameof(ITypeDefinition.Conversions), BindingFlags.Instance | BindingFlags.NonPublic)?.GetMethod,
         };
@@ -529,12 +527,12 @@ public class TypeRulesTests {
         ITypeDefinition first = new AstCollectionTypeDefinition(element, CollectionKind.List);
         ITypeDefinition second = new AstCollectionTypeDefinition(element, CollectionKind.List);
         await Assert.That(ReferenceEquals(first, second)).IsFalse();
-        var common = new[] { first, second }.GetCommonType();
+        var common = new[] { first, second }.GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(common).IsNotNull();
         await Assert.That(ReferenceEquals(common, first) || ReferenceEquals(common, second)).IsTrue();
         // The sibling: collections of different elements, or kinds, have no common type.
         ITypeDefinition other = new AstCollectionTypeDefinition(Clr(typeof(long)), CollectionKind.List);
-        await Assert.That(new[] { first, other }.GetCommonType()).IsNull();
+        await Assert.That(new[] { first, other }.GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsNull();
     }
 
     [Test]
@@ -545,7 +543,7 @@ public class TypeRulesTests {
             IsStatic: true) { Operator = OperatorKind.Add });
         ITypeDefinition bagType = bag;
         ITypeDefinition freshList = new AstCollectionTypeDefinition(bag, CollectionKind.List);
-        var resolution = bagType.GetOperator(OperatorKind.Add, freshList);
+        var resolution = bagType.GetOperator(OperatorKind.Add, freshList, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(resolution).IsNotNull();
         await Assert.That(resolution!.ResultTypeDefinition).IsSameReferenceAs(bag);
     }
@@ -562,7 +560,7 @@ public class TypeRulesTests {
             await Assert.That(operators.Length).IsEqualTo(1);
             await Assert.That(operators[0].Method is null).IsEqualTo(platform);
             await Assert.That(operators[0].ResultTypeDefinition).IsSameReferenceAs(boolean);
-            var resolution = definition.GetOperator(OperatorKind.LessThan, definition);
+            var resolution = definition.GetOperator(OperatorKind.LessThan, definition, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
             await Assert.That(resolution!.Method is null).IsEqualTo(platform);
             await Assert.That(resolution.ResultTypeDefinition).IsSameReferenceAs(boolean);
         }
@@ -575,7 +573,7 @@ public class TypeRulesTests {
         var set = new ModeledTypeSet();
         var money = set.Add("Money", ModeledTypeSet.Static("op_Implicit", "Money", "Cents"));
         var cents = set.Add("Cents");
-        await Assert.That(((ITypeDefinition)money).ResolveConversionFrom(cents)).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(cents, ((ITypeDefinition)money))).IsNull();
     }
 
     [Test]
@@ -584,7 +582,7 @@ public class TypeRulesTests {
         var bag = set.Add("Bag", new MethodDefinitionNode("op_Implicit", new NamedTypeReference("Bag"),
             [new Parameter("a", new CollectionTypeReference(new NamedTypeReference("Bag"), CollectionKind.List))], IsStatic: true) { Conversion = ConversionOperatorKind.Implicit });
         ITypeDefinition fresh = new AstCollectionTypeDefinition(bag, CollectionKind.List);
-        var conversion = ((ITypeDefinition)bag).ResolveConversionFrom(fresh);
+        var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(fresh, ((ITypeDefinition)bag));
         await Assert.That(conversion).IsNotNull();
         await Assert.That(conversion!.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }

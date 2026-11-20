@@ -1,10 +1,9 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.CSharp;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
-using TypeKind = Poly.Introspection.TypeKind;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -30,7 +29,7 @@ public sealed partial class DomainToCSharpExporter {
         return new TypeDefinitionNode(
             name,
             Fields: fields,
-            Kind: TypeKind.Enum,
+            Form: TypeDeclarationForm.Enum,
             AccessModifier: access,
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         );
@@ -49,12 +48,12 @@ public sealed partial class DomainToCSharpExporter {
             new OptionalTypeReference(
                 new NamedTypeReference(
                     "HashSet",
-                    TypeArguments: [new PrimitiveTypeReference(PrimType.String)])),
+                    TypeArguments: [TypeReference.To(typeof(string))])),
             AccessModifier: AccessModifier.Private));
         methods.Add(new MethodDefinitionNode(
             "NoteAutomaticStage",
             new TypeReference("void"),
-            Parameters: [new Parameter("stageName", new PrimitiveTypeReference(PrimType.String))],
+            Parameters: [new Parameter("stageName", TypeReference.To(typeof(string)))],
             Body: new Block([
                 new IfStatement(
                     new Equal(
@@ -69,7 +68,7 @@ public sealed partial class DomainToCSharpExporter {
                         new Member(new ThisReference(), "_automaticStageChain"),
                         new New(new NamedTypeReference(
                             "HashSet",
-                            TypeArguments: [new PrimitiveTypeReference(PrimType.String)])))),
+                            TypeArguments: [TypeReference.To(typeof(string))])))),
                 new IfStatement(
                     new Syntactic.Not(new Invoke(
                         new Member(
@@ -79,7 +78,7 @@ public sealed partial class DomainToCSharpExporter {
                     new ThrowStatement(new New(
                         new NamedTypeReference("System.InvalidOperationException"),
                         new Invoke(
-                            new Member(new PrimitiveTypeReference(PrimType.String), "Concat"),
+                            new Member(TypeReference.To(typeof(string)), "Concat"),
                             new Constant($"Automatic stage transition loop on entity '{entity.Name}': stage '"),
                             new Parameter("stageName"),
                             new Constant("' was already entered in this chain.")))))

@@ -1,6 +1,3 @@
-using Poly.Mcp.Sessions;
-using Poly.Mcp.Tools;
-
 namespace Poly.Tests.Mcp;
 
 /// <summary>MCP <c>add</c> of the contract kinds reports what it did to the session.</summary>

@@ -1,9 +1,8 @@
 using System.Collections.Concurrent;
 
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.DomainModeling.Meaning;
@@ -15,18 +14,32 @@ namespace Poly.DomainModeling.Meaning;
 /// <see cref="TypeMappingRegistry.ToClrTypeName"/> so pack overrides apply.
 /// Bound to one (<see cref="Domain"/>, <see cref="TypeMappingRegistry"/>) pair: a new session needs a new provider.
 /// </summary>
-internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
+internal sealed class DomainTypeDefinitionProvider : IQualifiedNameSource, ITypeNameLookup {
     private readonly Dictionary<string, DomainType> _types = new(StringComparer.Ordinal);
     private readonly TypeMappingRegistry _typeMaps;
     private readonly ConcurrentDictionary<string, ITypeDefinition> _synthetic = new(StringComparer.Ordinal);
 
-    public DomainTypeDefinitionProvider(Domain domain, TypeMappingRegistry typeMaps) {
+    private readonly ITypeSystem _system;
+
+    /// <param name="system">The system the domain's own declarations belong to: the model's (#998 T12c).</param>
+    public DomainTypeDefinitionProvider(Domain domain, TypeMappingRegistry typeMaps, ITypeSystem system) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(typeMaps);
+        ArgumentNullException.ThrowIfNull(system);
         _typeMaps = typeMaps;
+        _system = system;
         foreach (var type in domain.Types)
             _types.TryAdd(type.Name, type);
     }
+
+    /// <summary>What the domain declared <paramref name="name"/> as, when it is one of the domain's own declarations
+    /// (an entity, a value type or an enum), else null.</summary>
+    public DomainDeclaration? DeclarationOf(string name) => _types.GetValueOrDefault(name) switch {
+        Entity => DomainDeclaration.Entity,
+        Ontology.ValueType => DomainDeclaration.Value,
+        EnumType => DomainDeclaration.Enum,
+        _ => null,
+    };
 
     public ITypeDefinition? GetTypeDefinition(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -49,9 +62,20 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
 
     public ITypeDefinition? GetTypeDefinition(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
+    /// <summary>The synthetic declarations this provider has built so far.</summary>
+    public IEnumerable<ITypeDefinition> Types => _synthetic.Values;
+
+    /// <summary>The synthetic declarations stated in <paramref name="namespace"/>: this domain as a type source.</summary>
+    public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) =>
+        _synthetic.Values.Where(type => string.Equals(type.Namespace, @namespace, StringComparison.Ordinal));
+
+    ITypeDefinition? IQualifiedNameSource.ByQualifiedName(string name) => GetTypeDefinition(name);
+
+    ITypeDefinition? ITypeNameLookup.Lookup(string name) => GetTypeDefinition(name);
+
     private ITypeDefinition? FromClrName(string name) =>
-        DomainTypeMapping.TryPrimitiveType(_typeMaps.ToClrTypeName(name), out var primitive)
-            ? Clr(primitive.GetClrType()!)
+        DomainTypeMapping.TryClrType(_typeMaps.ToClrTypeName(name), out var ground)
+            ? Clr(ground)
             : null;
 
     private static ITypeDefinition Clr(Type type) =>
@@ -60,15 +84,17 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
 
     private AstTypeDefinition Synthesize(string name, DomainType declared) {
         var (kind, declaresEquality) = declared switch {
-            EnumType => (TypeKind.Enum, true),
-            Ontology.ValueType => (TypeKind.Struct, true),
-            Entity => (TypeKind.Class, true),
+            EnumType => (TypeDeclarationForm.Enum, true),
+            Ontology.ValueType => (TypeDeclarationForm.Struct, true),
+            Entity => (TypeDeclarationForm.Class, true),
             _ => throw new InvalidOperationException($"Domain type '{name}' is a '{declared.GetType().Name}', which has no definition shape.")
         };
         MethodDefinitionNode[]? methods = declaresEquality
             ? [Equality(OperatorKind.Equal, name), Equality(OperatorKind.NotEqual, name)]
             : null;
-        return new AstTypeDefinition(new TypeDefinitionNode(name, Kind: kind, Methods: methods), this);
+        // A domain synthetic belongs to the system its model was built with (#998 T12c, owner rulings 10, 13): an
+        // analysis' layer inside an analysis, the session's target when lowering builds a model of its own.
+        return new AstTypeDefinition(new TypeDefinitionNode(name, Form: kind, Methods: methods), this, _system);
     }
 
     /// <summary>
@@ -77,7 +103,7 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
     /// </summary>
     private static MethodDefinitionNode Equality(OperatorKind kind, string typeName) =>
         new(kind.ToString(),
-            new PrimitiveTypeReference(Introspection.PrimitiveType.Boolean),
+            TypeReference.To(typeof(bool)),
             [new Parameter("left", new NamedTypeReference(typeName)), new Parameter("right", new NamedTypeReference(typeName))],
             IsStatic: true) { Operator = kind };
 

@@ -328,7 +328,7 @@ public static partial class AbiEmitter {
             Default d => EmitDefault(d, ctx),
             ThisReference _ => EmitThis(ctx),
             ParameterReference => RejectCompile("ParameterReference is not a VM value; bind a Parameter."),
-            NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference =>
+            NamedTypeReference or TypeReference =>
                 RejectCompile("Type name is not a VM value; use it as a Member/Invoke/New receiver."),
             NullForgiving n => CompileNode(n.Operand, ctx),
             TypeAs t => EmitTypeAs(t, ctx),
@@ -564,7 +564,7 @@ public static partial class AbiEmitter {
         var slot = ctx.Reserve();
         // A VM array stores scalar slots in a `long[]` and heap handles in an `object[]`;
         // the index routes key on the element's CLR value-type-ness, so creation must agree
-        // (a `PrimitiveTypeReference` element such as `long` used to become `object`).
+        // (a ground-type element such as `long` used to become `object`).
         // A value-type element that is not a ring slot (decimal, Guid) is a heap
         // handle, and a fresh array's zero slot would be the null handle, not default(T);
         // reject the optional spelling rather than read null where C# gives the default.

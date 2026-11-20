@@ -1,6 +1,5 @@
 using System.Text;
 
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Ontology;
@@ -44,7 +43,23 @@ public class OverloadSweepTests {
     /// <b>a later slice that legitimately changes a winner adds a row here and explains it in its PR</b>, as T-16 does for
     /// <c>PopCount(1)</c>. Each row is pinned in a test of its own.
     /// </summary>
+    private const string S2bWhy = "#998 S2b: the exporter's `new NotSupportedException(...)` guard binds through C#'s implicit "
+        + "`using System`, where the retired bare-name alias left it unresolved; the analysis now completes and records the "
+        + "constructor site, and no winner changes";
+
+    private const string ReceiverBindingWhy = "#998: a short type receiver is bound by the analysis, not the reader's text scan. "
+        + "In `using System; long Math = 5; Math.Abs(-1);` read as a bare unit, top-level statements form no block, so the "
+        + "local is never registered: its declaration stays an error (the unit is still refused) and the receiver now binds "
+        + "System.Math. CSharpScript wraps top-level statements in a block, where the local wins (LocalNamedLikeANamespace_Wins)";
+
     private static readonly (string Key, string Before, string After, string Why)[] ExplainedDeltas = [
+        ("csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #5", "  errors: 2\n",
+         "  errors: 1\n  System.Math.Abs(System.Int32)\n", ReceiverBindingWhy),
+        ("poly guide // ✅ Correct — create is the final statement #0", "  errors: 1\n", "  errors: 0\n", S2bWhy),
+        ("poly guide // ✅ Correct — create is the final statement #0",
+         "  Poly.Runtime.DomainFailure.At(System.String)\n",
+         "  Poly.Runtime.DomainFailure.At(System.String)\n  System.NotSupportedException.ctor(System.String)\n",
+         S2bWhy),
         ("csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #4",
          "  errors: 1\n  System.Numerics.BitOperations.PopCount(System.UInt32)\n",
          "  errors: 2\n",
@@ -164,22 +179,6 @@ public class OverloadSweepTests {
     ];
 
     /// <summary>
-    /// Entries whose error count depends on what the run has loaded, compared on their identities only. T-22a: the C# reader
-    /// unit <c>(Customer)(-c)</c> names a type <c>Customer</c> no assembly of the test project declares; the registry's bare-name
-    /// lookup resolves it to a class another test compiled and loaded earlier in the run (so <c>-c</c> is undefined, one error,
-    /// as in C#), and to nothing when the unit runs alone (no type, not judged, no error). The unit has no call site.
-    /// </summary>
-    private static readonly (string Key, string Why)[] RunDependentErrorCounts = [
-        ("csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #10",
-         "T-22a judges unary minus by the provider; 'Customer' resolves only when an earlier test loaded a type of that name"),
-    ];
-
-    private static string WithoutRunDependentErrorCount(string key, string body) =>
-        RunDependentErrorCounts.Any(r => r.Key == key)
-            ? string.Concat(body.Split('\n').Where(static l => l.Length > 0 && !l.StartsWith("  errors:", StringComparison.Ordinal)).Select(static l => l + "\n"))
-            : body;
-
-    /// <summary>
     /// Identities of single-overload methods whose sites a slice adds, removes or moves: the filter hides both the presence
     /// and the absence of these members, not only a move, in documents the baseline already has them
     /// in (L-04b: every generated <c>Create</c> and <c>Create{Nav}</c> is a root-scope wrapper, so the
@@ -285,11 +284,7 @@ public class OverloadSweepTests {
 
         // The explained sites also leave the baseline (after the deltas above, whose text they may sit in).
         baseline = [.. baseline.Select(static e => (e.Key, WithoutExplainedAdditions(e.Body)))];
-        foreach (var (key, why) in RunDependentErrorCounts)
-            await Assert.That(baseline.Any(e => e.Key == key && e.Body.Split('\n').All(static l => l.Length == 0 || l.StartsWith("  errors:", StringComparison.Ordinal)))).IsTrue().Because(why);
-        var comparison = Compare(
-            [.. baseline.Select(static e => (e.Key, WithoutRunDependentErrorCount(e.Key, e.Body)))],
-            [.. run.Select(static e => (e.Key, WithoutRunDependentErrorCount(e.Key, e.Body)))]);
+        var comparison = Compare(baseline, run);
         if (comparison.Added.Count > 0)
             Console.WriteLine($"OverloadSweep: {comparison.Added.Count} entries not in the baseline (reported, not compared):\n  " + string.Join("\n  ", comparison.Added));
         await Assert.That(comparison.Missing).IsEmpty();

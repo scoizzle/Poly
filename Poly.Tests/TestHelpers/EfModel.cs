@@ -9,7 +9,6 @@ using Microsoft.EntityFrameworkCore.Metadata;
 
 using Poly.Compile;
 using Poly.Packs.Product;
-using Poly.Tests.DomainModeling.Lowering;
 
 namespace Poly.Tests.TestHelpers;
 

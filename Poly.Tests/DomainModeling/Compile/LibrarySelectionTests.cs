@@ -1,16 +1,13 @@
 using Microsoft.Extensions.Logging.Abstractions;
 
-using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Libraries.Platform;
 using Poly.DomainModeling.Ontology;
 using Poly.DslCompiler;
-using Poly.Mcp;
 using Poly.Mcp.Sessions;
 using Poly.Packs.Product;
 using Poly.Packs.Sqlite;
 using Poly.Packs.SqlServer;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 

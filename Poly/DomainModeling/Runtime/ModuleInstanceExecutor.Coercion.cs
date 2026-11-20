@@ -1,11 +1,7 @@
 using System.Globalization;
 
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Meaning;
 using Poly.Interpretation.Vm.Abi;
-using Poly.Introspection;
-
-using Prim = Poly.Introspection.PrimitiveType;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.DomainModeling.Runtime;
 
@@ -195,35 +191,32 @@ public sealed partial class ModuleInstanceExecutor {
 
     private static bool IsTextLike(Parameter parameter) =>
         parameter.TypeReference switch {
-            ClrTypeReference { RuntimeType: var rt } when rt == typeof(string) => true,
-            PrimitiveTypeReference { PrimitiveId: Prim.String } => true,
             NamedTypeReference { TypeName: "Text" or "String" or "string" } => true,
+            TypeDefinitionReference stated => Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(stated.TypeDefinition) is "Text",
             TypeReference { TypeName: "Text" or "String" or "string" } => true,
             _ => false
         };
 
     private static string? ParameterTypeName(Parameter parameter) =>
         parameter.TypeReference switch {
-            ClrTypeReference { RuntimeType: var rt } when rt == typeof(string) => "Text",
-            ClrTypeReference { RuntimeType: var rt } when rt == typeof(bool) => "Boolean",
-            PrimitiveTypeReference { PrimitiveId: Prim.String } => "Text",
-            PrimitiveTypeReference { PrimitiveId: Prim.Boolean } => "Boolean",
+            TypeDefinitionReference stated when Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(stated.TypeDefinition) is "Text" => "Text",
+            TypeDefinitionReference stated when Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(stated.TypeDefinition) is "Boolean" => "Boolean",
+            TypeDefinitionReference => null,
             NamedTypeReference n => n.TypeName,
             TypeReference t => t.TypeName,
             _ => null
         };
 
-    private static Prim? PrimitiveForParameter(Parameter parameter) =>
+    private static Type? PrimitiveForParameter(Parameter parameter) =>
         parameter.TypeReference switch {
-            PrimitiveTypeReference p => p.PrimitiveId,
-            ClrTypeReference { RuntimeType: var rt } => rt.GetPrimitiveType(),
+            TypeDefinitionReference stated => stated.TypeDefinition.GetRuntimeType(),
             NamedTypeReference n => DomainPrimitive(n.TypeName),
             TypeReference t => DomainPrimitive(t.TypeName),
             _ => null
         };
 
-    private static Prim? DomainPrimitive(string typeName) =>
-        DomainTypeMapping.TryPrimitiveType(
-            DomainTypeMapping.ToClrTypeName(typeName), out var prim)
-            ? prim : null;
+    private static Type? DomainPrimitive(string typeName) =>
+        DomainTypeMapping.TryClrType(
+            DomainTypeMapping.ToClrTypeName(typeName), out var ground)
+            ? ground : null;
 }

@@ -1,6 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
-using Poly.DomainModeling.Ontology.Effects;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;

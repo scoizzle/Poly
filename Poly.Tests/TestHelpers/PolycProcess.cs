@@ -5,8 +5,6 @@ using System.Text.Json.Nodes;
 
 using Poly.Tests.Polyc;
 
-using TUnit.Core;
-
 namespace Poly.Tests.TestHelpers;
 
 /// <summary>What to start. <see cref="Dll"/> is run as <c>dotnet &lt;Dll&gt; &lt;Args&gt;</c>.</summary>

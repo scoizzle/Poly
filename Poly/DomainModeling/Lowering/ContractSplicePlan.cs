@@ -1,6 +1,3 @@
-using Poly.Ast;
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology.Contract;
 
 namespace Poly.DomainModeling.Lowering;

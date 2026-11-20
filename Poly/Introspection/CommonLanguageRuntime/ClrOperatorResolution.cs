@@ -1,25 +1,33 @@
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>
-/// C#'s operator selection (12.4.4, 12.4.5), the rule <c>ITypeDefinition.ResolveOperator</c> answers with for the .NET
+/// C#'s operator selection (12.4.4, 12.4.5), the rule C#'s <c>ITypeSystem.Operator</c> answers with for the .NET
 /// platform and for the C#-surface definitions the analysis builds.
 /// </summary>
 /// <remarks>
 /// Candidates are the operators either operand offers beside the other: a CLR definition's are pair-aware
-/// (<see cref="ClrTypeDefinition.OperatorsBeside"/>: <c>UInt32 + Int32</c> is <c>Int64</c>, which neither operand
+/// (<see cref="Poly.Interpretation.CSharp.CSharpBuiltIns.OperatorsBeside"/>: <c>UInt32 + Int32</c> is <c>Int64</c>, which neither operand
 /// declares), any other definition's are its <see cref="ITypeDefinition.Operators"/> of the kind. A candidate applies when
 /// each operand is identical to its parameter type or converts to it implicitly. A candidate whose parameters are all
 /// identical wins; otherwise exactly one applicable candidate is returned. Zero, or two or more of either, is none: fail
 /// closed. This is not C# 12.6.4 better-conversion: the pair-aware built-in set leaves nothing for it to rank.
 /// </remarks>
 internal static class ClrOperatorResolution {
-    public static ITypeOperator? Resolve(ITypeDefinition left, OperatorKind kind, ITypeDefinition? right) {
+    /// <param name="convert">The conversion rule that decides whether an operand applies to a parameter
+    /// (source, destination): a type system passes its own (#998 T3), so a foreign parameter type's door never decides.</param>
+    /// <param name="offeredBy">The candidates a type system offers for an operand beside the other (#998 T10): its
+    /// own built-ins and the operand's declared operators.</param>
+    public static ITypeOperator? Resolve(ITypeDefinition left, OperatorKind kind, ITypeDefinition? right,
+        Func<ITypeDefinition, ITypeDefinition, ITypeConversion?> convert,
+        Func<ITypeDefinition, OperatorKind, ITypeDefinition?, IEnumerable<ITypeOperator>> offeredBy) {
         ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(convert);
+        ArgumentNullException.ThrowIfNull(offeredBy);
         var arity = OperatorShape.ArityOf(kind);
         var operands = arity == 1 ? new[] { left } : new[] { left, right ?? throw new ArgumentNullException(nameof(right)) };
 
         var candidates = new List<ITypeOperator>();
-        foreach (var offered in Offered(left, right, kind)) {
+        foreach (var offered in Offered(left, right, kind, offeredBy)) {
             if (offered.Parameters.Count() == arity && !candidates.Exists(c => SameOperator(c, offered)))
                 candidates.Add(offered);
         }
@@ -34,7 +42,7 @@ internal static class ClrOperatorResolution {
                 if (TypeDefinitionExtensions.IsSameType(parameterType, operands[i]))
                     continue;
                 allIdentical = false;
-                applies = parameterType.ResolveConversionFrom(operands[i]) is { Kind: ConversionOperatorKind.Implicit };
+                applies = convert(operands[i], parameterType) is { Kind: ConversionOperatorKind.Implicit };
             }
             if (applies)
                 applicable.Add((candidate, allIdentical));
@@ -45,19 +53,15 @@ internal static class ClrOperatorResolution {
         return chosen.Length == 1 ? chosen[0].Operator : null;
     }
 
-    private static IEnumerable<ITypeOperator> Offered(ITypeDefinition left, ITypeDefinition? right, OperatorKind kind) {
-        foreach (var offered in OfferedBy(left, kind, right))
+    private static IEnumerable<ITypeOperator> Offered(ITypeDefinition left, ITypeDefinition? right, OperatorKind kind,
+        Func<ITypeDefinition, OperatorKind, ITypeDefinition?, IEnumerable<ITypeOperator>> offeredBy) {
+        foreach (var offered in offeredBy(left, kind, right))
             yield return offered;
         if (right is null || TypeDefinitionExtensions.IsSameType(left, right))
             yield break;
-        foreach (var offered in OfferedBy(right, kind, left))
+        foreach (var offered in offeredBy(right, kind, left))
             yield return offered;
     }
-
-    private static IEnumerable<ITypeOperator> OfferedBy(ITypeDefinition definition, OperatorKind kind, ITypeDefinition? other) =>
-        definition is ClrTypeDefinition clr
-            ? clr.OperatorsBeside(kind, other)
-            : definition.Operators.Where(o => o.Kind == kind);
 
     /// <summary>Same declaring type, member (or none), parameter types and result: one operator reached twice.</summary>
     private static bool SameOperator(ITypeOperator a, ITypeOperator b) {

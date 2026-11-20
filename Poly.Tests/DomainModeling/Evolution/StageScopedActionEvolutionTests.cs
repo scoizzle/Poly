@@ -1,4 +1,3 @@
-using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 

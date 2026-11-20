@@ -1,5 +1,3 @@
-using Poly.DomainModeling.Meaning;
-
 namespace Poly.DomainModeling.Libraries.Temporal;
 
 /// <summary>CLR/SQL projections for temporal catalog types. Core DomainTypeMapping does not name them.</summary>

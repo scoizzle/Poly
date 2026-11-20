@@ -6,43 +6,34 @@ namespace Poly.Tests.Interpretation;
 
 public class AnalyzerBuilderTests {
     [Test]
-    public async Task Builder_WithExplicitTypeDefinitionProvider_UsesProvider() {
-        var provider = new TrackingTypeDefinitionProvider(ClrTypeDefinitionRegistry.Shared);
-        var node = new Constant(123);
+    public async Task Builder_WithRegisteredSource_ResolvesItsNames() {
+        var definition = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(Uri));
+        var source = new NamedSource("Custom", definition);
+        var node = new TypeReference("Custom");
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver().Build().Analyze(node, typeDefinitions: provider);
+            .UseTypeAndMemberResolver().Build()
+            .Analyze(node, setup: context => context.AddSource(source));
 
-        await Assert.That(result.GetResolvedType(node)).IsNotNull();
-        await Assert.That(provider.RequestedTypes).Contains(typeof(int));
+        await Assert.That(result.GetResolvedType(node)).IsSameReferenceAs(definition);
     }
 
     [Test]
-    public async Task Builder_WithExplicitEmptyProviderSet_StillFallsBackToSharedClr() {
-        // CORE §3.5: custom providers always fall back to CLR so BCL names still resolve.
-        var emptyProvider = new NoOpTypeDefinitionProvider();
+    public async Task Builder_WithEmptySource_StillFallsBackToTheCSharpTarget() {
+        // An own source that answers nothing does not hide the target: C# over the CLR still resolves Int32.
         var node = new Constant(123);
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver().Build().Analyze(node, typeDefinitions: emptyProvider);
+            .UseTypeAndMemberResolver().Build()
+            .Analyze(node, setup: context => context.AddSource(new NamedSource("Unused", definition: null)));
 
         await Assert.That(result.GetResolvedType(node)).IsNotNull();
         await Assert.That(result.GetResolvedType(node)!.FullName).IsEqualTo("System.Int32");
     }
 
-    private sealed class NoOpTypeDefinitionProvider : ITypeDefinitionProvider {
-        public ITypeDefinition? GetTypeDefinition(string name) => null;
-        public ITypeDefinition? GetTypeDefinition(Type type) => null;
-    }
+    /// <summary>A source the analysis registers as its own, answering exactly one name (#998 T12b).</summary>
+    private sealed class NamedSource(string name, ITypeDefinition? definition) : IQualifiedNameSource {
+        public ITypeDefinition? ByQualifiedName(string qualifiedName) =>
+            string.Equals(qualifiedName, name, StringComparison.Ordinal) ? definition : null;
 
-    private sealed class TrackingTypeDefinitionProvider(ITypeDefinitionProvider innerProvider) : ITypeDefinitionProvider {
-        private readonly List<Type> _requestedTypes = new();
-
-        public IReadOnlyList<Type> RequestedTypes => _requestedTypes;
-
-        public ITypeDefinition? GetTypeDefinition(string name) => innerProvider.GetTypeDefinition(name);
-
-        public ITypeDefinition? GetTypeDefinition(Type type) {
-            _requestedTypes.Add(type);
-            return innerProvider.GetTypeDefinition(type);
-        }
+        public IEnumerable<ITypeDefinition> TypesIn(string? @namespace) => [];
     }
 }

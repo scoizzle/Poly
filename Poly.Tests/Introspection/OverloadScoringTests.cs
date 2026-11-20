@@ -8,8 +8,6 @@ using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
 
-using Prim = Poly.Introspection.PrimitiveType;
-
 namespace Poly.Tests.Introspection;
 
 /// <summary>
@@ -85,7 +83,7 @@ public class OverloadScoringTests {
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
     /// <summary>The 21 primitives the master matrices were captured over; T-18b's native integers are pinned apart (lock amendment 9).</summary>
-    private static readonly Type[] Primitives = [.. Enum.GetValues<Prim>().Where(static p => p <= Prim.Structure).Select(static p => p.GetClrType()!)];
+    private static readonly Type[] Primitives = [.. ClrBuiltInTypes.All.Take(21)];
 
     private static readonly Type[] Natives = [typeof(nint), typeof(nuint)];
 
@@ -100,7 +98,7 @@ public class OverloadScoringTests {
     ];
 
     private static string Accepts(string parameter, Type argument) =>
-        Clr(typeof(Lone)).FindMatchingMethodOverloads(parameter, [Clr(argument)]).Any() ? "A" : ".";
+        Clr(typeof(Lone)).FindMatchingMethodOverloads(parameter, [Clr(argument)], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared).Any() ? "A" : ".";
 
     private static string Row(string parameter, IEnumerable<Type> arguments) =>
         string.Concat(arguments.Select(argument => Accepts(parameter, argument)));
@@ -165,7 +163,7 @@ public class OverloadScoringTests {
         $"{method.DeclaringTypeDefinition.Name}.{method.Name}({string.Join(',', method.Parameters.Select(static p => p.ParameterTypeDefinition.Name))})";
 
     internal static string Winners(Type type, string name, params Type[] arguments) {
-        var winners = Clr(type).FindMatchingMethodOverloads(name, arguments.Select(Clr)).Select(Signature).Order(StringComparer.Ordinal);
+        var winners = Clr(type).FindMatchingMethodOverloads(name, arguments.Select(Clr), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared).Select(Signature).Order(StringComparer.Ordinal);
         var rendered = string.Join(" | ", winners);
         return $"{type.Name}.{name}({string.Join(',', arguments.Select(static a => a.Name))}) = {(rendered.Length == 0 ? "none" : rendered)}";
     }
@@ -448,7 +446,7 @@ public class OverloadScoringTests {
     /// Everything else stays, cell for cell.
     /// </summary>
     internal static string AfterT16(string masterMatrix) {
-        var removed = TypeRulesTests.RemovedWidenings.Select(static pair => (From: pair.From.ToString(), To: pair.To.ToString())).ToHashSet();
+        var removed = TypeRulesTests.RemovedWidenings.Select(static pair => (From: ParameterName(pair.From), To: ParameterName(pair.To))).ToHashSet();
         var arguments = Array.Empty<string>();
         var output = new List<string>();
         foreach (var line in masterMatrix.Split('\n')) {
@@ -598,12 +596,12 @@ public class OverloadScoringTests {
         // decimal <- int goes through the declared op_Implicit (tier 1); long <- int is applied by the platform (tier 2).
         await Assert.That(Winners(typeof(Overloads), "LongVsDecimal", typeof(int)))
             .IsEqualTo("Overloads.LongVsDecimal(Int32) = Overloads.LongVsDecimal(Decimal)");
-        var decimalFromInt = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(int)));
-        var longFromInt = Clr(typeof(long)).ResolveConversionFrom(Clr(typeof(int)));
+        var decimalFromInt = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), Clr(typeof(decimal)));
+        var longFromInt = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int)), Clr(typeof(long)));
         await Assert.That(decimalFromInt!.Method).IsNotNull();
         await Assert.That(longFromInt!.Method).IsNull();
-        await Assert.That(Clr(typeof(decimal)).IsAssignableFrom(Clr(typeof(int)))).IsTrue();
-        await Assert.That(Clr(typeof(long)).IsAssignableFrom(Clr(typeof(int)))).IsFalse();
+        await Assert.That(Clr(typeof(decimal)).IsAssignableFrom(Clr(typeof(int)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(Clr(typeof(long)).IsAssignableFrom(Clr(typeof(int)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
@@ -611,10 +609,10 @@ public class OverloadScoringTests {
         var mismatches = new List<string>();
         foreach (var to in Primitives.Concat(Natives).Where(static t => t != typeof(object))) {
             foreach (var from in Primitives.Concat(Natives)) {
-                var conversion = Clr(to).ResolveConversionFrom(Clr(from));
+                var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(from), Clr(to));
                 if (conversion is not { Kind: ConversionOperatorKind.Implicit } implicitConversion)
                     continue;
-                var assignable = Clr(to).IsAssignableFrom(Clr(from));
+                var assignable = Clr(to).IsAssignableFrom(Clr(from), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
                 if (assignable != (implicitConversion.Method is not null))
                     mismatches.Add($"{from.Name} -> {to.Name}: method={implicitConversion.Method is not null} assignable={assignable}");
             }
@@ -636,15 +634,15 @@ public class OverloadScoringTests {
         var disagreements = new List<string>();
         foreach (var type in types) {
             var definition = Clr(type);
-            var assignable = objectType.IsAssignableFrom(definition);
-            var converts = objectType.ResolveConversionFrom(definition) is { Kind: ConversionOperatorKind.Implicit };
+            var assignable = objectType.IsAssignableFrom(definition, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+            var converts = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(definition, objectType) is { Kind: ConversionOperatorKind.Implicit };
             if (!assignable || !converts)
                 disagreements.Add($"{type.FullName}: IsAssignableFrom={assignable} ResolveConversionFrom(implicit)={converts}");
         }
         await Assert.That(types.Length).IsGreaterThan(500);
         await Assert.That(disagreements).IsEmpty();
-        await Assert.That(objectType.IsAssignableFrom(objectType)).IsTrue();
-        await Assert.That(objectType.ResolveConversionFrom(objectType)).IsNull();
+        await Assert.That(objectType.IsAssignableFrom(objectType, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(objectType, objectType)).IsNull();
     }
 
     [Test]
@@ -653,8 +651,8 @@ public class OverloadScoringTests {
         // answer stays none, so the two statements of the boxing rule agree on every CLR definition and differ here by design.
         var objectType = Clr(typeof(object));
         ITypeDefinition modeled = new ModeledTypeSet().Add("Bag");
-        await Assert.That(objectType.IsAssignableFrom(modeled)).IsTrue();
-        await Assert.That(objectType.ResolveConversionFrom(modeled)).IsNull();
+        await Assert.That(objectType.IsAssignableFrom(modeled, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(modeled, objectType)).IsNull();
     }
 
     // ---- a declared operator is tier 1, and one step only ----
@@ -719,13 +717,13 @@ public class OverloadScoringTests {
             new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", list)]),
             new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", new NamedTypeReference("Bag"))]));
         ITypeDefinition fresh = new AstCollectionTypeDefinition((ITypeDefinition)set.GetTypeDefinition("Bag")!, CollectionKind.List);
-        var winners = host.FindMatchingMethodOverloads("Take", [fresh]).ToArray();
+        var winners = host.FindMatchingMethodOverloads("Take", [fresh], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared).ToArray();
         await Assert.That(winners.Length).IsEqualTo(1);
         await Assert.That(winners[0].Parameters.Single().ParameterTypeDefinition).IsTypeOf<AstCollectionTypeDefinition>();
         // The sibling: the single-element parameter alone still binds through the declared conversion.
         var bagOnly = (ITypeDefinition)set.Add("BagHost",
             new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", new NamedTypeReference("Bag"))]));
-        await Assert.That(bagOnly.FindMatchingMethodOverloads("Take", [fresh]).Count()).IsEqualTo(1);
+        await Assert.That(bagOnly.FindMatchingMethodOverloads("Take", [fresh], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared).Count()).IsEqualTo(1);
     }
 
     // ---- the one C# reader delta the sweep found ----
@@ -749,19 +747,19 @@ public class OverloadScoringTests {
     [Test]
     public async Task IsAssignableWithoutConversion_ExcludesDeclaredOperators_AndBuiltInConversions() {
         // A declared operator is assignment (IsAssignableFrom) but not "without conversion".
-        await Assert.That(Clr(typeof(Meters)).IsAssignableFrom(Clr(typeof(double)))).IsTrue();
-        await Assert.That(Clr(typeof(Meters)).IsAssignableWithoutConversion(Clr(typeof(double)))).IsFalse();
-        await Assert.That(Clr(typeof(decimal)).IsAssignableFrom(Clr(typeof(long)))).IsTrue();
-        await Assert.That(Clr(typeof(decimal)).IsAssignableWithoutConversion(Clr(typeof(long)))).IsFalse();
+        await Assert.That(Clr(typeof(Meters)).IsAssignableFrom(Clr(typeof(double)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(Meters)), Clr(typeof(double)))).IsFalse();
+        await Assert.That(Clr(typeof(decimal)).IsAssignableFrom(Clr(typeof(long)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(decimal)), Clr(typeof(long)))).IsFalse();
         // A built-in numeric conversion is neither.
-        await Assert.That(Clr(typeof(long)).IsAssignableFrom(Clr(typeof(int)))).IsFalse();
-        await Assert.That(Clr(typeof(long)).IsAssignableWithoutConversion(Clr(typeof(int)))).IsFalse();
+        await Assert.That(Clr(typeof(long)).IsAssignableFrom(Clr(typeof(int)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(long)), Clr(typeof(int)))).IsFalse();
         // The siblings: identity, inheritance, interfaces, the T -> T? lift and the box into object need none.
-        await Assert.That(Clr(typeof(long)).IsAssignableWithoutConversion(Clr(typeof(long)))).IsTrue();
-        await Assert.That(Clr(typeof(IEnumerable<int>)).IsAssignableWithoutConversion(Clr(typeof(List<int>)))).IsTrue();
-        await Assert.That(Clr(typeof(int?)).IsAssignableWithoutConversion(Clr(typeof(int)))).IsTrue();
-        await Assert.That(Clr(typeof(int)).IsAssignableWithoutConversion(Clr(typeof(int?)))).IsFalse();
-        await Assert.That(Clr(typeof(object)).IsAssignableWithoutConversion(Clr(typeof(decimal)))).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(long)), Clr(typeof(long)))).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(IEnumerable<int>)), Clr(typeof(List<int>)))).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(int?)), Clr(typeof(int)))).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(int)), Clr(typeof(int?)))).IsFalse();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(object)), Clr(typeof(decimal)))).IsTrue();
     }
 
     [Test]
@@ -769,7 +767,7 @@ public class OverloadScoringTests {
         var escapes = new List<string>();
         foreach (var to in Primitives)
             foreach (var from in Primitives)
-                if (Clr(to).IsAssignableWithoutConversion(Clr(from)) && !Clr(to).IsAssignableFrom(Clr(from)))
+                if (Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(to), Clr(from)) && !Clr(to).IsAssignableFrom(Clr(from), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared))
                     escapes.Add($"{from.Name} -> {to.Name}");
         await Assert.That(escapes).IsEmpty();
     }
@@ -781,10 +779,10 @@ public class OverloadScoringTests {
         ITypeDefinition crate = set.Add("Crate");
         ITypeDefinition bags = new AstCollectionTypeDefinition(bag, CollectionKind.List);
         ITypeDefinition freshBags = new AstCollectionTypeDefinition(bag, CollectionKind.List);
-        await Assert.That(bag.IsAssignableWithoutConversion(bag)).IsTrue();
-        await Assert.That(bag.IsAssignableWithoutConversion(crate)).IsFalse();
-        await Assert.That(bags.IsAssignableWithoutConversion(freshBags)).IsTrue();
-        await Assert.That(Clr(typeof(object)).IsAssignableWithoutConversion(bag)).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(bag, bag)).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(bag, crate)).IsFalse();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(bags, freshBags)).IsTrue();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(typeof(object)), bag)).IsTrue();
     }
 
     // ---- T-21c: C#'s implicit nullable conversion (10.6.1) is stated by the provider, with no method ----
@@ -827,27 +825,27 @@ public class OverloadScoringTests {
             (typeof(long), typeof(decimal?)), (typeof(int), typeof(long?)), (typeof(int), typeof(decimal?)),
             (typeof(int?), typeof(long?)), (typeof(long?), typeof(decimal?)), (typeof(int?), typeof(decimal?)),
         }) {
-            var conversion = Clr(to).ResolveConversionFrom(Clr(from));
+            var conversion = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(from), Clr(to));
             await Assert.That(conversion is { Kind: ConversionOperatorKind.Implicit, Method: null }).IsTrue().Because($"{from.Name} -> {to.Name}");
             // Assignment, casts and type tests are not loosened: a method-less conversion is never assignability.
-            await Assert.That(Clr(to).IsAssignableFrom(Clr(from))).IsFalse().Because($"{from.Name} -> {to.Name}");
-            await Assert.That(Clr(to).IsAssignableWithoutConversion(Clr(from))).IsFalse().Because($"{from.Name} -> {to.Name}");
+            await Assert.That(Clr(to).IsAssignableFrom(Clr(from), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse().Because($"{from.Name} -> {to.Name}");
+            await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.IsAssignableWithoutConversion(Clr(to), Clr(from))).IsFalse().Because($"{from.Name} -> {to.Name}");
         }
-        await Assert.That(Clr(typeof(decimal?)).IsAssignableFrom(Clr(typeof(long)))).IsFalse();
+        await Assert.That(Clr(typeof(decimal?)).IsAssignableFrom(Clr(typeof(long)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)).IsFalse();
     }
 
     [Test]
     public async Task LiftedImplicit_IsOnlyForANullableTarget_AndOnlyWhereTheUnderlyingConversionIsImplicit() {
         // A non-nullable target never takes the lifted arm; a nullable source into a non-nullable target stays refused.
-        await Assert.That(Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(long?)))).IsNull();
-        await Assert.That(Clr(typeof(long)).ResolveConversionFrom(Clr(typeof(int?)))).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(long?)), Clr(typeof(decimal)))).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(int?)), Clr(typeof(long)))).IsNull();
         // An explicit or absent underlying conversion lifts to nothing implicit.
-        await Assert.That(Clr(typeof(decimal?)).ResolveConversionFrom(Clr(typeof(double)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(Clr(typeof(int?)).ResolveConversionFrom(Clr(typeof(long)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(Clr(typeof(long?)).ResolveConversionFrom(Clr(typeof(ulong)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(double)), Clr(typeof(decimal?)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(long)), Clr(typeof(int?)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(ulong)), Clr(typeof(long?)))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
         // T -> T? keeps the method Nullable<T> declares (op_Implicit(T)): the lifted arm never replaces a declared conversion.
-        await Assert.That(Clr(typeof(decimal?)).ResolveConversionFrom(Clr(typeof(decimal)))?.Method).IsNotNull();
-        await Assert.That(Clr(typeof(decimal?)).ResolveConversionFrom(Clr(typeof(decimal?)))).IsNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(decimal)), Clr(typeof(decimal?)))?.Method).IsNotNull();
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(decimal?)), Clr(typeof(decimal?)))).IsNull();
     }
 
     [Test]
@@ -897,7 +895,7 @@ public class OverloadScoringTests {
             (typeof(decimal?), typeof(double), "none", null),
             (typeof(int?), typeof(long), "none", null),
         }) {
-            var common = new[] { Clr(left), Clr(right) }.GetCommonType()?.GetRuntimeType();
+            var common = new[] { Clr(left), Clr(right) }.GetCommonType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)?.GetRuntimeType();
             await Assert.That(CSharpCallOracle.ConditionalType(left, right)).IsEqualTo(csharp).Because($"{left.Name} : {right.Name}");
             await Assert.That(common).IsEqualTo(expected).Because($"{left.Name} : {right.Name}");
         }
@@ -918,7 +916,7 @@ public class OverloadScoringTests {
         // resolution pass takes the first by declaration order. Overload tie-breaking is row #847 (owner ruling); the deviation is pinned.
         // This proves the TIE (both returned); the bound overload is measured end to end in ValueRepresentationEmitTests.OverloadTie_*.
         await Assert.That(CSharpCallOracle.Chosen([typeof(decimal?), typeof(long?)], typeof(int))).IsEqualTo("long?");
-        var winners = Clr(typeof(NullableOverloads)).FindMatchingMethodOverloads("LongVsDecimal", [Clr(typeof(int))])
+        var winners = Clr(typeof(NullableOverloads)).FindMatchingMethodOverloads("LongVsDecimal", [Clr(typeof(int))], Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)
             .Select(static method => method.Parameters.Single().ParameterTypeDefinition.GetRuntimeType()!).ToArray();
         await Assert.That(winners).IsEquivalentTo(new[] { typeof(decimal?), typeof(long?) });
     }

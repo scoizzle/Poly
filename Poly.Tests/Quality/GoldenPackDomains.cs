@@ -1,5 +1,3 @@
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.Quality;
 
 /// <summary>A golden domain that cannot be booted as an app: <paramref name="Issue"/> names the open issue,

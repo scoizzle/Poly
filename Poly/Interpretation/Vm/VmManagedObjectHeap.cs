@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-
 namespace Poly.Interpretation.Vm;
 
 /// <summary>Object heap for the Poly VM. Reference-type values are stored

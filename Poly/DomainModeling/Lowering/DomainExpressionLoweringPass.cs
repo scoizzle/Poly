@@ -1,10 +1,6 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
-
-using SN = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 

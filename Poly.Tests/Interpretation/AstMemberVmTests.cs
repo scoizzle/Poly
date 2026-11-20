@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
 
@@ -7,18 +8,18 @@ namespace Poly.Tests.Interpretation;
 
 /// <summary>F14: Member/Assignment on dict-backed AST property/field via Interpreter.Compile.</summary>
 public class AstMemberVmTests {
-    private static ITypeDefinitionProvider BuildItemType(bool field = false) {
+    private static ITypeSource BuildItemType(bool field = false) {
         TypeDefinitionNode typeNode = field
             ? new TypeDefinitionNode(
                 "Item", "Sample",
-                Fields: [new FieldDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))])
+                Fields: [new FieldDefinitionNode("Count", TypeReference.To(typeof(long)))])
             : new TypeDefinitionNode(
                 "Item", "Sample",
-                Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+                Properties: [new PropertyDefinitionNode("Count", TypeReference.To(typeof(long)))]);
         var tda = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     [Test]
@@ -54,7 +55,7 @@ public class AstMemberVmTests {
 
     [Test]
     public async Task CompileExecute_New_AstConstructor_WritesDict() {
-        var count = new Parameter("count", new PrimitiveTypeReference(PrimitiveType.Int64));
+        var count = new Parameter("count", TypeReference.To(typeof(long)));
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
             Constructors: [
@@ -64,7 +65,7 @@ public class AstMemberVmTests {
                         new Assignment(new Member(new ThisReference(), "Count"), count)
                     ]))
             ],
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+            Properties: [new PropertyDefinitionNode("Count", TypeReference.To(typeof(long)))]);
         var tda = Analyze(typeNode);
         var program = Interpreter.Compile(new New(new TypeReference("Sample.Item"), new Constant(7L)), tda);
         using var exec = Interpreter.Execute(program);
@@ -102,11 +103,11 @@ public class AstMemberVmTests {
     public async Task CompileExecute_Invoke_AstMethod_MutatesDict() {
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))],
+            Properties: [new PropertyDefinitionNode("Count", TypeReference.To(typeof(long)))],
             Methods: [
                 new MethodDefinitionNode(
                     "Inc",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    TypeReference.To(typeof(long)),
                     Body: new Assignment(
                         new Member(new ThisReference(), "Count"),
                         new Add(new Member(new ThisReference(), "Count"), new Constant(1L))))
@@ -122,7 +123,7 @@ public class AstMemberVmTests {
 
     [Test]
     public async Task CompileExecute_Invoke_AstMethod_QualifiedLongParameter_KeepsScalar() {
-        // A qualified primitive is a TypeReference, not a PrimitiveTypeReference.
+        // A qualified primitive is a named TypeReference, not the definition a keyword states.
         // The callee parameter is a value-type raw slot; the argument must not be
         // boxed to a heap handle.
         var value = new Parameter("value", new TypeReference("System.Int64"));
@@ -131,7 +132,7 @@ public class AstMemberVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Inc",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    TypeReference.To(typeof(long)),
                     Parameters: [value],
                     Body: new Add(new Variable("value"), new Constant(1L)),
                     IsStatic: true)
@@ -158,7 +159,7 @@ public class AstMemberVmTests {
                         new Assignment(new Member(new ThisReference(), "Count"), count)
                     ]))
             ],
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+            Properties: [new PropertyDefinitionNode("Count", TypeReference.To(typeof(long)))]);
         var tda = Analyze(typeNode);
         var program = Interpreter.Compile(new New(new TypeReference("Sample.Item"), new Constant(41L)), tda);
 
@@ -169,11 +170,11 @@ public class AstMemberVmTests {
         await Assert.That(bag!["Count"]).IsEqualTo(41L);
     }
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeSource Analyze(TypeDefinitionNode typeNode) {
         var tda = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     private static readonly Parameter ObjectValue = new("v", TypeReference.To<object>());
@@ -190,7 +191,7 @@ public class AstMemberVmTests {
         Methods: [
             new MethodDefinitionNode(
                 "Set",
-                new ClrTypeReference(typeof(void)),
+                TypeReference.To(typeof(void)),
                 Parameters: [ObjectValue],
                 Body: new Block([new Assignment(new Member(new ThisReference(), "V"), ObjectValue)]))
         ]);
@@ -231,11 +232,11 @@ public class AstMemberVmTests {
         var count = new Member(new ThisReference(), "Count");
         var tda = Analyze(new TypeDefinitionNode(
             "Spinner", "Sample",
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))],
+            Properties: [new PropertyDefinitionNode("Count", TypeReference.To(typeof(long)))],
             Methods: [
                 new MethodDefinitionNode(
                     "Spin",
-                    new ClrTypeReference(typeof(void)),
+                    TypeReference.To(typeof(void)),
                     Body: new WhileLoop(
                         new LessThan(count, new Constant(50L)),
                         new Assignment(count, new Add(count, new Constant(1L)))))
@@ -267,7 +268,7 @@ public class AstMemberVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Create",
-                    new ClrTypeReference(typeof(void)),
+                    TypeReference.To(typeof(void)),
                     Body: new Block([new Variable("f"), new Assignment(new Variable("f"), LambdaArgument())]))
             ]));
         var shop = new Parameter("shop", new TypeReference("Sample.Shop"));
@@ -282,17 +283,17 @@ public class AstMemberVmTests {
         // must see the callee's diagnostics, not the caller's narrowed copy.
         var typeNode = new TypeDefinitionNode(
             "Shop", "Sample",
-            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))],
+            Properties: [new PropertyDefinitionNode("Count", TypeReference.To(typeof(long)))],
             Methods: [
                 new MethodDefinitionNode(
                     "Dirty",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    TypeReference.To(typeof(long)),
                     Parameters: [],
                     Body: new Member(new ThisReference(), "Count"),
                     IsStatic: true),
                 new MethodDefinitionNode(
                     "Clean",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    TypeReference.To(typeof(long)),
                     Parameters: [],
                     Body: new Invoke(new Member(new TypeReference("Sample.Shop"), "Dirty")),
                     IsStatic: true)
@@ -312,9 +313,9 @@ public class AstMemberVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Run",
-                    new ClrTypeReference(typeof(void)),
+                    TypeReference.To(typeof(void)),
                     Body: new Block([new Invoke(
-                        new Member(new ClrTypeReference(typeof(HostJobProbe)), nameof(HostJobProbe.Take)),
+                        new Member(TypeReference.To(typeof(HostJobProbe)), nameof(HostJobProbe.Take)),
                         new ThisReference(), LambdaArgument())]))
             ]));
         var shop = new Parameter("shop", new TypeReference("Sample.Shop"));

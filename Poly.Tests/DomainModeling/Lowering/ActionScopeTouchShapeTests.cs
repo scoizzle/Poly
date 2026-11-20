@@ -1,14 +1,10 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Sqlite;
-using Poly.Runtime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -244,8 +240,8 @@ public class ActionScopeTouchShapeTests {
     };
 
     private static bool IsTouchOfThis(Node node) =>
-        node is Invoke { Delegate: Member { MemberName: "Touch", Value: ClrTypeReference { RuntimeType: var type } }, Arguments: [ThisReference] }
-        && type == typeof(ActionScope);
+        node is Invoke { Delegate: Member { MemberName: "Touch", Value: var receiver }, Arguments: [ThisReference] }
+        && receiver.Denotes(typeof(ActionScope));
 
     /// <summary>Every method that writes <c>this</c> before (or without) touching it, as <c>Type.Method</c>.</summary>
     internal static List<string> Violations(IEnumerable<TypeDefinitionNode> types) {
@@ -333,7 +329,7 @@ public class ActionScopeTouchShapeTests {
 
     [Test]
     public async Task Tripwire_WhenAMethodWritesAPeerOrThroughAnAlias_NamesIt() {
-        static MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
+        static MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(TypeReference.To(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
         var peer = Method("PeerWrite", new Assignment(new Member(new Parameter("peer"), "X"), new Constant(1)));
         var alias = Method("AliasWrite", new Block([
             new Assignment(new Variable("self"), new ThisReference()),

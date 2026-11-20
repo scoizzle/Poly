@@ -993,9 +993,7 @@ public static partial class AbiEmitter {
         // spells IEnumerable<T> as a concrete List<T>.
         if (method.DefinitionNode.ReturnType is NamedTypeReference { TypeArguments: { Count: 1 } args } named
             && named.FullName is "IEnumerable" or "System.Collections.Generic.IEnumerable") {
-            var element = args[0] is PrimitiveTypeReference { IsNullable: false } primitive
-                ? primitive.PrimitiveId.GetClrType()
-                : ctx.Analysis?.GetResolvedType(args[0])?.GetRuntimeType();
+            var element = (args[0] is TypeDefinitionReference stated ? stated.TypeDefinition : ctx.Analysis?.GetResolvedType(args[0]))?.GetRuntimeType();
             if (element is not null)
                 return element;
         }
@@ -1169,14 +1167,15 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>
-    /// True when <paramref name="body"/> is one call (or return of a call) on a CLR
-    /// type's static member, as in <c>{ return Ops.Job(this, a); }</c>.
+    /// True when <paramref name="body"/> is one call (or return of a call) on a type's
+    /// static member, as in <c>{ return Ops.Job(this, a); }</c>. A type node names the
+    /// receiver, so any reference shape counts: a resolved definition, a name, or a primitive.
     /// </summary>
     private static bool ForwardsToClrStatic(Node body) {
         var statement = body is Block { Nodes.Count: 1 } block ? block.Nodes[0] : body;
         if (statement is Return { Value: { } value })
             statement = value;
-        return statement is Invoke { Delegate: Member { Value: ClrTypeReference } };
+        return statement is Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference } };
     }
 
     /// <summary>The caller's compilation-unit analysis, narrowed to diagnostics

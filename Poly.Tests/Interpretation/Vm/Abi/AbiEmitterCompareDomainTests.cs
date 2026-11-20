@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.CSharp;
 
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
@@ -539,7 +540,7 @@ public class AbiEmitterCompareDomainTests {
         await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
     }
 
-    private static ITypeDefinitionProvider StampType() {
+    private static ITypeSource StampType() {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, new TypeDefinitionNode(
@@ -553,10 +554,10 @@ public class AbiEmitterCompareDomainTests {
                 Stamp("Left", TypeReference.To<int>(), new Constant(0), 1L),
                 Stamp("Right", TypeReference.To<decimal>(), new Constant(0m), 2L),
             ]));
-        return context.TypeDefinitions;
+        return context.Declarations();
     }
 
-    private static MethodDefinitionNode Stamp(string name, TypeReference returns, Node value, long mark) =>
+    private static MethodDefinitionNode Stamp(string name, Node returns, Node value, long mark) =>
         new(
             name,
             returns,
@@ -661,8 +662,8 @@ internal static class EnumComparisonOracle {
     }
 
     private static Node Side(Type type, string side, string name) => side switch {
-        "E" => new Parameter(name, new ClrTypeReference(type)),
-        "E?" => new Parameter(name, new OptionalTypeReference(new ClrTypeReference(type))),
+        "E" => new Parameter(name, TypeReference.To(type)),
+        "E?" => new Parameter(name, new OptionalTypeReference(TypeReference.To(type))),
         "null" => new Constant(null),
         _ => new Constant(Enum.Parse(type, side))
     };

@@ -1,12 +1,11 @@
 using Poly.Interpretation;
-using Poly.Introspection;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
-/// The two node-level surface behaviours that outlived the hand-kept inventory: a
-/// An empty block is a no-op statement and rejected as a value, and a
-/// <see cref="ClrTypeReference"/> is not a VM value. Which producer honours which kind is
+/// The two node-level surface behaviours that outlived the hand-kept inventory: an empty block
+/// is a no-op statement and rejected as a value, and a type reference is not a VM value. Which producer honours which kind is
 /// <see cref="NodeFacts"/>'s question, checked by <see cref="NodeFactsTotalityTests"/>.
 /// </summary>
 public class LanguageSurfaceTests {
@@ -19,8 +18,8 @@ public class LanguageSurfaceTests {
     }
 
     [Test]
-    public async Task ClrTypeReference_AsValue_CompileRejects() {
-        await Assert.That(() => Interpreter.Compile(new ClrTypeReference(typeof(string))))
+    public async Task TypeReference_AsValue_CompileRejects() {
+        await Assert.That(() => Interpreter.Compile(TypeReference.To(typeof(string))))
             .Throws<InvalidOperationException>();
     }
 }

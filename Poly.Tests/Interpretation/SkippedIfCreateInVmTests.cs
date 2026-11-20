@@ -1,11 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
-using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm.Abi;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -90,10 +86,10 @@ public class SkippedIfCreateInVmTests {
         var outOfRange = McpTestTools.Surface.Create(sessionId, "Meter", """{"Rate":1e30}""");
         await Assert.That(outOfRange.Ok).IsFalse();
 
-        await Assert.That(DictionaryBackedValue.CoerceReadValue(1.0d, Poly.Introspection.PrimitiveType.Int64)).IsEqualTo(1L);
-        await Assert.That(DictionaryBackedValue.CoerceReadValue(1.0m, Poly.Introspection.PrimitiveType.Int64)).IsEqualTo(1L);
+        await Assert.That(DictionaryBackedValue.CoerceReadValue(1.0d, typeof(long))).IsEqualTo(1L);
+        await Assert.That(DictionaryBackedValue.CoerceReadValue(1.0m, typeof(long))).IsEqualTo(1L);
         var fractional = Assert.Throws<InvalidOperationException>(
-            () => DictionaryBackedValue.CoerceReadValue(0.25d, Poly.Introspection.PrimitiveType.Int64));
+            () => DictionaryBackedValue.CoerceReadValue(0.25d, typeof(long)));
         await Assert.That(fractional!.Message).Contains("Number is integral");
         await Assert.That(fractional.Message).Contains("Decimal");
     }

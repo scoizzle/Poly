@@ -499,5 +499,5 @@ internal class Student : Poly.Runtime.IActionScoped
             this._enrollments.Add(__item8);
         }
     }
-    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Student", "Email", email);
+    public static bool ExistsWithEmail(Poly.Runtime.IStoragePort db, string email) => db.Exists("Student", "Email", email);
 }

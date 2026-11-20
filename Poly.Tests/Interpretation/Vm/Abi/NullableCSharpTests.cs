@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
@@ -21,11 +22,11 @@ public class NullableCSharpTests {
         return exec.RawValue;
     }
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeSource Analyze(TypeDefinitionNode typeNode) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var context = AnalysisContext.CreateDefault();
         analyzer.Analyze(context, typeNode);
-        return context.TypeDefinitions;
+        return context.Declarations();
     }
 
     private enum Color { Red = 1, Blue = 2 }
@@ -152,7 +153,7 @@ public class NullableCSharpTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Probe",
-                    new PrimitiveTypeReference(PrimitiveType.Boolean),
+                    TypeReference.To(typeof(bool)),
                     Body: new Return(new Equal(
                         new Member(new ThisReference(), "Limit"), new Constant(null))))
             ]));

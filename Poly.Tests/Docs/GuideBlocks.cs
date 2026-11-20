@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 
 using Poly.Compile;
-using Poly.DomainModeling.Compile;
 using Poly.Packs.Product;
 
 namespace Poly.Tests.Docs;

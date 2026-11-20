@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using Poly.Compile;
-using Poly.DomainModeling.Language;
 using Poly.Grammar;
 using Poly.Packs.Product;
 using Poly.Tests.Polyc;

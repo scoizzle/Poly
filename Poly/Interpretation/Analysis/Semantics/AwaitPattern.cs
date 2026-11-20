@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
@@ -114,7 +113,7 @@ internal static class AwaitPattern {
     private static ClrMethod? ParameterlessInstance(ITypeDefinition type, string name) =>
         type.Methods
             .WithName(name)
-            .WithParameterTypes()
+            .WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [])
             .OfType<ClrMethod>()
             .FirstOrDefault(method => !method.MethodInfo.IsStatic);
 

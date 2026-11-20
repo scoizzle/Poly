@@ -1,5 +1,4 @@
 using Poly.Benchmarks;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Docs;
 

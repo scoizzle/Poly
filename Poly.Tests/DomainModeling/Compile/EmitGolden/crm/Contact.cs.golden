@@ -178,5 +178,5 @@ internal class Contact : Poly.Runtime.IActionScoped
         this.Account = (Account?)__saved[2]!;
         this.CurrentStage = (ContactStage)__saved[3]!;
     }
-    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Contact", "Email", email);
+    public static bool ExistsWithEmail(Poly.Runtime.IStoragePort db, string email) => db.Exists("Contact", "Email", email);
 }

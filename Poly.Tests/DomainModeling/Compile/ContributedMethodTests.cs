@@ -1,15 +1,9 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
-using Poly.DomainModeling.Runtime;
-using Poly.DslCompiler;
+using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
@@ -260,8 +254,8 @@ public class ContributedMethodTests {
         var unit = new DbContextGenerator(domain, storage, implementsStoragePort: true)
             .GenerateCompilationUnit();
         var context = unit.FindType("LabDbContext")!;
-        var contract = context.Interfaces!.OfType<ClrTypeReference>().Single();
-        await Assert.That(contract.RuntimeType).IsEqualTo(typeof(IStoragePort));
+        var contract = context.Interfaces!.Single();
+        await Assert.That(contract.Denotes(typeof(IStoragePort))).IsTrue();
 
         var exists = context.FindMethod("Exists")!;
         await Assert.That(exists.Body).IsNotNull();
@@ -532,8 +526,8 @@ public class ContributedMethodTests {
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var storage = _requireStorage ? request.RequireStorage() : null;
-            var dbType = new ClrTypeReference(typeof(IStoragePort));
-            var text = new ClrTypeReference(typeof(string));
+            var dbType = TypeReference.To(typeof(IStoragePort));
+            var text = TypeReference.To(typeof(string));
             var existsDb = new Parameter("db", dbType);
             var existsCode = new Parameter("code", text);
             var methodName = "ExistsWith" + request.Property.Name;
@@ -541,7 +535,7 @@ public class ContributedMethodTests {
             var propertyName = request.Property.Name;
             var exists = new MethodDefinitionNode(
                 methodName,
-                new ClrTypeReference(typeof(bool)),
+                TypeReference.To(typeof(bool)),
                 Parameters: [existsDb, existsCode],
                 Body: new Block([
                     new Return(new Invoke(
@@ -604,7 +598,7 @@ public class ContributedMethodTests {
         public bool Applies(Constraint constraint) => constraint is RangeConstraint;
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
-            var scale = new ClrTypeReference(typeof(int));
+            var scale = TypeReference.To(typeof(int));
             var parameter = new Parameter("scale", scale);
             return new ConstraintContribution(
                 LibraryId,
@@ -674,11 +668,11 @@ public class ContributedMethodTests {
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var type = request.Property.Name == "Code"
-                ? new ClrTypeReference(typeof(IStoragePort))
-                : new ClrTypeReference(typeof(string));
+                ? TypeReference.To(typeof(IStoragePort))
+                : TypeReference.To(typeof(string));
             var db = new Parameter("db", type);
             var value = request.ParameterOn("Create")
-                ?? new Parameter("value", new ClrTypeReference(typeof(string)));
+                ?? new Parameter("value", TypeReference.To(typeof(string)));
             return new ConstraintContribution(
                 LibraryId,
                 request.Entity.Name,
@@ -709,7 +703,7 @@ public class ContributedMethodTests {
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var method = new MethodDefinitionNode(
                 "ExistsWithAnything",
-                new ClrTypeReference(typeof(bool)),
+                TypeReference.To(typeof(bool)),
                 Parameters: [],
                 Body: new Block([new Return(new Constant(true))]),
                 IsStatic: true);
@@ -722,5 +716,45 @@ public class ContributedMethodTests {
                 [],
                 [method, method]);
         }
+    }
+
+    [Test]
+    [Arguments(typeof(string))]
+    [Arguments(typeof(int))]
+    [Arguments(typeof(object))]
+    public async Task Threading_ACallOnAGroundType_NamedLikeAThreadedMethod_IsRefused(Type ground) {
+        // A ground type (`string`, `int`, `object`) is never a module type, so a threaded method's name called on one
+        // cannot be threaded through it: refused, not silently left without its slot.
+        var missing = typeof(ContributedMethods).GetMethod("Missing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var parameters = missing.GetParameters();
+        TypeDefinitionNode[] module = [new("Host")];
+        var call = new Invoke(new Member(TypeReference.To(ground), "Concat"));
+        object?[] arguments = [
+            call, 0, "Run", module, new List<List<MethodDefinitionNode>> { new() },
+            Activator.CreateInstance(parameters[5].ParameterType), new HashSet<string>(StringComparer.Ordinal) { "Concat" }
+        ];
+
+        var thrown = Assert.Throws<System.Reflection.TargetInvocationException>(() => missing.Invoke(null, arguments));
+
+        await Assert.That(thrown!.InnerException).IsTypeOf<InvalidOperationException>();
+        await Assert.That(thrown.InnerException!.Message).Contains("Cannot thread 'Concat'");
+    }
+
+    [Test]
+    public async Task Threading_ACallOnANonPrimitiveClrType_NamedLikeAThreadedMethod_LooksUpTheModuleByName() {
+        // A CLR type that is not one of the host's primitives is looked up as a module type by its name (#998 T8 pin):
+        // the module declares no such type, so nothing is threaded and nothing is refused.
+        var missing = typeof(ContributedMethods).GetMethod("Missing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var parameters = missing.GetParameters();
+        TypeDefinitionNode[] module = [new("Host")];
+        var call = new Invoke(new Member(TypeReference.To(typeof(Uri)), "Concat"));
+        object?[] arguments = [
+            call, 0, "Run", module, new List<List<MethodDefinitionNode>> { new() },
+            Activator.CreateInstance(parameters[5].ParameterType), new HashSet<string>(StringComparer.Ordinal) { "Concat" }
+        ];
+
+        var result = (System.Collections.ICollection)missing.Invoke(null, arguments)!;
+
+        await Assert.That(result.Count).IsEqualTo(0);
     }
 }

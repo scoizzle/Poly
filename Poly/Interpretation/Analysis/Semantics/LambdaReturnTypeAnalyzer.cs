@@ -1,3 +1,5 @@
+using Poly.Introspection.CommonLanguageRuntime;
+
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {

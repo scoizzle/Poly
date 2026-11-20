@@ -113,7 +113,7 @@ All in `Poly/Ast/Nodes/` (some in `TypeDefinitions/` subdirectory):
 | `TypeReference(string TypeName)` | Base type reference by name string |
 | `TypeDefinitionReference(ITypeDefinition)` | Already-resolved type definition |
 | `ClrTypeReference(Type RuntimeType)` | Direct CLR System.Type reference |
-| `PrimitiveTypeReference(PrimitiveType)` | Primitive type by enum |
+| `TypeDefinitionReference(ITypeDefinition)` | A type stated by its definition (a C# keyword is the C# surface's name for a CLR definition) |
 | `NamedTypeReference(string, string?)` | Named type with optional namespace + generics |
 | `CollectionTypeReference(ElementType, CollectionKind)` | Collection type (Array/List/Set) |
 | `OptionalTypeReference(InnerType)` | Nullable/optional wrapper |
@@ -397,7 +397,7 @@ A provider-based type abstraction decoupled from CLR reflection. Consumers work 
 | Interface | Purpose |
 |---|---|
 | `ITypeDefinition` | A type with introspectable members |
-| `ITypeDefinitionProvider` | Resolves types by name, CLR Type, or PrimitiveType |
+| `ITypeSystem` | Holds a set of definitions (`Sources`), resolves qualified names, binds its words and decides its rules (#998) |
 | `ITypeMember` | Base for all type members |
 | `ITypeMethod` | A method with parameters |
 | `ITypeConstructor` | A constructor |

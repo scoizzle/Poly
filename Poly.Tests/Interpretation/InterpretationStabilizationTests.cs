@@ -1,8 +1,8 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
@@ -143,7 +143,7 @@ public class InterpretationStabilizationTests {
         var target = new TypeDefinitionNode("Target",
             Properties: [
                 new PropertyDefinitionNode("Age",
-                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    TypeReference.To(typeof(long)),
                     Getter: new PropertyGetterDefinitionNode())
             ]);
         var source = new TypeDefinitionNode("Source",
@@ -156,8 +156,8 @@ public class InterpretationStabilizationTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, target);
         analyzer.Analyze(ctx, source);
-        var items = ctx.TypeDefinitions.GetTypeDefinition("Source")!.Properties.Single(p => p.Name == "Items");
-        var element = items.MemberTypeDefinition.GetElementType();
+        var items = ctx.TypeSystem.Resolve("Source")!.Properties.Single(p => p.Name == "Items");
+        var element = items.MemberTypeDefinition.GetElementType(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(element).IsNotNull();
         await Assert.That(element!.Name).IsEqualTo("Target");
     }
@@ -173,32 +173,32 @@ public class InterpretationStabilizationTests {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, type);
-        var prop = ctx.TypeDefinitions.GetTypeDefinition("Holder")!.Properties.Single();
+        var prop = ctx.TypeSystem.Resolve("Holder")!.Properties.Single();
         await Assert.That(() => _ = prop.MemberTypeDefinition)
             .Throws<InvalidOperationException>();
     }
 
-    private static ITypeDefinitionProvider AnalyzePerson() => Analyze(PersonTypeDef());
+    private static ITypeSource AnalyzePerson() => Analyze(PersonTypeDef());
 
     private static TypeDefinitionNode PersonTypeDef() => new(
         "Person",
         Properties: [
             new PropertyDefinitionNode("Age",
-                new PrimitiveTypeReference(PrimitiveType.Int64),
+                TypeReference.To(typeof(long)),
                 Getter: new PropertyGetterDefinitionNode()),
             new PropertyDefinitionNode("Name",
-                new PrimitiveTypeReference(PrimitiveType.String),
+                TypeReference.To(typeof(string)),
                 Getter: new PropertyGetterDefinitionNode()),
             new PropertyDefinitionNode("Ref",
-                new PrimitiveTypeReference(PrimitiveType.Structure),
+                TypeReference.To(typeof(object)),
                 Getter: new PropertyGetterDefinitionNode())
         ]);
 
-    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode node) {
+    private static ITypeSource Analyze(TypeDefinitionNode node) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, node);
-        return ctx.TypeDefinitions;
+        return ctx.Declarations();
     }
 
     [Test]
@@ -303,7 +303,7 @@ public class InterpretationStabilizationTests {
 
     [Test]
     public async Task CompileChecked_RootThisReference_DoesNotThrow() {
-        var program = Interpreter.CompileChecked(new ThisReference(), AnalysisContext.CreateDefault().TypeDefinitions);
+        var program = Interpreter.CompileChecked(new ThisReference(), ClrTypeDefinitionRegistry.Shared);
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.RawValue).IsEqualTo(0L);
     }
@@ -454,6 +454,7 @@ public class InterpretationStabilizationTests {
     public async Task StandardAnalyzer_PassNames_MatchInterpreterPipeline() {
         string[] expected = [
             TypeDefinitionNodeAnalyzer.Id,
+            UnitTypeScopeAnalyzer.Id,
             ThisReferenceContextAnalyzer.Id,
             ScopeValidator.Id,
             TypeAndMemberResolver.Id,
@@ -493,7 +494,7 @@ public class InterpretationStabilizationTests {
     private static async Task AssertSlot0(object? arg, long expectedRaw) {
         var program = Interpreter.Compile(arg is null
             ? new ThisReference()
-            : new Parameter("p", new ClrTypeReference(arg.GetType())));
+            : new Parameter("p", TypeReference.To(arg.GetType())));
         using var exec = Interpreter.Execute(program, s => s.SetArgs(arg));
         await Assert.That(exec.RawValue).IsEqualTo(expectedRaw);
     }

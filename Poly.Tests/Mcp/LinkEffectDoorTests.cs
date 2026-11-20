@@ -3,10 +3,8 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Poly.Compile;
-using Poly.DomainModeling.Compile;
 using Poly.Mcp.Surface;
 using Poly.Packs.Product;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 

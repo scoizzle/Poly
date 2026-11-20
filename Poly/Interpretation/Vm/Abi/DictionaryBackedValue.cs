@@ -40,7 +40,7 @@ internal static class DictionaryBackedValue {
     private static readonly MethodInfo ConvertToChar =
         Ref.Method((Expression<Func<object, char>>)(o => Convert.ToChar(o)));
     private static readonly MethodInfo GuardCompatibleInfo =
-        Ref.Method((Expression<Func<object?, PrimitiveType, object>>)((raw, t) => GuardCompatible(raw, t)));
+        Ref.Method((Expression<Func<object?, Type, object>>)((raw, t) => GuardCompatible(raw, t)));
 
     /// <summary>
     /// Value used when a dictionary key is absent and the member has no constant
@@ -53,29 +53,34 @@ internal static class DictionaryBackedValue {
         // value-type zero below would not apply and Missing cannot convert to T?.
         if (targetType.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null)
             return Expression.Constant(null, typeof(object));
-        var convert = ConvertMethod(targetType.PrimitiveType);
+        var convert = ConvertMethod(RuntimeTypeOf(targetType));
         if (convert is null || !convert.ReturnType.IsValueType)
             return Expression.Convert(Expression.Constant(System.Reflection.Missing.Value), typeof(object));
         var zero = Activator.CreateInstance(convert.ReturnType)!;
         return Expression.Convert(Expression.Constant(zero), typeof(object));
     }
 
-    private static MethodInfo? ConvertMethod(PrimitiveType? primitive) => primitive switch {
-        PrimitiveType.Int64 => ConvertToInt64,
-        PrimitiveType.Int32 => ConvertToInt32,
-        PrimitiveType.Int16 => ConvertToInt16,
-        PrimitiveType.Int8 => ConvertToSByte,
-        PrimitiveType.Float64 => ConvertToDouble,
-        PrimitiveType.Float32 => ConvertToSingle,
-        PrimitiveType.Decimal => ConvertToDecimal,
-        PrimitiveType.Boolean => ConvertToBoolean,
-        PrimitiveType.String => ConvertToString,
-        PrimitiveType.Char => ConvertToChar,
+    /// <summary>The runtime type the CLR definition names; a modeled or foreign definition names none.</summary>
+    private static Type? RuntimeTypeOf(ITypeDefinition definition) =>
+        definition is ClrTypeDefinition clr ? clr.RuntimeType : null;
+
+    private static MethodInfo? ConvertMethod(Type? target) => target switch {
+        Type t when t == typeof(long) => ConvertToInt64,
+        Type t when t == typeof(int) => ConvertToInt32,
+        Type t when t == typeof(short) => ConvertToInt16,
+        Type t when t == typeof(sbyte) => ConvertToSByte,
+        Type t when t == typeof(double) => ConvertToDouble,
+        Type t when t == typeof(float) => ConvertToSingle,
+        Type t when t == typeof(decimal) => ConvertToDecimal,
+        Type t when t == typeof(bool) => ConvertToBoolean,
+        Type t when t == typeof(string) => ConvertToString,
+        Type t when t == typeof(char) => ConvertToChar,
         _ => null
     };
 
     internal static Expression CoerceRead(Expression dictValue, ITypeDefinition targetType) {
-        var convertMethod = ConvertMethod(targetType.PrimitiveType);
+        var target = RuntimeTypeOf(targetType);
+        var convertMethod = ConvertMethod(target);
         if (convertMethod is not null) {
             // Fail loud on fundamentally wrong-typed raw values instead of silently
             // coercing (Convert.ToInt64(true) → 1, Convert.ToString(null) → "", etc.):
@@ -84,7 +89,7 @@ internal static class DictionaryBackedValue {
             var guarded = Expression.Call(
                 GuardCompatibleInfo,
                 Expression.Convert(dictValue, typeof(object)),
-                Expression.Constant(targetType.PrimitiveType!.Value));
+                Expression.Constant(target, typeof(Type)));
             return Expression.Convert(
                 Expression.Call(null, convertMethod, guarded),
                 typeof(object));
@@ -105,60 +110,59 @@ internal static class DictionaryBackedValue {
     /// values that Convert.* would silently mangle (bool/object → number, null → default),
     /// so the runtime fails loud instead of storing a corrupted value.
     /// </summary>
-    internal static object GuardCompatible(object? raw, PrimitiveType target) {
+    internal static object GuardCompatible(object? raw, Type target) {
         if (raw is null) return null!;
-        switch (target) {
-            case PrimitiveType.Int64 or PrimitiveType.Int32 or PrimitiveType.Int16 or PrimitiveType.Int8
-                or PrimitiveType.Float64 or PrimitiveType.Float32 or PrimitiveType.Decimal:
-                if (raw is bool)
-                    throw new InvalidOperationException(
-                        $"Cannot store a Boolean value in a numeric property (got '{raw}').");
-                if (raw is not (long or int or short or byte or sbyte or ushort or uint or ulong or double or float or decimal))
-                    throw new InvalidOperationException(
-                        $"Cannot store a value of type '{raw.GetType().Name}' in a numeric property.");
-                // Number is long. Convert.ToInt64 would truncate 0.25 to 0.
-                if (target == PrimitiveType.Int64 && raw is double or float or decimal && !IsIntegralNumber(raw))
-                    throw new InvalidOperationException(
-                        $"Number is integral; '{raw}' is not a valid Number. Use Decimal.");
-                return raw;
-            case PrimitiveType.Boolean:
-                if (raw is not bool)
-                    throw new InvalidOperationException(
-                        $"Cannot store a value of type '{raw.GetType().Name}' in a Boolean property.");
-                return raw;
-            case PrimitiveType.String:
-                if (raw is not string)
-                    throw new InvalidOperationException(
-                        $"Cannot store a value of type '{raw.GetType().Name}' in a Text property.");
-                return raw;
-            case PrimitiveType.Char:
-                if (raw is not char and not string)
-                    throw new InvalidOperationException(
-                        $"Cannot store a value of type '{raw.GetType().Name}' in a character property.");
-                return raw;
-            default:
-                return raw;
+        if (target == typeof(long) || target == typeof(int) || target == typeof(short) || target == typeof(sbyte)
+            || target == typeof(double) || target == typeof(float) || target == typeof(decimal)) {
+            if (raw is bool)
+                throw new InvalidOperationException(
+                    $"Cannot store a Boolean value in a numeric property (got '{raw}').");
+            if (raw is not (long or int or short or byte or sbyte or ushort or uint or ulong or double or float or decimal))
+                throw new InvalidOperationException(
+                    $"Cannot store a value of type '{raw.GetType().Name}' in a numeric property.");
+            // Number is long. Convert.ToInt64 would truncate 0.25 to 0.
+            if (target == typeof(long) && raw is double or float or decimal && !IsIntegralNumber(raw))
+                throw new InvalidOperationException(
+                    $"Number is integral; '{raw}' is not a valid Number. Use Decimal.");
+            return raw;
         }
+        if (target == typeof(bool)) {
+            if (raw is not bool)
+                throw new InvalidOperationException(
+                    $"Cannot store a value of type '{raw.GetType().Name}' in a Boolean property.");
+            return raw;
+        }
+        if (target == typeof(string)) {
+            if (raw is not string)
+                throw new InvalidOperationException(
+                    $"Cannot store a value of type '{raw.GetType().Name}' in a Text property.");
+            return raw;
+        }
+        if (target == typeof(char)) {
+            if (raw is not char and not string)
+                throw new InvalidOperationException(
+                    $"Cannot store a value of type '{raw.GetType().Name}' in a character property.");
+            return raw;
+        }
+        return raw;
     }
 
     /// <summary>
     /// Runtime counterpart of <see cref="CoerceRead"/>: GuardCompatible, then
     /// the same Convert.* as the member-read expression.
     /// </summary>
-    internal static object? CoerceReadValue(object? raw, PrimitiveType target) {
+    internal static object? CoerceReadValue(object? raw, Type target) {
         var guarded = GuardCompatible(raw, target);
-        return target switch {
-            PrimitiveType.Int64 => Convert.ToInt64(guarded),
-            PrimitiveType.Int32 => Convert.ToInt32(guarded),
-            PrimitiveType.Int16 => Convert.ToInt16(guarded),
-            PrimitiveType.Int8 => Convert.ToSByte(guarded),
-            PrimitiveType.Float64 => Convert.ToDouble(guarded),
-            PrimitiveType.Float32 => Convert.ToSingle(guarded),
-            PrimitiveType.Decimal => Convert.ToDecimal(guarded),
-            PrimitiveType.Boolean => Convert.ToBoolean(guarded),
-            PrimitiveType.String => Convert.ToString(guarded),
-            PrimitiveType.Char => Convert.ToChar(guarded),
-            _ => guarded
-        };
+        return target == typeof(long) ? Convert.ToInt64(guarded)
+            : target == typeof(int) ? Convert.ToInt32(guarded)
+            : target == typeof(short) ? Convert.ToInt16(guarded)
+            : target == typeof(sbyte) ? Convert.ToSByte(guarded)
+            : target == typeof(double) ? Convert.ToDouble(guarded)
+            : target == typeof(float) ? Convert.ToSingle(guarded)
+            : target == typeof(decimal) ? Convert.ToDecimal(guarded)
+            : target == typeof(bool) ? Convert.ToBoolean(guarded)
+            : target == typeof(string) ? Convert.ToString(guarded)
+            : target == typeof(char) ? Convert.ToChar(guarded)
+            : guarded;
     }
 }

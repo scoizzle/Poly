@@ -1,9 +1,6 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
-using Poly.DomainModeling.Runtime;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
@@ -87,7 +84,7 @@ public sealed partial class DomainToCSharpExporter {
     internal const string ActionBodyPrefix = "__BodyOf";
 
     private static Node ActionScopeCall(string member, params Node[] arguments) =>
-        new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), member), arguments);
+        new Invoke(new Member(TypeReference.To(typeof(ActionScope)), member), arguments);
 
     /// <summary>
     /// <c>ActionScope.Touch(this)</c>, the first statement of every mutator (L-03c): the action wrapper, a subscription
@@ -118,7 +115,7 @@ public sealed partial class DomainToCSharpExporter {
         var wrapper = new Block([
             new Assignment(scope, new TypeCast(
                 ActionScopeCall("Begin", new Constant(null)),
-                new ClrTypeReference(typeof(ActionScopeToken)))),
+                TypeReference.To(typeof(ActionScopeToken)))),
             new Assignment(done, new Constant(false)),
             new TryCatchFinally(
                 new Block([

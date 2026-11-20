@@ -1,6 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 
@@ -41,7 +41,7 @@ public class SuspendResumeVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Tick",
-                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+                    TypeReference.To(typeof(long)),
                     Body: new Block([
                         new SuspendNode(new Constant(0L), "mid"),
                         new Constant(7L)
@@ -53,7 +53,7 @@ public class SuspendResumeVmTests {
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Tick"));
 
-        await Assert.That(() => Interpreter.Compile(invoke, ctx.TypeDefinitions))
+        await Assert.That(() => Interpreter.Compile(invoke, ctx.Declarations()))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("SuspendNode");
     }

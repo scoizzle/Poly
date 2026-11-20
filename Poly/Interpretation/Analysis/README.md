@@ -7,9 +7,10 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 
 | Pass | Extension Method | Produces Metadata | Diagnostics |
 |------|-----------------|-------------------|-------------|
-| `TypeDefinitionNodeAnalyzer` | `.UseTypeDefinitionNodeAnalyzer()` | `TypeDefinitionMetadata`; also an `ITypeDefinitionProvider` | (none; member-type miss is fail-closed. Generic parameters and `NamedTypeReference` type arguments resolve.) |
+| `TypeDefinitionNodeAnalyzer` | `.UseTypeDefinitionNodeAnalyzer()` | `TypeDefinitionMetadata`; registers the unit's declarations (`AstTypeRegistry`) as one of the analysis layer's own sources | (none; member-type miss is fail-closed. Generic parameters and `NamedTypeReference` type arguments resolve.) |
+| `UnitTypeScopeAnalyzer` | `.UseUnitTypeScope()` | `UnitTypeScope`: the language's implicit usings (`IImplicitUsings`; C#'s are the SDK's) and the unit's `using` directives, a source beneath the declarations | ambiguous bare name |
 | `ThisReferenceContextAnalyzer` | `.UseThisReferenceContext()` | `this` resolved type on `ThisReference` | `TH0001` (static body) |
-| `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (bindings, parameter bindings, block scopes, writes, escapes, captures), `CatchBindingMetadata`, `LambdaCaptureMetadata`; resolves dotted CLR type names against the scope | Scoping errors |
+| `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (bindings, parameter bindings, block scopes, writes, escapes, captures), `CatchBindingMetadata`, `LambdaCaptureMetadata`; resolves dotted CLR type names and binds a short type receiver (`Math.Abs`) against the scope, never over a live declaration or a member in scope in an enclosing type (declared, a primary-constructor parameter, or inherited) | Scoping errors |
 | `TypeAndMemberResolver` | `.UseTypeAndMemberResolver()` | Resolved types (projected through bindings) + resolved members | Structural failures (missing members) |
 | `SideEffectAnalyzer` | `.UseSideEffectAnalysis()` | `SideEffectMetadata` (`NodeEffect` flags: state effects and `Throws`, composed post-order, a catch-all absorbing the try block's throw), `AssignmentValueUsedMetadata`; contributes the `NoObservableEffect` elision reason for a non-final statement with no effect at all | `DEAD_CODE_ELIDABLE` |
 | `JumpTargetAnalyzer` | `.UseJumpTargetResolution()` | `ResolvedJumpTarget` (break/continue/goto targets) | `JT0001`-`JT0004` |

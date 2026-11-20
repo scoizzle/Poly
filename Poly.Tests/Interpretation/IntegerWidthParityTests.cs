@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 
@@ -95,7 +96,7 @@ public class IntegerWidthParityTests {
         var x = new Parameter("x", TypeReference.To<int>());
         var lambda = new Lambda([x], new UnaryMinus(x));
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(
-            new Member(new ClrTypeReference(typeof(NegProbe)), nameof(NegProbe.ApplyInt)),
+            new Member(TypeReference.To(typeof(NegProbe)), nameof(NegProbe.ApplyInt)),
             lambda, new Constant(int.MinValue))));
         int operand = int.MinValue;
         await Assert.That(exec.GetValue<int>()).IsEqualTo(unchecked(-operand));

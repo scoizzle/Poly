@@ -1,6 +1,5 @@
 using System.Reflection;
 
-using Poly.DomainModeling.Language;
 using Poly.Grammar;
 using Poly.Interpretation.CSharp;
 

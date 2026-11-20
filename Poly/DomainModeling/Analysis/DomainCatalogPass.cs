@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;

@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling.Compile;

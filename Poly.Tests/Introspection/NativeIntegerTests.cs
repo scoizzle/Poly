@@ -1,21 +1,13 @@
 using System.Globalization;
 using System.Reflection;
-using System.Runtime.Loader;
-using System.Text;
 
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
-
-using RoslynSeverity = Microsoft.CodeAnalysis.DiagnosticSeverity;
 
 namespace Poly.Tests.Introspection;
 
@@ -171,8 +163,8 @@ internal static class NativeIntegerGrid {
 
     public static Cell Evaluate(OperatorKind kind, Type left, Type? right) {
         var oracle = CSharpOperatorOracle.Answer(kind, left, right);
-        var a = new Parameter("a", new ClrTypeReference(left));
-        var b = right is null ? null : new Parameter("b", new ClrTypeReference(right));
+        var a = new Parameter("a", TypeReference.To(left));
+        var b = right is null ? null : new Parameter("b", TypeReference.To(right));
         var node = Build(kind, a, b);
         AnalysisResult analysis;
         try {
@@ -240,7 +232,7 @@ internal static class NativeIntegerGrid {
 public class NativeIntegerTests {
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    private static Parameter Param(string name, Type type) => new(name, new ClrTypeReference(type));
+    private static Parameter Param(string name, Type type) => new(name, TypeReference.To(type));
 
     private static string PreT18aPath() =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "Introspection", "NativeIntegerPreT18a.txt");
@@ -326,13 +318,15 @@ public class NativeIntegerTests {
     [Test]
     public async Task Provider_NintPlusInt_IsTheBuiltInOperator_AndNintIsAPrimitive() {
         var nint = Clr(typeof(nint));
-        var resolution = nint.GetOperator(OperatorKind.Add, Clr(typeof(int)));
+        var resolution = nint.GetOperator(OperatorKind.Add, Clr(typeof(int)), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         await Assert.That(resolution is { Method: null }).IsTrue();
         await Assert.That(resolution!.ResultTypeDefinition).IsSameReferenceAs(nint);
         await Assert.That(resolution.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, nint))).IsTrue();
-        await Assert.That(nint.PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nint");
-        await Assert.That(Clr(typeof(nuint)).PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nuint");
-        await Assert.That(nint.Kind).IsEqualTo(Poly.Introspection.TypeKind.Primitive);
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(nint)).IsEqualTo("nint");
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(Clr(typeof(nuint)))).IsEqualTo("nuint");
+        await Assert.That(nint.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(nint));
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.SimpleTypeOf(nint))
+            .IsEqualTo(Poly.Interpretation.CSharp.SimpleType.NInt);
         foreach (var kind in Enum.GetValues<OperatorKind>())
             await Assert.That(nint.Operators.Where(o => o.Kind == kind).Any(static o => o.Method is not null)).IsFalse().Because($"IntPtr's reflected {kind} stands down");
     }
@@ -343,13 +337,13 @@ public class NativeIntegerTests {
     /// </summary>
     [Test]
     public async Task Provider_NintToLongIsImplicitBuiltIn_IntFromNintKeepsTheDeclaredExplicit() {
-        var toLong = Clr(typeof(long)).ResolveConversionFrom(Clr(typeof(nint)));
+        var toLong = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(nint)), Clr(typeof(long)));
         await Assert.That(toLong?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(toLong!.Method).IsNull();
-        var toInt = Clr(typeof(int)).ResolveConversionFrom(Clr(typeof(nint)));
+        var toInt = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(nint)), Clr(typeof(int)));
         await Assert.That(toInt?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
         await Assert.That(toInt!.Method?.Name).IsEqualTo("op_Explicit");
-        var toDecimal = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(nuint)));
+        var toDecimal = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(typeof(nuint)), Clr(typeof(decimal)));
         await Assert.That(toDecimal?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
     }
 
@@ -363,7 +357,7 @@ public class NativeIntegerTests {
             var expected = CSharpOperatorOracle.Conversion(from, to);
             implicitCount += expected is ConversionOperatorKind.Implicit ? 1 : 0;
             explicitCount += expected is ConversionOperatorKind.Explicit ? 1 : 0;
-            var actual = Clr(to).ResolveConversionFrom(Clr(from));
+            var actual = Poly.Interpretation.CSharp.CSharpTypeSystem.Shared.Conversion(Clr(from), Clr(to));
             if (actual?.Kind != expected)
                 mismatches.Add($"{CSharpOperatorOracle.Keyword(from)} -> {CSharpOperatorOracle.Keyword(to)}: C# {expected?.ToString() ?? "none"}, provider {actual?.Kind.ToString() ?? "none"}");
             else if (actual is { Kind: ConversionOperatorKind.Implicit, Method: not null })
@@ -388,16 +382,17 @@ public class NativeIntegerTests {
             var oracle = CSharpOperatorOracle.Answer(kind, left, right);
             // Poly's shift-count policy (C# rejects, Poly defines): Roslyn rejects the cell, and the provider types it as C#
             // types the shift by an int count.
-            if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight && right!.GetPrimitiveType() is { } count
-                && ClrBuiltInRules.IsPolicyShiftCount(count) && IntCountShift(kind, left) is { } shifted) {
+            if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
+                && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(right))
+                && IntCountShift(kind, left) is { } shifted) {
                 policy++;
-                var typed = Clr(left).GetOperator(kind, Clr(right!))?.ResultTypeDefinition.GetRuntimeType();
+                var typed = Clr(left).GetOperator(kind, Clr(right!), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared)?.ResultTypeDefinition.GetRuntimeType();
                 if (oracle.Defined || typed != shifted)
                     mismatches.Add($"{CSharpOperatorOracle.Key(kind, left, right)}: policy, C# {(oracle.Defined ? "defines it" : oracle.Errors)}, provider {(typed is null ? "none" : CSharpOperatorOracle.Keyword(typed))}, int count {CSharpOperatorOracle.Keyword(shifted)}");
                 continue;
             }
             defined += oracle.Defined ? 1 : 0;
-            var resolution = Clr(left).GetOperator(kind, right is null ? null : Clr(right));
+            var resolution = Clr(left).GetOperator(kind, right is null ? null : Clr(right), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
             var actual = resolution?.ResultTypeDefinition.GetRuntimeType();
             if (actual != oracle.Type)
                 mismatches.Add($"{CSharpOperatorOracle.Key(kind, left, right)}: C# {(oracle.Defined ? CSharpOperatorOracle.Keyword(oracle.Type!) : oracle.Errors)}, provider {(actual is null ? "none" : CSharpOperatorOracle.Keyword(actual))}");
@@ -512,12 +507,10 @@ public class NativeIntegerTests {
     /// <summary>The writer prints the C# keyword for a native-integer type reference, never the enum member name.</summary>
     [Test]
     public async Task Writer_PrintsTheNativeKeyword() {
-        var primitive = typeof(nint).GetPrimitiveType();
-        await Assert.That(primitive).IsNotNull();
-        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), new PrimitiveTypeReference(primitive!.Value)));
+        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), TypeReference.To(typeof(nint))));
         await Assert.That(printed).Contains("(nint)");
         await Assert.That(printed).DoesNotContain("NInt");
-        await Assert.That(typeof(nuint).GetPrimitiveType()?.GetCSharpKeyword()).IsEqualTo("nuint");
+        await Assert.That(Poly.Interpretation.CSharp.CSharpTypeNames.SpellingOf(typeof(nuint))).IsEqualTo("nuint");
     }
 
     // ---- fix round 1: casts, assignments and constants outside operators (review F1, F4) ----
@@ -617,12 +610,12 @@ public class NativeIntegerTests {
     public async Task TypeDefinitionNode_NativeIntegerProperty_ResolvesToTheNativeType() {
         var holder = new TypeDefinitionNode("NativeHolder",
             Properties: [
-                new PropertyDefinitionNode("Signed", new PrimitiveTypeReference(typeof(nint).GetPrimitiveType()!.Value), Getter: new PropertyGetterDefinitionNode()),
-                new PropertyDefinitionNode("Unsigned", new PrimitiveTypeReference(typeof(nuint).GetPrimitiveType()!.Value), Getter: new PropertyGetterDefinitionNode())
+                new PropertyDefinitionNode("Signed", TypeReference.To(typeof(nint)), Getter: new PropertyGetterDefinitionNode()),
+                new PropertyDefinitionNode("Unsigned", TypeReference.To(typeof(nuint)), Getter: new PropertyGetterDefinitionNode())
             ]);
         var context = Poly.Analysis.AnalysisContext.CreateDefault();
         new Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer().Analyze(context, holder);
-        var properties = context.TypeDefinitions.GetTypeDefinition("NativeHolder")!.Properties.ToDictionary(static p => p.Name, static p => p.MemberTypeDefinition.GetRuntimeType());
+        var properties = context.TypeSystem.Resolve("NativeHolder")!.Properties.ToDictionary(static p => p.Name, static p => p.MemberTypeDefinition.GetRuntimeType());
         await Assert.That(properties["Signed"]).IsEqualTo(typeof(nint));
         await Assert.That(properties["Unsigned"]).IsEqualTo(typeof(nuint));
     }
@@ -686,7 +679,7 @@ internal static class NativeConversionGrid {
         public string Line => $"{Key} | {Class} | {Detail}";
     }
 
-    private static Parameter Param(string name, Type type) => new(name, new ClrTypeReference(type));
+    private static Parameter Param(string name, Type type) => new(name, TypeReference.To(type));
 
     private static string Errors(AnalysisResult analysis) =>
         string.Join("; ", analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message));
@@ -734,7 +727,7 @@ internal static class NativeConversionGrid {
     private static object[] ValuesOf(Type type) => [NativeIntegerGrid.Values[type].Stress, NativeIntegerGrid.Values[type].Plain];
 
     public static Cell EvaluateCast(Type from, Type to) {
-        var node = new TypeCast(Param("a", from), new ClrTypeReference(to));
+        var node = new TypeCast(Param("a", from), TypeReference.To(to));
         var (cls, detail) = Run(node, ValuesOf(from).Select(v => (new object?[] { v }, Expected(CSharpOperatorOracle.ConversionValue(from, to, v, implicitOnly: false)))), to);
         return new($"({CSharpOperatorOracle.Keyword(to)}){CSharpOperatorOracle.Keyword(from)}", from, to, cls, detail);
     }

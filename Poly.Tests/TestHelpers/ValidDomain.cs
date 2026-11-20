@@ -1,6 +1,4 @@
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Bootstrap;
 namespace Poly.DomainModeling;
 
 /// <summary>

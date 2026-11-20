@@ -14,10 +14,10 @@ public class EnumerableMemberExtensionsTests {
         var indexOfMembers = stringType.Methods.WithName("IndexOf");
 
         // Find overload with char parameter
-        var charVersion = indexOfMembers.WithParameterTypes([charType]).First();
+        var charVersion = indexOfMembers.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [charType]).First();
 
         // Find overload with string parameter
-        var stringVersion = indexOfMembers.WithParameterTypes([stringType]).First();
+        var stringVersion = indexOfMembers.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [stringType]).First();
 
         // Verify both exist and are different
         await Assert.That(charVersion).IsNotNull();
@@ -34,7 +34,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Substring");
 
         // String.Substring(int) - need to pass ITypeDefinition, not System.Type
-        var filtered = members.WithParameterTypes([intType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [intType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -48,7 +48,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Substring");
 
         // String.Substring(int, int) overload
-        var filteredMethods = members.WithParameterTypes([intType, intType]);
+        var filteredMethods = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [intType, intType]);
         await Assert.That(filteredMethods).HasSingleItem();
         var filtered = filteredMethods.First();
 
@@ -64,7 +64,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Substring");
 
         // Try to find with non-existent parameter signature
-        var filtered = members.WithParameterTypes([doubleType]);
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [doubleType]);
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered).IsEmpty();
@@ -77,7 +77,7 @@ public class EnumerableMemberExtensionsTests {
         var members = intType.Fields.WithName("MaxValue");
 
         // MaxValue is a field, not a method, so filtering by parameters returns empty
-        var filtered = members.WithParameterTypes([intType]);
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [intType]);
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered).IsEmpty();
@@ -91,7 +91,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Properties.WithName("Length");
 
         // Length is a property, not a method, so filtering by parameters returns empty
-        var filtered = members.WithParameterTypes([intParamType]);
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [intParamType]);
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered).IsEmpty();
@@ -105,7 +105,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("IndexOf");
 
         // String.IndexOf(char)
-        var filtered = members.WithParameterTypes([charType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [charType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -120,7 +120,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("IndexOf");
 
         // String.IndexOf(string)
-        var filtered = members.WithParameterTypes([stringType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [stringType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -135,7 +135,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Contains");
 
         // String.Contains(string)
-        var filtered = members.WithParameterTypes([stringType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [stringType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -149,7 +149,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Contains");
 
         // String.Contains(string, StringComparison)
-        var filtered = members.WithParameterTypes([stringType, stringComparisonType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [stringType, stringComparisonType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(2);
@@ -162,7 +162,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Replace");
 
         // String.Replace(string, string)
-        var filtered = members.WithParameterTypes([stringType, stringType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [stringType, stringType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(2);
@@ -177,7 +177,7 @@ public class EnumerableMemberExtensionsTests {
         var members = registry.GetTypeDefinition<string>().Methods.WithName("Replace");
 
         // String.Replace(char, char)
-        var filtered = members.WithParameterTypes([charType, charType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [charType, charType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(2);
@@ -193,7 +193,7 @@ public class EnumerableMemberExtensionsTests {
         var members = listType.Methods.WithName("Add");
 
         // List<string>.Add(string)
-        var filtered = members.WithParameterTypes([stringType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [stringType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -206,7 +206,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("StartsWith");
 
         // String.StartsWith(string)
-        var filtered = members.WithParameterTypes([stringType]).First();
+        var filtered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [stringType]).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -221,8 +221,8 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("IndexOf");
 
         // Can distinguish between IndexOf(char) and IndexOf(string)
-        var charFiltered = members.WithParameterTypes([charType]).First();
-        var stringFiltered = members.WithParameterTypes([stringType]).First();
+        var charFiltered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [charType]).First();
+        var stringFiltered = members.WithParameterTypes(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, [stringType]).First();
 
         await Assert.That(charFiltered).IsNotNull();
         await Assert.That(stringFiltered).IsNotNull();

@@ -1,6 +1,4 @@
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.Packs.Product;
 using Poly.Tests.Docs;
 

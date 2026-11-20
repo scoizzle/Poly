@@ -1,11 +1,8 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
-using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using DmPrimitive = Poly.DomainModeling.Ontology.PrimitiveType;
 
@@ -77,7 +74,7 @@ public class TypedExpressionMetadataTests {
         var binary = analysis.GetMetadata<TypedExpressionMetadata>(node)?.Binary;
         await Assert.That(binary).IsNotNull();
         await Assert.That(binary!.Kind).IsEqualTo(NumericKind.Decimal);
-        await Assert.That(binary.Result.Definition!.PrimitiveType).IsEqualTo(Poly.Introspection.PrimitiveType.Decimal);
+        await Assert.That(binary.Result.Definition!.GetRuntimeType()).IsEqualTo(typeof(decimal));
         await Assert.That(binary.MayOverflow).IsFalse();
         await Assert.That(AnalyzerBehaviourPinTests.Verdict(analysis)).IsEqualTo(BaselineReferenceError);
     }

@@ -8,7 +8,10 @@ namespace Poly.DomainModeling.Meaning;
 /// session's type maps, and a definition is spelled by the domain word that binds it. A family is the set of definitions
 /// the domain's words bind, compared by identity, never what a type answers about itself: a type no word binds is in no
 /// family. Everything it does not own (identity, conversions, operators, rules) its target answers.
-/// Interim (removed by #998 S3, the prelude): the words and their bindings are <see cref="DomainTypeMapping"/>'s table.
+/// The prelude is <see cref="Canonical"/>: the definitions a domain word may bind. A word's C# spelling (core's default
+/// or a pack's override, <see cref="TypeMappingRegistry"/>) binds the prelude definition the target spells that way
+/// (#998 S3), so no spelling-to-type table exists beside the prelude and a name C# could resolve (<c>Uri</c>,
+/// <c>short</c>) never becomes a domain type.
 /// </summary>
 internal sealed class DomainTypeSystem(TypeMappingRegistry typeMaps, ITypeSystem target)
     : ITypeSystem, Poly.Interpretation.Analysis.Semantics.IImplicitUsings {
@@ -42,8 +45,17 @@ internal sealed class DomainTypeSystem(TypeMappingRegistry typeMaps, ITypeSystem
     public ITypeDefinition? Resolve(string qualifiedName) => target.Resolve(qualifiedName);
 
     /// <summary>The definition a domain word binds on this session (pack overrides included), or null.</summary>
-    public ITypeDefinition? Bind(string word) =>
-        DomainTypeMapping.TryClrType(typeMaps.ToClrTypeName(word), out var type) ? Clr(type) : null;
+    public ITypeDefinition? Bind(string word) => Ground(target, typeMaps.ToClrTypeName(word));
+
+    /// <summary>The prelude definition <paramref name="target"/> spells as <paramref name="spelling"/>, or null: only a
+    /// definition the prelude holds is a domain ground type, and how one is spelled is the target's answer.</summary>
+    internal static ITypeDefinition? Ground(ITypeSystem target, string spelling) {
+        foreach (var (definition, _) in Canonical) {
+            if (string.Equals(target.Spell(definition), spelling, StringComparison.Ordinal))
+                return definition;
+        }
+        return null;
+    }
 
     public string? Spell(ITypeDefinition definition) => WordOf(definition);
 

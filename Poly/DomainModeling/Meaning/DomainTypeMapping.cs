@@ -1,4 +1,6 @@
 
+using Poly.Introspection.CommonLanguageRuntime;
+
 namespace Poly.DomainModeling.Meaning;
 
 /// <summary>
@@ -42,24 +44,11 @@ public static class DomainTypeMapping {
         "int" or "long" or "double" or "decimal" or "float" or "bool"
         or "DateTime" or "DateOnly" or "TimeOnly" or "TimeSpan" or "Guid";
 
-    /// <summary>Maps a CLR type name (after <see cref="ToClrTypeName"/>) to the CLR type it names: the ground types the
-    /// domain's built-in type names lower to.</summary>
+    /// <summary>Maps a C# type spelling (after <see cref="ToClrTypeName"/>) to the CLR type it names, when that type
+    /// is one the domain prelude holds (<see cref="DomainTypeSystem.Ground"/>): C# states each one's spelling, so no
+    /// table here can drift from the names above.</summary>
     public static bool TryClrType(string clrTypeName, out Type type) {
-        type = clrTypeName switch {
-            "string" => typeof(string),
-            "long" => typeof(long),
-            "int" => typeof(int),
-            "bool" => typeof(bool),
-            "DateTime" => typeof(DateTime),
-            "DateOnly" => typeof(DateOnly),
-            "TimeOnly" => typeof(TimeOnly),
-            "TimeSpan" => typeof(TimeSpan),
-            "Guid" => typeof(Guid),
-            "decimal" => typeof(decimal),
-            "double" => typeof(double),
-            "float" => typeof(float),
-            _ => null!
-        };
+        type = DomainTypeSystem.Ground(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared, clrTypeName)?.GetRuntimeType()!;
         return type is not null;
     }
 

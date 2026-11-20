@@ -47,6 +47,29 @@ public class TypeSystemOwnershipTests {
     }
 
     [Test]
+    public async Task DomainWord_BindsThroughCSharpsSpelling_ToAPreludeDefinitionOnly() {
+        // #998 S3: a word's C# spelling (core's or a pack's) binds the prelude definition C# spells that way. No
+        // second spelling-to-type table can drift from the first: Binary's `byte[]` binds.
+        var domain = new DomainTypeSystem(new TypeMappingRegistry(), CSharp);
+        await Assert.That(domain.Bind("Binary")).IsSameReferenceAs(Clr(typeof(byte[])));
+        await Assert.That(domain.Bind("Number")).IsSameReferenceAs(Clr(typeof(long)));
+        await Assert.That(domain.Bind("Uuid")).IsSameReferenceAs(Clr(typeof(Guid)));
+        await Assert.That(domain.Bind("Uri")).IsNull().Because("System.Uri is no prelude definition, so a name C# could resolve binds nothing");
+
+        var maps = new TypeMappingRegistry();
+        maps.OverrideClrTypeName("Number", "short");
+        maps.OverrideClrTypeName("Stamp", "DateTime");
+        var overridden = new DomainTypeSystem(maps, CSharp);
+        await Assert.That(overridden.Bind("Number")).IsNull().Because("short is C#'s, but the prelude holds no Int16");
+        await Assert.That(overridden.Bind("Stamp")).IsSameReferenceAs(Clr(typeof(DateTime)));
+
+        await Assert.That(DomainTypeMapping.TryClrType("byte[]", out var bytes)).IsTrue();
+        await Assert.That(bytes).IsEqualTo(typeof(byte[]));
+        await Assert.That(DomainTypeMapping.TryClrType("short", out _)).IsFalse();
+        await Assert.That(DomainTypeMapping.TryClrType("Uri", out _)).IsFalse();
+    }
+
+    [Test]
     public async Task ImplicitUsings_AreCSharps_NeverTheDomainLanguages() {
         // #998 S2b: C#'s implicit usings are C#'s rule. The domain language layers on C# but imports no host namespace, so a
         // bare host name (File, Environment) never binds beneath a domain analysis.

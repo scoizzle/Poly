@@ -116,6 +116,8 @@ Highlights:
 
 ## Minimal usage
 
+Inside the Poly assembly (the registry is internal; an outside caller reaches definitions through an `ITypeSystem`):
+
 ```csharp
 using Poly.Introspection.CommonLanguageRuntime;
 

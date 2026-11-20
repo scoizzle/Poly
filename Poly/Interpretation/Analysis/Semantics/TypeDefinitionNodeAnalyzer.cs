@@ -694,9 +694,14 @@ internal static class AstTypeReferenceResolver {
         if (LookupConstructedGeneric(named, args.Length, resolver) is { } constructed)
             return constructed;
 
-        var open = LookupOpenGeneric(named, args.Length, resolver)
-            ?? LookupClrOpenGeneric(named, args.Length, resolver)
-            ?? LookupNamed(named, resolver, system, enclosing, allowTypeParameter: false);
+        var open = LookupOpenGeneric(named, args.Length, resolver);
+        if (open is null) {
+            // The analysis' own declaration answers its name first: `Action<int>` beside a declared non-generic `Action`
+            // is never the host's Action`1. (The declaration keeps answering with its arguments dropped, as it always
+            // did; C# refuses the program, CS0308.)
+            var bare = LookupNamed(named, resolver, system, enclosing, allowTypeParameter: false);
+            open = bare is AstTypeDefinition ? bare : LookupClrOpenGeneric(named, args.Length, resolver) ?? bare;
+        }
         if (open is null)
             return null;
         return CloseGeneric(open, args);
@@ -740,9 +745,9 @@ internal static class AstTypeReferenceResolver {
         if (arity <= 0)
             return null;
 
-        // Arity keys are an AST-registry fact here. A CLR hit on `Name`1` is accepted only
-        // through LookupConstructedGeneric, so it cannot steal the call from a non-generic
-        // runtime type or be closed a second time.
+        // Only the analysis' own generic declaration answers here. A constructed CLR hit on `Name`1` was taken by
+        // LookupConstructedGeneric before this, and the host's open generic is asked after the bare name
+        // (LookupClrOpenGeneric), so neither is closed a second time.
         var fullKey = AstTypeRegistry.Key(named.FullName, arity);
         if (resolver.Lookup(fullKey) is AstTypeDefinition full)
             return full;

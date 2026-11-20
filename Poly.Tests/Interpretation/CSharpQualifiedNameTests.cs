@@ -174,6 +174,36 @@ public class CSharpQualifiedNameTests {
         return current;
     }
 
+    [Test]
+    [Arguments("class Base { public string Path = \"x\"; }\nclass C : Base { public string M() { return Path.Combine(\"a\", \"b\"); } }", "Combine")]
+    [Arguments("class Root { public Random Random = new Random(1); }\nclass Mid : Root { }\nclass C : Mid { public int M() { return Random.Next(5); } }", "Next")]
+    [Arguments("record C(Random Random) { public int M() { return Random.Next(5); } }", "Next")]
+    [Arguments("class Box<T> { public string Path = \"x\"; }\nclass C : Box<int> { public string M() { return Path.Combine(\"a\", \"b\"); } }", "Combine")]
+    [Arguments("class C : System.Exception { public object M() { return Data.Equals(null); } }", "Equals")]
+    public async Task InheritedMemberOrPrimaryParameter_NamedLikeAType_IsNeverBoundAsTheType(string source, string member) {
+        // Found by the pre-ship review: a member a base type declares, and a record's primary-constructor parameter, are
+        // names in scope too. Bound as the type, `Path.Combine` would run System.IO.Path's static method.
+        var unit = CSharpLanguage.Read(source);
+        var receiver = Find<Member>(unit, node => node.MemberName == member)?.Value;
+        await Assert.That(receiver).IsNotNull();
+
+        await Assert.That(Interpreter.Analyze(unit).GetNodeReplacement(receiver!)).IsNull();
+    }
+
+    [Test]
+    [Arguments("class A : A { public string M() { return Path.Combine(\"a\", \"b\"); } }")]
+    [Arguments("class A : B { public string M() { return Path.Combine(\"a\", \"b\"); } }\nclass B : A { }")]
+    public async Task TypeReceiver_InATypeWhoseBasesCycle_StillBinds(string source) {
+        // The base walk ends at the first repeated declaration; no base declares `Path`, so it is System.IO.Path.
+        var unit = CSharpLanguage.Read("using System.IO;\n" + source);
+        var receiver = Find<Member>(unit, node => node.MemberName == "Combine")?.Value;
+        await Assert.That(receiver).IsNotNull();
+
+        var replacement = Interpreter.Analyze(unit).GetNodeReplacement(receiver!);
+
+        await Assert.That(replacement.States(typeof(System.IO.Path))).IsTrue();
+    }
+
     private static T? Find<T>(Node root, Func<T, bool> predicate) where T : Node =>
         Walk(root).OfType<T>().FirstOrDefault(predicate);
 

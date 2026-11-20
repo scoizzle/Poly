@@ -56,7 +56,8 @@ public class ArchitectureBoundaryTests {
     };
 
     /// <summary>Per-file, per-pattern budget. The measured count must equal the budget: a reduction lowers the number
-    /// here in the same change, so the budget only shrinks.</summary>
+    /// here in the same change, so under one set of patterns the budget only shrinks. Widening a pattern re-baselines:
+    /// the uses it newly counts are added in the change that widens it.</summary>
     private static readonly Dictionary<string, (string RemovingRow, Dictionary<string, int> Max)> Budget = new(StringComparer.Ordinal) {
         ["Poly/Interpretation/Analysis/ConstantFolding/ConstantFoldingPass.cs"] = ("analysis-time invocation and CLR primitives (#954); removing row: I9 (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 4, ["typeof("] = 66 }),
         ["Poly/Interpretation/Analysis/Semantics/AvailableExpressionPass.cs"] = ("reads an array's runtime type; removing row: #999", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1 }),

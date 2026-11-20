@@ -385,14 +385,15 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 
     /// <summary>Binds a member's receiver that is a short CLR type name (<c>Math</c> in <c>Math.Abs(x)</c>) through the
     /// analysis' scope (#998: a unit's usings and its language's implicit ones), unless a declaration live at this site
-    /// or a member of an enclosing type has that name. The receiver is replaced by the type, so the use check below sees
-    /// a type name, not a local. A name several imports declare is reported as ambiguous, never bound.</summary>
+    /// or a member in scope in an enclosing type (<see cref="HasMemberInScope"/>) has that name. The receiver is replaced
+    /// by the type, so the use check below sees a type name, not a local. A name several imports declare is reported as
+    /// ambiguous, never bound.</summary>
     private static void TryBindTypeReceiver(AnalysisContext context, ScopeState state, Member member) {
         if (member.Value is not Variable receiver || context.GetNodeReplacement(receiver) is not null)
             return;
         if (state.VariablesByName.TryGetValue(receiver.Name, out var stack) && stack.Count > 0)
             return;
-        if (state.EnclosingTypes.Any(type => DeclaresMember(type, receiver.Name)))
+        if (state.EnclosingTypes.Any(type => HasMemberInScope(context, type, receiver.Name)))
             return;
         var definition = context.TypeSystem.Resolve(receiver.Name);
         if (definition is null
@@ -407,10 +408,36 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         context.SetResolvedType(receiver, clr);
     }
 
+    /// <summary>True when <paramref name="name"/> is a member in scope inside <paramref name="type"/>: one it declares,
+    /// or one a base type does. Bases are walked by declaration, so a base cycle ends at its first repeat, and a host
+    /// (CLR) base answers for its own chain. A base that does not resolve is reported where it is declared and ends the
+    /// walk. Conservative where C# is not: a base member the type cannot access still counts, so its name is refused as a
+    /// type receiver rather than bound.</summary>
+    private static bool HasMemberInScope(AnalysisContext context, TypeDefinitionNode type, string name) {
+        var seen = new HashSet<TypeDefinitionNode>(ReferenceEqualityComparer.Instance);
+        for (var current = type; seen.Add(current);) {
+            if (DeclaresMember(current, name))
+                return true;
+            if (current.BaseType is null)
+                return false;
+            switch (AstTypeReferenceResolver.TryResolve(current.BaseType, context.Layer, context.TypeSystem)) {
+                case AstTypeDefinition declared:
+                    current = declared.Syntax;
+                    break;
+                case { } host:
+                    return host.Members.Any(member => member.Name == name);
+                default:
+                    return false;
+            }
+        }
+        return false;
+    }
+
     private static bool DeclaresMember(TypeDefinitionNode type, string name) =>
         (type.Fields?.Any(field => field.Name == name) ?? false)
         || (type.Properties?.Any(property => property.Name == name) ?? false)
-        || (type.Methods?.Any(method => method.Name == name) ?? false);
+        || (type.Methods?.Any(method => method.Name == name) ?? false)
+        || (type.PrimaryConstructorParameters?.Any(parameter => parameter.Name == name) ?? false);
 
     private static void RegisterScopedParameter(ScopeState state, Parameter parameter) {
         if (!state.VariablesByName.TryGetValue(parameter.Name, out var stack)) {

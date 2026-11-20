@@ -38,7 +38,8 @@ public class DeclarationOwnershipTests {
     public async Task BareImportedName_IsOneDefinition_AtADeclarationAndAnExpressionSite() {
         // #998: a unit's scope is one of the analysis' own sources, and every pass looks a name up against it rather
         // than reading a node bound once. That is the end state only if no pass sees another answer: the declaration's
-        // member type is resolved by the pass that runs before the scope opens, the expression by a later one.
+        // member type resolves lazily, on first read, after the scope has registered its source, and the expression is
+        // resolved by a later pass against the same scope.
         var memberType = new NamedTypeReference("StringBuilder");
         var created = new New(new NamedTypeReference("StringBuilder"));
         var holder = new TypeDefinitionNode("Holder", Properties: [new PropertyDefinitionNode("Text", memberType)]);
@@ -52,6 +53,24 @@ public class DeclarationOwnershipTests {
             .IsSameReferenceAs(stringBuilder).Because("the declaration's member is bound through the unit's using");
         await Assert.That(analysis.GetResolvedType(created.Type)).IsSameReferenceAs(stringBuilder)
             .Because("the expression site, resolved by a later pass, asks the same scope and gets the same definition");
+    }
+
+    [Test]
+    public async Task GenericName_OfADeclaredNonGenericType_IsNeverTheClrGeneric() {
+        // Found by the pre-ship review: the unit's own declaration answers its name first. `Action<int>` beside a
+        // declared non-generic `Action` is not System.Action<int> (C# refuses the program, CS0308; the analysis keeps
+        // the declaration it always answered with, and never a host type).
+        var declared = new TypeDefinitionNode("Action");
+        var holder = new TypeDefinitionNode("Holder", Properties: [
+            new PropertyDefinitionNode("Callback", new NamedTypeReference("Action", TypeArguments: [TypeReference.To<int>()])),
+        ]);
+
+        var analysis = Poly.Interpretation.Interpreter.Analyze(new CompilationUnitNode([], null, [declared, holder], null));
+        var callback = DefinitionOf(analysis, holder).Properties.Single().MemberTypeDefinition;
+
+        await Assert.That(callback is ClrTypeDefinition).IsFalse();
+        await Assert.That(callback.Name).IsEqualTo("Action");
+        await Assert.That(callback.System).IsSameReferenceAs(analysis.TypeSystem);
     }
 
     [Test]

@@ -697,12 +697,12 @@ internal static class AstTypeReferenceResolver {
         var open = LookupOpenGeneric(named, args.Length, resolver);
         if (open is null) {
             // The analysis' own declaration answers its name first: `Action<int>` beside a declared non-generic `Action`
-            // is neither the host's Action`1 nor that declaration with its arguments dropped. It is no type, and the
-            // type pass reports it at the reference (DeclaredWithAnotherArity; owner, 2026-11-20).
+            // is never the host's Action`1. It is an error, which the type pass reports at the reference
+            // (DeclaredWithAnotherArity; owner, 2026-11-20). The declaration stays the reference's answer so that a
+            // later read of a member typed this way has a definition to read: answering no type made that read throw
+            // out of the analysis, and the diagnostic was lost with it.
             var bare = LookupNamed(named, resolver, system, enclosing, allowTypeParameter: false);
-            if (bare is AstTypeDefinition)
-                return null;
-            open = LookupClrOpenGeneric(named, args.Length, resolver) ?? bare;
+            open = bare is AstTypeDefinition ? bare : LookupClrOpenGeneric(named, args.Length, resolver) ?? bare;
         }
         if (open is null)
             return null;
@@ -711,7 +711,8 @@ internal static class AstTypeReferenceResolver {
 
     /// <summary>The analysis' own declaration a generic name spells with a number of type arguments it does not declare
     /// (<c>Action&lt;int&gt;</c> beside a declared non-generic <c>Action</c>; C#'s CS0308 and CS0305), else null. The
-    /// same lookups, in the same order, as <see cref="CloseNamed"/>, which answers no type for it.</summary>
+    /// same lookups, in the same order, as <see cref="CloseNamed"/>, which answers that declaration for it; the type
+    /// pass reports the error.</summary>
     internal static AstTypeDefinition? DeclaredWithAnotherArity(
         NamedTypeReference named,
         ITypeNameLookup resolver,

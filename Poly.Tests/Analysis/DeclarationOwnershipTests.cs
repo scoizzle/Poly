@@ -72,15 +72,34 @@ public class DeclarationOwnershipTests {
     }
 
     [Test]
-    public async Task GenericName_WithAnotherArityThanItsDeclaration_ResolvesToNoType() {
+    public async Task GenericName_WithAnotherArityThanItsDeclaration_IsReportedAtTheReference_AndIsNeverTheHostsGeneric() {
         var declared = new TypeDefinitionNode("Action");
         var reference = new NamedTypeReference("Action", TypeArguments: [TypeReference.To<int>()]);
         var holder = new TypeDefinitionNode("Holder", Properties: [new PropertyDefinitionNode("Callback", reference)]);
 
         var analysis = Poly.Interpretation.Interpreter.Analyze(new CompilationUnitNode([], null, [declared, holder], null));
 
-        await Assert.That(analysis.GetResolvedType(reference)).IsNull();
-        await Assert.That(analysis.HasErrors).IsTrue();
+        var error = analysis.Diagnostics.Single(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        await Assert.That(error.Message)
+            .IsEqualTo("'Action' is declared with 0 type parameter(s) and cannot be used with 1 type argument(s)");
+        await Assert.That(error.Node).IsSameReferenceAs(reference);
+        // The error is the refusal. The reference keeps the declaration as its answer, so a later read of the member
+        // has a type to read and the analysis ends with its diagnostic, not an exception; it is never the host's generic.
+        await Assert.That(analysis.GetResolvedType(reference)).IsSameReferenceAs(DefinitionOf(analysis, declared));
+    }
+
+    [Test]
+    [Arguments("class Action { }\nclass Holder { public Action<int> X { get; set; } public object M() { return this.X; } }")]
+    [Arguments("class Action { }\nclass Holder { public Action<int> X { get; set; } }\nclass User { public object M() { var h = new Holder(); return h.X; } }")]
+    [Arguments("class Action { }\nclass Holder { public object N(Action<int> a) { return a; } public object M() { return this.N(null); } }")]
+    public async Task GenericName_WithAnotherArityThanItsDeclaration_IsRefusedByADiagnostic_WhereItsMemberIsUsed(string source) {
+        // A use of the member reads its type. Refusing the reference by answering no type made that read throw out of the
+        // analysis ("Type with name 'Action' not found"), and the positioned error was lost with it.
+        var analysis = Poly.Interpretation.Interpreter.Analyze(CSharpLanguage.Read(source));
+
+        await Assert.That(analysis.Diagnostics.Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(static diagnostic => diagnostic.Message))
+            .Contains("'Action' is declared with 0 type parameter(s) and cannot be used with 1 type argument(s)");
     }
 
     [Test]

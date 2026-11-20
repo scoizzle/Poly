@@ -25,7 +25,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (resolvedType != null) {
             context.SetResolvedType(node, resolvedType!);
         }
-        else if (node is NamedTypeReference generic
+        if (node is NamedTypeReference generic
             && AstTypeReferenceResolver.DeclaredWithAnotherArity(generic, context.Layer, context.TypeSystem) is { } declared) {
             context.ReportError(generic,
                 $"'{declared.Name}' is declared with {declared.GenericParameters.Count()} type parameter(s) and cannot be used with {generic.TypeArguments!.Count} type argument(s)");

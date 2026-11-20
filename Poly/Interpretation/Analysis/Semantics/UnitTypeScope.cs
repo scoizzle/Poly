@@ -70,12 +70,15 @@ public sealed class UnitTypeScopeAnalyzer : INodeAnalyzer {
             && context.GetMetadata<UnitTypeScope>(default) is { } open
             && open.Candidates(name) is { Count: > 1 } candidates
             && context.TypeSystem.Resolve(name) is null) {
-            context.ReportDiagnostic(node, DiagnosticSeverity.Error,
-                $"'{name}' is ambiguous between {string.Join(" and ", candidates.Select(static type => $"'{type.FullName}'"))}");
+            context.ReportDiagnostic(node, DiagnosticSeverity.Error, AmbiguityMessage(name, candidates));
         }
 
         this.AnalyzeChildren(context, node);
     }
+
+    /// <summary>The error for a bare name several imported namespaces declare.</summary>
+    internal static string AmbiguityMessage(string name, IReadOnlyList<ITypeDefinition> candidates) =>
+        $"'{name}' is ambiguous between {string.Join(" and ", candidates.Select(static type => $"'{type.FullName}'"))}";
 
     private static UnitTypeScope Open(AnalysisContext context) {
         // A scope's sources are the unit's declarations, then the analysis' target chain (#998 T12a): the CLR is the C#

@@ -47,7 +47,14 @@ public class OverloadSweepTests {
         + "`using System`, where the retired bare-name alias left it unresolved; the analysis now completes and records the "
         + "constructor site, and no winner changes";
 
+    private const string ReceiverBindingWhy = "#998: a short type receiver is bound by the analysis, not the reader's text scan. "
+        + "In `using System; long Math = 5; Math.Abs(-1);` read as a bare unit, top-level statements form no block, so the "
+        + "local is never registered: its declaration stays an error (the unit is still refused) and the receiver now binds "
+        + "System.Math. CSharpScript wraps top-level statements in a block, where the local wins (LocalNamedLikeANamespace_Wins)";
+
     private static readonly (string Key, string Before, string After, string Why)[] ExplainedDeltas = [
+        ("csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #5", "  errors: 2\n",
+         "  errors: 1\n  System.Math.Abs(System.Int32)\n", ReceiverBindingWhy),
         ("poly guide // ✅ Correct — create is the final statement #0", "  errors: 1\n", "  errors: 0\n", S2bWhy),
         ("poly guide // ✅ Correct — create is the final statement #0",
          "  Poly.Runtime.DomainFailure.At(System.String)\n",

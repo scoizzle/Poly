@@ -38,9 +38,11 @@ public class CSharpQualifiedNameTests {
 
     [Test]
     public async Task UsingScope_ResolvesShortTypeName() {
+        // The reader keeps the name as written; the analysis binds it where it is used (#998: binding is the scope's).
         var unit = CSharpLanguage.Read("using System;\nMath.Abs(-1);");
-        await Assert.That(Find<Member>(unit, node => node.MemberName == "Abs")?.Value)
-            .IsTypeOf<NamedTypeReference>()
+        var receiver = Find<Member>(unit, node => node.MemberName == "Abs")?.Value;
+        await Assert.That(receiver).IsTypeOf<Variable>();
+        await Assert.That(Interpreter.Analyze(unit).GetNodeReplacement(receiver!).States(typeof(Math))).IsTrue()
             .Because("a using names the namespace a short type name resolves through");
 
         await Assert.That(Execute(unit)).IsEqualTo(1L);
@@ -101,6 +103,53 @@ public class CSharpQualifiedNameTests {
         var read = CSharpLanguage.Read("{ " + printed + " }");
         using var original = Interpreter.Execute(Interpreter.Compile(new PopCount(new Constant(7L))));
         await Assert.That(Execute(read)).IsEqualTo(Convert.ToInt64(original.Result.Value));
+    }
+
+    [Test]
+    public async Task UsingScope_ALocalInAnotherBlock_DoesNotHideTheImportedType() {
+        // #998: the analysis binds a short type name where it is used, against the scopes live at that site. A local of
+        // the same name declared in a block that has closed is not in scope there, so it does not hide the type.
+        var unit = CSharpLanguage.Read(
+            "using System.Numerics;\n{ { long BitOperations = 1; } return BitOperations.PopCount((ulong)7); }");
+
+        await Assert.That(Execute(unit)).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task ShortTypeName_WithNoUsing_BindsThroughCSharpsImplicitSystem() {
+        // #998 S2b: C#'s implicit usings hold System, so Math needs no directive, as in a dotnet project.
+        await Assert.That(Execute(CSharpLanguage.Read("Math.Abs(-1);"))).IsEqualTo(1L);
+    }
+
+
+    [Test]
+    public async Task MemberNamedLikeAType_IsNeverBoundAsTheType() {
+        // C# binds `Random` in `Random.Next(5)` to the field when the enclosing type declares one (the "Color Color"
+        // rule). The analysis must never bind it to System.Random instead, which would turn an instance call into a static one.
+        var unit = CSharpLanguage.Read(
+            "class C { public Random Random = new Random(1); public int M() { return Random.Next(5); } }");
+        var receiver = Find<Member>(unit, node => node.MemberName == "Next")?.Value;
+        await Assert.That(receiver).IsNotNull();
+
+        var analysis = Interpreter.Analyze(unit);
+
+        await Assert.That(analysis.GetNodeReplacement(receiver!)).IsNull()
+            .Because("a member of the enclosing type is not a type name");
+    }
+
+    [Test]
+    public async Task ShortTypeReceiver_OutsideTheImplicitUsings_NeedsItsUsing() {
+        await Assert.That(Errors(Interpreter.Analyze(CSharpLanguage.Read("Encoding.UTF8.WebName;"))))
+            .Contains(static message => message.Contains("Encoding", StringComparison.Ordinal));
+        await Assert.That(Errors(Interpreter.Analyze(CSharpLanguage.Read("using System.Text;\nEncoding.UTF8.WebName;"))))
+            .IsEmpty();
+    }
+
+    [Test]
+    public async Task ShortTypeReceiver_ImportedTwice_IsAmbiguous() {
+        var errors = Errors(Interpreter.Analyze(CSharpLanguage.Read(
+            "using System.Threading;\nusing System.Timers;\nTimer.ReferenceEquals(null, null);")));
+        await Assert.That(errors).Contains(static message => message.Contains("ambiguous", StringComparison.Ordinal));
     }
 
     private static long Execute(CompilationUnitNode unit) {

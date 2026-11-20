@@ -41,6 +41,9 @@ internal sealed record ScopeState(
     // Parameter declarations — a parameter name registered for a lambda or method
     // body shadows an outer variable of the same name.
     Dictionary<string, Stack<Node>> VariablesByName
+,
+    // The type declarations enclosing the node, innermost last: a member of one is a name in scope, never a type name.
+    List<TypeDefinitionNode> EnclosingTypes
 );
 
 internal sealed class ScopeValidator : INodeAnalyzer {
@@ -64,7 +67,8 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 CapturedParameters: new(ReferenceEqualityComparer.Instance)
             ),
             ScopeStack: [],
-            VariablesByName: []
+            VariablesByName: [],
+            EnclosingTypes: []
         );
         // Stash the metadata on the root node so any consumer (e.g. lowering)
         // can find it via analysis.GetMetadata<>(rootNode) or FindAnyVariable.
@@ -110,6 +114,12 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeLambda(context, state, lambda);
                 break;
 
+            case TypeDefinitionNode type:
+                state.EnclosingTypes.Add(type);
+                AnalyzeChildrenWithState(context, state, node);
+                state.EnclosingTypes.RemoveAt(state.EnclosingTypes.Count - 1);
+                break;
+
             case MethodDefinitionNode method:
                 AnalyzeMethodDefinition(context, state, method);
                 break;
@@ -136,6 +146,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 // declared local named `System` wins over the type name.
                 if (TryRewriteDottedTypeName(context, state, member))
                     return;
+                TryBindTypeReceiver(context, state, member);
                 AnalyzeChildrenWithState(context, state, node);
                 break;
 
@@ -371,6 +382,35 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         context.SetResolvedType(member, clr);
         return true;
     }
+
+    /// <summary>Binds a member's receiver that is a short CLR type name (<c>Math</c> in <c>Math.Abs(x)</c>) through the
+    /// analysis' scope (#998: a unit's usings and its language's implicit ones), unless a declaration live at this site
+    /// or a member of an enclosing type has that name. The receiver is replaced by the type, so the use check below sees
+    /// a type name, not a local. A name several imports declare is reported as ambiguous, never bound.</summary>
+    private static void TryBindTypeReceiver(AnalysisContext context, ScopeState state, Member member) {
+        if (member.Value is not Variable receiver || context.GetNodeReplacement(receiver) is not null)
+            return;
+        if (state.VariablesByName.TryGetValue(receiver.Name, out var stack) && stack.Count > 0)
+            return;
+        if (state.EnclosingTypes.Any(type => DeclaresMember(type, receiver.Name)))
+            return;
+        var definition = context.TypeSystem.Resolve(receiver.Name);
+        if (definition is null
+            && context.GetMetadata<UnitTypeScope>(default)?.Candidates(receiver.Name) is { Count: > 1 } candidates) {
+            context.ReportError(receiver, UnitTypeScopeAnalyzer.AmbiguityMessage(receiver.Name, candidates));
+            context.SetNodeReplacement(receiver, new NamedTypeReference(receiver.Name));
+            return;
+        }
+        if (definition is not Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinition clr)
+            return;
+        context.SetNodeReplacement(receiver, new TypeDefinitionReference(clr));
+        context.SetResolvedType(receiver, clr);
+    }
+
+    private static bool DeclaresMember(TypeDefinitionNode type, string name) =>
+        (type.Fields?.Any(field => field.Name == name) ?? false)
+        || (type.Properties?.Any(property => property.Name == name) ?? false)
+        || (type.Methods?.Any(method => method.Name == name) ?? false);
 
     private static void RegisterScopedParameter(ScopeState state, Parameter parameter) {
         if (!state.VariablesByName.TryGetValue(parameter.Name, out var stack)) {

@@ -60,13 +60,18 @@ public class TypeScopeTests {
     }
 
     [Test]
-    public async Task BareClrName_WithNoUsing_DoesNotResolve_WhateverTheVocabularyNames() {
-        // `DateTime` resolves today only because a shared primitive id happens to carry that name.
-        var (_, errors) = Run("DateTime.UtcNow.Year > 2000;");
-        await Assert.That(errors).Contains("DateTime");
+    public async Task BareClrName_OutsideTheImplicitUsings_DoesNotResolveWithoutAUsing() {
+        // #998 S2b (owner Q2): a C# unit sees C#'s implicit usings, so DateTime (System) needs no directive, and the
+        // retired primitive table no longer decides it. StringBuilder (System.Text) is outside them: it needs its using,
+        // whatever the process has loaded.
+        var (implicitValue, implicitErrors) = Run("DateTime.UtcNow.Year > 2000;");
+        await Assert.That(implicitErrors).IsEmpty();
+        await Assert.That(Convert.ToInt64(implicitValue)).IsEqualTo(1L).Because("the VM states a true Boolean as the word 1");
 
-        var (value, importedErrors) = Run("using System;\nDateTime.UtcNow.Year > 2000;");
+        var (_, errors) = Run("new StringBuilder().Length == 0;");
+        await Assert.That(errors).Contains("StringBuilder");
+
+        var (_, importedErrors) = Run("using System.Text;\nnew StringBuilder().Length == 0;");
         await Assert.That(importedErrors).IsEmpty();
-        await Assert.That(Convert.ToInt64(value)).IsEqualTo(1L).Because("the VM states a true Boolean as the word 1");
     }
 }

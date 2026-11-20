@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>Shared source of unique local names for one method's lowering.</summary>

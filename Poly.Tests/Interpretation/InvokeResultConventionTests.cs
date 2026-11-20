@@ -1,5 +1,4 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
@@ -27,7 +26,7 @@ public class InvokeResultConventionTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Half",
-                    TypeReference.Of(typeof(double)),
+                    TypeReference.To(typeof(double)),
                     Body: new Block([]))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();

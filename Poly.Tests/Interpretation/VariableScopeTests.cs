@@ -1,4 +1,3 @@
-using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Tests.Interpretation;

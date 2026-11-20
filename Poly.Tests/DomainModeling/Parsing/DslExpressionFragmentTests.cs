@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 
 using Subtract = Poly.DomainModeling.Ontology.Subtract;

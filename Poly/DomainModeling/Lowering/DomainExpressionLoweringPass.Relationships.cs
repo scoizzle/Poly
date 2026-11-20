@@ -1,4 +1,3 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Ontology;
 
 using SN = Poly.Ast.Nodes;

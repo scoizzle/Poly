@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.DomainModeling.Analysis;
 

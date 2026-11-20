@@ -1,7 +1,5 @@
 using System.Globalization;
 
-using Poly.Runtime;
-
 namespace Poly.Tests.Runtime;
 
 /// <summary>

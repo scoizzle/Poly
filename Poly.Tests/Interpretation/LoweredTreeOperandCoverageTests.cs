@@ -74,7 +74,7 @@ public class LoweredTreeOperandCoverageTests {
     static Parameter NumArray(string name = "arr") => P<long[]>(name);
     static Node Wrap(params Node[] nodes) => new Block(nodes);
     static Node Pick(Node condition, Node ifTrue, Node ifFalse) => Wrap(new Conditional(condition, ifTrue, ifFalse));
-    static Node Call(string method, Node argument) => Wrap(new Invoke(new Member(TypeReference.Of(typeof(Probe)), method), argument));
+    static Node Call(string method, Node argument) => Wrap(new Invoke(new Member(TypeReference.To(typeof(Probe)), method), argument));
 
     static Node Assign2(Node first, Node second) {
         var x = new Variable("x");
@@ -303,7 +303,7 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(UnaryMinus), "Enum", Rejects, () => Wrap(new UnaryMinus(P<DayOfWeek>("a"))), [DayOfWeek.Monday]),
         Row(typeof(Equal), "ClrStructWithoutEquality", Rejects, () => Wrap(new Equal(P<KeyValuePair<int, int>>("a"), P<KeyValuePair<int, int>>("b"))), [new KeyValuePair<int, int>(1, 2), new KeyValuePair<int, int>(1, 2)]),
         Row(typeof(LessThan), "ModelledStruct", Rejects, () => Wrap(new LessThan(new Parameter("a", new TypeDefinitionReference(ModelledStruct.Value)), new Parameter("b", new TypeDefinitionReference(ModelledStruct.Value)))), [null, null]),
-        Row(typeof(Equal), "VoidCallWithNumber", Rejects, () => Wrap(new Equal(new Invoke(new Member(new Member(TypeReference.Of(typeof(Holder)), nameof(Holder.Items)), "Clear")), new Constant(0L))), []),
+        Row(typeof(Equal), "VoidCallWithNumber", Rejects, () => Wrap(new Equal(new Invoke(new Member(new Member(TypeReference.To(typeof(Holder)), nameof(Holder.Items)), "Clear")), new Constant(0L))), []),
         Row(typeof(Add), "NullWithNumber", Rejects, () => Wrap(new Add(new Constant(null), new Constant(1))), []),
         Row(typeof(UnaryMinus), "Null", Rejects, () => Wrap(new UnaryMinus(new Constant(null))), []),
         Row(typeof(Add), "TextWithUnresolved", Rejects, () => Wrap(new Add(new Constant("a"), new Default(null))), []),

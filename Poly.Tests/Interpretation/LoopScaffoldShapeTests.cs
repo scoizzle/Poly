@@ -1,11 +1,9 @@
 using System.Collections;
 using System.Linq.Expressions;
 
-using Poly.Ast.Nodes;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 

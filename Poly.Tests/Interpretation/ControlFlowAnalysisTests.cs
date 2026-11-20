@@ -2,7 +2,6 @@ using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -438,7 +437,7 @@ public class ControlFlowAnalysisTests {
             new Constant(0L),
             CatchClauses: [
                 new CatchClause(
-                    TypeReference.Of(typeof(InvalidOperationException)),
+                    TypeReference.To(typeof(InvalidOperationException)),
                     null,
                     catchBody)
             ]);
@@ -458,7 +457,7 @@ public class ControlFlowAnalysisTests {
             tryBlock,
             CatchClauses: [
                 new CatchClause(
-                    TypeReference.Of(typeof(InvalidOperationException)),
+                    TypeReference.To(typeof(InvalidOperationException)),
                     null,
                     catchBody)
             ]);
@@ -480,7 +479,7 @@ public class ControlFlowAnalysisTests {
             tryBlock,
             CatchClauses: [
                 new CatchClause(
-                    TypeReference.Of(typeof(InvalidOperationException)),
+                    TypeReference.To(typeof(InvalidOperationException)),
                     null,
                     catchBody)
             ]);
@@ -500,7 +499,7 @@ public class ControlFlowAnalysisTests {
             tryBlock,
             CatchClauses: [
                 new CatchClause(
-                    TypeReference.Of(typeof(InvalidOperationException)),
+                    TypeReference.To(typeof(InvalidOperationException)),
                     null,
                     catchBody)
             ]);

@@ -153,7 +153,7 @@ public class NullableCSharpTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Probe",
-                    TypeReference.Of(typeof(bool)),
+                    TypeReference.To(typeof(bool)),
                     Body: new Return(new Equal(
                         new Member(new ThisReference(), "Limit"), new Constant(null))))
             ]));

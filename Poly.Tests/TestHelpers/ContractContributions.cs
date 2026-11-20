@@ -1,10 +1,5 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
 using Poly.Interpretation.CSharp;
 
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
@@ -54,7 +49,7 @@ public static class ContractContributions {
     /// </summary>
     public static Func<Block> TraceBody(string endpointName) => () => new Block([
         new Invoke(
-            new Member(TypeReference.Of(typeof(System.Diagnostics.Debug)), "WriteLine"),
+            new Member(TypeReference.To(typeof(System.Diagnostics.Debug)), "WriteLine"),
             [
                 new Invoke(
                     new Member(TypeReference.To<string>(), "Concat"),

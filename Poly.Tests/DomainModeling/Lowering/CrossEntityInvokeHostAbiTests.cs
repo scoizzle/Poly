@@ -1,7 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Lowering;

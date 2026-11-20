@@ -1,15 +1,11 @@
-using System.Reflection;
 using System.Runtime.Loader;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Tests;
 using Poly.DomainModeling.Ontology;
-
-using Artifact = Poly.DomainModeling.Compile.Artifact;
 
 namespace Poly.Tests.DomainModeling.Compile;
 

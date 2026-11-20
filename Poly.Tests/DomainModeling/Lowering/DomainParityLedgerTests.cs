@@ -1,6 +1,3 @@
-using Poly.DomainModeling.Compile;
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>

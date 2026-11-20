@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using System.Reflection;
 
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;

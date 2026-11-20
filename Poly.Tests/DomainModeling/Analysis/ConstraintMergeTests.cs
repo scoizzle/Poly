@@ -1,11 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Libraries.Storage;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 

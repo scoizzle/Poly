@@ -1,12 +1,6 @@
-using Poly.Analysis;
-using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
-using Poly.Tests.TestHelpers;
 
 using DmPrimitive = Poly.DomainModeling.Ontology.PrimitiveType;
 

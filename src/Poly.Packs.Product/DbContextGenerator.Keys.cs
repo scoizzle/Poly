@@ -21,15 +21,15 @@ public sealed partial class DbContextGenerator {
     /// </summary>
     private static FieldDefinitionNode PendingKeysField() =>
         new("_pendingKeys",
-            new NamedTypeReference("HashSet", TypeArguments: [TypeReference.Of(typeof(string))]),
-            DefaultValue: new New(new NamedTypeReference("HashSet", TypeArguments: [TypeReference.Of(typeof(string))])),
+            new NamedTypeReference("HashSet", TypeArguments: [TypeReference.To(typeof(string))]),
+            DefaultValue: new New(new NamedTypeReference("HashSet", TypeArguments: [TypeReference.To(typeof(string))])),
             IsReadOnly: true,
             AccessModifier: AccessModifier.Private);
 
     private MethodDefinitionNode ExistsMethod() {
-        var entityParam = new Parameter("entity", TypeReference.Of(typeof(string)));
-        var propertyParam = new Parameter("property", TypeReference.Of(typeof(string)));
-        var valueParam = new Parameter("value", TypeReference.Of(typeof(string)));
+        var entityParam = new Parameter("entity", TypeReference.To(typeof(string)));
+        var propertyParam = new Parameter("property", TypeReference.To(typeof(string)));
+        var valueParam = new Parameter("value", TypeReference.To(typeof(string)));
         var nodes = new List<Node> {
             new IfStatement(
                 new Invoke(
@@ -69,18 +69,18 @@ public sealed partial class DbContextGenerator {
         nodes.Add(new Return(new Constant(false)));
         return new MethodDefinitionNode(
             "Exists",
-            TypeReference.Of(typeof(bool)),
+            TypeReference.To(typeof(bool)),
             Parameters: [entityParam, propertyParam, valueParam],
             Body: new Block(nodes));
     }
 
     private static MethodDefinitionNode TryReserveMethod() {
-        var entityParam = new Parameter("entity", TypeReference.Of(typeof(string)));
-        var propertyParam = new Parameter("property", TypeReference.Of(typeof(string)));
-        var valueParam = new Parameter("value", TypeReference.Of(typeof(string)));
+        var entityParam = new Parameter("entity", TypeReference.To(typeof(string)));
+        var propertyParam = new Parameter("property", TypeReference.To(typeof(string)));
+        var valueParam = new Parameter("value", TypeReference.To(typeof(string)));
         return new MethodDefinitionNode(
             "TryReserve",
-            TypeReference.Of(typeof(bool)),
+            TypeReference.To(typeof(bool)),
             Parameters: [entityParam, propertyParam, valueParam],
             Body: new Block([
                 new Return(new Invoke(
@@ -90,9 +90,9 @@ public sealed partial class DbContextGenerator {
     }
 
     private static MethodDefinitionNode RecordMethod() {
-        var entityParam = new Parameter("entity", TypeReference.Of(typeof(string)));
-        var propertyParam = new Parameter("property", TypeReference.Of(typeof(string)));
-        var valueParam = new Parameter("value", TypeReference.Of(typeof(string)));
+        var entityParam = new Parameter("entity", TypeReference.To(typeof(string)));
+        var propertyParam = new Parameter("property", TypeReference.To(typeof(string)));
+        var valueParam = new Parameter("value", TypeReference.To(typeof(string)));
         return new MethodDefinitionNode(
             "Record",
             new TypeReference("void"),
@@ -105,9 +105,9 @@ public sealed partial class DbContextGenerator {
     }
 
     private static MethodDefinitionNode ReleaseMethod() {
-        var entityParam = new Parameter("entity", TypeReference.Of(typeof(string)));
-        var propertyParam = new Parameter("property", TypeReference.Of(typeof(string)));
-        var valueParam = new Parameter("value", TypeReference.Of(typeof(string)));
+        var entityParam = new Parameter("entity", TypeReference.To(typeof(string)));
+        var propertyParam = new Parameter("property", TypeReference.To(typeof(string)));
+        var valueParam = new Parameter("value", TypeReference.To(typeof(string)));
         return new MethodDefinitionNode(
             "Release",
             new TypeReference("void"),
@@ -122,6 +122,6 @@ public sealed partial class DbContextGenerator {
     // One encoding for the host and the simulator: the length-prefixed KeyCodec key.
     private static Node PendingKey(Node entity, Node property, Node value) =>
         new Invoke(
-            new Member(TypeReference.Of(typeof(KeyCodec)), "Canonical"),
+            new Member(TypeReference.To(typeof(KeyCodec)), "Canonical"),
             entity, property, value);
 }

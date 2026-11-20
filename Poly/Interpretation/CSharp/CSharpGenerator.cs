@@ -1,5 +1,3 @@
-using Poly.Interpretation.Analysis.Semantics;
-
 namespace Poly.Interpretation.CSharp;
 
 /// <summary>C# source code generator. Produces readable C# code from analyzed

@@ -1,6 +1,5 @@
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 

@@ -1,10 +1,7 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Analysis;
 
@@ -48,7 +45,7 @@ public class DeclarationOwnershipTests {
                     new NamedTypeReference("List", TypeArguments: [new NamedTypeReference("Order")])),
                 new PropertyDefinitionNode(
                     "Counts",
-                    new NamedTypeReference("List", TypeArguments: [TypeReference.Of(typeof(int))]))
+                    new NamedTypeReference("List", TypeArguments: [TypeReference.To(typeof(int))]))
             ]);
         var analysis = Analyze(new CompilationUnitNode([], null, [order, shelf], null));
         var resolved = DefinitionOf(analysis, shelf);
@@ -73,7 +70,7 @@ public class DeclarationOwnershipTests {
                         new NamedTypeReference("List", TypeArguments: [new NamedTypeReference("Order")])),
                     new PropertyDefinitionNode(
                         "Counts",
-                        new NamedTypeReference("List", TypeArguments: [TypeReference.Of(typeof(int))]))
+                        new NamedTypeReference("List", TypeArguments: [TypeReference.To(typeof(int))]))
                 ]);
             var unit = new CompilationUnitNode([], null, [order, shelf], null);
             return (Analyze(unit), unit);
@@ -124,7 +121,7 @@ public class DeclarationOwnershipTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Format",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Parameters: [new Parameter("value")])
             ]);
 
@@ -152,7 +149,7 @@ public class DeclarationOwnershipTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Format",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Parameters: [new Parameter("value")])
             ]);
         var underDomain = DefinitionOf(Analyze(declared, domain), declared);

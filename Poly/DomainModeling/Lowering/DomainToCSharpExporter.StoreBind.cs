@@ -4,7 +4,7 @@ namespace Poly.DomainModeling.Lowering;
 
 public sealed partial class DomainToCSharpExporter {
     internal static Node StoreJobObjectType() =>
-        TypeReference.Of(typeof(object));
+        TypeReference.To(typeof(object));
 
     internal static Node TypedNull(string typeName) =>
         new TypeCast(new Constant(null),

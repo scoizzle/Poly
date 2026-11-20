@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 
 using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;

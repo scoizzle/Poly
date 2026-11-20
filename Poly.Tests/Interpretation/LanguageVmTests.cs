@@ -2,7 +2,6 @@ using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -583,7 +582,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task TypeCast_GroundTypeReference_Int32() {
-        var node = new TypeCast(new Constant(42L), TypeReference.Of(typeof(int)));
+        var node = new TypeCast(new Constant(42L), TypeReference.To(typeof(int)));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(42);
     }
@@ -836,7 +835,7 @@ public class LanguageVmTests {
 
     [Test]
     public async Task GroundTypeReference_AsValue_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new Add(TypeReference.Of(typeof(int)), new Constant(1L))))
+        await Assert.That(() => Interpreter.Compile(new Add(TypeReference.To(typeof(int)), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 

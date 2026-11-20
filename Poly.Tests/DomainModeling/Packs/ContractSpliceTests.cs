@@ -1,9 +1,4 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
 using Poly.Interpretation.CSharp;
-using Poly.Tests.TestHelpers;
 
 using static Poly.Tests.TestHelpers.ContractContributions;
 

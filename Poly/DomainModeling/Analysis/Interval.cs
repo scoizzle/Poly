@@ -1,5 +1,3 @@
-using Poly.DomainModeling.Ontology.Constraints;
-
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>

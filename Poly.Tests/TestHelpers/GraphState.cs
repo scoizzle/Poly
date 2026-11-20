@@ -3,9 +3,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 
-using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
-using Poly.Runtime;
 
 namespace Poly.Tests.TestHelpers;
 

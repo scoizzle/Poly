@@ -1,6 +1,4 @@
-using Poly.Ast.Nodes;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -33,13 +31,13 @@ public class ClrReferencePrintTests {
         Cast("DateTime", TypeReference.To<DateTime>(), "_ = (DateTime)1;"),
         Cast("Guid", TypeReference.To<Guid>(), "_ = (Guid)1;"),
         Cast("Uri", TypeReference.To<Uri>(), "_ = (System.Uri)1;"),
-        Cast("Of(long)", TypeReference.Of(typeof(long)), "_ = (long)1;"),
+        Cast("Of(long)", TypeReference.To(typeof(long)), "_ = (long)1;"),
         // The shapes the first factory attempt exposed.
         Cast("Func<int,int>", TypeReference.To<Func<int, int>>(), "_ = (Func<int, int>)1;"),
         Cast("Action<int>", TypeReference.To<Action<int>>(), "_ = (Action<int>)1;"),
         Cast("Task<int>", TypeReference.To<Task<int>>(), "_ = (Task<int>)1;"),
         Cast("nested", TypeReference.To<AstParityTests.ParityWidget>(), "_ = (Poly.Tests.Interpretation.AstParityTests.ParityWidget)1;"),
-        Cast("void", TypeReference.Of(typeof(void)), "_ = (System.Void)1;"),
+        Cast("void", TypeReference.To(typeof(void)), "_ = (System.Void)1;"),
         Cast("int[][]", TypeReference.To<int[][]>(), "_ = (System.Int32[][])1;"),
         // The old printer answered int? here (TypeCode reports an enum as its underlying integer); the reference
         // spells the type it was given.

@@ -1,6 +1,5 @@
 using System.Text;
 
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Ontology;

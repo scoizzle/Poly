@@ -1,4 +1,3 @@
-using Poly.Analysis;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
@@ -109,7 +108,7 @@ public class InvalidProgramTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Body: thisReference,
                     IsStatic: true)
             ]);
@@ -433,7 +432,7 @@ public class InvalidProgramTests {
                     "Create",
                     new NamedTypeReference("Order"),
                     Parameters: [
-                        new Parameter("name", TypeReference.Of(typeof(string))),
+                        new Parameter("name", TypeReference.To(typeof(string))),
                         new Parameter(
                             "items",
                             new OptionalTypeReference(new NamedTypeReference(
@@ -445,7 +444,7 @@ public class InvalidProgramTests {
                             new Constant(null)),
                         new Parameter(
                             "count",
-                            new OptionalTypeReference(TypeReference.Of(typeof(int))),
+                            new OptionalTypeReference(TypeReference.To(typeof(int))),
                             new Constant(null))
                     ],
                     IsStatic: true)
@@ -506,7 +505,7 @@ public class InvalidProgramTests {
                     "Create",
                     new NamedTypeReference("Order"),
                     Parameters: [
-                        new Parameter("name", TypeReference.Of(typeof(string))),
+                        new Parameter("name", TypeReference.To(typeof(string))),
                         new Parameter(
                             "items",
                             new OptionalTypeReference(new NamedTypeReference(
@@ -658,14 +657,14 @@ public class InvalidProgramTests {
             "Order",
             Constructors: [
                 new ConstructorDefinitionNode(
-                    Parameters: [new Parameter("total", TypeReference.Of(typeof(long)))],
+                    Parameters: [new Parameter("total", TypeReference.To(typeof(long)))],
                     AccessModifier: AccessModifier.Private)
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "Create",
                     new NamedTypeReference("Order"),
-                    Parameters: [new Parameter("total", TypeReference.Of(typeof(long)))],
+                    Parameters: [new Parameter("total", TypeReference.To(typeof(long)))],
                     Body: new New(new NamedTypeReference("Order"), new Parameter("total")),
                     IsStatic: true)
             ]);
@@ -683,7 +682,7 @@ public class InvalidProgramTests {
             "Order",
             Constructors: [
                 new ConstructorDefinitionNode(
-                    [new Parameter("total", TypeReference.Of(typeof(long)))])
+                    [new Parameter("total", TypeReference.To(typeof(long)))])
             ]);
         await AssertAnalysisThenCompileRejects(
             new Block([order, new New(new NamedTypeReference("Order"), new Constant(null))]),
@@ -698,10 +697,10 @@ public class InvalidProgramTests {
             Constructors: [
                 new ConstructorDefinitionNode(
                     Parameters: [
-                        new Parameter("isSuccess", TypeReference.Of(typeof(bool))),
+                        new Parameter("isSuccess", TypeReference.To(typeof(bool))),
                         new Parameter(
                             "errorMessage",
-                            new OptionalTypeReference(TypeReference.Of(typeof(string))))
+                            new OptionalTypeReference(TypeReference.To(typeof(string))))
                     ],
                     AccessModifier: AccessModifier.Private)
             ]);
@@ -710,11 +709,11 @@ public class InvalidProgramTests {
             Constructors: [
                 new ConstructorDefinitionNode(
                     Parameters: [
-                        new Parameter("isSuccess", TypeReference.Of(typeof(bool))),
+                        new Parameter("isSuccess", TypeReference.To(typeof(bool))),
                         new Parameter("value", new NamedTypeReference("T")),
                         new Parameter(
                             "errorMessage",
-                            new OptionalTypeReference(TypeReference.Of(typeof(string))))
+                            new OptionalTypeReference(TypeReference.To(typeof(string))))
                     ],
                     AccessModifier: AccessModifier.Private)
             ],

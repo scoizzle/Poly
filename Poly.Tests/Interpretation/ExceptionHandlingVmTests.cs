@@ -10,10 +10,10 @@ public class ExceptionHandlingVmTests {
         var node = new Block([
             new Assignment(caught, new Constant(0L)),
             new TryCatchFinally(
-                new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)))),
+                new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)))),
                 CatchClauses: [
                     new CatchClause(
-                        TypeReference.Of(typeof(InvalidOperationException)),
+                        TypeReference.To(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(caught, new Constant(1L)))
                 ]),
@@ -27,10 +27,10 @@ public class ExceptionHandlingVmTests {
     [Test]
     public async Task TryCatch_TypedCatch_SkipsNonMatching() {
         var node = new TryCatchFinally(
-            new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)))),
+            new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)))),
             CatchClauses: [
                 new CatchClause(
-                    TypeReference.Of(typeof(ArgumentException)),
+                    TypeReference.To(typeof(ArgumentException)),
                     null,
                     new Constant(1L))
             ]);
@@ -62,10 +62,10 @@ public class ExceptionHandlingVmTests {
         var node = new Block([
             new Assignment(steps, new Constant(0L)),
             new TryCatchFinally(
-                new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)))),
+                new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)))),
                 CatchClauses: [
                     new CatchClause(
-                        TypeReference.Of(typeof(InvalidOperationException)),
+                        TypeReference.To(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(steps, new Add(steps, new Constant(1L))))
                 ],
@@ -86,10 +86,10 @@ public class ExceptionHandlingVmTests {
             new TryCatchFinally(
                 new IfStatement(
                     new Constant(0L),
-                    new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException))))),
+                    new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException))))),
                 CatchClauses: [
                     new CatchClause(
-                        TypeReference.Of(typeof(InvalidOperationException)),
+                        TypeReference.To(typeof(InvalidOperationException)),
                         null,
                         new Assignment(steps, new Constant(99L)))
                 ],
@@ -106,7 +106,7 @@ public class ExceptionHandlingVmTests {
         var node = new Block([
             new Assignment(caught, new Constant(0L)),
             new TryCatchFinally(
-                new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)))),
+                new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)))),
                 CatchClauses: [
                     new CatchClause(
                         ExceptionType: null,
@@ -127,11 +127,11 @@ public class ExceptionHandlingVmTests {
             new Assignment(msg, new Constant("")),
             new TryCatchFinally(
                 new ThrowStatement(new New(
-                    TypeReference.Of(typeof(InvalidOperationException)),
+                    TypeReference.To(typeof(InvalidOperationException)),
                     new Constant("boom-msg"))),
                 CatchClauses: [
                     new CatchClause(
-                        TypeReference.Of(typeof(InvalidOperationException)),
+                        TypeReference.To(typeof(InvalidOperationException)),
                         "ex",
                         new Assignment(msg, new Member(new Variable("ex"), "Message")))
                 ]),
@@ -149,16 +149,16 @@ public class ExceptionHandlingVmTests {
             new Assignment(steps, new Constant(0L)),
             new TryCatchFinally(
                 new TryCatchFinally(
-                    new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)))),
+                    new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)))),
                     CatchClauses: [
                         new CatchClause(
-                            TypeReference.Of(typeof(InvalidOperationException)),
+                            TypeReference.To(typeof(InvalidOperationException)),
                             null,
                             new Assignment(steps, new Add(steps, new Constant(1L))))
                     ]),
                 CatchClauses: [
                     new CatchClause(
-                        TypeReference.Of(typeof(InvalidOperationException)),
+                        TypeReference.To(typeof(InvalidOperationException)),
                         null,
                         new Assignment(steps, new Add(steps, new Constant(10L))))
                 ]),
@@ -176,18 +176,18 @@ public class ExceptionHandlingVmTests {
             new Assignment(steps, new Constant(0L)),
             new TryCatchFinally(
                 new TryCatchFinally(
-                    new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)))),
+                    new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)))),
                     CatchClauses: [
                         new CatchClause(
-                            TypeReference.Of(typeof(InvalidOperationException)),
+                            TypeReference.To(typeof(InvalidOperationException)),
                             null,
                             new ThrowStatement(new New(
-                                TypeReference.Of(typeof(ArgumentException)),
+                                TypeReference.To(typeof(ArgumentException)),
                                 new Constant("from-inner-catch"))))
                     ]),
                 CatchClauses: [
                     new CatchClause(
-                        TypeReference.Of(typeof(ArgumentException)),
+                        TypeReference.To(typeof(ArgumentException)),
                         null,
                         new Assignment(steps, new Constant(7L)))
                 ]),

@@ -1,5 +1,3 @@
-using Poly.DomainModeling.Compile;
-
 namespace Poly.DomainModeling.Libraries.Tests;
 
 /// <summary>

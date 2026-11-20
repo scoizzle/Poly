@@ -1,4 +1,3 @@
-using Poly.Analysis;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
@@ -55,8 +54,8 @@ public class VariableMultiAssignTypeExperimentTests {
     [Test]
     public async Task ExistingUnionTypeReference_MixedOptions_CollapseToObject() {
         var union = new UnionTypeReference([
-            TypeReference.Of(typeof(long)),
-            TypeReference.Of(typeof(string))
+            TypeReference.To(typeof(long)),
+            TypeReference.To(typeof(string))
         ]);
         var prop = new PropertyDefinitionNode("Value", union);
         var typeDef = new TypeDefinitionNode("Holder", Properties: [prop]);

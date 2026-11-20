@@ -1,18 +1,11 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
-using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Runtime;
 
@@ -151,7 +144,7 @@ public sealed class DomainResultErasureTests {
                 new PropertyDefinitionNode(
                     "Typed",
                     new NamedTypeReference("DomainResult", TypeArguments: [
-                        TypeReference.Of(typeof(string)),
+                        TypeReference.To(typeof(string)),
                     ])),
             ]);
 

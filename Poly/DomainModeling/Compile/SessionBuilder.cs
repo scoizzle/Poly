@@ -1,5 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;

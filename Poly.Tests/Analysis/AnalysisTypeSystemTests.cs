@@ -1,9 +1,6 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Analysis;
 

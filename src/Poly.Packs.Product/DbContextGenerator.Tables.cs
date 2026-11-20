@@ -57,7 +57,7 @@ public sealed partial class DbContextGenerator {
             new Member(bParam, "Property"),
             new Constant(shadowKey)
         ) {
-            TypeArguments = [TypeReference.Of(typeof(int))]
+            TypeArguments = [TypeReference.To(typeof(int))]
         });
         bodyNodes.Add(new Invoke(
             new Member(bParam, "HasKey"),

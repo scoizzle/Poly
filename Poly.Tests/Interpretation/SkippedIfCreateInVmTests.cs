@@ -1,12 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
-using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm.Abi;
-using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 

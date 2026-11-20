@@ -35,7 +35,7 @@ public static class QuoteDoorProbe {
 /// families outside the bridge's fence, judged against compiled C#.
 /// </summary>
 public class QuoteOnlyLambdaTests {
-    private static Member Static(Type type, string name) => new(TypeReference.Of(type), name);
+    private static Member Static(Type type, string name) => new(TypeReference.To(type), name);
 
     private static string TypeName(Type type) =>
         Nullable.GetUnderlyingType(type) is { } underlying ? underlying.Name + "?" : type.Name;
@@ -92,9 +92,9 @@ public class QuoteOnlyLambdaTests {
     }
 
     private static (Parameter A, Parameter B, Lambda Lambda) Binary(Type left, Type right, Func<Parameter, Parameter, Node> body) {
-        var x = new Parameter("x", TypeReference.Of(left));
-        var y = new Parameter("y", TypeReference.Of(right));
-        return (new Parameter("a", TypeReference.Of(left)), new Parameter("b", TypeReference.Of(right)), new Lambda([x, y], body(x, y)));
+        var x = new Parameter("x", TypeReference.To(left));
+        var y = new Parameter("y", TypeReference.To(right));
+        return (new Parameter("a", TypeReference.To(left)), new Parameter("b", TypeReference.To(right)), new Lambda([x, y], body(x, y)));
     }
 
     private static Member Quote(Type left, Type right) =>
@@ -183,20 +183,20 @@ public class QuoteOnlyLambdaTests {
     /// </summary>
     [Test]
     public async Task ModuleCalleeDoor_LiteralLambda_IsDecidedAtTheBoundary() {
-        var f = new Parameter("f", TypeReference.Of(typeof(System.Linq.Expressions.Expression<Func<ulong?, object>>)));
-        var value = new Parameter("value", TypeReference.Of(typeof(ulong?)));
+        var f = new Parameter("f", TypeReference.To(typeof(System.Linq.Expressions.Expression<Func<ulong?, object>>)));
+        var value = new Parameter("value", TypeReference.To(typeof(ulong?)));
         var typeNode = new TypeDefinitionNode(
             "QuoteDoor", "Sample",
             Methods: [
                 new MethodDefinitionNode(
                     "Apply",
-                    TypeReference.Of(typeof(bool)),
+                    TypeReference.To(typeof(bool)),
                     Parameters: [f, value],
                     Body: new Invoke(Static(typeof(QuoteDoorProbe), nameof(QuoteDoorProbe.Apply)), f, value),
                     IsStatic: true)
             ]);
-        var x = new Parameter("x", TypeReference.Of(typeof(ulong?)));
-        var a = new Parameter("a", TypeReference.Of(typeof(ulong?)));
+        var x = new Parameter("x", TypeReference.To(typeof(ulong?)));
+        var a = new Parameter("a", TypeReference.To(typeof(ulong?)));
         var call = new Invoke(new Member(new TypeReference("Sample.QuoteDoor"), "Apply"),
             new Lambda([x], new Add(x, new Constant(1))), a);
         // C#: x + 1 over ulong? is ulong? (the constant converts), 7 + 1 = 8.
@@ -212,18 +212,18 @@ public class QuoteOnlyLambdaTests {
     /// </summary>
     [Test]
     public async Task ModuleMethodWithoutACompilableBody_LiteralLambdaArgument() {
-        var f = new Parameter("f", TypeReference.Of(typeof(System.Linq.Expressions.Expression<Func<ulong?, object>>)));
+        var f = new Parameter("f", TypeReference.To(typeof(System.Linq.Expressions.Expression<Func<ulong?, object>>)));
         var typeNode = new TypeDefinitionNode(
             "QuoteDoorHost", "Sample",
             Constructors: [new ConstructorDefinitionNode([], new Block([]))],
             Methods: [
                 new MethodDefinitionNode(
                     "Take",
-                    TypeReference.Of(typeof(bool)),
+                    TypeReference.To(typeof(bool)),
                     Parameters: [f],
                     Body: new Block([new Invoke(new Lambda([], new Constant(1L))), new Constant(true)]))
             ]);
-        var x = new Parameter("x", TypeReference.Of(typeof(ulong?)));
+        var x = new Parameter("x", TypeReference.To(typeof(ulong?)));
         var host = new Variable("host");
         var node = new Block([
             new Assignment(host, new New(new TypeReference("Sample.QuoteDoorHost"))),
@@ -247,7 +247,7 @@ public class QuoteOnlyLambdaTests {
         var (a, _, lambda) = Binary(typeof(int), typeof(int), static (x, y) => new Add(x, y));
         var probe = Static(typeof(BridgeProbe<,>).MakeGenericType(typeof(int), typeof(object)), "Apply");
         await Assert.That(Run(new Invoke(probe, lambda, a), [7])).StartsWith("analysis-rejected: no matching member 'Apply'");
-        var wide = new Parameter("x", TypeReference.Of(typeof(long)));
+        var wide = new Parameter("x", TypeReference.To(typeof(long)));
         await Assert.That(Run(new Invoke(probe, new Lambda([wide], wide), a), [7])).StartsWith("analysis-rejected: no matching member 'Apply'");
     }
 
@@ -283,8 +283,8 @@ public class QuoteOnlyLambdaTests {
             ("nuint? x + 1 -> object", typeof(nuint?), typeof(object), static x => new Add(x, new Constant(1))),
             ("nuint? x > 0 -> object", typeof(nuint?), typeof(object), static x => new GreaterThan(x, new Constant(0)))
         }) {
-            var x = new Parameter("x", TypeReference.Of(operand));
-            var a = new Parameter("a", TypeReference.Of(operand));
+            var x = new Parameter("x", TypeReference.To(operand));
+            var a = new Parameter("a", TypeReference.To(operand));
             var probe = Static(typeof(BridgeProbe<,>).MakeGenericType(operand, ret), "Apply");
             lines.Add($"{name} = {Run(new Invoke(probe, new Lambda([x], body(x)), a), [(nuint)7])}");
         }
@@ -361,14 +361,14 @@ public class QuoteOnlyLambdaTests {
             Cell<DayOfWeek, int>("DayOfWeek + Int32", static (x, y) => new Add(x, y!), static (x, y) => x + y, (DayOfWeek.Monday, 2)),
             Cell<object, object>("Object == Object", static (x, y) => new Equal(x, y!), static (x, y) => x == y, (s1, s2), (s1, s1)),
             Cell<object>("Object == null", static (x, _) => new Equal(x, new Constant(null)), static x => x == null, s1, null),
-            Cell<DateTime>("(Object)DateTime", static (x, _) => new TypeCast(x, TypeReference.Of(typeof(object))), static x => (object)x, dt1),
-            Cell<int>("(DayOfWeek)Int32", static (x, _) => new TypeCast(x, TypeReference.Of(typeof(DayOfWeek))), static x => (DayOfWeek)x, 2),
-            Cell<DayOfWeek>("(Int32)DayOfWeek", static (x, _) => new TypeCast(x, TypeReference.Of(typeof(int))), static x => (int)x, DayOfWeek.Friday),
-            Cell<object>("Object as Text", static (x, _) => new TypeAs(x, TypeReference.Of(typeof(string))), static x => x as string, s1, 7),
-            Cell<object>("Object is Text", static (x, _) => new TypeIs(x, TypeReference.Of(typeof(string))), static x => x is string, s1, 7),
-            Cell<object>("(Duration)Object", static (x, _) => new TypeCast(x, TypeReference.Of(typeof(TimeSpan))), static x => (TimeSpan)x, ts1),
+            Cell<DateTime>("(Object)DateTime", static (x, _) => new TypeCast(x, TypeReference.To(typeof(object))), static x => (object)x, dt1),
+            Cell<int>("(DayOfWeek)Int32", static (x, _) => new TypeCast(x, TypeReference.To(typeof(DayOfWeek))), static x => (DayOfWeek)x, 2),
+            Cell<DayOfWeek>("(Int32)DayOfWeek", static (x, _) => new TypeCast(x, TypeReference.To(typeof(int))), static x => (int)x, DayOfWeek.Friday),
+            Cell<object>("Object as Text", static (x, _) => new TypeAs(x, TypeReference.To(typeof(string))), static x => x as string, s1, 7),
+            Cell<object>("Object is Text", static (x, _) => new TypeIs(x, TypeReference.To(typeof(string))), static x => x is string, s1, 7),
+            Cell<object>("(Duration)Object", static (x, _) => new TypeCast(x, TypeReference.To(typeof(TimeSpan))), static x => (TimeSpan)x, ts1),
             // C# CS0077: 'as' needs a reference or nullable type.
-            Refused<object>("Object as Int32", static (x, _) => new TypeAs(x, TypeReference.Of(typeof(int))), s1),
+            Refused<object>("Object as Int32", static (x, _) => new TypeAs(x, TypeReference.To(typeof(int))), s1),
             // Coalesce and conditional outside the fence: the function-table compile refused some of these on master.
             Cell<DayOfWeek?>("DayOfWeek? ?? DayOfWeek", static (x, _) => new Coalesce(x, new Constant(DayOfWeek.Monday)), static x => x ?? DayOfWeek.Monday, DayOfWeek.Friday, null),
             Refused<DayOfWeek?, int>("DayOfWeek? ?? Int32", static (x, y) => new Coalesce(x, y!), (DayOfWeek.Friday, 1)),
@@ -409,12 +409,12 @@ public class QuoteOnlyLambdaTests {
     /// <summary>The cell through the VM, one run per set: the stage, or the type and the values joined as C#'s are.</summary>
     private static string VmAnswer(FenceCell cell) {
         var stages = cell.Sets.Select(set => {
-            var x = new Parameter("x", TypeReference.Of(cell.Left));
-            var a = new Parameter("a", TypeReference.Of(cell.Left));
+            var x = new Parameter("x", TypeReference.To(cell.Left));
+            var a = new Parameter("a", TypeReference.To(cell.Left));
             Node call;
             if (cell.Right is { } right) {
-                var y = new Parameter("y", TypeReference.Of(right));
-                var b = new Parameter("b", TypeReference.Of(right));
+                var y = new Parameter("y", TypeReference.To(right));
+                var b = new Parameter("b", TypeReference.To(right));
                 call = new Invoke(Quote(cell.Left, right), new Lambda([x, y], cell.Body(x, y)), a, b);
                 return Run(call, [set.Left, set.Right]);
             }

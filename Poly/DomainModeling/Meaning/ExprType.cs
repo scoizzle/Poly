@@ -1,5 +1,3 @@
-using Poly.Introspection;
-
 namespace Poly.DomainModeling.Meaning;
 
 /// <summary>

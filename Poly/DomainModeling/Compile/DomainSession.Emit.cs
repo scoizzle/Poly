@@ -1,5 +1,4 @@
 // DomainSession emit path: module printing and contributed artifacts.
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
 

@@ -1,7 +1,3 @@
-using System.Runtime.CompilerServices;
-
-using Poly.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Analysis;

@@ -79,13 +79,13 @@ public sealed partial class DomainToCSharpExporter {
         Entity entity, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
         fields.Add(new FieldDefinitionNode(
             "_notifyDepth",
-            TypeReference.Of(typeof(int)),
+            TypeReference.To(typeof(int)),
             AccessModifier: AccessModifier.Private));
         var depth = new Member(new ThisReference(), "_notifyDepth");
         methods.Add(new MethodDefinitionNode(
             "EnterNotifyCascade",
-            TypeReference.Of(typeof(int)),
-            Parameters: [new Parameter("stageName", TypeReference.Of(typeof(string)))],
+            TypeReference.To(typeof(int)),
+            Parameters: [new Parameter("stageName", TypeReference.To(typeof(string)))],
             Body: new Block([
                 new IfStatement(
                     new GreaterThanOrEqual(
@@ -94,7 +94,7 @@ public sealed partial class DomainToCSharpExporter {
                     new ThrowStatement(new New(
                         new NamedTypeReference("System.InvalidOperationException"),
                         new Invoke(
-                            new Member(TypeReference.Of(typeof(string)), "Concat"),
+                            new Member(TypeReference.To(typeof(string)), "Concat"),
                             new Constant($"Subscription cascade on entity '{entity.Name}' exceeded max depth ({MaxNotifyDepth}) while notifying '"),
                             new Parameter("stageName"),
                             new Constant("'."))))),
@@ -102,7 +102,7 @@ public sealed partial class DomainToCSharpExporter {
                 new Return(new Syntactic.Subtract(depth, new Constant(1)))
             ]),
             AccessModifier: AccessModifier.Private));
-        var entered = new Parameter("depth", TypeReference.Of(typeof(int)));
+        var entered = new Parameter("depth", TypeReference.To(typeof(int)));
         methods.Add(new MethodDefinitionNode(
             "ExitNotifyCascade",
             new TypeReference("void"),
@@ -167,7 +167,7 @@ public sealed partial class DomainToCSharpExporter {
                         fieldAcc,
                         new IfStatement(
                             new Invoke(
-                                new Member(TypeReference.Of(typeof(object)), "ReferenceEquals"),
+                                new Member(TypeReference.To(typeof(object)), "ReferenceEquals"),
                                 [existing, subscriber]),
                             new Block([new Return(null)]))),
                     new Invoke(

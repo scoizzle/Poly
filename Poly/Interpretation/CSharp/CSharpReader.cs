@@ -1,7 +1,6 @@
 using System.Globalization;
 
 using Poly.Grammar;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.CSharp;
@@ -288,7 +287,7 @@ public static class CSharpReader {
                     : member.Children[0];
                 fields.Add(new FieldDefinitionNode(
                     Capture(target, "name"),
-                    TypeReference.Of(typeof(int)),
+                    TypeReference.To(typeof(int)),
                     new Constant(FoldEnumValue(target)),
                     IsStatic: true,
                     IsConst: true));
@@ -556,7 +555,7 @@ public static class CSharpReader {
             }
         }
 
-        private static Node Primitive(Type type) => TypeReference.Of(type);
+        private static Node Primitive(Type type) => TypeReference.To(type);
 
         // ── statements ───────────────────────────────────────────────────────
 

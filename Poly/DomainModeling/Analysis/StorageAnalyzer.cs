@@ -1,7 +1,5 @@
 using Poly.DomainModeling.Ontology;
 
-using Action = Poly.DomainModeling.Ontology.Action;
-
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>

@@ -1,7 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
@@ -42,7 +41,7 @@ public class SuspendResumeVmTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Tick",
-                    TypeReference.Of(typeof(long)),
+                    TypeReference.To(typeof(long)),
                     Body: new Block([
                         new SuspendNode(new Constant(0L), "mid"),
                         new Constant(7L)

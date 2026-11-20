@@ -1,8 +1,6 @@
-using Poly.Ast.Nodes;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Runtime;
 
 namespace Poly.Tests.Introspection;
 
@@ -14,7 +12,7 @@ namespace Poly.Tests.Introspection;
 public class ClrReferenceIdentityTests {
     [Test]
     public async Task Of_PlainType_CarriesTheProvidersDefinition() {
-        var reference = TypeReference.Of(typeof(string));
+        var reference = TypeReference.To(typeof(string));
 
         await Assert.That(reference).IsTypeOf<TypeDefinitionReference>();
         var stated = ((TypeDefinitionReference)reference).TypeDefinition;
@@ -24,7 +22,7 @@ public class ClrReferenceIdentityTests {
 
     [Test]
     public async Task Of_GenericType_CarriesTheClosedDefinition() {
-        var reference = TypeReference.Of(typeof(Func<int, string>));
+        var reference = TypeReference.To(typeof(Func<int, string>));
 
         await Assert.That(reference).IsTypeOf<TypeDefinitionReference>();
         var stated = ((TypeDefinitionReference)reference).TypeDefinition;
@@ -34,7 +32,7 @@ public class ClrReferenceIdentityTests {
 
     [Test]
     public async Task Of_NullableType_KeepsTheOptionalShapeOverItsUnderlyingDefinition() {
-        var reference = TypeReference.Of(typeof(int?));
+        var reference = TypeReference.To(typeof(int?));
 
         await Assert.That(reference).IsTypeOf<OptionalTypeReference>();
         await Assert.That(((OptionalTypeReference)reference).InnerType).IsTypeOf<TypeDefinitionReference>();
@@ -55,7 +53,7 @@ public class ClrReferenceIdentityTests {
 
     [Test]
     public async Task Denotes_AnImplementerOfThePort_IsTrue() {
-        var implementer = TypeReference.Of(typeof(Poly.DomainModeling.Runtime.ModuleStoragePort));
+        var implementer = TypeReference.To(typeof(Poly.DomainModeling.Runtime.ModuleStoragePort));
         await Assert.That(implementer.Denotes(typeof(IStoragePort))).IsTrue()
             .Because("a parameter typed as an implementer of the port takes the port");
     }

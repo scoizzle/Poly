@@ -27,7 +27,7 @@ public class AsyncMethodVmTests {
     }
 
     private static MethodDefinitionNode AsyncReturning(string name, Type task, Node body) => new(
-        name, TypeReference.Of(task), Body: body, IsAsync: true);
+        name, TypeReference.To(task), Body: body, IsAsync: true);
 
     private static TypeDefinitionNode ItemWith(params MethodDefinitionNode[] methods) =>
         new("Item", "Sample", Methods: methods);
@@ -77,7 +77,7 @@ public class AsyncMethodVmTests {
     [Test]
     public async Task NonAsyncMethod_IsNotWrapped() {
         var sync = new MethodDefinitionNode(
-            "Sync", TypeReference.Of(typeof(long)),
+            "Sync", TypeReference.To(typeof(long)),
             Body: new Return(new Constant(9L)));
         var tda = Analyze(ItemWith(sync));
         await Assert.That(RunLong(tda, new Invoke(new Member(Item, "Sync")))).IsEqualTo(9L);
@@ -87,9 +87,9 @@ public class AsyncMethodVmTests {
     public async Task NonAsyncTaskReturningMethod_IsNotWrapped() {
         // IsAsync false: the body's own Task<long> is the method's value, not a wrapped result.
         var raw = new MethodDefinitionNode(
-            "Raw", TypeReference.Of(typeof(Task<long>)),
+            "Raw", TypeReference.To(typeof(Task<long>)),
             Body: new Return(new Invoke(
-                new Member(TypeReference.Of(typeof(Host)), "Completed"))));
+                new Member(TypeReference.To(typeof(Host)), "Completed"))));
         var tda = Analyze(ItemWith(raw));
         using var exec = Execute(Compile(tda, new Invoke(new Member(Item, "Raw"))));
         var task = exec.GetValue<Task<long>>();
@@ -109,7 +109,7 @@ public class AsyncMethodVmTests {
     [Test]
     public async Task AwaitInNonAsyncMethod_IsRejected() {
         var bad = new MethodDefinitionNode(
-            "Bad", TypeReference.Of(typeof(Task<long>)),
+            "Bad", TypeReference.To(typeof(Task<long>)),
             Body: new Return(new Await(new Constant(1L))));
         var tda = Analyze(ItemWith(bad));
         await Assert.That(() => Compile(tda, new Await(new Invoke(new Member(Item, "Bad")))))

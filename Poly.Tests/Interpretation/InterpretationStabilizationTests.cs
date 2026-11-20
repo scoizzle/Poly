@@ -1,5 +1,4 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
@@ -144,7 +143,7 @@ public class InterpretationStabilizationTests {
         var target = new TypeDefinitionNode("Target",
             Properties: [
                 new PropertyDefinitionNode("Age",
-                    TypeReference.Of(typeof(long)),
+                    TypeReference.To(typeof(long)),
                     Getter: new PropertyGetterDefinitionNode())
             ]);
         var source = new TypeDefinitionNode("Source",
@@ -185,13 +184,13 @@ public class InterpretationStabilizationTests {
         "Person",
         Properties: [
             new PropertyDefinitionNode("Age",
-                TypeReference.Of(typeof(long)),
+                TypeReference.To(typeof(long)),
                 Getter: new PropertyGetterDefinitionNode()),
             new PropertyDefinitionNode("Name",
-                TypeReference.Of(typeof(string)),
+                TypeReference.To(typeof(string)),
                 Getter: new PropertyGetterDefinitionNode()),
             new PropertyDefinitionNode("Ref",
-                TypeReference.Of(typeof(object)),
+                TypeReference.To(typeof(object)),
                 Getter: new PropertyGetterDefinitionNode())
         ]);
 
@@ -495,7 +494,7 @@ public class InterpretationStabilizationTests {
     private static async Task AssertSlot0(object? arg, long expectedRaw) {
         var program = Interpreter.Compile(arg is null
             ? new ThisReference()
-            : new Parameter("p", TypeReference.Of(arg.GetType())));
+            : new Parameter("p", TypeReference.To(arg.GetType())));
         using var exec = Interpreter.Execute(program, s => s.SetArgs(arg));
         await Assert.That(exec.RawValue).IsEqualTo(expectedRaw);
     }

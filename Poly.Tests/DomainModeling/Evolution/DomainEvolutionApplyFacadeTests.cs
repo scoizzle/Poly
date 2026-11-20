@@ -1,6 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 

@@ -1,7 +1,5 @@
 using System.Text.Json.Nodes;
 
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.Mcp;
 
 /// <summary>

@@ -2,11 +2,8 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
-using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
-using Poly.Runtime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

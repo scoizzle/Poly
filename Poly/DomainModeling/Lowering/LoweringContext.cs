@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Lowering;

@@ -1,8 +1,6 @@
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.DomainModeling.Compile;
@@ -111,7 +109,7 @@ public sealed class ConstraintCompileRequest {
         ArgumentNullException.ThrowIfNull(type);
         return Types?.ClrDefinitionOf(type) is { } definition
             ? new TypeDefinitionReference(definition)
-            : Ast.Nodes.TypeReference.Of(type);
+            : Ast.Nodes.TypeReference.To(type);
     }
 
     public Entity Entity { get; }

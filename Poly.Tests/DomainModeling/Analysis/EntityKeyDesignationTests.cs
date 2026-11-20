@@ -1,10 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
-using Poly.DomainModeling.Ontology.Effects;
 using Poly.DomainModeling.Queries;
 using Poly.Grammar;
 using Poly.Interpretation.CSharp;

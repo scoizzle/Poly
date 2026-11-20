@@ -1,6 +1,4 @@
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
 
 namespace Poly.Tests.Mcp;

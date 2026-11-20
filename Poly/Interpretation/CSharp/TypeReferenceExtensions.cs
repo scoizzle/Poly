@@ -1,4 +1,3 @@
-using Poly.Ast.Nodes;
 using Poly.Introspection.CommonLanguageRuntime;
 
 
@@ -15,14 +14,14 @@ namespace Poly.Interpretation.CSharp;
 internal static class TypeReferenceExtensions {
     extension(TypeReference) {
         /// <summary>A reference to <typeparamref name="T"/>.</summary>
-        public static Node To<T>() => TypeReference.Of(typeof(T));
+        public static Node To<T>() => TypeReference.To(typeof(T));
 
         /// <summary>A reference to <paramref name="type"/>: an optional over its underlying reference when it is
         /// nullable, else the platform's own definition of the type.</summary>
-        public static Node Of(Type type) {
+        public static Node To(Type type) {
             ArgumentNullException.ThrowIfNull(type);
             if (Nullable.GetUnderlyingType(type) is { } underlying)
-                return new OptionalTypeReference(TypeReference.Of(underlying));
+                return new OptionalTypeReference(TypeReference.To(underlying));
             return new TypeDefinitionReference(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type));
         }
     }

@@ -10,7 +10,6 @@ using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -170,8 +169,8 @@ internal static class ConstantFoldGrid {
 
     /// <summary>The unfolded VM: the same operator over Parameter operands, run with the row's values, as the ledger runs it.</summary>
     public static string UnfoldedVm(FoldGridRow row) {
-        var a = new Parameter("a", TypeReference.Of(row.Left.Clr!));
-        var b = row.Right is null ? null : new Parameter("b", TypeReference.Of(row.Right.Clr!));
+        var a = new Parameter("a", TypeReference.To(row.Left.Clr!));
+        var b = row.Right is null ? null : new Parameter("b", TypeReference.To(row.Right.Clr!));
         var node = Build(row.Op, a, b);
         try {
             var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
@@ -327,8 +326,8 @@ public class ConstantFoldingProviderTests {
         await Assert.That(MasterUnfoldedValues.Value.Keys.Order(StringComparer.Ordinal).ToArray())
             .IsEquivalentTo(rows.Select(static row => row.Key).Order(StringComparer.Ordinal).ToArray());
         foreach (var row in rows) {
-            var a = new Parameter("a", TypeReference.Of(row.Left.Clr!));
-            var b = new Parameter("b", TypeReference.Of(row.Right!.Clr!));
+            var a = new Parameter("a", TypeReference.To(row.Left.Clr!));
+            var b = new Parameter("b", TypeReference.To(row.Right!.Clr!));
             await Assert.That(ConstantFoldGrid.UnfoldedVm(row)).IsEqualTo("throws InvalidOperationException");
             await Assert.That(() => Interpreter.Compile(ConstantFoldGrid.Build(row.Op, a, b)))
                 .Throws<InvalidOperationException>().WithMessageContaining("comparison between incompatible types");

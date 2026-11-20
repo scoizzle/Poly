@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
 using Poly.Interpretation.CSharp;
 
 using Artifact = Poly.DomainModeling.Compile.Artifact;
@@ -162,7 +161,7 @@ public sealed class EveryConceptHasTreeTests {
             Methods: [
                 new MethodDefinitionNode(
                     "M",
-                    TypeReference.Of(typeof(int)),
+                    TypeReference.To(typeof(int)),
                     Body: new Constant(DomainExpression.Literal(1)))
             ]);
 

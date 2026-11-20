@@ -1,6 +1,5 @@
 // EffectAnalyzer partial: an exit-block transition must target what every leaving hop targets.
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.DomainModeling.Analysis;
 

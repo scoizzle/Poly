@@ -24,7 +24,7 @@ public class AbiEmitterOptionalScalarTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Probe",
-                    TypeReference.Of(typeof(bool)),
+                    TypeReference.To(typeof(bool)),
                     Parameters: [age],
                     Body: new Return(body),
                     IsStatic: true)

@@ -8,8 +8,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Language;
 using Poly.Packs.Product;
 using Poly.Tests.Docs;
 

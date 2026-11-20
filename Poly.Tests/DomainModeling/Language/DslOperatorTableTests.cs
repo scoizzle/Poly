@@ -1,6 +1,3 @@
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Libraries.Temporal;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 

@@ -1,8 +1,5 @@
 using System.Reflection;
 
-using Poly.Interpretation;
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>

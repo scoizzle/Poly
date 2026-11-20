@@ -3,7 +3,6 @@ using System.Reflection;
 using RuntimeAsyncDomainResult = Poly.Runtime.AsyncDomainResult;
 using RuntimeDomainFailure = Poly.Runtime.DomainFailure;
 using RuntimeDomainFailureKind = Poly.Runtime.DomainFailureKind;
-using RuntimeDomainResult = Poly.Runtime.DomainResult;
 
 namespace Poly.Tests.Runtime;
 

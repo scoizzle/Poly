@@ -1,8 +1,6 @@
 using System.Globalization;
 
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
 using Poly.Runtime;
@@ -77,7 +75,7 @@ internal static class ConstraintCheckWriter {
         PresencePolicy Presence,
         CheckOrder Order) {
         internal static readonly ConstraintCheckStyle Create = new(
-            () => TypeReference.Of(typeof(string)),
+            () => TypeReference.To(typeof(string)),
             () => new NamedTypeReference("System.Text.RegularExpressions.Regex"),
             NamesEnumValue: true,
             Presence: PresencePolicy.CreateSlot,

@@ -1,11 +1,7 @@
-using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Platform;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
-using Poly.Grammar;
 
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 

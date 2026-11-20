@@ -2,11 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 
-using Poly.Ast.Nodes;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.Vm;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;

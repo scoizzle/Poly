@@ -1,6 +1,5 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.Mcp.Sessions;
 
 namespace Poly.Tests.TestHelpers;
 

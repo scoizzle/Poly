@@ -1,10 +1,7 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.Packs.Product;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 

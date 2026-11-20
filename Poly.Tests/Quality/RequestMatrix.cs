@@ -2,8 +2,6 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.Quality;
 
 /// <summary>An action to invoke on a created row; <paramref name="Rejected"/> is null when no argument can be rejected.</summary>

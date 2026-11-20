@@ -1,12 +1,9 @@
 using System.Collections;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
-using Poly.Interpretation.Vm;
 using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -52,7 +49,7 @@ public class InvokeMemberInstanceTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "CurrentStage",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode())
             ],
             Methods: [
@@ -60,7 +57,7 @@ public class InvokeMemberInstanceTests {
                     "Notify",
                     new TypeReference("void"),
                     Parameters: [new Parameter("stageName",
-                        TypeReference.Of(typeof(string)))],
+                        TypeReference.To(typeof(string)))],
                     Body: new Block([])),
                 new MethodDefinitionNode(
                     "Bounce",
@@ -146,7 +143,7 @@ public class InvokeMemberInstanceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Ping",
-                    TypeReference.Of(typeof(long)),
+                    TypeReference.To(typeof(long)),
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -168,7 +165,7 @@ public class InvokeMemberInstanceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Ping",
-                    TypeReference.Of(typeof(long)),
+                    TypeReference.To(typeof(long)),
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();

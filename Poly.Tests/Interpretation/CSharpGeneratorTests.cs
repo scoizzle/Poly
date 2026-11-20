@@ -1,7 +1,5 @@
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -650,13 +648,13 @@ public class CSharpGeneratorTests {
             Fields: [
                 new FieldDefinitionNode(
                     "Technology",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     DefaultValue: new Constant("Technology"),
                     IsStatic: true,
                     IsConst: true),
                 new FieldDefinitionNode(
                     "Healthcare",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     DefaultValue: new Constant("Healthcare"),
                     IsStatic: true,
                     IsConst: true)
@@ -697,7 +695,7 @@ public class CSharpGeneratorTests {
             Name: "Widget",
             Interfaces: [
                 new NamedTypeReference("IDisposable"),
-                new NamedTypeReference("IEnumerable", TypeArguments: [TypeReference.Of(typeof(string))])
+                new NamedTypeReference("IEnumerable", TypeArguments: [TypeReference.To(typeof(string))])
             ]);
 
         var result = new CSharpGenerator().Generate(node);
@@ -713,7 +711,7 @@ public class CSharpGeneratorTests {
         var node = new TypeDefinitionNode(
             Name: "WidgetCreated",
             PrimaryConstructorParameters: [
-                new Parameter("Name", TypeReference.Of(typeof(string)))
+                new Parameter("Name", TypeReference.To(typeof(string)))
             ],
             Semantics: TypeDefinitionSemantics.ImmutableValue);
 
@@ -730,7 +728,7 @@ public class CSharpGeneratorTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Name",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode(),
                     Setter: new PropertySetterDefinitionNode(AccessModifier: AccessModifier.Protected))
             ]);
@@ -751,14 +749,14 @@ public class CSharpGeneratorTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "base",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode())
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "Create",
                     new TypeReference("void"),
-                    Parameters: [new Parameter("ref", TypeReference.Of(typeof(string)))],
+                    Parameters: [new Parameter("ref", TypeReference.To(typeof(string)))],
                     Body: new Block([new Return()]))
             ]);
 
@@ -797,22 +795,22 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_PrimaryConstructorInitializerReferences_WritesParameterBackedInitializers() {
-        var nameParameter = new Parameter("name", TypeReference.Of(typeof(string)));
+        var nameParameter = new Parameter("name", TypeReference.To(typeof(string)));
         var node = new TypeDefinitionNode(
             Name: "Widget",
             PrimaryConstructorParameters: [nameParameter],
             Properties: [
                 new PropertyDefinitionNode(
                     "DisplayName",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode(),
-                    Initializer: new PropertyInitializerDefinitionNode(new Parameter("name", TypeReference.Of(typeof(string)))))
+                    Initializer: new PropertyInitializerDefinitionNode(new Parameter("name", TypeReference.To(typeof(string)))))
             ],
             Fields: [
                 new FieldDefinitionNode(
                     "_name",
-                    TypeReference.Of(typeof(string)),
-                    new Parameter("name", TypeReference.Of(typeof(string))),
+                    TypeReference.To(typeof(string)),
+                    new Parameter("name", TypeReference.To(typeof(string))),
                     IsReadOnly: true,
                     AccessModifier: AccessModifier.Private)
             ],
@@ -946,13 +944,13 @@ public class CSharpGeneratorTests {
     [Test]
     public async Task Generate_MapOptionalUnion_TypeRefs() {
         var g = new CSharpGenerator();
-        var optional = new OptionalTypeReference(TypeReference.Of(typeof(int)));
+        var optional = new OptionalTypeReference(TypeReference.To(typeof(int)));
         var map = new MapTypeReference(
-            TypeReference.Of(typeof(string)),
-            TypeReference.Of(typeof(int)));
+            TypeReference.To(typeof(string)),
+            TypeReference.To(typeof(int)));
         var union = new UnionTypeReference([
-            TypeReference.Of(typeof(int)),
-            TypeReference.Of(typeof(string))
+            TypeReference.To(typeof(int)),
+            TypeReference.To(typeof(string))
         ]);
         await Assert.That(g.Generate(optional)).Contains("?");
         await Assert.That(g.Generate(map)).Contains("Dictionary");

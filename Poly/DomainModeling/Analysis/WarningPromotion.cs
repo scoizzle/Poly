@@ -1,5 +1,3 @@
-using Poly.Analysis;
-
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>

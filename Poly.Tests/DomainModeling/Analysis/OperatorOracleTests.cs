@@ -5,8 +5,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -273,8 +271,8 @@ internal static class OperatorOracle {
 
     private static (string Lowered, string Abi) RunVm(
         OracleOperand left, OperatorKind kind, OracleOperand? right, ITypeOperator? resolution, List<OracleDivergence> divergences) {
-        var a = new Parameter("a", TypeReference.Of(left.Clr!));
-        var b = right is null ? null : new Parameter("b", TypeReference.Of(right.Clr!));
+        var a = new Parameter("a", TypeReference.To(left.Clr!));
+        var b = right is null ? null : new Parameter("b", TypeReference.To(right.Clr!));
         var node = Build(kind, a, b);
         var expectedType = resolution is { } found && found.ResultTypeDefinition.TryGetRuntimeType(out var tree) ? tree : null;
 

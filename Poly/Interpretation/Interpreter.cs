@@ -4,7 +4,6 @@ using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
-using Poly.Introspection;
 
 using PrimValueKind = Poly.Interpretation.Vm.Abi.ValueRepresentationKind;
 

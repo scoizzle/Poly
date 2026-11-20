@@ -4,7 +4,6 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
-using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
 
 namespace Poly.Tests.Mcp;

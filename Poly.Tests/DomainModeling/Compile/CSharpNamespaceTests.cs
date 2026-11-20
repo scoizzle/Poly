@@ -1,10 +1,6 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Ontology;
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>

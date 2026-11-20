@@ -1,7 +1,5 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 

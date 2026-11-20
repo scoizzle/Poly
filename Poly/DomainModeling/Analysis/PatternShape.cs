@@ -1,7 +1,3 @@
-using System.Text.RegularExpressions;
-
-using Poly.DomainModeling.Ontology.Constraints;
-
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>

@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 using Poly.Interpretation.CSharp;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -46,8 +45,8 @@ public class CSharpLanguageTests {
     [Test]
     public async Task Write_GenericType_ClosesNestedTypeArguments() {
         var type = new NamedTypeReference("Dictionary", TypeArguments: [
-            TypeReference.Of(typeof(string)),
-            new CollectionTypeReference(TypeReference.Of(typeof(long))),
+            TypeReference.To(typeof(string)),
+            new CollectionTypeReference(TypeReference.To(typeof(long))),
         ]);
         var field = new FieldDefinitionNode("Prices", type);
         var text = CSharpLanguage.Write([new TypeDefinitionNode("Ledger", Fields: [field])]);

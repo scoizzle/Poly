@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 

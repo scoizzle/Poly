@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>An expression lowered to statements (loops, short-circuit) plus the value those statements produce.</summary>

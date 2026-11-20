@@ -1,13 +1,9 @@
 using System.Reflection;
 
-using Poly.Ast.Nodes;
-using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
 
 using TUnit.Assertions.Enums;
 

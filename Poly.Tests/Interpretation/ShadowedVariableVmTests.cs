@@ -1,6 +1,5 @@
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -125,7 +124,7 @@ public class ShadowedVariableVmTests {
     }
 
     private static Member Probe(string name) =>
-        new(TypeReference.Of(typeof(ShadowProbe)), name);
+        new(TypeReference.To(typeof(ShadowProbe)), name);
 
     public static class ShadowProbe {
         public static long Apply(System.Linq.Expressions.Expression<Func<long, long>> body, long value) =>

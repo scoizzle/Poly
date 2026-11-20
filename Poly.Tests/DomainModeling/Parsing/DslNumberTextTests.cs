@@ -2,11 +2,9 @@ using System.Text.RegularExpressions;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 using Poly.Tests.Docs;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 

@@ -1,12 +1,10 @@
 using System.Reflection;
 
-using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Introspection;
 

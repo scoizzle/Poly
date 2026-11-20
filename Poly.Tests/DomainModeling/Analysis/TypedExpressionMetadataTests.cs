@@ -1,11 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using DmPrimitive = Poly.DomainModeling.Ontology.PrimitiveType;

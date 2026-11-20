@@ -1,6 +1,5 @@
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
@@ -20,7 +19,7 @@ public class LanguageSurfaceTests {
 
     [Test]
     public async Task TypeReference_AsValue_CompileRejects() {
-        await Assert.That(() => Interpreter.Compile(TypeReference.Of(typeof(string))))
+        await Assert.That(() => Interpreter.Compile(TypeReference.To(typeof(string))))
             .Throws<InvalidOperationException>();
     }
 }

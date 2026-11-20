@@ -1,17 +1,9 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.Vm;
 using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.DomainModeling.Compile;
 

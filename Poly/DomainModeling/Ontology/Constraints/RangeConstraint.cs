@@ -1,5 +1,3 @@
-using System.Collections;
-
 namespace Poly.DomainModeling.Ontology.Constraints;
 
 /// <summary>One closed interval of a <see cref="RangeConstraint"/> union; a null bound is unbounded.</summary>

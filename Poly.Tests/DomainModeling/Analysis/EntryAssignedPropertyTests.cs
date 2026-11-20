@@ -1,11 +1,8 @@
-using Poly.Analysis;
 using Poly.Compile;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Effects;
 using Poly.Packs.Product;
 
 namespace Poly.Tests.DomainModeling.Analysis;

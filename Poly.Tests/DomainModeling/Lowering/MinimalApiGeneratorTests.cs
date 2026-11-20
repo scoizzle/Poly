@@ -8,9 +8,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Ontology;
-using Poly.DslCompiler;
 using Poly.Packs.Product;
-using Poly.Tests.TestHelpers;
 
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;

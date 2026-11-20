@@ -1,5 +1,3 @@
-using Poly.DomainModeling.Compile;
-
 namespace Poly.Tests.DomainModeling.Compile;
 
 public sealed class ArtifactIdTests {

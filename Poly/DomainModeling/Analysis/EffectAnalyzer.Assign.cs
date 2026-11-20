@@ -2,9 +2,6 @@
 using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;
-using Add = Poly.DomainModeling.Ontology.Add;
-using Multiply = Poly.DomainModeling.Ontology.Multiply;
-using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Analysis;
 

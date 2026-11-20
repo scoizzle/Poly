@@ -1,6 +1,4 @@
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Contract;
 
 using ValueType = Poly.DomainModeling.Ontology.ValueType;

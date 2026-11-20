@@ -1,10 +1,6 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
@@ -209,7 +205,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private static Node TypeReferenceTo(ITypeSystem? provider, Type type) =>
         provider?.ClrDefinitionOf(type) is { } definition
             ? new TypeDefinitionReference(definition)
-            : TypeReference.Of(type);
+            : TypeReference.To(type);
 
     private sealed class AssignWalk {
         private readonly string _typeName;

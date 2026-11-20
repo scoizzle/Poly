@@ -1,6 +1,5 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 

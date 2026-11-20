@@ -1,6 +1,3 @@
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Language;
-
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>

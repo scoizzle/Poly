@@ -1,7 +1,5 @@
-using Poly.Ast.Nodes;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
 

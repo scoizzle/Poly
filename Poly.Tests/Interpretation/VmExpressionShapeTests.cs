@@ -4,7 +4,6 @@ using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 

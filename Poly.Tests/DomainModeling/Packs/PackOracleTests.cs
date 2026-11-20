@@ -5,9 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-using Poly.Tests.DomainModeling.Lowering;
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.DomainModeling.Packs;
 
 /// <summary>

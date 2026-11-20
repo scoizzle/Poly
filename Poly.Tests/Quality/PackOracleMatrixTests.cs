@@ -1,11 +1,9 @@
 using System.Text.RegularExpressions;
 
 using Poly.DomainModeling;
-using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.Tests.DomainModeling.Lowering;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Quality;
 

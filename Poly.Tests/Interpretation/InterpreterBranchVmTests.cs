@@ -240,16 +240,16 @@ public class InterpreterBranchVmTests {
     public async Task AstMethod_NonConstantDefault_OmittedArgumentIsZero() {
         var extra = new Parameter(
             "extra",
-            TypeReference.Of(typeof(long)),
+            TypeReference.To(typeof(long)),
             DefaultValue: new Add(new Constant(1L), new Constant(1L)));
         var tda = Analyze(new TypeDefinitionNode(
             "OpenLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Pick",
-                    TypeReference.Of(typeof(long)),
+                    TypeReference.To(typeof(long)),
                     Parameters: [
-                        new Parameter("written", TypeReference.Of(typeof(long))),
+                        new Parameter("written", TypeReference.To(typeof(long))),
                         extra
                     ],
                     Body: new Return(extra),
@@ -473,18 +473,18 @@ public class InterpreterBranchVmTests {
     private static (ITypeSource Types, Invoke Call) Pick(int arguments) {
         var written = new Parameter(
             "written",
-            TypeReference.Of(typeof(long)),
+            TypeReference.To(typeof(long)),
             DefaultValue: new Constant(1L));
         var extra = new Parameter(
             "extra",
-            TypeReference.Of(typeof(long)),
+            TypeReference.To(typeof(long)),
             DefaultValue: new Constant(7L));
         var tda = Analyze(new TypeDefinitionNode(
             "PickLot", "Branch",
             Methods: [
                 new MethodDefinitionNode(
                     "Pick",
-                    TypeReference.Of(typeof(long)),
+                    TypeReference.To(typeof(long)),
                     Parameters: [written, extra],
                     Body: new Return(new Add(written, extra)),
                     IsStatic: true)

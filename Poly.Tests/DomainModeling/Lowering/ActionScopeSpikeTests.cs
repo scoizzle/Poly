@@ -1,7 +1,5 @@
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Runtime;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -13,8 +11,8 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// and compiled by Roslyn with warnings as errors.
 /// </summary>
 public class ActionScopeSpikeTests {
-    private static readonly Node Scope = TypeReference.Of(typeof(ActionScope));
-    private static readonly Node BagType = TypeReference.Of(typeof(Dictionary<string, object?>));
+    private static readonly Node Scope = TypeReference.To(typeof(ActionScope));
+    private static readonly Node BagType = TypeReference.To(typeof(Dictionary<string, object?>));
 
     private static Node ScopeCall(string name, params Node[] arguments) =>
         new Invoke(new Member(Scope, name), arguments);
@@ -98,7 +96,7 @@ public class ActionScopeSpikeTests {
             new TryCatchFinally(
                 new Block([
                     new Invoke(new Member(bag, "Clear")),
-                    new ThrowStatement(new New(TypeReference.Of(typeof(InvalidOperationException)), new Constant("boom")))
+                    new ThrowStatement(new New(TypeReference.To(typeof(InvalidOperationException)), new Constant("boom")))
                 ]),
                 FinallyBlock: new Block([
                     ScopeCall("Rollback", scope),

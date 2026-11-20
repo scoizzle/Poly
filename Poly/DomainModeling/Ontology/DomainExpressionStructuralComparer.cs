@@ -1,7 +1,4 @@
-using System.Collections;
 using System.Reflection;
-
-using Poly.Ast;
 
 namespace Poly.DomainModeling.Ontology;
 

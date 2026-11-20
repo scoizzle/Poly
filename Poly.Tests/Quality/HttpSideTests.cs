@@ -2,8 +2,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 
-using Poly.Tests.TestHelpers;
-
 namespace Poly.Tests.Quality;
 
 /// <summary>The HTTP side over a fake handler: no host is booted.</summary>

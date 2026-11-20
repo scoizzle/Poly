@@ -1,6 +1,3 @@
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection.CommonLanguageRuntime;
-
 namespace Poly.Introspection;
 
 /// <summary>User-defined conversion operator from a source type to a destination type.</summary>

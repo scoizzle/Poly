@@ -1,9 +1,6 @@
 using System.Globalization;
 
-using Poly.Ast.Nodes;
 using Poly.DomainModeling;
-using Poly.DomainModeling.Libraries.Temporal;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
@@ -671,7 +668,7 @@ public class OperatorLookupTests {
         // Beside an operand that is not one of the simple numeric types, Int64 offers its own (Int64, Int64) addition.
         // A modeled type that converts implicitly to Int64 relies on that: the operand converts and the operator applies, as in C#.
         var set = new ModeledTypeSet();
-        ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", TypeReference.Of(typeof(long)),
+        ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", TypeReference.To(typeof(long)),
             [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true) { Conversion = ConversionOperatorKind.Implicit });
         var number = OperatorOperands.Clr(typeof(long));
         var offered = CSharpBuiltIns.OperatorsBeside((ClrTypeDefinition)number, OperatorKind.Add, cents).Single();

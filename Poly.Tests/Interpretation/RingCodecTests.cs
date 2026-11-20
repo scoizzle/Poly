@@ -1,8 +1,5 @@
-using Poly.Ast.Nodes;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
-using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 
 namespace Poly.Tests.Interpretation;

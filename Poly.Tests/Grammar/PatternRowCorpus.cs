@@ -1,13 +1,8 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Ontology.Contract;
 using Poly.Grammar;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Packs.Product;
 using Poly.Tests.Interpretation;
 

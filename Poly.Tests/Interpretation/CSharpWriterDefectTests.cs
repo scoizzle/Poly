@@ -1,9 +1,6 @@
 using System.Reflection;
 
-using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 

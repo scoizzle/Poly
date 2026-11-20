@@ -1,4 +1,3 @@
-using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm.Abi;
 
 namespace Poly.Interpretation.Vm;

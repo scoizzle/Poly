@@ -764,18 +764,18 @@ public partial class MinimalApiGeneratorTests {
     [MethodDataSource(nameof(WhitelistEntries))]
     public async Task ActionReads_WhitelistEntry_IsTheOnlyReasonTheCallIsFollowed(string entry) {
         var customer = new Member(new ThisReference(), "Customer");
-        var policy = new Invoke(new Member(TypeReference.Of(typeof(DomainFailure)), "Policy"), new Constant("m"), customer);
+        var policy = new Invoke(new Member(TypeReference.To(typeof(DomainFailure)), "Policy"), new Constant("m"), customer);
         var resultOfCustomer = new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("Customer")]);
         var (call, expected) = entry switch {
-            "Poly.Runtime.ActionScope.*" => ((Node)new Invoke(new Member(TypeReference.Of(typeof(ActionScope)), "Touch"), customer), "this{Customer}"),
-            "System.Object.ReferenceEquals" => (new Invoke(new Member(TypeReference.Of(typeof(object)), "ReferenceEquals"), customer, customer), "this{Customer}"),
+            "Poly.Runtime.ActionScope.*" => ((Node)new Invoke(new Member(TypeReference.To(typeof(ActionScope)), "Touch"), customer), "this{Customer}"),
+            "System.Object.ReferenceEquals" => (new Invoke(new Member(TypeReference.To(typeof(object)), "ReferenceEquals"), customer, customer), "this{Customer}"),
             "Poly.Runtime.DomainResult.Success" => (new Assignment(new Variable("n"),
                 new Member(new Member(new Member(new Invoke(new Member(resultOfCustomer, "Success"), customer), "Value"), "Region"), "Name")),
                 "this{Customer{Region}}"),
             "Poly.Runtime.DomainResult.Failure" => (new Invoke(new Member(resultOfCustomer, "Failure"), customer), "this{Customer}"),
             "Poly.Runtime.DomainFailure.*" => (policy, "this{Customer}"),
             "Poly.Runtime.DomainFailure.At" => (new Invoke(new Member(
-                new Invoke(new Member(TypeReference.Of(typeof(DomainFailure)), "Policy"), new Constant("m"), new Constant("p")), "At"), customer),
+                new Invoke(new Member(TypeReference.To(typeof(DomainFailure)), "Policy"), new Constant("m"), new Constant("p")), "At"), customer),
                 "this{Customer}"),
             "Poly.Runtime.IStoragePort.*" => (new Invoke(new Member(new Parameter("db"), "Exists"), new Constant("Widget"), new Constant("Code"), new Constant("x")), "this{}"),
             _ => throw new InvalidOperationException($"No test for whitelist entry '{entry}'."),
@@ -821,7 +821,7 @@ public partial class MinimalApiGeneratorTests {
         var types = compile.Catalog.Artifacts.Select(a => a.Descriptor.Id.Type).Distinct().ToList();
         foreach (var type in types)
             catalog.DeclareType(type, types);
-        var lookalike = TypeReference.Of(typeof(Lookalike.IStoragePort));
+        var lookalike = TypeReference.To(typeof(Lookalike.IStoragePort));
         foreach (var artifact in compile.Catalog.Artifacts) {
             if (artifact.Descriptor.Id.Type == "entity" && artifact.Descriptor.Id.Segments[^1] == "Widget") {
                 var replaced = ((IReadOnlyList<TypeDefinitionNode>)artifact.Payload!)

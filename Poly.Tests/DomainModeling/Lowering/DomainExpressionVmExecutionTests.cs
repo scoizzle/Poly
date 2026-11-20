@@ -1,9 +1,7 @@
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
-using Poly.Tests.TestHelpers;
 
 using SN = Poly.Ast.Nodes;
 

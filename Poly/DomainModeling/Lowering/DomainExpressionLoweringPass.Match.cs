@@ -97,7 +97,7 @@ public sealed partial class DomainExpressionLoweringPass {
             ? LoweredExpression.Of(new SN.TypeCast(new Constant(null), slot))
             : target is null ? Route(value) : AdaptTo(value, target, _currentSubject);
         return toDecimal && !armType.Optional && DomainTypeSystem.WordOf(armType.Definition) is "Int32" or "Number"
-            ? lowered with { Value = new SN.TypeCast(lowered.Value, TypeReference.Of(typeof(decimal))) }
+            ? lowered with { Value = new SN.TypeCast(lowered.Value, TypeReference.To(typeof(decimal))) }
             : lowered;
     }
 }

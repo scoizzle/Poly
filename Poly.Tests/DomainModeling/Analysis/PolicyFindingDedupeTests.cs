@@ -2,12 +2,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Surface;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 

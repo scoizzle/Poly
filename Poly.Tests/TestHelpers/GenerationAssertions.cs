@@ -1,6 +1,5 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
 

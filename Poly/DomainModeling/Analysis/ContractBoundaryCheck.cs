@@ -1,7 +1,4 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Contract;
 
 using And = Poly.DomainModeling.Ontology.And;

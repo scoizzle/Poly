@@ -1,5 +1,3 @@
-using Poly.Interpretation.Analysis.ControlFlow;
-
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal sealed class DefiniteAssignmentAnalyzer : INodeAnalyzer {

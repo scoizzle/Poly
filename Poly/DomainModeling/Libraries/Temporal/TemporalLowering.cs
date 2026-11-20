@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
 
@@ -314,7 +312,7 @@ internal static class TemporalLowering {
     }
 
     private static Node Int32Offset(Node rawArg) =>
-        new TypeCast(rawArg, TypeReference.Of(typeof(int)));
+        new TypeCast(rawArg, TypeReference.To(typeof(int)));
 
     private static Node ScaleOffset(Node offset, int factor) => offset switch {
         Constant { Value: long n } => new Constant(n * factor),

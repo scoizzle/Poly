@@ -1,8 +1,5 @@
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Contract;
-using Poly.DomainModeling.Runtime;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;

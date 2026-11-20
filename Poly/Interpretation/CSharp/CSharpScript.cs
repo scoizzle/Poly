@@ -1,6 +1,5 @@
 using System.Globalization;
 
-using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 
 namespace Poly.Interpretation.CSharp;

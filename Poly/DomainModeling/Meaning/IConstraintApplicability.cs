@@ -1,6 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
-using Poly.Introspection;
 
 namespace Poly.DomainModeling.Meaning;
 

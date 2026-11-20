@@ -1,6 +1,5 @@
 using System.Globalization;
 
-using Poly.Ast;
 using Poly.Ast.Nodes;
 
 using Poly.Interpretation.CSharp;
@@ -27,7 +26,7 @@ internal static class RangeAttributeArguments {
         var max = maximum ?? openMaximum;
         if (clrType == "decimal") {
             return [
-                new TypeOf(TypeReference.Of(typeof(decimal))),
+                new TypeOf(TypeReference.To(typeof(decimal))),
                 new Constant(DecimalBoundText(min)),
                 new Constant(DecimalBoundText(max)),
             ];

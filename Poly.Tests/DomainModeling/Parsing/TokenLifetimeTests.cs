@@ -2,9 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 
 using Poly.Compile;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.Grammar;
 using Poly.Packs.Product;
 

@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Server;
 
 using Poly.Mcp.Surface;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 

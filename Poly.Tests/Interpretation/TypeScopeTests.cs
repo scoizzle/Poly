@@ -1,4 +1,3 @@
-using Poly.Analysis;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 

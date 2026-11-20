@@ -2,10 +2,7 @@ using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 
@@ -239,7 +236,7 @@ public sealed partial class MinimalApiGenerator {
                     new Member(new TypeReference(BuilderVar), "Services"),
                     "AddScoped")) {
                 TypeArguments = [
-                    TypeReference.Of(typeof(IStoragePort)),
+                    TypeReference.To(typeof(IStoragePort)),
                     new TypeReference(dbContextName)
                 ]
             });
@@ -390,21 +387,21 @@ public sealed partial class MinimalApiGenerator {
     /// <summary>CLR keyword names are the CLR definitions the keywords name, so a
     /// domain type of the same name can print with <c>@</c> in type position.</summary>
     private static Node ClrTypeNode(string clrType) => clrType switch {
-        "bool" => TypeReference.Of(typeof(bool)),
-        "byte" => TypeReference.Of(typeof(byte)),
-        "char" => TypeReference.Of(typeof(char)),
-        "decimal" => TypeReference.Of(typeof(decimal)),
-        "double" => TypeReference.Of(typeof(double)),
-        "float" => TypeReference.Of(typeof(float)),
-        "int" => TypeReference.Of(typeof(int)),
-        "long" => TypeReference.Of(typeof(long)),
-        "object" => TypeReference.Of(typeof(object)),
-        "sbyte" => TypeReference.Of(typeof(sbyte)),
-        "short" => TypeReference.Of(typeof(short)),
-        "string" => TypeReference.Of(typeof(string)),
-        "uint" => TypeReference.Of(typeof(uint)),
-        "ulong" => TypeReference.Of(typeof(ulong)),
-        "ushort" => TypeReference.Of(typeof(ushort)),
+        "bool" => TypeReference.To(typeof(bool)),
+        "byte" => TypeReference.To(typeof(byte)),
+        "char" => TypeReference.To(typeof(char)),
+        "decimal" => TypeReference.To(typeof(decimal)),
+        "double" => TypeReference.To(typeof(double)),
+        "float" => TypeReference.To(typeof(float)),
+        "int" => TypeReference.To(typeof(int)),
+        "long" => TypeReference.To(typeof(long)),
+        "object" => TypeReference.To(typeof(object)),
+        "sbyte" => TypeReference.To(typeof(sbyte)),
+        "short" => TypeReference.To(typeof(short)),
+        "string" => TypeReference.To(typeof(string)),
+        "uint" => TypeReference.To(typeof(uint)),
+        "ulong" => TypeReference.To(typeof(ulong)),
+        "ushort" => TypeReference.To(typeof(ushort)),
         _ => new TypeReference(clrType),
     };
 }

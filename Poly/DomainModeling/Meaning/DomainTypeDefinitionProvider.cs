@@ -1,10 +1,8 @@
 using System.Collections.Concurrent;
 
-using Poly.Ast.Nodes;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.DomainModeling.Meaning;
@@ -105,7 +103,7 @@ internal sealed class DomainTypeDefinitionProvider : IQualifiedNameSource, IType
     /// </summary>
     private static MethodDefinitionNode Equality(OperatorKind kind, string typeName) =>
         new(kind.ToString(),
-            TypeReference.Of(typeof(bool)),
+            TypeReference.To(typeof(bool)),
             [new Parameter("left", new NamedTypeReference(typeName)), new Parameter("right", new NamedTypeReference(typeName))],
             IsStatic: true) { Operator = kind };
 

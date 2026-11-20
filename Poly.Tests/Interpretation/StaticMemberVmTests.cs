@@ -1,6 +1,5 @@
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
@@ -41,7 +40,7 @@ public class StaticMemberVmTests {
     [Test]
     public async Task Member_NeutralTypeReferenceUtcNow_ReturnsUtcClock() {
         using var exec = Interpreter.Execute(Interpreter.Compile(
-            new Member(TypeReference.Of(typeof(DateTime)), "UtcNow")));
+            new Member(TypeReference.To(typeof(DateTime)), "UtcNow")));
         await Assert.That(exec.GetValue<DateTime>().Kind).IsEqualTo(DateTimeKind.Utc);
     }
 

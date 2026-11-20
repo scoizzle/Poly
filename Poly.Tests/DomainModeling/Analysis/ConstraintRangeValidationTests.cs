@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 

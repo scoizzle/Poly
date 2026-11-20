@@ -1,5 +1,3 @@
-using Poly.DomainModeling.Language;
-
 namespace Poly.Tests.TestHelpers;
 
 /// <summary>

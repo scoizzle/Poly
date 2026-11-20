@@ -1,10 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
-using Poly.DomainModeling.Ontology.Effects;
-using Poly.DomainModeling.Runtime;
 
 namespace Poly.Tests.DomainModeling.Runtime;
 

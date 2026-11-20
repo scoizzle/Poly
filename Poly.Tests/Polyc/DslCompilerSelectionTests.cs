@@ -2,9 +2,6 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 
 using Poly.Compile;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Ontology;
-using Poly.DslCompiler;
 using Poly.Packs.Product;
 
 using CompileMode = Poly.DslCompiler.CompileMode;

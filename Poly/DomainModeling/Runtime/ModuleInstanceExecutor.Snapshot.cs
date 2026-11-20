@@ -1,5 +1,3 @@
-using System.Collections;
-
 namespace Poly.DomainModeling.Runtime;
 
 // Snapshot partial: bag and registration capture/restore around a transaction.

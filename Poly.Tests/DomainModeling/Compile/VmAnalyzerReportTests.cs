@@ -1,7 +1,6 @@
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Ontology;
-using Poly.Interpretation;
 using Poly.Packs.Sqlite;
 
 namespace Poly.Tests.DomainModeling.Compile;

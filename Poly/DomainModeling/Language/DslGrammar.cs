@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Libraries.Temporal;
-using Poly.DomainModeling.Meaning;
 using Poly.Grammar;
 
 namespace Poly.DomainModeling.Language;

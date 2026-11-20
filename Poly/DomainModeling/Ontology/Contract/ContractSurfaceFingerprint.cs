@@ -1,7 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
-
-using Poly.DomainModeling.Language;
 
 namespace Poly.DomainModeling.Ontology.Contract;
 

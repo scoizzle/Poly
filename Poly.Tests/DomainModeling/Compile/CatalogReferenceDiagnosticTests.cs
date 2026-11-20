@@ -1,6 +1,3 @@
-using Poly.Analysis;
-using Poly.DomainModeling.Compile;
-
 using Artifact = Poly.DomainModeling.Compile.Artifact;
 
 namespace Poly.Tests.DomainModeling.Compile;

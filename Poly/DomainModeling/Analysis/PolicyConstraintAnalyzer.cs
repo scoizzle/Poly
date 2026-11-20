@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using ValueType = Poly.DomainModeling.Ontology.ValueType;

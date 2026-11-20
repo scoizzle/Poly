@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Libraries.Temporal;

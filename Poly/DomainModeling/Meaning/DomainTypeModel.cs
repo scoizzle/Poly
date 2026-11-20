@@ -1,7 +1,5 @@
-using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
 
 
 namespace Poly.DomainModeling.Meaning;

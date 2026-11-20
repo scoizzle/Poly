@@ -1,9 +1,6 @@
-using Poly.DomainModeling.Language;
 using Poly.Grammar;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Grammar;
 

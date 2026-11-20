@@ -1,13 +1,6 @@
-using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Constraints;
-using Poly.DomainModeling.Ontology.Contract;
-using Poly.DomainModeling.Runtime;
-using Poly.Tests.TestHelpers;
 
 using static Poly.Tests.TestHelpers.ContractContributions;
 

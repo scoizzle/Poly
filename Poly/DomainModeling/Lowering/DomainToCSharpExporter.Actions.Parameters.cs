@@ -1,6 +1,5 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Syntactic = Poly.Ast.Nodes;

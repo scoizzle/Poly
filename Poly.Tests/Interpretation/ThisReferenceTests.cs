@@ -1,6 +1,5 @@
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
-using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
@@ -13,12 +12,12 @@ public class ThisReferenceTests {
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Name", TypeReference.Of(typeof(string)))
+                new PropertyDefinitionNode("Name", TypeReference.To(typeof(string)))
             ],
             Methods: [
                 new MethodDefinitionNode(
                     "GetName",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Body: memberAccess)
             ]);
 
@@ -69,7 +68,7 @@ public class ThisReferenceTests {
             Methods: [
                 new MethodDefinitionNode(
                     "Bad",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Body: thisReference,
                     IsStatic: true)
             ]);
@@ -96,10 +95,10 @@ public class ThisReferenceTests {
             "Widget",
             "Sample",
             Properties: [
-                new PropertyDefinitionNode("Name", TypeReference.Of(typeof(string))),
+                new PropertyDefinitionNode("Name", TypeReference.To(typeof(string))),
                 new PropertyDefinitionNode(
                     "DisplayName",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Getter: new PropertyGetterDefinitionNode(memberAccess))
             ]);
 
@@ -128,7 +127,7 @@ public class ThisReferenceTests {
             Properties: [
                 new PropertyDefinitionNode(
                     "Bad",
-                    TypeReference.Of(typeof(string)),
+                    TypeReference.To(typeof(string)),
                     Initializer: new PropertyInitializerDefinitionNode(thisReference),
                     IsStatic: true)
             ]);

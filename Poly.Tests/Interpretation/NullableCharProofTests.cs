@@ -2,7 +2,6 @@ using System.Globalization;
 
 using Microsoft.CSharp.RuntimeBinder;
 
-using Poly.Analysis;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
@@ -73,7 +72,7 @@ internal static class NullableCharGrid {
                             continue;
                         if (!Arithmetic(kind) && (Unwrap(left).IsEnum || Unwrap(right).IsEnum))
                             continue;
-                        var node = ExtraOperandGrid.Build(kind, new Parameter("a", TypeReference.Of(left)), new Parameter("b", TypeReference.Of(right)));
+                        var node = ExtraOperandGrid.Build(kind, new Parameter("a", TypeReference.To(left)), new Parameter("b", TypeReference.To(right)));
                         var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
                         cells.Add(new Cell(left, kind, right, Classify(kind, left, right, node, analysis, resolution)));
                     }

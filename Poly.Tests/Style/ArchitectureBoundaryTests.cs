@@ -35,10 +35,10 @@ public class ArchitectureBoundaryTests {
     ];
 
     /// <summary>Type-fact patterns the meaning layers may not add to. Word boundaries, so <c>RuntimeType</c> does not
-    /// also match inside <c>GetRuntimeType</c>.</summary>
+    /// also match inside <c>GetRuntimeType</c>; <c>GetRuntimeType</c> counts <c>TryGetRuntimeType</c> too.</summary>
     private static readonly (string Name, Regex Pattern)[] TypeFacts = [
         ("typeof(", new Regex(@"\btypeof\s*\(", RegexOptions.Compiled)),
-        ("GetRuntimeType", new Regex(@"\bGetRuntimeType\b", RegexOptions.Compiled)),
+        ("GetRuntimeType", new Regex(@"\b(?:Try)?GetRuntimeType\b", RegexOptions.Compiled)),
         ("RuntimeType", new Regex(@"\bRuntimeType\b", RegexOptions.Compiled)),
         ("ClrTypeReference", new Regex(@"\bClrTypeReference\b", RegexOptions.Compiled)),
         ("Nullable.GetUnderlyingType", new Regex(@"\bNullable\.GetUnderlyingType\b", RegexOptions.Compiled)),
@@ -58,15 +58,16 @@ public class ArchitectureBoundaryTests {
     /// <summary>Per-file, per-pattern budget. The measured count must equal the budget: a reduction lowers the number
     /// here in the same change, so the budget only shrinks.</summary>
     private static readonly Dictionary<string, (string RemovingRow, Dictionary<string, int> Max)> Budget = new(StringComparer.Ordinal) {
-        ["Poly/Interpretation/Analysis/ConstantFolding/ConstantFoldingPass.cs"] = ("analysis-time invocation and CLR primitives (#954); removing row: I9 (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["typeof("] = 66 }),
+        ["Poly/Interpretation/Analysis/ConstantFolding/ConstantFoldingPass.cs"] = ("analysis-time invocation and CLR primitives (#954); removing row: I9 (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 4, ["typeof("] = 66 }),
+        ["Poly/Interpretation/Analysis/Semantics/AvailableExpressionPass.cs"] = ("reads an array's runtime type; removing row: #999", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1 }),
         ["Poly/Interpretation/Analysis/Semantics/AwaitPattern.cs"] = ("awaiter reflection and CLR members; removing row: I9 (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 7 }),
-        ["Poly/Interpretation/Analysis/Semantics/ClrTypeResolution.cs"] = ("resolves a CLR type reference; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1 }),
-        ["Poly/Interpretation/Analysis/Semantics/ConstantOperandRule.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["typeof("] = 4 }),
-        ["Poly/Interpretation/Analysis/Semantics/IteratorLegalityAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 2 }),
-        ["Poly/Interpretation/Analysis/Semantics/LambdaReturnTypeAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 1 }),
-        ["Poly/Interpretation/Analysis/Semantics/SyntaxTypeCompatibilityAnalyzer.cs"] = ("the CLR category table and its type references (T-28); removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 5, ["GetRuntimeType"] = 14, ["Nullable.GetUnderlyingType"] = 8, ["RuntimeType"] = 3, ["typeof("] = 55 }),
-        ["Poly/Interpretation/Analysis/Semantics/TypeAndMemberResolutionPass.cs"] = ("CLR type statements the pass still makes; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 17, ["Nullable.GetUnderlyingType"] = 5, ["RuntimeType"] = 1, ["typeof("] = 31 }),
-        ["Poly/Interpretation/Analysis/Semantics/TypeDefinitionNodeAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 1, ["Nullable.GetUnderlyingType"] = 1, ["RuntimeType"] = 5, ["typeof("] = 10 }),
+        ["Poly/Interpretation/Analysis/Semantics/ClrTypeResolution.cs"] = ("resolves a CLR type reference; removing row: #999", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1 }),
+        ["Poly/Interpretation/Analysis/Semantics/ConstantOperandRule.cs"] = ("the ulong and nuint operand rule, a numeric category stated twice; removing row: #954", new(StringComparer.Ordinal) { ["typeof("] = 4 }),
+        ["Poly/Interpretation/Analysis/Semantics/IteratorLegalityAnalyzer.cs"] = ("CLR type facts; removing row: #999", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 2 }),
+        ["Poly/Interpretation/Analysis/Semantics/LambdaReturnTypeAnalyzer.cs"] = ("CLR type facts; removing row: #999", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 1 }),
+        ["Poly/Interpretation/Analysis/Semantics/SyntaxTypeCompatibilityAnalyzer.cs"] = ("the CLR category table and its type references (T-28); removing row: #954", new(StringComparer.Ordinal) { ["CLR type predicate"] = 5, ["GetRuntimeType"] = 22, ["Nullable.GetUnderlyingType"] = 8, ["RuntimeType"] = 3, ["typeof("] = 55 }),
+        ["Poly/Interpretation/Analysis/Semantics/TypeAndMemberResolutionPass.cs"] = ("CLR type statements the pass still makes; removing row: #999", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 17, ["Nullable.GetUnderlyingType"] = 5, ["RuntimeType"] = 1, ["typeof("] = 31 }),
+        ["Poly/Interpretation/Analysis/Semantics/TypeDefinitionNodeAnalyzer.cs"] = ("CLR type facts; removing row: #999", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 1, ["Nullable.GetUnderlyingType"] = 1, ["RuntimeType"] = 5, ["typeof("] = 10 }),
     };
 
     [Test]

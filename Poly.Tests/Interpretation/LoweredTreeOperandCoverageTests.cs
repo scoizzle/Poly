@@ -263,7 +263,7 @@ public class LoweredTreeOperandCoverageTests {
 
     /// <summary>A modelled struct with no declared operator, as a lowered value type is.</summary>
     static readonly Lazy<ITypeDefinition> ModelledStruct = new(static () =>
-        new AstTypeDefinition(new TypeDefinitionNode("InterimMoney", Form: TypeDeclarationForm.Struct), Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared));
+        new AstTypeDefinition(new TypeDefinitionNode("InterimMoney", Form: TypeDeclarationForm.Struct), Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared));
 
     public sealed class Holder {
         public static List<long> Items { get; } = [];

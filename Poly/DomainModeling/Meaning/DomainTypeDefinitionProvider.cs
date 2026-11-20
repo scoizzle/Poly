@@ -20,10 +20,15 @@ internal sealed class DomainTypeDefinitionProvider : IQualifiedNameSource, IType
     private readonly TypeMappingRegistry _typeMaps;
     private readonly ConcurrentDictionary<string, ITypeDefinition> _synthetic = new(StringComparer.Ordinal);
 
-    public DomainTypeDefinitionProvider(Domain domain, TypeMappingRegistry typeMaps) {
+    private readonly ITypeSystem _system;
+
+    /// <param name="system">The system the domain's own declarations belong to: the model's (#998 T12c).</param>
+    public DomainTypeDefinitionProvider(Domain domain, TypeMappingRegistry typeMaps, ITypeSystem system) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(typeMaps);
+        ArgumentNullException.ThrowIfNull(system);
         _typeMaps = typeMaps;
+        _system = system;
         foreach (var type in domain.Types)
             _types.TryAdd(type.Name, type);
     }
@@ -88,7 +93,9 @@ internal sealed class DomainTypeDefinitionProvider : IQualifiedNameSource, IType
         MethodDefinitionNode[]? methods = declaresEquality
             ? [Equality(OperatorKind.Equal, name), Equality(OperatorKind.NotEqual, name)]
             : null;
-        return new AstTypeDefinition(new TypeDefinitionNode(name, Form: kind, Methods: methods), this);
+        // A domain synthetic belongs to the system its model was built with (#998 T12c, owner rulings 10, 13): an
+        // analysis' layer inside an analysis, the session's target when lowering builds a model of its own.
+        return new AstTypeDefinition(new TypeDefinitionNode(name, Form: kind, Methods: methods), this, _system);
     }
 
     /// <summary>

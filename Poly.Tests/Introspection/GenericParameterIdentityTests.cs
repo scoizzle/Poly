@@ -18,7 +18,7 @@ public class GenericParameterIdentityTests {
     }
 
     private static ITypeDefinition Declared(string name, string? ns = null) =>
-        new AstTypeDefinition(new TypeDefinitionNode(name, ns), new ModeledTypeSet());
+        new AstTypeDefinition(new TypeDefinitionNode(name, ns), new ModeledTypeSet(), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
     private static ITypeDefinition ListOf(ITypeDefinition element) => new AstCollectionTypeDefinition(element, CollectionKind.List);
 

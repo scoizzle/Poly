@@ -64,7 +64,7 @@ public class ArchitectureBoundaryTests {
         ["Poly/Interpretation/Analysis/Semantics/LambdaReturnTypeAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["GetRuntimeType"] = 1, ["typeof("] = 1 }),
         ["Poly/Interpretation/Analysis/Semantics/SyntaxTypeCompatibilityAnalyzer.cs"] = ("the CLR category table and its type references (T-28); removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 5, ["GetRuntimeType"] = 14, ["Nullable.GetUnderlyingType"] = 8, ["RuntimeType"] = 3, ["typeof("] = 55 }),
         ["Poly/Interpretation/Analysis/Semantics/TypeAndMemberResolutionPass.cs"] = ("CLR type statements the pass still makes; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 17, ["Nullable.GetUnderlyingType"] = 5, ["RuntimeType"] = 1, ["typeof("] = 31 }),
-        ["Poly/Interpretation/Analysis/Semantics/TypeDefinitionNodeAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 1, ["Nullable.GetUnderlyingType"] = 1, ["RuntimeType"] = 5, ["typeof("] = 14 }),
+        ["Poly/Interpretation/Analysis/Semantics/TypeDefinitionNodeAnalyzer.cs"] = ("CLR type facts; removing row: I8b (#972)", new(StringComparer.Ordinal) { ["CLR type predicate"] = 1, ["GetRuntimeType"] = 1, ["Nullable.GetUnderlyingType"] = 1, ["RuntimeType"] = 5, ["typeof("] = 10 }),
     };
 
     [Test]

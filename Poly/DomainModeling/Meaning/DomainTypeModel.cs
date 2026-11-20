@@ -18,7 +18,7 @@ internal sealed class DomainTypeModel {
     /// <param name="system">The type system that decides assignment (#998 T4d): the analysis' target.</param>
     public DomainTypeModel(Domain domain, TypeMappingRegistry typeMaps, ITypeSystem system) {
         ArgumentNullException.ThrowIfNull(system);
-        _provider = new DomainTypeDefinitionProvider(domain, typeMaps);
+        _provider = new DomainTypeDefinitionProvider(domain, typeMaps, system);
         _system = system;
     }
 

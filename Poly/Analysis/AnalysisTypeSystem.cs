@@ -1,15 +1,19 @@
 namespace Poly.Analysis;
 
 using Poly.Ast.Nodes;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 
 /// <summary>
-/// The type system one analysis decides by (#998 T12a, T12b; docs/decisions/2026-11-19-a-type-system-owns-definitions-
+/// The type system one analysis decides by (#998 T12a–T12c; docs/decisions/2026-11-19-a-type-system-owns-definitions-
 /// vocabulary-and-rules.md §2). It is the analysis' layer: its own sources — the declarations it registers and the
 /// sources a caller supplies — answer a qualified name first, in their registered precedence order, and its
-/// <see cref="Target"/> answers everything else. The CLR is reached only as the Target chain's answer, and nothing falls back beside the
-/// layer. Not yet through it (T12c): C#'s declarations still take the CLR's <c>object</c>, <c>int</c> and <c>void</c>
-/// directly. Vocabulary and rules are the Target's until T12c gives the layer its declarations.
+/// <see cref="Target"/> answers everything else. The CLR is reached only as the Target chain's answer, and nothing falls
+/// back beside the layer. The declarations it holds belong to it (T12c): a declared type, and any synthetic collection or
+/// generic parameter built over one, reports this layer as its <see cref="ITypeDefinition.System"/>, so two analyses'
+/// declarations are never the same type while a CLR collection stays C#'s
+/// (<see cref="AstTypeIdentity"/> is the body both share). Vocabulary and rules are the Target's unless a type system
+/// declares its own.
 /// </summary>
 internal sealed class AnalysisTypeSystem(ITypeSystem target) : ITypeSystem, ITypeNameLookup {
     /// <summary>This layer's own sources, in query order (index 0 answers first).</summary>
@@ -68,7 +72,25 @@ internal sealed class AnalysisTypeSystem(ITypeSystem target) : ITypeSystem, ITyp
 
     public ITypeDefinition? Bind(string word) => target.Bind(word);
     public string? Spell(ITypeDefinition definition) => target.Spell(definition);
-    public bool IsSame(ITypeDefinition a, ITypeDefinition b) => target.IsSame(a, b);
+
+    /// <summary>
+    /// Identity in the layer (#998 T12c): the definitions this layer owns answer through the body C# shares
+    /// (<see cref="AstTypeIdentity"/>: reference identity for a declaration, kind and element for a synthetic collection,
+    /// name and declaring type for a generic parameter); everything else is the Target's, and a definition this layer
+    /// owns is never the same as one another system owns.
+    /// </summary>
+    public bool IsSame(ITypeDefinition a, ITypeDefinition b) {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        if (ReferenceEquals(a, b))
+            return true;
+        var left = ReferenceEquals(a.System, this);
+        var right = ReferenceEquals(b.System, this);
+        if (left || right)
+            return left && right && AstTypeIdentity.IsSame(a, b);
+        return target.IsSame(a, b);
+    }
+
     public ITypeDefinition? NullableOf(ITypeDefinition definition) => target.NullableOf(definition);
     public ITypeDefinition? ElementType(ITypeDefinition definition) => target.ElementType(definition);
 

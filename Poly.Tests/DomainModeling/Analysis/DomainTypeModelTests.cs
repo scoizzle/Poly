@@ -42,6 +42,32 @@ public class DomainTypeModelTests {
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type)!;
 
     [Test]
+    public async Task DomainSynthetic_BelongsToTheSystemItsModelWasBuiltWith() {
+        // #998 T12c (owner rulings 10, 13): a domain's own declarations are not the shared C# system's; inside an
+        // analysis the model is built with that analysis' layer, so its entities are the layer's.
+        var maps = new TypeMappingRegistry();
+        TemporalTypeMaps.Apply(maps);
+        var layer = new Poly.Analysis.AnalysisTypeSystem(Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+        var model = new DomainTypeModel(BuildDomain(), maps, layer);
+
+        await Assert.That(model.Resolve("Order").Definition!.System).IsSameReferenceAs(layer);
+        await Assert.That(model.Resolve("Status").Definition!.System).IsSameReferenceAs(layer);
+    }
+
+    [Test]
+    public async Task DomainSynthetic_UnderTheDomainsOwnSystem_KeepsObjectsMembers() {
+        // A domain session's analysis decides by a layer over DomainTypeSystem, whose words are the domain's; the
+        // entity's implicit top type is its chain's object, as before #998 T12c.
+        var maps = new TypeMappingRegistry();
+        TemporalTypeMaps.Apply(maps);
+        var layer = new Poly.Analysis.AnalysisTypeSystem(
+            new Poly.DomainModeling.Meaning.DomainTypeSystem(maps, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared));
+        var model = new DomainTypeModel(BuildDomain(), maps, layer);
+
+        await Assert.That(model.Resolve("Order").Definition!.Methods.WithName("ToString").Any()).IsTrue();
+    }
+
+    [Test]
     public async Task Resolve_DecimalAndNumber_AreDistinctDefinitions() {
         var model = Model();
         var decimalType = model.Resolve("Decimal");

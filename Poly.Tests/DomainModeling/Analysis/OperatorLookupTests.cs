@@ -42,7 +42,7 @@ internal sealed class ModeledTypeSet : ITypeSystem, ITypeNameLookup {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
     public AstTypeDefinition Add(string name, params MethodDefinitionNode[] methods) {
-        var definition = new AstTypeDefinition(new TypeDefinitionNode(name, Form: TypeDeclarationForm.Struct, Methods: methods), this);
+        var definition = new AstTypeDefinition(new TypeDefinitionNode(name, Form: TypeDeclarationForm.Struct, Methods: methods), this, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         _types[name] = definition;
         return definition;
     }

@@ -36,7 +36,7 @@ public class TypeShapeTests {
     public async Task Declaration_CSharpStatesWhatItsFormDeclares() {
         var registry = new AstTypeRegistry();
         ITypeDefinition Declared(TypeDeclarationForm form) =>
-            new AstTypeDefinition(new TypeDefinitionNode("T", Form: form), registry);
+            new AstTypeDefinition(new TypeDefinitionNode("T", Form: form), registry, CSharp);
 
         await Assert.That(CSharp.IsEnumType(Declared(TypeDeclarationForm.Enum))).IsTrue();
         await Assert.That(CSharp.HasValueSemantics(Declared(TypeDeclarationForm.Struct))).IsTrue();

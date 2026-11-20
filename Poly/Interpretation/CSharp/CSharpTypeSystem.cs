@@ -35,30 +35,11 @@ internal sealed class CSharpTypeSystem : ITypeSystem, ICSharpTypeRules {
 
     /// <summary>
     /// C#'s identity (#998 T9, moved from the definitions): a CLR definition and a declared type are the same only as
-    /// the same object; two synthetic collections of one kind and element are one type (each resolve builds a fresh
-    /// instance; a nested collection compares by this notion again, since its name does not carry its element's
-    /// namespace); two generic parameters are one when they share a name and a declaring type.
+    /// the same object; a synthetic collection and a generic parameter answer through the body an analysis layer shares
+    /// (#998 T12c, <see cref="Poly.Interpretation.Analysis.Semantics.AstTypeIdentity"/>).
     /// </summary>
-    public bool IsSame(ITypeDefinition a, ITypeDefinition b) {
-        ArgumentNullException.ThrowIfNull(a);
-        ArgumentNullException.ThrowIfNull(b);
-        if (ReferenceEquals(a, b))
-            return true;
-        return (a, b) switch {
-            (Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition left,
-                Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition right) when left.Kind == right.Kind =>
-                left.ElementType is Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition
-                    || right.ElementType is Poly.Interpretation.Analysis.Semantics.AstCollectionTypeDefinition
-                    ? TypeDefinitionExtensions.IsSameType(left.ElementType, right.ElementType)
-                    : string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
-                      && string.Equals(left.ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal),
-            (Poly.Interpretation.Analysis.Semantics.AstGenericParameterTypeDefinition left,
-                Poly.Interpretation.Analysis.Semantics.AstGenericParameterTypeDefinition right) =>
-                string.Equals(left.Name, right.Name, StringComparison.Ordinal)
-                && TypeDefinitionExtensions.IsSameType(left.DeclaringType, right.DeclaringType),
-            _ => false,
-        };
-    }
+    public bool IsSame(ITypeDefinition a, ITypeDefinition b) =>
+        Poly.Interpretation.Analysis.Semantics.AstTypeIdentity.IsSame(a, b);
 
     /// <summary>The CLR's nullable form wraps its underlying type; C#'s declarations and foreign definitions wrap nothing
     /// (#998 T9).</summary>

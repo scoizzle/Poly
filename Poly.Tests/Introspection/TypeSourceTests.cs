@@ -115,8 +115,8 @@ public class TypeSourceTests {
     [Test]
     public async Task Declarations_TypesIn_ListsADeclarationUnderItsOwnNamespace() {
         var registry = new AstTypeRegistry();
-        var order = new AstTypeDefinition(new TypeDefinitionNode("Order", Namespace: "Shop"), registry);
-        var loose = new AstTypeDefinition(new TypeDefinitionNode("Loose"), registry);
+        var order = new AstTypeDefinition(new TypeDefinitionNode("Order", Namespace: "Shop"), registry, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
+        var loose = new AstTypeDefinition(new TypeDefinitionNode("Loose"), registry, Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
         registry.Add(order);
         registry.Add(loose);
 

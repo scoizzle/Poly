@@ -35,7 +35,7 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer {
                     context.SetMetadata(typeDef, new TypeDefinitionMetadata(existing));
             }
             else {
-                var definition = new AstTypeDefinition(typeDef, context.Layer);
+                var definition = new AstTypeDefinition(typeDef, context.Layer, context.TypeSystem);
                 registry.Add(definition);
                 context.SetMetadata(node, new TypeDefinitionMetadata(definition));
             }
@@ -141,6 +141,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     /// reads to answer whether a declared type is an enum or a value type (#998 T6a).</summary>
     internal TypeDeclarationForm Form => _node.Form;
     private readonly ITypeNameLookup _resolver;
+    private readonly ITypeSystem _system;
     private readonly IReadOnlyDictionary<string, ITypeDefinition>? _substitutions;
     private static long _nextOpenId;
     private readonly long _openId;
@@ -158,18 +159,20 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private readonly Lazy<IReadOnlyList<ITypeField>> _fields;
     private readonly Lazy<IReadOnlyList<ITypeMember>> _members;
 
-    public AstTypeDefinition(TypeDefinitionNode node, ITypeNameLookup resolver)
-        : this(node, resolver, substitutions: null,
+    public AstTypeDefinition(TypeDefinitionNode node, ITypeNameLookup resolver, ITypeSystem system)
+        : this(node, resolver, system, substitutions: null,
             openId: global::System.Threading.Interlocked.Increment(ref _nextOpenId)) {
     }
 
     private AstTypeDefinition(
         TypeDefinitionNode node,
         ITypeNameLookup resolver,
+        ITypeSystem system,
         IReadOnlyDictionary<string, ITypeDefinition>? substitutions,
         long openId) {
         _node = node;
         _resolver = resolver;
+        _system = system;
         _substitutions = substitutions;
         _openId = openId;
         _baseType = new(() => _node.BaseType is null ? null : ResolveType(_node.BaseType));
@@ -210,7 +213,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
             var substitutions = new Dictionary<string, ITypeDefinition>(StringComparer.Ordinal);
             for (var i = 0; i < parameters.Count; i++)
                 substitutions[parameters[i].Name] = arguments[i];
-            var closed = new AstTypeDefinition(_node, _resolver, substitutions, _openId);
+            var closed = new AstTypeDefinition(_node, _resolver, _system, substitutions, _openId);
             _closures[key] = closed;
             return closed;
         }
@@ -293,10 +296,9 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
     /// <summary>Each declaration builds one definition, so a declaration and its definition are one instance; a closed
     /// generic is that definition closed, a distinct instance.</summary>
-    /// <summary>C#'s own declaration: C#'s system decides its identity and relations (#998 T9). Interim, removed by T12
-    /// (the analysis holds a target system): a unit's declarations belong to the shared C# system, not a layer of their
-    /// own.</summary>
-    public ITypeSystem System => Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+    /// <summary>The analysis layer whose own source declared this type (#998 T12c): a declaration is the analysis' own
+    /// type, so identity, its implicit base and its member types are that layer's.</summary>
+    public ITypeSystem System => _system;
 
     // AST-based types are dictionary-backed at runtime
     public Type RuntimeType => typeof(IDictionary<string, object>);
@@ -397,17 +399,14 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
         if (BaseType is not null) {
             AddMembers(inheritedMemberSelector(BaseType));
         }
-        else {
-            // Every C# type with no declared base derives from System.Object; its
-            // members (ToString, Equals, GetHashCode, GetType) are available on an
-            // AST type too. Declared members already added above still win by key.
-            var objectType = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(object));
-            if (objectType is not null) {
-                var inherited = inheritedMemberSelector(objectType);
-                if (inheritedFilter is not null)
-                    inherited = inherited.Where(inheritedFilter);
-                AddMembers(inherited);
-            }
+        else if (DeclaredTypeVocabulary.Word(_system, "object") is { } topType) {
+            // A type with no declared base takes its analysis system's top type (#998 T12c, owner ruling 14): under C#
+            // System.Object, whose members (ToString, Equals, GetHashCode, GetType) an AST type has too; nothing under a
+            // target that binds no such word. Declared members already added above still win by key.
+            var inherited = inheritedMemberSelector(topType);
+            if (inheritedFilter is not null)
+                inherited = inherited.Where(inheritedFilter);
+            AddMembers(inherited);
         }
 
         foreach (var implementedInterface in Interfaces) {
@@ -430,7 +429,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     }
 
     internal ITypeDefinition ResolveType(Node typeNode) =>
-        AstTypeReferenceResolver.Resolve(typeNode, _resolver, this);
+        AstTypeReferenceResolver.Resolve(typeNode, _resolver, _system, this);
 
     internal IReadOnlyList<IParameter> MapParameters(IReadOnlyList<Parameter>? parameters) {
         return parameters?
@@ -475,7 +474,7 @@ internal sealed class AstParameterDefinition : IParameter {
         _declaringType = declaringType;
         Position = position;
         _parameterType = new(() => _node.TypeReference is null
-            ? ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<object>()
+            ? DeclaredTypeVocabulary.Object(_declaringType.System, $"parameter '{_node.Name}' of '{_declaringType.Name}'")
             : _declaringType.ResolveType(_node.TypeReference));
         _defaultValue = new(() => _node.DefaultValue is Constant constant ? constant.Value : null);
     }
@@ -592,8 +591,9 @@ internal static class AstTypeReferenceResolver {
     public static ITypeDefinition Resolve(
         Node typeNode,
         ITypeNameLookup resolver,
+        ITypeSystem system,
         ITypeDefinition? enclosing = null) {
-        return TryResolve(typeNode, resolver, enclosing)
+        return TryResolve(typeNode, resolver, system, enclosing)
             ?? throw new InvalidOperationException(
                 $"Type with name '{TypeNameOf(typeNode)}' not found.");
     }
@@ -601,19 +601,23 @@ internal static class AstTypeReferenceResolver {
     public static ITypeDefinition? TryResolve(
         Node typeNode,
         ITypeNameLookup resolver,
+        ITypeSystem system,
         ITypeDefinition? enclosing = null) {
-        var clr = ClrTypeDefinitionRegistry.Shared;
-
-        return typeNode switch {
-            NamedTypeReference named => ResolveNamed(named, resolver, clr, enclosing),
-            OptionalTypeReference opt => ResolveOptional(opt, resolver, clr, enclosing),
-            CollectionTypeReference col => ResolveCollection(col, resolver, clr, enclosing),
-            MapTypeReference map => ResolveMap(map, resolver, clr, enclosing),
-            UnionTypeReference union => ResolveUnion(union, resolver, clr, enclosing),
-            TypeDefinitionReference tdr => tdr.TypeDefinition,
-            TypeReference tr => ResolveByName(tr.TypeName, resolver, clr),
-            _ => clr.GetTypeDefinition<object>()
-        };
+        if (typeNode is CollectionTypeReference collection)
+            return ResolveCollection(collection, resolver, system, enclosing);
+        if (typeNode is MapTypeReference map)
+            return ResolveMap(map, resolver, system, enclosing);
+        if (typeNode is UnionTypeReference union)
+            return ResolveUnion(union, resolver, system, enclosing);
+        if (typeNode is OptionalTypeReference optional)
+            return ResolveOptional(optional, resolver, system, enclosing);
+        if (typeNode is NamedTypeReference named)
+            return ResolveNamed(named, resolver, system, enclosing);
+        if (typeNode is TypeDefinitionReference declared)
+            return declared.TypeDefinition;
+        if (typeNode is TypeReference reference)
+            return ResolveByName(reference.TypeName, resolver, system);
+        return DeclaredTypeVocabulary.Word(system, "object");
     }
 
     private static string TypeNameOf(Node typeNode) => typeNode switch {
@@ -625,13 +629,13 @@ internal static class AstTypeReferenceResolver {
     private static ITypeDefinition? ResolveNamed(
         NamedTypeReference named,
         ITypeNameLookup resolver,
-        ClrTypeDefinitionRegistry clr,
+        ITypeSystem system,
         ITypeDefinition? enclosing) {
         if (named.TypeArguments is { Count: > 0 } args) {
             var resolvedArgs = new ITypeDefinition[args.Count];
             ITypeDefinition? open = null;
             for (var i = 0; i < args.Count; i++) {
-                var resolved = TryResolve(args[i], resolver, enclosing);
+                var resolved = TryResolve(args[i], resolver, system, enclosing);
                 if (resolved is null && !TryCollectionKind(named.TypeName, out _)) {
                     // DomainResult<T> inside the open definition: T is that definition's parameter,
                     // not a separate type. An unknown name still fails.
@@ -642,21 +646,25 @@ internal static class AstTypeReferenceResolver {
                     return null;
                 resolvedArgs[i] = resolved;
             }
-            return CloseNamed(named, resolvedArgs, resolver, clr, enclosing);
+            // A closed collection follows its argument (#998 T12c, owner ruling 13): a declared one makes it the
+            // analysis layer's, a CLR one leaves it C#'s.
+            if (args.Count == 1 && TryCollectionKind(named.TypeName, out var kind))
+                return CloseCollection(resolvedArgs[0], kind);
+            return CloseNamed(named, resolvedArgs, resolver, system, enclosing);
         }
 
-        return LookupNamed(named, resolver, clr, enclosing, allowTypeParameter: true);
+        return LookupNamed(named, resolver, system, enclosing, allowTypeParameter: true);
     }
 
     private static ITypeDefinition? LookupNamed(
         NamedTypeReference named,
         ITypeNameLookup resolver,
-        ClrTypeDefinitionRegistry clr,
+        ITypeSystem system,
         ITypeDefinition? enclosing,
         bool allowTypeParameter) {
         if (named.Namespace is null
             && string.Equals(named.TypeName, "void", StringComparison.OrdinalIgnoreCase))
-            return clr.GetTypeDefinition(typeof(void));
+            return system.Resolve("System.Void");
 
         if (allowTypeParameter && enclosing is not null && named.Namespace is null) {
             // A closed view's own argument overrides the open parameter scan:
@@ -678,11 +686,8 @@ internal static class AstTypeReferenceResolver {
         NamedTypeReference named,
         ITypeDefinition[] args,
         ITypeNameLookup resolver,
-        ClrTypeDefinitionRegistry clr,
+        ITypeSystem system,
         ITypeDefinition? enclosing) {
-        if (args.Length == 1 && TryCollectionKind(named.TypeName, out var kind))
-            return CloseCollection(args[0], kind, clr);
-
         // A scope that declares an arity key as an already-constructed CLR generic
         // (the VM's DomainResult`1 -> DomainResult<object>) is the answer itself: closing
         // it again over the argument types would rebuild a different closed type.
@@ -690,10 +695,10 @@ internal static class AstTypeReferenceResolver {
             return constructed;
 
         var open = LookupOpenGeneric(named, args.Length, resolver)
-            ?? LookupNamed(named, resolver, clr, enclosing, allowTypeParameter: false);
+            ?? LookupNamed(named, resolver, system, enclosing, allowTypeParameter: false);
         if (open is null)
             return null;
-        return CloseGeneric(open, args, clr);
+        return CloseGeneric(open, args);
     }
 
     private static ITypeDefinition? TypeParameterOf(ITypeDefinition open, Node argument) {
@@ -769,8 +774,7 @@ internal static class AstTypeReferenceResolver {
 
     private static ITypeDefinition CloseCollection(
         ITypeDefinition element,
-        CollectionKind kind,
-        ClrTypeDefinitionRegistry clr) {
+        CollectionKind kind) {
         if (element is AstTypeDefinition or AstCollectionTypeDefinition or AstGenericParameterTypeDefinition)
             return new AstCollectionTypeDefinition(element, kind);
 
@@ -781,13 +785,12 @@ internal static class AstTypeReferenceResolver {
             CollectionKind.Set => typeof(HashSet<>).MakeGenericType(elementClrType),
             _ => typeof(IEnumerable<>).MakeGenericType(elementClrType)
         };
-        return clr.GetTypeDefinition(collectionClrType);
+        return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(collectionClrType);
     }
 
     private static ITypeDefinition CloseGeneric(
         ITypeDefinition open,
-        ITypeDefinition[] args,
-        ClrTypeDefinitionRegistry clr) {
+        ITypeDefinition[] args) {
         // An AST generic closes through its own substitution map; the CLR branch below
         // would otherwise close it through its RuntimeType (IDictionary<,> for 2-arity).
         if (open is AstTypeDefinition astOpen)
@@ -805,71 +808,103 @@ internal static class AstTypeReferenceResolver {
         var clrArgs = new Type[args.Length];
         for (var i = 0; i < args.Length; i++)
             clrArgs[i] = args[i].GetRuntimeType() ?? typeof(object);
-        return clr.GetTypeDefinition(definition.MakeGenericType(clrArgs));
+        return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(definition.MakeGenericType(clrArgs));
     }
 
     private static ITypeDefinition ResolveOptional(
         OptionalTypeReference opt,
         ITypeNameLookup resolver,
-        ClrTypeDefinitionRegistry clr,
+        ITypeSystem system,
         ITypeDefinition? enclosing) {
-        var innerType = Resolve(opt.InnerType, resolver, enclosing);
+        var innerType = Resolve(opt.InnerType, resolver, system, enclosing);
         var innerClrType = innerType.GetRuntimeTypeOrThrow();
 
         if (!innerClrType.IsValueType || Nullable.GetUnderlyingType(innerClrType) != null)
             return innerType;
 
         var nullableType = typeof(Nullable<>).MakeGenericType(innerClrType);
-        return clr.GetTypeDefinition(nullableType);
+        return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(nullableType);
     }
 
     private static ITypeDefinition? ResolveByName(
-        string name, ITypeNameLookup resolver, ClrTypeDefinitionRegistry clr) {
+        string name, ITypeNameLookup resolver, ITypeSystem system) {
         if (string.Equals(name, "void", StringComparison.OrdinalIgnoreCase))
-            return clr.GetTypeDefinition(typeof(void));
+            return system.Resolve("System.Void");
         return resolver.Lookup(name);
     }
 
     private static ITypeDefinition ResolveCollection(
         CollectionTypeReference col,
         ITypeNameLookup resolver,
-        ClrTypeDefinitionRegistry clr,
+        ITypeSystem system,
         ITypeDefinition? enclosing) {
-        var elementType = Resolve(col.ElementType, resolver, enclosing);
-        return CloseCollection(elementType, col.Kind, clr);
+        var elementType = Resolve(col.ElementType, resolver, system, enclosing);
+        return CloseCollection(elementType, col.Kind);
     }
 
     private static ClrTypeDefinition ResolveMap(
         MapTypeReference map,
         ITypeNameLookup resolver,
-        ClrTypeDefinitionRegistry clr,
+        ITypeSystem system,
         ITypeDefinition? enclosing) {
-        var keyType = Resolve(map.KeyType, resolver, enclosing);
-        var valueType = Resolve(map.ValueType, resolver, enclosing);
+        var keyType = Resolve(map.KeyType, resolver, system, enclosing);
+        var valueType = Resolve(map.ValueType, resolver, system, enclosing);
 
         var dictType = typeof(Dictionary<,>).MakeGenericType(
             keyType.GetRuntimeTypeOrThrow(),
             valueType.GetRuntimeTypeOrThrow()
         );
-        return clr.GetTypeDefinition(dictType);
+        return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(dictType);
     }
 
     private static ITypeDefinition ResolveUnion(
         UnionTypeReference union,
         ITypeNameLookup resolver,
-        ClrTypeDefinitionRegistry clr,
+        ITypeSystem system,
         ITypeDefinition? enclosing) {
         if (union.Options.Count == 0) {
-            return clr.GetTypeDefinition<object>();
+            return DeclaredTypeVocabulary.Object(system, "a union type with no options");
         }
 
-        var optionTypes = union.Options.Select(option => Resolve(option, resolver, enclosing)).ToArray();
+        var optionTypes = union.Options.Select(option => Resolve(option, resolver, system, enclosing)).ToArray();
         var firstRuntimeType = optionTypes[0].GetRuntimeTypeOrThrow();
 
         // Preserve precision only when all options collapse to the same CLR runtime type.
         var allSameRuntimeType = optionTypes.All(type => type.GetRuntimeTypeOrThrow() == firstRuntimeType);
-        return allSameRuntimeType ? optionTypes[0] : clr.GetTypeDefinition<object>();
+        return allSameRuntimeType
+            ? optionTypes[0]
+            : DeclaredTypeVocabulary.Object(system, "a union whose options are different runtime types");
     }
+}
+
+/// <summary>
+/// The definitions an AST declaration needs from the analysis' own type system (#998 T12c): C#'s <c>object</c>,
+/// <c>int</c> and <c>void</c> under the C# target, and the target's own words otherwise. A declaration under a target
+/// that binds none fails closed, naming the declaration that needed it; it never invents a CLR type.
+/// </summary>
+internal static class DeclaredTypeVocabulary {
+    /// <summary>The definition the first system down <paramref name="system"/>'s target chain binds <paramref name="word"/>
+    /// to: a layer's words are its own (the domain binds Text, not object), and what it does not own its target answers,
+    /// so a domain session's declarations take C#'s object while a ledger, with no word and no target, gives none.</summary>
+    public static ITypeDefinition? Word(ITypeSystem system, string word) {
+        for (var current = system; current is not null; current = current.Target) {
+            if (current.Bind(word) is { } definition)
+                return definition;
+        }
+        return null;
+    }
+
+    public static ITypeDefinition Object(ITypeSystem system, string need) =>
+        Word(system, "object") ?? throw Unbound(system, "object", need);
+
+    public static ITypeDefinition Int(ITypeSystem system, string need) =>
+        Word(system, "int") ?? throw Unbound(system, "int", need);
+
+    public static ITypeDefinition Void(ITypeSystem system, string need) =>
+        system.Resolve("System.Void") ?? throw Unbound(system, "System.Void", need);
+
+    private static InvalidOperationException Unbound(ITypeSystem system, string typeName, string need) =>
+        new($"'{need}' needs the type '{typeName}', which the analysis type system ({system.GetType().Name}) does not bind.");
 }
 
 internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDefinition {
@@ -889,9 +924,7 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
         _ctor = new AstCollectionParameterlessConstructor(this);
         // new List<T>(items ?? new List<T>()) on a printed entity constructor.
         _copy = new AstCollectionCopyConstructor(this);
-        // DomainResult.Value is object. Add still has to accept the entity.
-        var addArg = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<object>();
-        _add = new AstCollectionAddMethod(this, addArg);
+        _add = new AstCollectionAddMethod(this);
     }
 
     public ITypeDefinition ElementType { get; }
@@ -917,10 +950,12 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     /// reference equality alone never matches an omitted collection argument. A nested collection compares by this
     /// notion again (its name does not carry its element's namespace).
     /// </summary>
-    /// <summary>C#'s own declaration: C#'s system decides its identity and relations (#998 T9). Interim, removed by T12
-    /// (the analysis holds a target system): a unit's declarations belong to the shared C# system, not a layer of their
-    /// own.</summary>
-    public ITypeSystem System => Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+    /// <summary>A synthetic collection follows its element (#998 T12c, owner ruling 13): an element an analysis layer
+    /// owns (a declared type, or a collection over one) makes the collection that layer's; any other element leaves it
+    /// C#'s, so it is the same type across analyses.</summary>
+    public ITypeSystem System => ElementType.System is Poly.Analysis.AnalysisTypeSystem layer
+        ? layer
+        : Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
     public Type RuntimeType => typeof(System.Collections.IList);
 }
 
@@ -957,13 +992,19 @@ internal sealed class AstCollectionSourceParameter(AstCollectionTypeDefinition s
     public object? DefaultValue => null;
 }
 
-/// <summary><c>Add(X)</c> on a synthetic collection type.</summary>
-internal sealed class AstCollectionAddMethod(AstCollectionTypeDefinition declaring, ITypeDefinition element) : ITypeMethod {
+/// <summary><c>Add(X)</c> on a synthetic collection type. Its <c>object</c> argument and its <c>void</c> result are the
+/// analysis system's words (#998 T12c): <c>DomainResult.Value</c> is object, so Add still has to accept the entity.</summary>
+internal sealed class AstCollectionAddMethod(AstCollectionTypeDefinition declaring) : ITypeMethod {
+    private readonly Lazy<ITypeDefinition> _returnType =
+        new(() => DeclaredTypeVocabulary.Void(declaring.System, $"'{declaring.Name}' Add"));
+    private readonly Lazy<IParameter> _parameter = new(() => new AstCollectionElementParameter(
+        DeclaredTypeVocabulary.Object(declaring.System, $"'{declaring.Name}' Add")));
+
     public string Name => "Add";
-    public ITypeDefinition MemberTypeDefinition => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(void))!;
+    public ITypeDefinition MemberTypeDefinition => _returnType.Value;
     public ITypeDefinition DeclaringTypeDefinition => declaring;
     public MemberKind Kind => MemberKind.Method;
-    public IEnumerable<IParameter> Parameters => [new AstCollectionElementParameter(element)];
+    public IEnumerable<IParameter> Parameters => [_parameter.Value];
     public AccessModifier AccessModifier => AccessModifier.Public;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
     public bool IsStatic => false;
@@ -1005,28 +1046,27 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     /// method-level parameters of one name on one type are the same type here: a stated limitation, and no DSL
     /// construct declares a method-level type parameter.
     /// </summary>
-    /// <summary>C#'s own declaration: C#'s system decides its identity and relations (#998 T9). Interim, removed by T12
-    /// (the analysis holds a target system): a unit's declarations belong to the shared C# system, not a layer of their
-    /// own.</summary>
-    public ITypeSystem System => Poly.Interpretation.CSharp.CSharpTypeSystem.Shared;
+    /// <summary>A generic parameter belongs to the system its declaring type does (#998 T12c, owner ruling 13).</summary>
+    public ITypeSystem System => DeclaringType.System;
 
     public Type RuntimeType => typeof(object);
 }
 
 internal sealed class AstCollectionItemProperty : ITypeProperty {
+    private readonly Lazy<IParameter> _index;
+
     public AstCollectionItemProperty(ITypeDefinition declaring, ITypeDefinition element) {
-        DeclaringTypeDefinition = declaring;
         MemberTypeDefinition = element;
-        Parameters = [
-            new AstIndexParameter(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<int>())
-        ];
+        DeclaringTypeDefinition = declaring;
+        _index = new(() => new AstIndexParameter(
+            DeclaredTypeVocabulary.Int(declaring.System, $"the indexer of '{declaring.Name}'")));
     }
 
     public string Name => "Item";
     public ITypeDefinition MemberTypeDefinition { get; }
     public ITypeDefinition DeclaringTypeDefinition { get; }
     public MemberKind Kind => MemberKind.Indexer;
-    public IEnumerable<IParameter> Parameters { get; }
+    public IEnumerable<IParameter> Parameters => [_index.Value];
     public AccessModifier AccessModifier => AccessModifier.Public;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
     public Mutability Mutability => Mutability.Mutable;

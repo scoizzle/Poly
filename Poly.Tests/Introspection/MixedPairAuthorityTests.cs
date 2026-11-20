@@ -57,7 +57,7 @@ public class MixedPairAuthorityTests {
     public async Task Operator_ModeledLeftOperand_ForeignRight_TheTargetFindsTheRightsDeclaration() {
         var third = new ThirdPlatformDefinition("Third");
         ITypeDefinition modeled = new Poly.Interpretation.Analysis.Semantics.AstTypeDefinition(
-            new Poly.Ast.Nodes.TypeDefinitionNode("Modeled"), new Poly.Interpretation.Analysis.Semantics.AstTypeRegistry());
+            new Poly.Ast.Nodes.TypeDefinitionNode("Modeled"), new Poly.Interpretation.Analysis.Semantics.AstTypeRegistry(), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared);
 
         await Assert.That(Target.Operator(OperatorKind.Add, modeled, third)).IsNull()
             .Because("+(long, Third) needs a long on the left; a modeled class does not convert to long");

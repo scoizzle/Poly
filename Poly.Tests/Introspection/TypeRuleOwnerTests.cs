@@ -89,7 +89,7 @@ public class TypeRuleOwnerTests {
     [Arguments(TypeDeclarationForm.Interface, "")]
     [Arguments(TypeDeclarationForm.Enum, "enum")]
     public async Task Declaration_CSharpStatesWhatItsFormDeclares(TypeDeclarationForm form, string expected) =>
-        await Assert.That(Owned(new AstTypeDefinition(new TypeDefinitionNode("T", Form: form), new AstTypeRegistry()))).IsEqualTo(expected);
+        await Assert.That(Owned(new AstTypeDefinition(new TypeDefinitionNode("T", Form: form), new AstTypeRegistry(), Poly.Interpretation.CSharp.CSharpTypeSystem.Shared))).IsEqualTo(expected);
 
     [Test]
     public async Task SecondHost_ItsOwnRuleStatesItsNumbers_AndCSharpStatesNothing() {

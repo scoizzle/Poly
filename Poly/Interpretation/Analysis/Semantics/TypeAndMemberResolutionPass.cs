@@ -208,7 +208,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
             NamedTypeReference named =>
-                AstTypeReferenceResolver.TryResolve(named, context.Layer),
+                AstTypeReferenceResolver.TryResolve(named, context.Layer, context.TypeSystem),
             OptionalTypeReference optional => ResolveOptionalType(context, optional),
             TypeReference typeRef => context.TypeSystem.Resolve(typeRef.TypeName),
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
@@ -1123,7 +1123,7 @@ internal static class MethodInvocationSemanticResolver {
             // type reference: resolve that reference through the provider instead of reading the shape as absent.
             node => context.GetResolvedType(node)
                 ?? (ReferenceEquals(node, parameter.TypeReference)
-                    ? AstTypeReferenceResolver.TryResolve(node, context.Layer)
+                    ? AstTypeReferenceResolver.TryResolve(node, context.Layer, context.TypeSystem)
                     : null));
 }
 

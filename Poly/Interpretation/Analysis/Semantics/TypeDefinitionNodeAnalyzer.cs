@@ -697,14 +697,33 @@ internal static class AstTypeReferenceResolver {
         var open = LookupOpenGeneric(named, args.Length, resolver);
         if (open is null) {
             // The analysis' own declaration answers its name first: `Action<int>` beside a declared non-generic `Action`
-            // is never the host's Action`1. (The declaration keeps answering with its arguments dropped, as it always
-            // did; C# refuses the program, CS0308.)
+            // is neither the host's Action`1 nor that declaration with its arguments dropped. It is no type, and the
+            // type pass reports it at the reference (DeclaredWithAnotherArity; owner, 2026-11-20).
             var bare = LookupNamed(named, resolver, system, enclosing, allowTypeParameter: false);
-            open = bare is AstTypeDefinition ? bare : LookupClrOpenGeneric(named, args.Length, resolver) ?? bare;
+            if (bare is AstTypeDefinition)
+                return null;
+            open = LookupClrOpenGeneric(named, args.Length, resolver) ?? bare;
         }
         if (open is null)
             return null;
         return CloseGeneric(open, args);
+    }
+
+    /// <summary>The analysis' own declaration a generic name spells with a number of type arguments it does not declare
+    /// (<c>Action&lt;int&gt;</c> beside a declared non-generic <c>Action</c>; C#'s CS0308 and CS0305), else null. The
+    /// same lookups, in the same order, as <see cref="CloseNamed"/>, which answers no type for it.</summary>
+    internal static AstTypeDefinition? DeclaredWithAnotherArity(
+        NamedTypeReference named,
+        ITypeNameLookup resolver,
+        ITypeSystem system) {
+        if (named.TypeArguments is not { Count: > 0 } args)
+            return null;
+        if (args.Count == 1 && TryCollectionKind(named.TypeName, out _))
+            return null;
+        if (LookupConstructedGeneric(named, args.Count, resolver) is not null
+            || LookupOpenGeneric(named, args.Count, resolver) is not null)
+            return null;
+        return LookupNamed(named, resolver, system, enclosing: null, allowTypeParameter: false) as AstTypeDefinition;
     }
 
     private static ITypeDefinition? TypeParameterOf(ITypeDefinition open, Node argument) {

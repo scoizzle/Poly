@@ -56,21 +56,41 @@ public class DeclarationOwnershipTests {
     }
 
     [Test]
-    public async Task GenericName_OfADeclaredNonGenericType_IsNeverTheClrGeneric() {
-        // Found by the pre-ship review: the unit's own declaration answers its name first. `Action<int>` beside a
-        // declared non-generic `Action` is not System.Action<int> (C# refuses the program, CS0308; the analysis keeps
-        // the declaration it always answered with, and never a host type).
+    [Arguments("class Action { }\nclass Holder { public Action<int> Callback { get; set; } }", "'Action' is declared with 0 type parameter(s) and cannot be used with 1 type argument(s)")]
+    [Arguments("class Action { }\nclass Holder { public object M(Action<int> a) { return a; } }", "'Action' is declared with 0 type parameter(s) and cannot be used with 1 type argument(s)")]
+    [Arguments("class Action { }\nclass Holder { public object M() { Action<int> a = null; return a; } }", "'Action' is declared with 0 type parameter(s) and cannot be used with 1 type argument(s)")]
+    [Arguments("class Action { }\nclass Holder { public object M() { return new Action<int>(); } }", "'Action' is declared with 0 type parameter(s) and cannot be used with 1 type argument(s)")]
+    [Arguments("class Box<T> { }\nclass Holder { public Box<int, int> Pair { get; set; } }", "'Box' is declared with 1 type parameter(s) and cannot be used with 2 type argument(s)")]
+    public async Task GenericName_WithAnotherArityThanItsDeclaration_IsRefused(string source, string message) {
+        // Owner, 2026-11-20: the unit's own declaration answers its name, so `Action<int>` beside a declared non-generic
+        // `Action` is neither System.Action<int> nor the declaration with its argument dropped. C# refuses it (CS0308,
+        // CS0305), and so does the analysis, at the reference.
+        var analysis = Poly.Interpretation.Interpreter.Analyze(CSharpLanguage.Read(source));
+
+        await Assert.That(analysis.Diagnostics.Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(static diagnostic => diagnostic.Message)).Contains(message);
+    }
+
+    [Test]
+    public async Task GenericName_WithAnotherArityThanItsDeclaration_ResolvesToNoType() {
         var declared = new TypeDefinitionNode("Action");
-        var holder = new TypeDefinitionNode("Holder", Properties: [
-            new PropertyDefinitionNode("Callback", new NamedTypeReference("Action", TypeArguments: [TypeReference.To<int>()])),
-        ]);
+        var reference = new NamedTypeReference("Action", TypeArguments: [TypeReference.To<int>()]);
+        var holder = new TypeDefinitionNode("Holder", Properties: [new PropertyDefinitionNode("Callback", reference)]);
 
         var analysis = Poly.Interpretation.Interpreter.Analyze(new CompilationUnitNode([], null, [declared, holder], null));
-        var callback = DefinitionOf(analysis, holder).Properties.Single().MemberTypeDefinition;
 
-        await Assert.That(callback is ClrTypeDefinition).IsFalse();
-        await Assert.That(callback.Name).IsEqualTo("Action");
-        await Assert.That(callback.System).IsSameReferenceAs(analysis.TypeSystem);
+        await Assert.That(analysis.GetResolvedType(reference)).IsNull();
+        await Assert.That(analysis.HasErrors).IsTrue();
+    }
+
+    [Test]
+    [Arguments("class Box<T> { }\nclass Holder { public Box<int> One { get; set; } }")]
+    [Arguments("class Action { }\nclass Holder { public Action Plain { get; set; } public System.Action<int> Host { get; set; } }")]
+    public async Task GenericName_MatchingItsDeclaration_OrQualifiedToTheHost_IsNotRefused(string source) {
+        var analysis = Poly.Interpretation.Interpreter.Analyze(CSharpLanguage.Read(source));
+
+        await Assert.That(analysis.Diagnostics.Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(static diagnostic => diagnostic.Message)).IsEmpty();
     }
 
     [Test]

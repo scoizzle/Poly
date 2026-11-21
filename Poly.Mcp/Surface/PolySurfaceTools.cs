@@ -305,6 +305,21 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             var focused = allFindings.Where(f => PathMatches(f.Path, normalized)).ToList();
             selectMatched = focused.Count > 0 || ElementExists(workspaceState.Domain, normalized);
             allFindings = focused;
+
+            // #534: a typo used to answer ok with an "unknown" verdict, indistinguishable from a
+            // legitimately undecided proof. The resolver, not a second guess, says whether the path names anything.
+            if (!selectMatched) {
+                var inspected = InspectService.Inspect(workspace, workspaceState, select, _query);
+                if (!inspected.Ok)
+                    return new PolyResponse(
+                        Ok: false,
+                        Summary: inspected.Summary,
+                        Findings: [],
+                        Data: inspected.Data,
+                        Next: Next(workspace, "poly_inspect", "poly_check"),
+                        State: StateOf(workspace),
+                        ErrorCode: inspected.ErrorCode ?? InspectService.ElementNotFoundCode);
+            }
         }
 
         var hintCount = allFindings.Count(f => string.Equals(f.Severity, "Hint", StringComparison.OrdinalIgnoreCase));
@@ -325,7 +340,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
         var summary = verdict switch {
             "violated" => $"Violated: {errorCount} error(s), {warningCount} warning(s), {hintCount} hint(s).",
-            "unknown" when !selectMatched => $"Unknown: no element or finding matches '{select}'.",
+            "unknown" when !selectMatched => $"Unknown: no finding matches '{select}'.",
             "unknown" when !string.IsNullOrWhiteSpace(args) => "Unknown: argument-specific proofs are not implemented yet; use poly_simulate to execute the action.",
             "unknown" => $"Unknown: {unverified} finding(s) could not be verified (writes analysis could not prove inside their constraints, or a default() beside a range or length), {warningCount} warning(s), {hintCount} hint(s). Bound the source, widen the target or guard a non-parameter write; poly_simulate executes the action.",
             _ => $"Proven: no errors, every write verified, {warningCount} warning(s), {hintCount} hint(s).",

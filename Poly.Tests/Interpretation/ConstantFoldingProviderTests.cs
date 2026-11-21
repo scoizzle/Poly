@@ -458,7 +458,8 @@ public class ConstantFoldingProviderTests {
 
     /// <summary>
     /// The allowed-DISAGREE set: folds in a cell whose VM value the operator ledger records as wrong (issue 832, owner
-    /// T-21). Folding is right there and the VM is wrong; T-21 inverts these pins. Derived from the ledger.
+    /// T-21). Folding is right there and the VM is wrong. Issue 832's fix made the VM answer those cells, so the set is
+    /// empty; a cell that becomes value-wrong again still shows here, and a named new fold there is still refused.
     /// </summary>
     [Test]
     public async Task FoldsInLedgerValueWrongCells_AreTheMasterSet_Pinned() {
@@ -484,19 +485,16 @@ public class ConstantFoldingProviderTests {
     }
 
     /// <summary>
-    /// The allowed-DISAGREE folds really differ from the unfolded VM today; when T-21 fixes the VM these start to agree
-    /// and the pin inverts.
+    /// The allowed-DISAGREE folds really differ from the unfolded VM; when T-21 fixes the VM these start to agree.
+    /// Issue 832's fix landed that, so no fold disagrees with the unfolded VM any more.
     /// </summary>
     [Test]
-    public async Task FoldsInLedgerValueWrongCells_DisagreeWithTheUnfoldedVm_T21InvertsThem() {
+    public async Task FoldsInLedgerValueWrongCells_NowAgreeWithTheUnfoldedVm_Issue832Fixed() {
         var lines = ConstantFoldGrid.Folded()
             .Where(static f => ConstantFoldGrid.LedgerValueWrongCells.Contains(f.Row.Cell))
             .Select(static f => $"{f.Row.Key}: fold {f.Fold}, VM {ConstantFoldGrid.UnfoldedVm(f.Row)}")
             .Order(StringComparer.Ordinal).ToArray();
-        await Assert.That(lines).IsEquivalentTo([
-            "Float32 Divide Float32 S1: fold Single:11184811, VM Double:11184811",
-            "Float32 Divide Float32 S2: fold Single:8.940697E-08, VM Double:8.940696716308594E-08"
-        ]);
+        await Assert.That(lines).IsEmpty();
     }
 
     /// <summary>
@@ -865,7 +863,8 @@ public class ConstantFoldingProviderTests {
     private const string MasterUndefinedFolds = "828 0d020bf27c2afbb7";
     private const string KeptFolds = "1776 06fba54a76763aeb";
     private const string UnprintableDefinedFolds = "48 ace2db05f3c87b7b";
-    private const string AllowedDisagree = "2 5e0895ede8f270db";
+    /// <summary>Empty since issue 832's fix: no fold sits in a cell whose VM value is wrong.</summary>
+    private const string AllowedDisagree = "0 e3b0c44298fc1c14";
     private const string LogicalFolds = "6 d49ba859ff062537";
     private const string UndefinedCells = "7800 1786e1cb3f6eaa59";
     private const string RejectedMismatchedEqualities = "672 88f2cc26c94956cb";

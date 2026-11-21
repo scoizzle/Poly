@@ -1540,9 +1540,14 @@ Offsets (`Now - 12 Days`) author, lower, and execute as `Add*` on that clock val
 Adding a duration to a *required* Date or DateTime that was never set fails with `'PropertyName' is not set` and does not change the instance. An offset or a difference on an `optional` date or date-time is rejected at analysis (#648): the property may be unset, and no door computes with an absent date.
 Compare a `Date` with `Today` and a `DateTime` with `Now`. A mixed comparison (`Date < Now`,
 `DateTime < Today`) is rejected at analysis.
+A `DateTime` ordering (`<`, `<=`, `>`, `>=`) compares instants, not clock fields: a value whose `Kind` is `Local` is
+read as its UTC instant (`ToUniversalTime()`), and a `Utc` or `Unspecified` value is read as its clock time — the one
+clock `Now` reads. So a .NET caller may pass `DateTime.Now`, or a value parsed without a marker, and the policy answers
+for the instant it names. An `optional` DateTime is still ordered only when it is present.
 
-**Explicitly NOT shipped:** `schedule at` / `at <time>`, business days, and timezone (TZ)
-handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ conversion.
+**Explicitly NOT shipped:** `schedule at` / `at <time>`, business days, and named time zones are out of scope — no
+`at 9am`, no business-day arithmetic, no `TimeZoneInfo` conversion. A `DateTime` still compares as its UTC instant,
+above, because `Kind` marks the value rather than naming a zone the domain models.
 
 **Rules:**
 - `Rel Prop` on `many` relationships is invalid (use `any Rel where …` — Q3′ shipped). Cardinality validation is enforced at domain analysis time; the parser accepts the syntax but the analysis pipeline will reject it when relationship metadata is available.

@@ -1520,7 +1520,8 @@ diverging:
   module's, not a separate export-only stub. This is the same body a source that writes
   `uses persistence` prints. A non-empty `uses` list replaces the implicit set
   `[storage, persistence]`, so a `unique` property needs `persistence` or a vendor library in
-  that list. Authoring is where the rule bites: a document that lists `uses storage` or
+  that list. A vendor library is persistence for its database: listing `persistence` beside one
+  (`uses persistence` with `uses sqlite`) loads the vendor only. Authoring is where the rule bites: a document that lists `uses storage` or
   `uses http` and nothing else is `DMLIB001` at define time, in `polyc` and in every MCP
   authoring call, instead of silently losing the constraint. The MCP execution overlay
   (`McpSessionStore.EnsureExecution`) still adds `persistence`; with the rule in place it adds

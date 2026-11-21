@@ -2188,10 +2188,11 @@ What an author or a client may rely on in this release, what may still change, a
   `currentStage`.
 - **The HTTP failure shape**: a failure the domain raises is ProblemDetails whose `title` is the failure kind (see
   *HTTP failures*, section 11). The statuses are `400` for `Required`, `Range`, `Length`, `Pattern`, `Enum`,
-  `Arithmetic`, `Argument` and `Constraint`; `409` for `Stage`, `Link`, `Unique` and `Conflict` (nothing raises
-  `Conflict` yet); `422` for `Policy`; `500` for `Cascade`; and `404` with title `Not Found` for an unknown id. A body
-  the host's JSON binder refuses (a wrong JSON type, an unknown enum string, a JSON `null` for an action argument) is
-  a `400` with an empty body, not ProblemDetails (see *Known wrong*).
+  `Arithmetic`, `Argument` and `Constraint`; `409` for `Stage`, `Link`, `Unique` and `Conflict` (nothing raises `Conflict`
+  yet; two concurrent creates of one key give one `201` and `409 Unique` for the rest, from the unique index);
+  `422` for `Policy`; `500` for `Cascade`; and `404` with title `Not Found` for an unknown id. A body the host's JSON
+  binder refuses (a wrong JSON type, an unknown enum string, a JSON `null` for an action argument) is a `400` with an
+  empty body, not ProblemDetails (see *Known wrong*).
 
 ### Not stable
 
@@ -2234,8 +2235,6 @@ What the id does not cover, and what that costs:
 
 ### Known wrong
 
-- **Two creates with the same unique value, at once** (every host with a unique index): one answers `500` instead of
-  `409 Unique`, because the unique index refuses the second save after the host's check has passed. Removed by P-09.
 - **A read through a to-one link that is not linked** (both hosts) answers differently by position. A guard, a policy
   read or an `invoke` refuses the action with `Required` (`400` over HTTP). A comparison through the unlinked hop is
   false for every operator, `!=` and `is not` included, whereas an absent value at the end of a set link makes `!=`

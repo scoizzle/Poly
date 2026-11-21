@@ -101,6 +101,25 @@ public class DslCompilerCompileOracleTests {
         await AssertSolutionCompiles();
     }
 
+    /// <summary>
+    /// #562: a unique key that is not Text. The save-time conflict mapping compares it the way the port's
+    /// key is encoded (both sides <c>ToString()</c>), and the host must stay warning-free with a provider
+    /// whose exception type it never names (CS1701 is what naming it costs).
+    /// </summary>
+    [Test]
+    public async Task Compile_NonTextUniqueKeys_EmitsCompilableSolution() {
+        const string poly = """
+            domain Metering
+
+            Reading: entity {
+              Serial: Text unique
+              Value: Decimal unique
+              ReadingNo: Number unique
+            }
+            """;
+        await AssertSolutionCompiles(poly);
+    }
+
     [Test]
     [Arguments("docs/probes/fleet-eval/09-transport/warehouse.poly")]
     [Arguments("docs/probes/fleet-eval/09-transport/orders.poly")]

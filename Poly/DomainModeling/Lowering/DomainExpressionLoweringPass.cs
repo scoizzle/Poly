@@ -278,12 +278,18 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     /// (<see cref="LoweringContext.SourceEntityName"/>), resolved the way
     /// <see cref="ResolveRelationshipTarget"/> resolves its source. No domain-wide scan.
     /// </summary>
-    private bool SourceEntityHasProperty(string name) {
+    private bool SourceEntityHasProperty(string name) => SourceProperty(name) is not null;
+
+    /// <summary>The entity whose members the subject exposes, or null when this body is not an entity's.</summary>
+    private Entity? SourceEntity() {
         if (_context.SourceEntityName is null)
-            return false;
-        var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            return null;
+        return _domain.Types.OfType<Entity>().FirstOrDefault(e =>
             string.Equals(e.Name, _context.SourceEntityName, StringComparison.Ordinal));
-        return source?.Properties.Any(p =>
-            string.Equals(p.Name, name, StringComparison.Ordinal)) == true;
     }
+
+    /// <summary>A declared property of <see cref="SourceEntity"/>, or null.</summary>
+    private Property? SourceProperty(string name) =>
+        SourceEntity()?.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.Ordinal));
 }

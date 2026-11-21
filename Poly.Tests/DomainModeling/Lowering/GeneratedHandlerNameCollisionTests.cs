@@ -181,6 +181,35 @@ public class GeneratedHandlerNameCollisionTests {
         await Assert.That(error.Message).Contains("generated stage enum of entity 'Book'");
     }
 
+    /// <summary>#890: the same domain-wide set at member scope. A property named like another entity's generated
+    /// stage enum shadows it where the subscription handler reads it (<c>BookStage.Out</c>), which is CS1061 in the
+    /// emitted C#.</summary>
+    private static string MemberDsl(string member) => $$"""
+        domain P
+        Shelf: entity {
+          {{member}}: Text default("")
+          Label: Text default("")
+          books: many Book
+          when any books Out { assign Label to "x" }
+        }
+        Book: entity {
+          shelf: Shelf via books
+          In: stage { Go: action { transition to Out } }
+          Out: stage { }
+        }
+        """;
+
+    [Test]
+    public async Task Property_NamedLikeAnotherEntitysStageEnum_IsRefusedNamingTheEntity() {
+        var (errors, compile) = Verdict(MemberDsl("BookStage"), "MemberEnum");
+
+        var error = errors.First(e => e.Code == DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(error.Message).Contains("Member 'BookStage' on entity 'Shelf'");
+        await Assert.That(error.Message).Contains("would shadow the generated C# type 'BookStage'");
+        await Assert.That(error.Node.GetType().GetProperty("Name")!.GetValue(error.Node)).IsEqualTo("BookStage");
+        await Assert.That(compile).IsEqualTo("");
+    }
+
     [Test]
     public async Task ActionParameter_NamedLikeAStageEnumThatIsNotGenerated_IsAcceptedAndCompiles() {
         var (errors, compile) = Verdict(StagelessParameterDsl("ShelfStage"), "NoEnum");

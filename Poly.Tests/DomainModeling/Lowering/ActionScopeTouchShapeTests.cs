@@ -145,9 +145,9 @@ public class ActionScopeTouchShapeTests {
         // L-04b: the public factory is the root-scope wrapper; the lowered factory body is its private partner.
         await Assert.That(wrapper).Contains("ActionScope.Begin(");
         await Assert.That(wrapper).Contains("Book.__BodyOfCreate(");
-        await Assert.That(create).Contains("Poly.Runtime.ActionScope.Create(created, \"Book\");");
-        await Assert.That(At(create, "new Book(")).IsLessThan(At(create, "ActionScope.Create(created"));
-        await Assert.That(At(create, "ActionScope.Create(created")).IsLessThan(At(create, ".AttachBooks(created)"));
+        await Assert.That(create).Contains("Poly.Runtime.ActionScope.Create(__created, \"Book\");");
+        await Assert.That(At(create, "new Book(")).IsLessThan(At(create, "ActionScope.Create(__created"));
+        await Assert.That(At(create, "ActionScope.Create(__created")).IsLessThan(At(create, ".AttachBooks(__created)"));
     }
 
     // F2: the cascade returns its entry depth and the exit assigns it back, so a rollback inside the cascade (which
@@ -404,7 +404,7 @@ public class ActionScopeTouchShapeTests {
             Each("H6", @"static DomainResult<\w+> __BodyOfCreate\(", m => {
                 var entity = System.Text.RegularExpressions.Regex.Match(m, @"DomainResult<(\w+)>").Groups[1].Value;
                 return System.Text.RegularExpressions.Regex.IsMatch(m,
-                    $@"var created = new {entity}\([^\n]*\);\n\s*Poly\.Runtime\.ActionScope\.Create\(created, ""{entity}""\);");
+                    $@"var __created = new {entity}\([^\n]*\);\n\s*Poly\.Runtime\.ActionScope\.Create\(__created, ""{entity}""\);");
             });
             if (counts.Values.Sum() > before || problems.Any(p => p.StartsWith(name + ":", StringComparison.Ordinal))) {
                 if (file.EndsWith(".golden", StringComparison.Ordinal))

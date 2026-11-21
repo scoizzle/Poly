@@ -72,13 +72,13 @@ internal class Guest : Poly.Runtime.IActionScoped
     }
     private DomainResult<EventHold> __BodyOfCreateEvents(long? headcount, long? capacity, decimal? dayRate, DateOnly? startDate, DateOnly? endDate, Hall? hall, Section? section)
     {
-        var eventHoldResult = EventHold.Create(headcount, capacity, dayRate, startDate, endDate, this, hall, section);
-        if (!eventHoldResult.IsSuccess)
+        var __eventHoldResult = EventHold.Create(headcount, capacity, dayRate, startDate, endDate, this, hall, section);
+        if (!__eventHoldResult.IsSuccess)
         {
-            return DomainResult<EventHold>.Failure(eventHoldResult.Error!);
+            return DomainResult<EventHold>.Failure(__eventHoldResult.Error!);
         }
-        var eventHold = eventHoldResult.Value;
-        return DomainResult<EventHold>.Success(eventHold);
+        var __eventHold = __eventHoldResult.Value;
+        return DomainResult<EventHold>.Success(__eventHold);
     }
     internal void AttachEvents(EventHold child)
     {
@@ -112,13 +112,13 @@ internal class Guest : Poly.Runtime.IActionScoped
     }
     private DomainResult<Reservation> __BodyOfCreateReservations(long? partySize, long? nights, decimal? nightlyRate, long? maxOccupancy, DateOnly? checkInDate, DateOnly? checkOutDate, Folio? folio, Room? room)
     {
-        var reservationResult = Reservation.Create(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, this, room);
-        if (!reservationResult.IsSuccess)
+        var __reservationResult = Reservation.Create(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, this, room);
+        if (!__reservationResult.IsSuccess)
         {
-            return DomainResult<Reservation>.Failure(reservationResult.Error!);
+            return DomainResult<Reservation>.Failure(__reservationResult.Error!);
         }
-        var reservation = reservationResult.Value;
-        return DomainResult<Reservation>.Success(reservation);
+        var __reservation = __reservationResult.Value;
+        return DomainResult<Reservation>.Success(__reservation);
     }
     internal void AttachReservations(Reservation child)
     {
@@ -156,13 +156,13 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Stage("'BookStay' requires stage 'Active' on entity 'Guest'.", "Guest.BookStay", "Active"));
         }
-        var create0 = this.CreateReservations(party, nights, room.NightlyRate, room.MaxOccupancy, arrive, depart, (Folio?)null, room);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateReservations(party, nights, room.NightlyRate, room.MaxOccupancy, arrive, depart, (Folio?)null, room);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Reservation>.Failure(create0.Error!.At("Guest.BookStay"));
+            return DomainResult<Reservation>.Failure(__create0.Error!.At("Guest.BookStay"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Reservation>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Reservation>.Success(__created1);
     }
     internal DomainResult<EventHold> BookHall(Hall hall, long party, DateOnly arrive, DateOnly depart)
     {
@@ -194,13 +194,13 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Stage("'BookHall' requires stage 'Active' on entity 'Guest'.", "Guest.BookHall", "Active"));
         }
-        var create0 = this.CreateEvents(party, hall.Capacity, hall.DayRate, arrive, depart, hall);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateEvents(party, hall.Capacity, hall.DayRate, arrive, depart, hall);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<EventHold>.Failure(create0.Error!.At("Guest.BookHall"));
+            return DomainResult<EventHold>.Failure(__create0.Error!.At("Guest.BookHall"));
         }
-        var created1 = create0.Value;
-        return DomainResult<EventHold>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<EventHold>.Success(__created1);
     }
     internal DomainResult<EventHold> BookSection(Section section, Hall hall, long party, DateOnly arrive, DateOnly depart)
     {
@@ -232,13 +232,13 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Stage("'BookSection' requires stage 'Active' on entity 'Guest'.", "Guest.BookSection", "Active"));
         }
-        var create0 = this.CreateEvents(party, section.Capacity, section.DayRate, arrive, depart, hall, section);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateEvents(party, section.Capacity, section.DayRate, arrive, depart, hall, section);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<EventHold>.Failure(create0.Error!.At("Guest.BookSection"));
+            return DomainResult<EventHold>.Failure(__create0.Error!.At("Guest.BookSection"));
         }
-        var created1 = create0.Value;
-        return DomainResult<EventHold>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<EventHold>.Success(__created1);
     }
     internal DomainResult Block()
     {
@@ -380,11 +380,11 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Guest'.", "Guest.Email"));
         }
-        var created = new Guest(__name, __email, __phone, __stayCount, __nightCount, __eventCount, events, reservations);
-        Poly.Runtime.ActionScope.Create(created, "Guest");
-        created.InitializeSubscriptions();
+        var __created = new Guest(__name, __email, __phone, __stayCount, __nightCount, __eventCount, events, reservations);
+        Poly.Runtime.ActionScope.Create(__created, "Guest");
+        __created.InitializeSubscriptions();
         db.Record("Guest", "Email", __email);
-        return DomainResult<Guest>.Success(created);
+        return DomainResult<Guest>.Success(__created);
     }
     private void InitializeSubscriptions()
     {

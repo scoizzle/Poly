@@ -773,7 +773,7 @@ public class FailureTypingTests {
         await Assert.That(cs).DoesNotContain("ConstraintFailureException");
         await Assert.That(cs).DoesNotContain("ErrorMessage ?? \"\"");
         var entry = ExportedCSharp.ExtractMethod(cs, "private DomainResult __EnterInitialStage(");
-        await Assert.That(entry).Contains("DomainResult.Failure(create0.Error!)");
+        await Assert.That(entry).Contains("DomainResult.Failure(__create0.Error!)");
         await Assert.That(entry).DoesNotContain(".At(");
     }
 

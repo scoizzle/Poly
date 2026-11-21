@@ -81,13 +81,13 @@ internal class QuoteLine : Poly.Runtime.IActionScoped
             return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Required("'quote' is required.", "QuoteLine.quote"));
         }
         var __quote = quote;
-        var created = new QuoteLine(__qty, __unitPrice, __product, __quote);
-        Poly.Runtime.ActionScope.Create(created, "QuoteLine");
+        var __created = new QuoteLine(__qty, __unitPrice, __product, __quote);
+        Poly.Runtime.ActionScope.Create(__created, "QuoteLine");
         if (quote != null)
         {
-            quote.AttachLines(created);
+            quote.AttachLines(__created);
         }
-        return DomainResult<QuoteLine>.Success(created);
+        return DomainResult<QuoteLine>.Success(__created);
     }
     public object __Snapshot()
     {

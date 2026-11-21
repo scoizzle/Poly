@@ -22,7 +22,7 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Person", "Name", "name");
 
         // L-08b (owner ruling): required means non-null for every type; "" is a value.
-        await Assert.That(cs).Contains("if (assignValue0 == null)");
+        await Assert.That(cs).Contains("if (__assignValue0 == null)");
         await Assert.That(cs).DoesNotContain("IsNullOrEmpty");
         await Assert.That(cs).Contains("\"'Name' is required.\"");
     }
@@ -55,7 +55,7 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Tag", "Code", "code");
 
         await Assert.That(cs).Contains(
-            "if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
+            "if (__assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(__assignValue0, \"^[A-Z]{3}\\\\z\"))");
     }
 
     [Test]
@@ -70,9 +70,9 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Note", "Body", "body");
 
         // L-08b: an empty string is a value, so the group is guarded by `!= null` only.
-        await Assert.That(cs).Contains("if (assignValue0 != null)");
-        await Assert.That(cs).Contains("assignValue0.Length < 7L");
-        await Assert.That(cs).Contains("assignValue0.Length > 20L");
+        await Assert.That(cs).Contains("if (__assignValue0 != null)");
+        await Assert.That(cs).Contains("__assignValue0.Length < 7L");
+        await Assert.That(cs).Contains("__assignValue0.Length > 20L");
     }
 
     [Test]
@@ -86,8 +86,8 @@ public class ConstraintCheckShapeTests {
             """);
         var cs = PrintAssign(domain, "Note", "Body", "body");
 
-        await Assert.That(cs).Contains("if (assignValue0.Length < 7L)");
-        await Assert.That(cs.Contains("if (!System.String.IsNullOrEmpty(assignValue0))")).IsFalse();
+        await Assert.That(cs).Contains("if (__assignValue0.Length < 7L)");
+        await Assert.That(cs.Contains("if (!System.String.IsNullOrEmpty(__assignValue0))")).IsFalse();
     }
 
     [Test]

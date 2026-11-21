@@ -68,13 +68,13 @@ internal class Student : Poly.Runtime.IActionScoped
     }
     private DomainResult<Enrollment> __BodyOfCreateEnrollments(DateOnly? enrolledOn, DateOnly? dueDate, long? grade, Section? section)
     {
-        var enrollmentResult = Enrollment.Create(enrolledOn, dueDate, grade, section, this);
-        if (!enrollmentResult.IsSuccess)
+        var __enrollmentResult = Enrollment.Create(enrolledOn, dueDate, grade, section, this);
+        if (!__enrollmentResult.IsSuccess)
         {
-            return DomainResult<Enrollment>.Failure(enrollmentResult.Error!);
+            return DomainResult<Enrollment>.Failure(__enrollmentResult.Error!);
         }
-        var enrollment = enrollmentResult.Value;
-        return DomainResult<Enrollment>.Success(enrollment);
+        var __enrollment = __enrollmentResult.Value;
+        return DomainResult<Enrollment>.Success(__enrollment);
     }
     internal void AttachEnrollments(Enrollment child)
     {
@@ -118,13 +118,13 @@ internal class Student : Poly.Runtime.IActionScoped
             return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Policy("'Enroll' blocked by policy 'AtLimit'.", "Student.Enroll", "AtLimit"));
         }
         this.OpenCredits = this.OpenCredits + 3L;
-        var create0 = this.CreateEnrollments((DateOnly?)null, (DateOnly?)null, (long?)null, offering);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateEnrollments((DateOnly?)null, (DateOnly?)null, (long?)null, offering);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Enrollment>.Failure(create0.Error!.At("Student.Enroll"));
+            return DomainResult<Enrollment>.Failure(__create0.Error!.At("Student.Enroll"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Enrollment>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Enrollment>.Success(__created1);
     }
     internal DomainResult DropRegistered()
     {
@@ -156,16 +156,16 @@ internal class Student : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'DropRegistered' requires stage 'Active' on entity 'Student'.", "Student.DropRegistered", "Active"));
         }
-        foreach (var target0 in this.Enrollments)
+        foreach (var __target0 in this.Enrollments)
         {
-            if (target0.CurrentStage != EnrollmentStage.Registered)
+            if (__target0.CurrentStage != EnrollmentStage.Registered)
             {
                 continue;
             }
-            var result1 = target0.Drop();
-            if (!result1.IsSuccess)
+            var __result1 = __target0.Drop();
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Student.DropRegistered"));
+                return DomainResult.Failure(__result1.Error!.At("Student.DropRegistered"));
             }
         }
         return DomainResult.Success();
@@ -200,10 +200,10 @@ internal class Student : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'DropAllRegistered' requires stage 'Active' on entity 'Student'.", "Student.DropAllRegistered", "Active"));
         }
-        var invoke0 = this.DropRegistered();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.DropRegistered();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("Student.DropAllRegistered"));
+            return DomainResult.Failure(__invoke0.Error!.At("Student.DropAllRegistered"));
         }
         return DomainResult.Success();
     }
@@ -237,16 +237,16 @@ internal class Student : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CompleteRegistered' requires stage 'Active' on entity 'Student'.", "Student.CompleteRegistered", "Active"));
         }
-        foreach (var target0 in this.Enrollments)
+        foreach (var __target0 in this.Enrollments)
         {
-            if (target0.CurrentStage != EnrollmentStage.Registered)
+            if (__target0.CurrentStage != EnrollmentStage.Registered)
             {
                 continue;
             }
-            var result1 = target0.Complete();
-            if (!result1.IsSuccess)
+            var __result1 = __target0.Complete();
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Student.CompleteRegistered"));
+                return DomainResult.Failure(__result1.Error!.At("Student.CompleteRegistered"));
             }
         }
         return DomainResult.Success();
@@ -281,16 +281,16 @@ internal class Student : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CompletePassing' requires stage 'Active' on entity 'Student'.", "Student.CompletePassing", "Active"));
         }
-        foreach (var target0 in this.Enrollments)
+        foreach (var __target0 in this.Enrollments)
         {
-            if (!target0.IsPassing())
+            if (!__target0.IsPassing())
             {
                 continue;
             }
-            var result1 = target0.Complete();
-            if (!result1.IsSuccess)
+            var __result1 = __target0.Complete();
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Student.CompletePassing"));
+                return DomainResult.Failure(__result1.Error!.At("Student.CompletePassing"));
             }
         }
         return DomainResult.Success();
@@ -439,11 +439,11 @@ internal class Student : Poly.Runtime.IActionScoped
         {
             return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Student'.", "Student.Email"));
         }
-        var created = new Student(__name, __email, __maxCredits, __openCredits, __holds, __completions, __lastGrade, enrollments);
-        Poly.Runtime.ActionScope.Create(created, "Student");
-        created.InitializeSubscriptions();
+        var __created = new Student(__name, __email, __maxCredits, __openCredits, __holds, __completions, __lastGrade, enrollments);
+        Poly.Runtime.ActionScope.Create(__created, "Student");
+        __created.InitializeSubscriptions();
         db.Record("Student", "Email", __email);
-        return DomainResult<Student>.Success(created);
+        return DomainResult<Student>.Success(__created);
     }
     private void InitializeSubscriptions()
     {

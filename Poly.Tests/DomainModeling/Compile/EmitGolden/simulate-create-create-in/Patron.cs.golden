@@ -46,13 +46,13 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     private DomainResult<Fine> __BodyOfCreateFines(long? amount, string? reason)
     {
-        var fineResult = Fine.Create(amount, reason, this);
-        if (!fineResult.IsSuccess)
+        var __fineResult = Fine.Create(amount, reason, this);
+        if (!__fineResult.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(fineResult.Error!);
+            return DomainResult<Fine>.Failure(__fineResult.Error!);
         }
-        var fine = fineResult.Value;
-        return DomainResult<Fine>.Success(fine);
+        var __fine = __fineResult.Value;
+        return DomainResult<Fine>.Success(__fine);
     }
     internal void AttachFines(Fine child)
     {
@@ -85,13 +85,13 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     private DomainResult<Fine> __BodyOfAssessByType()
     {
-        var create0 = Fine.Create(5L, "TypeCreate");
-        if (!create0.IsSuccess)
+        var __create0 = Fine.Create(5L, "TypeCreate");
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(create0.Error!.At("Patron.AssessByType"));
+            return DomainResult<Fine>.Failure(__create0.Error!.At("Patron.AssessByType"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Fine>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Fine>.Success(__created1);
     }
     internal DomainResult<Fine> AssessByRel()
     {
@@ -119,13 +119,13 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     private DomainResult<Fine> __BodyOfAssessByRel()
     {
-        var create0 = this.CreateFines(7L, "CreateIn");
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateFines(7L, "CreateIn");
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(create0.Error!.At("Patron.AssessByRel"));
+            return DomainResult<Fine>.Failure(__create0.Error!.At("Patron.AssessByRel"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Fine>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Fine>.Success(__created1);
     }
     public bool HasFines() => this.Fines.Count != 0;
     public bool HasFineCount() => this.Fines.Count > 0;
@@ -160,9 +160,9 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
         var __name = name;
-        var created = new Patron(__name, fines);
-        Poly.Runtime.ActionScope.Create(created, "Patron");
-        return DomainResult<Patron>.Success(created);
+        var __created = new Patron(__name, fines);
+        Poly.Runtime.ActionScope.Create(__created, "Patron");
+        return DomainResult<Patron>.Success(__created);
     }
     public object __Snapshot()
     {

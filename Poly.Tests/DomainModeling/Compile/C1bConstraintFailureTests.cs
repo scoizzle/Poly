@@ -71,7 +71,7 @@ public class C1bConstraintFailureTests {
         var printed = new CSharpGenerator().Generate(handler.Body!);
         await Assert.That(printed).Contains(".Error!");
         await Assert.That(printed.Contains("throw new", StringComparison.Ordinal)).IsFalse();
-        await Assert.That(printed.Contains("created", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(printed.Contains("__created", StringComparison.Ordinal)).IsFalse();
     }
 
     [Test]
@@ -144,7 +144,7 @@ public class C1bConstraintFailureTests {
 
     private static bool HasCreatedLocal(Node node) => Flatten(node).Any(n =>
         n is Variable { Name: { } name }
-        && name.StartsWith("created", StringComparison.Ordinal));
+        && name.StartsWith("__created", StringComparison.Ordinal));
 
     private static bool HasConstraintFailureThrow(Node node) => Flatten(node).Any(n =>
         n is ThrowStatement {

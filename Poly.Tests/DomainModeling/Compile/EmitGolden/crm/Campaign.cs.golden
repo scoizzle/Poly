@@ -55,13 +55,13 @@ internal class Campaign : Poly.Runtime.IActionScoped
     }
     private DomainResult<CampaignMember> __BodyOfCreateMembers(Contact? contact)
     {
-        var campaignMemberResult = CampaignMember.Create(contact, this);
-        if (!campaignMemberResult.IsSuccess)
+        var __campaignMemberResult = CampaignMember.Create(contact, this);
+        if (!__campaignMemberResult.IsSuccess)
         {
-            return DomainResult<CampaignMember>.Failure(campaignMemberResult.Error!);
+            return DomainResult<CampaignMember>.Failure(__campaignMemberResult.Error!);
         }
-        var campaignMember = campaignMemberResult.Value;
-        return DomainResult<CampaignMember>.Success(campaignMember);
+        var __campaignMember = __campaignMemberResult.Value;
+        return DomainResult<CampaignMember>.Success(__campaignMember);
     }
     internal void AttachMembers(CampaignMember child)
     {
@@ -98,13 +98,13 @@ internal class Campaign : Poly.Runtime.IActionScoped
         {
             return DomainResult<CampaignMember>.Failure(Poly.Runtime.DomainFailure.Stage("'Enroll' requires stage 'Active' on entity 'Campaign'.", "Campaign.Enroll", "Active"));
         }
-        var create0 = this.CreateMembers(who);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateMembers(who);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<CampaignMember>.Failure(create0.Error!.At("Campaign.Enroll"));
+            return DomainResult<CampaignMember>.Failure(__create0.Error!.At("Campaign.Enroll"));
         }
-        var created1 = create0.Value;
-        return DomainResult<CampaignMember>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<CampaignMember>.Success(__created1);
     }
     internal DomainResult End()
     {
@@ -169,9 +169,9 @@ internal class Campaign : Poly.Runtime.IActionScoped
             return DomainResult<Campaign>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Campaign.Name"));
         }
         var __name = name;
-        var created = new Campaign(__name, members);
-        Poly.Runtime.ActionScope.Create(created, "Campaign");
-        return DomainResult<Campaign>.Success(created);
+        var __created = new Campaign(__name, members);
+        Poly.Runtime.ActionScope.Create(__created, "Campaign");
+        return DomainResult<Campaign>.Success(__created);
     }
     public object __Snapshot()
     {

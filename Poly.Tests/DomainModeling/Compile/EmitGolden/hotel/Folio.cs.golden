@@ -54,16 +54,16 @@ internal class Folio : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'PostRoomNight' requires stage 'Open' on entity 'Folio'.", "Folio.PostRoomNight", "Open"));
         }
-        var assignValue0 = this.Balance + amount;
-        if (assignValue0 < 0m)
+        var __assignValue0 = this.Balance + amount;
+        if (__assignValue0 < 0m)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be >= 0.", "Folio.Balance"));
         }
-        if (assignValue0 > 1000000m)
+        if (__assignValue0 > 1000000m)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be <= 1000000.", "Folio.Balance"));
         }
-        this.Balance = assignValue0;
+        this.Balance = __assignValue0;
         return DomainResult.Success();
     }
     internal DomainResult PostCharge(long amount)
@@ -96,16 +96,16 @@ internal class Folio : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'PostCharge' requires stage 'Open' on entity 'Folio'.", "Folio.PostCharge", "Open"));
         }
-        var assignValue0 = this.Balance + amount;
-        if (assignValue0 < 0m)
+        var __assignValue0 = this.Balance + amount;
+        if (__assignValue0 < 0m)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be >= 0.", "Folio.Balance"));
         }
-        if (assignValue0 > 1000000m)
+        if (__assignValue0 > 1000000m)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be <= 1000000.", "Folio.Balance"));
         }
-        this.Balance = assignValue0;
+        this.Balance = __assignValue0;
         return DomainResult.Success();
     }
     internal DomainResult Settle()
@@ -224,9 +224,9 @@ internal class Folio : Poly.Runtime.IActionScoped
             return DomainResult<Folio>.Failure(Poly.Runtime.DomainFailure.Required("'reservation' is required.", "Folio.reservation"));
         }
         var __reservation = reservation;
-        var created = new Folio(__balance, __reservation);
-        Poly.Runtime.ActionScope.Create(created, "Folio");
-        return DomainResult<Folio>.Success(created);
+        var __created = new Folio(__balance, __reservation);
+        Poly.Runtime.ActionScope.Create(__created, "Folio");
+        return DomainResult<Folio>.Success(__created);
     }
     public object __Snapshot()
     {

@@ -83,8 +83,8 @@ public sealed partial class DbContextGenerator {
 
         // Collection navigations: set backing field access mode
         foreach (var nav in store.CollectionNavigations) {
-            // b.Metadata.FindNavigation(nameof(Entity.NavProp))!.SetPropertyAccessMode(PropertyAccessMode.Field)
-            bodyNodes.Add(BuildNavigationConfigNode(bParam, nav, entity.Name));
+            // b.Metadata.FindNavigation("NavProp")!.SetPropertyAccessMode(PropertyAccessMode.Field)
+            bodyNodes.Add(BuildNavigationConfigNode(bParam, nav));
         }
 
         // modelBuilder.Entity<EntityName>(b => { ... })
@@ -175,21 +175,19 @@ public sealed partial class DbContextGenerator {
         return new Invoke(new Member(navigation, withMany ? "WithMany" : "WithOne"), [.. withArgs]);
     }
 
-    private static Node BuildNavigationConfigNode(Parameter bParam, StorageNavigation nav, string entityName) {
-        // b.Metadata.FindNavigation(nameof(Entity.NavProp))!.SetPropertyAccessMode(PropertyAccessMode.Field)
-        // Issue 8: nameof must receive a Member expression, not a string Constant
-        var nameofCall = new Invoke(
-            new TypeReference("nameof"),
-            new Member(new NamedTypeReference(entityName), nav.PropertyName));
+    private static Node BuildNavigationConfigNode(Parameter bParam, StorageNavigation nav) {
+        // b.Metadata.FindNavigation("NavProp")!.SetPropertyAccessMode(PropertyAccessMode.Field)
+        // The name is a string, not `nameof(Entity.NavProp)`: a nameof argument is an expression, where a bare
+        // domain type binds to an inherited DbContext member first (an entity named `Entry` to
+        // DbContext.Entry<TEntity>, CS0119, #1012) and a namespace-qualified one binds to the entity when it is
+        // named like its domain (`Library.Library`). A string names the CLR property and cannot be shadowed.
+        var findNavigation = new Invoke(
+            new Member(new Member(bParam, "Metadata"), "FindNavigation"),
+            new Constant(nav.PropertyName));
 
         return new Invoke(
             new Member(
-                new NullForgiving(
-                    new Invoke(
-                        new Member(new Member(bParam, "Metadata"), "FindNavigation"),
-                        nameofCall
-                    )
-                ),
+                new NullForgiving(findNavigation),
                 "SetPropertyAccessMode"
             ),
             new Member(new TypeReference("PropertyAccessMode"), "Field")

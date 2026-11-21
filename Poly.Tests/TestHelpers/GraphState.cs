@@ -179,7 +179,7 @@ public static class ModuleScopeOnly {
         ModuleInstanceExecutor executor, ModuleInstance target, string actionName,
         IReadOnlyDictionary<string, object?>? args = null) {
         Call(executor, "SyncSubscriptionBodies");
-        var action = (Poly.DomainModeling.Ontology.Action?)Call(executor, "FindAction", target.EntityName, actionName)
+        var action = (Poly.DomainModeling.Ontology.Action?)Call(executor, "FindAction", target, actionName)
             ?? throw new ArgumentException($"No action '{actionName}' on '{target.EntityName}'.");
         var method = (Poly.Ast.Nodes.MethodDefinitionNode?)Call(executor, "FindMethod", target.EntityName, actionName, false)
             ?? throw new InvalidOperationException($"Module method '{actionName}' is missing on '{target.EntityName}'.");

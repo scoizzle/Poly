@@ -726,6 +726,7 @@ public static partial class AbiEmitter {
     private static Type CSharpBinaryNumericType(Type left, Type right, bool shift) {
         if (shift)
             return left == typeof(ulong) ? typeof(ulong)
+                : left == typeof(uint) ? typeof(uint)
                 : RingCodec.IsInt32Width(left) ? typeof(int) : typeof(long);
         if (left == typeof(bool) || right == typeof(bool))
             throw RejectBinary(left, right);
@@ -884,10 +885,11 @@ public static partial class AbiEmitter {
             ResolvedOperandType(left, ctx), ResolvedOperandType(right, ctx));
 
     /// <summary>The width one operand's own arithmetic runs at: <c>int</c> for the types C#
-    /// promotes to 32 bits, the word otherwise.</summary>
+    /// promotes to 32 bits, <c>uint</c> for the 32-bit unsigned set, the word otherwise.</summary>
     private static Type IntegerWidthOf(Node node, Context ctx) {
         var type = ResolvedOperandType(node, ctx);
         return type == typeof(ulong) ? typeof(ulong)
+            : type == typeof(uint) ? typeof(uint)
             : RingCodec.IsInt32Width(type) ? typeof(int) : typeof(long);
     }
 
@@ -921,8 +923,17 @@ public static partial class AbiEmitter {
             }
             if (ifTrue.Type != ifFalse.Type) {
                 var target = ValueTypeOf(ifTrue.Type, ifFalse.Type);
-                ifTrue = Convert(ifTrue, target);
-                ifFalse = Convert(ifFalse, target);
+                if (Nullable.GetUnderlyingType(target) is not null) {
+                    // A lifted conditional (#803): a non-nullable arm of another shape (a
+                    // decimal's heap handle, a narrower number) is decoded from its own
+                    // representation and lifted, never converted from the raw word.
+                    ifTrue = AsNullableOperand(c.IfTrue, ifTrue, target, ctx);
+                    ifFalse = AsNullableOperand(c.IfFalse, ifFalse, target, ctx);
+                }
+                else {
+                    ifTrue = Convert(ifTrue, target);
+                    ifFalse = Convert(ifFalse, target);
+                }
             }
             return Condition(test, ifTrue, ifFalse);
         }
@@ -988,14 +999,36 @@ public static partial class AbiEmitter {
     private static bool IsValueRepresented(Node node, Context ctx) =>
         ctx.KindOf(node) is ValueRepresentationKind.StackScalar;
 
-    /// <summary>The one type two arms of a value can share: <c>double</c> if either is
-    /// one, else <c>float</c> if either is one, else <c>long</c> if either is one, else the
-    /// left type unchanged.</summary>
-    private static Type ValueTypeOf(Type left, Type right) =>
-        left == typeof(double) || right == typeof(double) ? typeof(double)
+    /// <summary>The one type two arms of a value can share.
+    /// <para>A nullable arm lifts the other one: C#'s conditional has the nullable type when
+    /// one arm is <c>T?</c> and the other converts to <c>T</c> (#803). Without this, the
+    /// <c>long</c> rule below turned a <c>long?</c> arm into <c>long</c>, and reading the
+    /// lifted value threw <c>Nullable object must have a value</c> when it was null.</para>
+    /// <para>Otherwise: <c>double</c> if either is one, else <c>float</c> if either is one,
+    /// else <c>long</c> if either is one, else the left type unchanged.</para></summary>
+    private static Type ValueTypeOf(Type left, Type right) {
+        if (Nullable.GetUnderlyingType(left) is not null || Nullable.GetUnderlyingType(right) is not null) {
+            var leftUnderlying = Nullable.GetUnderlyingType(left) ?? left;
+            var rightUnderlying = Nullable.GetUnderlyingType(right) ?? right;
+            if (IsNumericArm(leftUnderlying) && IsNumericArm(rightUnderlying)) {
+                try {
+                    return typeof(Nullable<>).MakeGenericType(
+                        CSharpBinaryNumericType(leftUnderlying, rightUnderlying, shift: false));
+                }
+                catch (InvalidOperationException) {
+                    // No lifted operator (decimal beside double): the non-nullable rule
+                    // below chooses a target and the conversion fails closed.
+                }
+            }
+        }
+        return left == typeof(double) || right == typeof(double) ? typeof(double)
             : left == typeof(float) || right == typeof(float) ? typeof(float)
             : left == typeof(long) || right == typeof(long) ? typeof(long)
             : left;
+    }
+
+    private static bool IsNumericArm(Type type) =>
+        type != typeof(bool) && (type.IsPrimitive || type == typeof(decimal) || type.IsEnum);
 
     private static bool ContainsSuspend(Node node) {
         if (node is SuspendNode)
@@ -1055,6 +1088,7 @@ public static partial class AbiEmitter {
             throw new InvalidOperationException(
                 "VM compile rejected: cannot resolve the width of a nullable arithmetic operand.");
         return underlying == typeof(ulong) ? typeof(ulong)
+            : underlying == typeof(uint) ? typeof(uint)
             : RingCodec.IsInt32Width(underlying) ? typeof(int) : typeof(long);
     }
 
@@ -1095,7 +1129,10 @@ public static partial class AbiEmitter {
             var rightArm = DecodeIeeeWordArm(rightRead, n.RightHandValue, ctx);
             Expression right = rightArm.Type == underlying || rightArm.Type == tmp.Type
                 ? rightArm
-                : Convert(rightArm, underlying);
+                // A Boolean or a CLR enum is not a number: the word's own representation decodes it (#907).
+                : rightArm.Type == typeof(long) && IsWordDecoded(underlying)
+                    ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
+                    : Convert(rightArm, underlying);
             return Block(
                 leftCompiled.Code,
                 Assign(tmp, stored),
@@ -1131,6 +1168,10 @@ public static partial class AbiEmitter {
             // A temporal arm is its word, not a number: decode it, do not convert it.
             Expression right = rightArm.Type == underlying || rightArm.Type == leftVal.Type
                 ? rightArm
+                // A Boolean or a CLR enum is not a number: Convert(long, …) has no coercion for a
+                // Boolean and re-types an enum (#907), so the word's own representation decodes it.
+                : rightArm.Type == typeof(long) && IsWordDecoded(underlying)
+                    ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
                 : rightArm.Type == typeof(long)
                     && LocalType.Of(underlying) is LocalType.TemporalLocal { IsWord: true }
                     ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
@@ -1161,6 +1202,12 @@ public static partial class AbiEmitter {
                 whenLeft,
                 rightVal));
     }
+
+    /// <summary>A coalesce arm whose frame is a word and whose CLR type is not a number: a
+    /// <c>bool</c> or a CLR enum. Its word is decoded by its own representation, never converted
+    /// numerically (#907).</summary>
+    private static bool IsWordDecoded(Type underlying) =>
+        underlying == typeof(bool) || underlying.IsEnum;
 
     private static Expression UnboxIfHeapNullable(Context ctx, Node node, Expression handle) {
         var clr = ctx.ClrTypeOf(node);

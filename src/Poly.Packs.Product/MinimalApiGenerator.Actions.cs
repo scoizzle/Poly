@@ -123,6 +123,15 @@ public sealed partial class MinimalApiGenerator {
             if (thisReads.FirstOrDefault(n => n.Navigation == backReference) is { } parentReads)
                 AppendReadLoads(preActionNodes, "parentEntity", parentReads.Children, parentLoaded, locals);
 
+            // #560: a subscription is a function of persisted state. The module's own registration path
+            // (InitializeSubscriptions, the one Create calls) runs after the loads, on each instance whose
+            // collections this route loaded, so a stored subscriber is registered exactly as it was on create.
+            // Reusing the module's path keeps the inverse and the per-stage grouping in one place.
+            if (parentCtx is { } subscriptionParent && HasSubscriptionInitializer(subscriptionParent.Parent))
+                preActionNodes.Add(new Invoke(new Member(new Variable("parentEntity"), "InitializeSubscriptions")));
+            if (HasSubscriptionInitializer(entity))
+                preActionNodes.Add(new Invoke(new Member(new Variable("entity"), "InitializeSubscriptions")));
+
             // ── Try body: entity-ref lookups + invoke + result switch ──
             var tryBody = new List<Node>();
             var invokeArgs = new List<Node>();

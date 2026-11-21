@@ -1,4 +1,5 @@
 using Poly.Analysis;
+using Poly.Ast;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
@@ -88,7 +89,10 @@ public sealed class PolyCompiler {
         ArgumentNullException.ThrowIfNull(analysis);
         var build = new DiagnosticBuilder(file, "");
         var diags = new List<CompileDiagnostic>();
-        var files = ProduceFiles(build, diags, session, domain, analysis);
+        // Lower, the lowered module's VM analysis and the C# print all recurse over the tree, so this door runs on the
+        // same parse stack Compile and Analyze use: the caller's stack must not decide whether a legal document emits
+        // (#882, where a 256-level policy aborted a 512 KB caller in ConstantFoldingPass).
+        var files = DslLimits.RunOnParseStack(() => ProduceFiles(build, diags, session, domain, analysis));
         return new CompileResult(file, domain.Name, diags, files, domain, analysis, session, session.ArtifactCatalog);
     }
 
@@ -305,7 +309,7 @@ public sealed class PolyCompiler {
             if (!_options.Catalog.Contains(id)) {
                 diags.Add(ExtensionDiagnostic(build, tree, id, occurrence: 1, Severities.Error,
                     DiagnosticCodes.UnknownExtension,
-                    $"Unknown domain extension '{id}'. Record only ids this catalog can resolve."));
+                    $"Unknown domain extension '{id}'. Known ids: {string.Join(", ", _options.Catalog.KnownIds)}."));
                 ok = false;
             }
         }
@@ -331,7 +335,10 @@ public sealed class PolyCompiler {
             return build.Unplaced(Severities.Error, DiagnosticCodes.Parse, ex.Detail);
         var offset = ex.Offset >= 0 ? ex.Offset : build.Lines.OffsetOf(ex.Line, ex.Column);
         var length = ex.Length > 0 ? ex.Length : build.WordLength(offset);
-        return build.Span(offset, length, Severities.Error, DiagnosticCodes.Parse, ex.Detail, "");
+        // A detail that carries its own position (the parse layer writes one for consumers that read only the
+        // message) repeats the placement; the reader gets the position once.
+        return build.Span(offset, length, Severities.Error, DiagnosticCodes.Parse,
+            WithoutRepeatedPosition(ex.Detail, ex.Line, ex.Column), "");
     }
 
     /// <summary>
@@ -366,13 +373,43 @@ public sealed class PolyCompiler {
         if (root is null)
             return build.Unplaced(severity, code, diagnostic.Message, "");
         var path = DomainElementPath.Resolve(root, diagnostic.Node);
+        var (line, column) = NodePosition(diagnostic.Node);
+        if (line > 0) {
+            // The node knows where its own keyword sits (a `match`, a call, a literal), so the diagnostic is placed
+            // there rather than at the nearest named element that holds it.
+            var at = build.Lines.OffsetOf(line, column);
+            return build.Span(at, build.WordLength(at), severity, code,
+                WithoutRepeatedPosition(diagnostic.Message, line, column), path);
+        }
         var node = SpanBridge.Locate(outline.Value, path);
         if (node is null)
             return build.Unplaced(severity, code, diagnostic.Message, path);
         var length = string.Equals(build.TextAt(node.StartOffset, node.Name.Length), node.Name, StringComparison.Ordinal)
             ? node.Name.Length
             : 1;
-        return build.Span(node.StartOffset, length, severity, code, diagnostic.Message, path);
+        var placed = build.Lines.At(node.StartOffset);
+        return build.Span(node.StartOffset, length, severity, code,
+            WithoutRepeatedPosition(diagnostic.Message, placed.Line, placed.Column), path);
+    }
+
+    /// <summary>The source position a node records for itself, or <c>(0, 0)</c> when it records none.</summary>
+    private static (int Line, int Column) NodePosition(Node node) => node switch {
+        MatchExpr match => (match.Line, match.Col),
+        FunctionCall call => (call.Line, call.Col),
+        Literal literal => (literal.Line, literal.Col),
+        _ => (0, 0),
+    };
+
+    /// <summary>
+    /// Analysis writes a position into a message for consumers that carry none. A placed diagnostic carries the
+    /// position, so a trailing copy of that same position is dropped: one position, once.
+    /// </summary>
+    private static string WithoutRepeatedPosition(string message, int line, int column) {
+        var suffix = $" (line {line}, col {column})";
+        var at = message.EndsWith(suffix + ".", StringComparison.Ordinal)
+            ? message.Length - suffix.Length - 1
+            : message.EndsWith(suffix, StringComparison.Ordinal) ? message.Length - suffix.Length : -1;
+        return at < 0 ? message : string.Concat(message[..at], message[(at + suffix.Length)..]);
     }
 
     private static CompileDiagnostic FromFinding(DiagnosticBuilder build, AnalysisFinding finding) =>

@@ -199,7 +199,8 @@ public class ActionScopeEmitTests {
         var (cs, _) = Print(Dsl, "ActionScopeNames");
         // L-03c adds `__depth`, the notify cascade's entry depth (a local of Notify{Stage}Subscribers).
         // L-08b adds the effective-value local of each Required or Defaulted create slot (`__` + the slot).
-        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+|code|label|score)$");
+        // #630 adds the create-time notification record: its queue, its window flag, and the record and replay methods.
+        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+|code|label|score|pending\w*|stage|notified\d+|deferringStageNotifications|DeferStageNotification|ReplayStageNotifications)$");
         var stray = Regex.Matches(cs, @"\b__\w+").Select(m => m.Value).Where(n => !allowed.IsMatch(n)).Distinct().ToList();
         await Assert.That(string.Join(",", stray)).IsEqualTo("");
 
@@ -262,7 +263,8 @@ public class ActionScopeEmitTests {
         var (_, assembly) = Print(Dsl, "ActionScopeNullable");
         var group = Create(assembly, "Group", ("label", "g"));
         var scoped = (IActionScoped)group;
-        var items = Read(group, "Items");
+        // The property is a copy (#541); restore has to keep the backing list itself.
+        var items = group.GetType().GetField("_items", PrintedMembers.Any)!.GetValue(group);
 
         var nullSnapshot = scoped.__Snapshot();
         Write(group, "Tag", "now-set");
@@ -277,7 +279,7 @@ public class ActionScopeEmitTests {
 
         Call(group, "Add", "x");
         scoped.__Restore(nullSnapshot);
-        await Assert.That(ReferenceEquals(Read(group, "Items"), items)).IsTrue();
+        await Assert.That(ReferenceEquals(group.GetType().GetField("_items", PrintedMembers.Any)!.GetValue(group), items)).IsTrue();
         await Assert.That(Count(group, "Items")).IsEqualTo(0);
     }
 
@@ -372,7 +374,10 @@ public class ActionScopeEmitTests {
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)) {
             var element = type.GetGenericArguments()[0];
             var list = (IList)(current ?? Activator.CreateInstance(type)!);
-            list.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(element));
+            // #630: the creation-time notification queue holds strings, which GetUninitializedObject refuses.
+            list.Add(element == typeof(string)
+                ? "mutated"
+                : System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(element));
             field.SetValue(instance, list);
         }
         else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(HashSet<>)) {

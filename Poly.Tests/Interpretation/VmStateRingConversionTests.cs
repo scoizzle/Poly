@@ -179,7 +179,8 @@ public class VmStateRingConversionTests {
     }
 
     /// <summary><c>(T?)x</c> of a zero is a present zero, not absent: <c>??</c> keeps it and <c>== null</c> is false.
-    /// The fallback is a <c>T?</c>: <c>bool? ?? bool</c> is refused by the emitter's coalesce today (row T-21b).</summary>
+    /// The fallback here is a <c>T?</c>, the arm that keeps the nullable; <c>bool? ?? bool</c> and a CLR enum's
+    /// word arm are pinned in <c>CoalesceTests</c> (#907).</summary>
     [Test]
     public async Task CastToNullable_OfZero_IsPresent() {
         await PresentZero(0, 1);

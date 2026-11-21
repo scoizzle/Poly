@@ -40,13 +40,23 @@ internal class Section : Poly.Runtime.IActionScoped
     public Instructor? Instructor { get; private set; }
     public IReadOnlyList<Enrollment> Enrollments
     {
-        get => this._enrollments;
+        get => new List<Enrollment>(this._enrollments);
     }
     public IReadOnlyList<WaitOffer> Waitlist
     {
-        get => this._waitlist;
+        get => new List<WaitOffer>(this._waitlist);
     }
     public SectionStage CurrentStage { get; private set; }
+    internal void AttachCourse(Course child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Course = child;
+    }
+    internal void AttachInstructor(Instructor child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Instructor = child;
+    }
     internal void AttachEnrollments(Enrollment child)
     {
         Poly.Runtime.ActionScope.Touch(this);
@@ -86,6 +96,11 @@ internal class Section : Poly.Runtime.IActionScoped
             return DomainResult<WaitOffer>.Failure(waitOfferResult.Error!);
         }
         var waitOffer = waitOfferResult.Value;
+        var __notify = waitOffer.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<WaitOffer>.Failure(__notify.Error!);
+        }
         return DomainResult<WaitOffer>.Success(waitOffer);
     }
     internal void AttachWaitlist(WaitOffer child)
@@ -364,7 +379,7 @@ internal class Section : Poly.Runtime.IActionScoped
         created.InitializeSubscriptions();
         return DomainResult<Section>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Enrollments)
         {

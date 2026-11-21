@@ -14,7 +14,9 @@ namespace Poly.Tests.Polyc;
 /// in a child process; the probe is payload only in the parent and acts when the child runner sets
 /// <c>POLY_CHILD_PROBE</c>. Row G-25 adds the statement limit (64) and path words to the stack grid; see
 /// <see cref="ChildProbe_StatementAndExpressionShapes_OnFixedStack"/>. The parse stack hop (<c>DslLimits.RunOnParseStack</c>)
-/// is still on <c>PolyCompiler</c> and <c>DomainResolver.Resolve</c>, so the analyze and compile doors run on its 16 MB thread.
+/// is still on <c>PolyCompiler</c> and <c>DomainResolver.Resolve</c>, so the analyze and compile doors run on its 16 MB thread;
+/// #882 puts <c>PolyCompiler.Produce</c> on it too, and the recursive walks probe the remaining stack so a thread that is
+/// still too small gets a typed failure, never a process abort.
 ///
 /// <para>There is no pass registry in the product, so the passes driven at 256 are a fixed list, each named by its
 /// facade: parse = <c>DslExpressionFragment.ParseOnThisThread</c>; analysis = <c>DomainSession.Analyze</c>; lowering =
@@ -409,6 +411,100 @@ public class RecursivePassDepthTests {
     }
 
     /// <summary>
+    /// #882: <c>PolyCompiler.Produce</c> used to abort a 512 KB caller thread on the legal 256-level policy (a stack
+    /// overflow in <c>ConstantFoldingPass</c>, which cannot be caught). It now runs on the parse stack the other
+    /// compiler doors use, so the caller's stack does not decide whether a legal document emits. One child per cell,
+    /// so a regression is recorded as that child's exit code rather than aborting the suite.
+    /// </summary>
+    [Test]
+    [Arguments(512)]
+    [Arguments(1024)]
+    public async Task Produce_256Nots_OnTheCallersStack_Produces(int stackKb) =>
+        await Assert.That(await BucketCell("not", Limit, "produce", stackKb)).IsEqualTo("ok")
+            .Because($"produce on a {stackKb} KB caller thread");
+
+    /// <summary>
+    /// #882: a recursive walk whose thread is still too small turns "not enough stack" into a typed
+    /// <see cref="InsufficientExecutionStackException"/> instead of a process abort. The doors here are the ones the
+    /// compiler doors call behind their hop (<c>DomainSession.AnalyzeModule</c>, <c>DomainSession.Lower</c>,
+    /// <c>DomainDslPrinter.Print</c>); each runs on a 128 KB thread, measurably below what the 256-level policy needs
+    /// (128 KB aborts all three today, and 256 KB still aborts the analysis).
+    /// One child per cell so an abort is an outcome, not a dead suite.
+    /// </summary>
+    [Test]
+    [Arguments("analyze", 128)]
+    [Arguments("lower", 128)]
+    [Arguments("print", 128)]
+    public async Task DirectDoor_OnATooSmallStack_IsTyped_NotAnAbort(string door, int stackKb) =>
+        await Assert.That(await DirectDoorCell(door, stackKb)).IsEqualTo(TypedStackFailure);
+
+    private const string TypedStackFailure = "throw InsufficientExecutionStackException";
+
+    /// <summary>One direct door in its own child, on a fixed stack: "ok", the typed failure, or "abort &lt;code&gt;".</summary>
+    private static async Task<string> DirectDoorCell(string door, int stackKb) {
+        var output = Path.Combine(Path.GetTempPath(), $"poly-882-{Guid.NewGuid():N}.txt");
+        try {
+            var result = await PolycProcess.RunTestInChildAsync(
+                $"/*/*/{nameof(RecursivePassDepthTests)}/{nameof(ChildProbe_DirectDoor_OnFixedStack)}",
+                new Dictionary<string, string?> {
+                    ["POLY_CHILD_PROBE"] = "882-doors",
+                    ["POLY_PROBE_STACK_KB"] = stackKb.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["POLY_PROBE_DOOR"] = door,
+                    ["POLY_PROBE_OUT"] = output,
+                });
+            if (result.IsAborted)
+                return result.Stderr.Contains("Stack overflow", StringComparison.Ordinal)
+                    ? $"abort {result.ExitCode} (stack overflow)"
+                    : $"abort {result.ExitCode}";
+            return File.Exists(output) ? File.ReadAllText(output) : $"exit {result.ExitCode} with no outcome";
+        }
+        finally {
+            File.Delete(output);
+        }
+    }
+
+    [Test]
+    public async Task ChildProbe_DirectDoor_OnFixedStack() {
+        if (Environment.GetEnvironmentVariable("POLY_CHILD_PROBE") != "882-doors")
+            return;
+
+        var stackKb = int.Parse(Environment.GetEnvironmentVariable("POLY_PROBE_STACK_KB")!, System.Globalization.CultureInfo.InvariantCulture);
+        var door = Environment.GetEnvironmentVariable("POLY_PROBE_DOOR")!;
+        var body = ParserLimitsTests.Nots(Limit);
+        // The domain each door walks is built and analyzed on the 16 MB parse stack. Lower runs on a fresh domain
+        // (its module is not in the cache yet), so the small stack really does the lowering.
+        var (_, analyzed) = Analyzed(body);
+        var (_, fresh) = Analyzed(body);
+        var module = analyzed.Session!.Lower(analyzed.Domain!, analyzed.Analysis!);
+        var outcome = OnStack(stackKb * 1024, () => {
+            try {
+                switch (door) {
+                    case "analyze":
+                        _ = DomainSession.AnalyzeModule(module);
+                        break;
+                    case "lower":
+                        _ = fresh.Session!.Lower(fresh.Domain!, fresh.Analysis!);
+                        break;
+                    case "print":
+                        _ = new DomainDslPrinter(analyzed.Session!).Print(analyzed.Domain!);
+                        break;
+                    default:
+                        throw new InvalidOperationException(door);
+                }
+                return "ok";
+            }
+            catch (InsufficientExecutionStackException) {
+                return "throw " + nameof(InsufficientExecutionStackException);
+            }
+            catch (Exception ex) {
+                return "throw " + ex.GetType().Name;
+            }
+        });
+        File.WriteAllText(Environment.GetEnvironmentVariable("POLY_PROBE_OUT")!, outcome);
+        await Assert.That(outcome).IsNotNull();
+    }
+
+    /// <summary>
     /// RECORDED CURRENT RESULT, owner G-25b (not a pass): 10,000 entry-chained stages run the evolution out of the
     /// child's 1 GB heap, reported as DSL0004. Kept out of the default run ([Explicit]): the cell spends the whole
     /// 1 GB heap cap by construction. Run it by name.
@@ -422,15 +518,12 @@ public class RecursivePassDepthTests {
 
     /// <summary>
     /// RECORDED CURRENT RESULTS, owner G-25b (not passes): a policy of 256 nested <c>not</c>s (G-10's limit) analyzes
-    /// through the hop, then each door runs on the caller's own stack, which the hop does not cover:
-    /// <c>PolyCompiler.Produce</c> (what <c>OracleTool</c> calls), a direct <c>DomainSession.Lower</c>, and
-    /// <c>DomainDslPrinter.Print</c>. Each cell is its own child, so an abort is recorded as the child's exit code.
-    /// Recorded 2026-11-13: <c>Produce</c> on 512 KB aborts (stack overflow in <c>ConstantFoldingPass.FoldUnaryBoolean</c> /
-    /// <c>TryFold</c> / <c>GetConstantValue</c>, under <c>DomainSession.Emit</c> → <c>VmAnalysisOf</c>); every other cell completes.
+    /// through the hop, then a direct <c>DomainSession.Lower</c> and <c>DomainDslPrinter.Print</c> run on the caller's
+    /// own stack, which the hop does not cover. Each cell is its own child, so an abort is recorded as the child's exit
+    /// code. <c>PolyCompiler.Produce</c> left this bucket with #882: it hops, and
+    /// <see cref="Produce_256Nots_OnTheCallersStack_Produces"/> asserts it.
     /// </summary>
     [Test]
-    [Arguments("produce", 512, "abort 134 (stack overflow)")]
-    [Arguments("produce", 1024, "ok")]
     [Arguments("lower", 512, "ok")]
     [Arguments("lower", 1024, "ok")]
     [Arguments("print", 512, "ok")]

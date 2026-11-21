@@ -35,9 +35,14 @@ internal class Truck : Poly.Runtime.IActionScoped
     public Warehouse? Warehouse { get; private set; }
     public IReadOnlyList<Delivery> Deliveries
     {
-        get => this._deliveries;
+        get => new List<Delivery>(this._deliveries);
     }
     public TruckStage CurrentStage { get; private set; }
+    internal void AttachWarehouse(Warehouse child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Warehouse = child;
+    }
     internal void AttachDeliveries(Delivery child)
     {
         Poly.Runtime.ActionScope.Touch(this);
@@ -199,7 +204,7 @@ internal class Truck : Poly.Runtime.IActionScoped
         db.Record("Truck", "Vin", __vin);
         return DomainResult<Truck>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

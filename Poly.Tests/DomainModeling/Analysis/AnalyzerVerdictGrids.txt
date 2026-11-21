@@ -74,35 +74,35 @@ N + M | match arm into Boolean = DMMAT002+DMSEM003
 N + M | match arm into Date = DMMAT002+DMSEM003
 N + M | match arm into Color = DMMAT002+DMSEM003
 N + M | match arm into Widget = DMMAT002+DMSEM003
-C + C | assign Number = ok
+C + C | assign Number = DMSEM003
 C + C | assign Decimal = ok
 C + C | assign Text = DMSEM003
 C + C | assign Boolean = DMSEM003
 C + C | assign Date = DMSEM003
 C + C | assign Color = DMSEM003
 C + C | assign Widget = DMSEM003
-C + C | create Number = ok
+C + C | create Number = DMSEM003
 C + C | create Decimal = ok
 C + C | create Text = DMSEM003
 C + C | create Boolean = DMSEM003
 C + C | create Date = DMSEM003
 C + C | create Color = DMSEM003
 C + C | create Widget = DMSEM003
-C + C | invoke Number = ok
+C + C | invoke Number = DMSEM003
 C + C | invoke Decimal = ok
 C + C | invoke Text = DMSEM003
 C + C | invoke Boolean = DMSEM003
 C + C | invoke Date = DMSEM003
 C + C | invoke Color = DMSEM003
 C + C | invoke Widget = DMSEM003
-C + C | call Number = ok
+C + C | call Number = DMFUN003
 C + C | call Decimal = ok
 C + C | call Text = DMFUN003
 C + C | call Boolean = DMFUN003
 C + C | call Date = DMFUN003
 C + C | call Color = DMFUN003
 C + C | call Widget = DMFUN003
-C + C | return Number = ok
+C + C | return Number = DMFUN006
 C + C | return Decimal = ok
 C + C | return Text = DMFUN006
 C + C | return Boolean = DMFUN006
@@ -137,8 +137,8 @@ C + C | for where form = DMSEM003
 C + C | not form = DMSEM003
 C + C | form and Flag = DMSEM003
 C + C | match { form -> 1 } = DMMAT001
-C + C | form * N = ok
-C + C | N * form = ok
+C + C | form * N = DMSEM003
+C + C | N * form = DMSEM003
 C + C | form * Name = DMSEM003
 C + C | Name * form = DMSEM003
 C + C | match arm into Number = DMSEM003
@@ -962,28 +962,28 @@ sum parts Qty | match arm into Boolean = DMMAT002+DMSEM003
 sum parts Qty | match arm into Date = DMMAT002+DMSEM003
 sum parts Qty | match arm into Color = DMMAT002+DMSEM003
 sum parts Qty | match arm into Widget = DMMAT002+DMSEM003
-sum parts Price | assign Number = ok
+sum parts Price | assign Number = DMSEM003
 sum parts Price | assign Decimal = ok
 sum parts Price | assign Text = DMSEM003
 sum parts Price | assign Boolean = DMSEM003
 sum parts Price | assign Date = DMSEM003
 sum parts Price | assign Color = DMSEM003
 sum parts Price | assign Widget = DMSEM003
-sum parts Price | create Number = ok
+sum parts Price | create Number = DMSEM003
 sum parts Price | create Decimal = ok
 sum parts Price | create Text = DMSEM003
 sum parts Price | create Boolean = DMSEM003
 sum parts Price | create Date = DMSEM003
 sum parts Price | create Color = DMSEM003
 sum parts Price | create Widget = DMSEM003
-sum parts Price | invoke Number = ok
+sum parts Price | invoke Number = DMSEM003
 sum parts Price | invoke Decimal = ok
 sum parts Price | invoke Text = DMSEM003
 sum parts Price | invoke Boolean = DMSEM003
 sum parts Price | invoke Date = DMSEM003
 sum parts Price | invoke Color = DMSEM003
 sum parts Price | invoke Widget = DMSEM003
-sum parts Price | call Number = ok
+sum parts Price | call Number = DMFUN003
 sum parts Price | call Decimal = ok
 sum parts Price | call Text = DMFUN003
 sum parts Price | call Boolean = DMFUN003
@@ -1025,8 +1025,8 @@ sum parts Price | for where form = DMSEM003
 sum parts Price | not form = DMSEM003
 sum parts Price | form and Flag = DMSEM003
 sum parts Price | match { form -> 1 } = DMMAT001
-sum parts Price | form * N = ok
-sum parts Price | N * form = ok
+sum parts Price | form * N = DMSEM003
+sum parts Price | N * form = DMSEM003
 sum parts Price | form * Name = DMSEM003
 sum parts Price | Name * form = DMSEM003
 sum parts Price | match arm into Number = DMSEM003
@@ -1276,7 +1276,7 @@ C + C | policy form != null = DMSEM003
 C + C | require form == Number = ok
 C + C | require form == Text = DMSEM003
 C + C | stage require form == Text = DMSEM003
-C + C | onEntry assign Number = ok
+C + C | onEntry assign Number = DMSEM003
 C + C | onEntry assign Text = DMSEM003
 Due + N | policy form == Number = DMSEM003
 Due + N | policy form == Text = DMSEM003
@@ -1384,7 +1384,7 @@ sum parts Price | policy form != null = DMSEM003
 sum parts Price | require form == Number = ok
 sum parts Price | require form == Text = DMSEM003
 sum parts Price | stage require form == Text = DMSEM003
-sum parts Price | onEntry assign Number = ok
+sum parts Price | onEntry assign Number = DMSEM003
 sum parts Price | onEntry assign Text = DMSEM003
 Cost Amount | policy form == Number = DMSTR006
 Cost Amount | policy form == Text = DMSEM003+DMSTR006
@@ -2132,10 +2132,10 @@ Number | policy sum > 0 = ok
 Number | assign Number = ok
 Number | assign Decimal = ok
 Decimal | policy sum > 0 = ok
-Decimal | assign Number = ok
+Decimal | assign Number = DMSEM003
 Decimal | assign Decimal = ok
 Cents | policy sum > 0 = ok
-Cents | assign Number = ok
+Cents | assign Number = DMSEM003
 Cents | assign Decimal = ok
 Id64 | policy sum > 0 = ok
 Id64 | assign Number = ok
@@ -2150,7 +2150,7 @@ long | policy sum > 0 = DMSEM005
 long | assign Number = DMSEM005
 long | assign Decimal = DMSEM005
 decimal | policy sum > 0 = DMSEM005
-decimal | assign Number = DMSEM005
+decimal | assign Number = DMSEM003+DMSEM005
 decimal | assign Decimal = DMSEM005
 Text | policy sum > 0 = DMSEM005
 Text | assign Number = DMSEM005
@@ -2582,7 +2582,7 @@ Due + (C + C) policy = DMSEM003
 C * 2 + 5 Days policy = DMSEM003
 (C + C) + 5 Days assign = DMSEM003
 Stamp + A + 5 Days assign = DMSEM003
-(A + B) * C assign Number = ok
+(A + B) * C assign Number = DMSEM003
 assigned arithmetic stays unknown = DMSEM003
 ## Match
 match { true -> P_<row>, else -> P_<col> }; cols: Number Decimal Date DateTime Time Text Color Guid

@@ -45,6 +45,26 @@ public sealed class DslCompilerSelectionTests {
     }
 
     /// <summary>
+    /// A document that lists generic <c>persistence</c> beside a vendor (<c>uses persistence</c>, <c>uses sqlite</c>)
+    /// loads the vendor only, the rule a host's vendor already follows: both register the storage pass, and loading
+    /// both crashed every compile with an unpositioned "analyzer already registered".
+    /// </summary>
+    [Test]
+    [Arguments("persistence sqlite")]
+    [Arguments("sqlite persistence")]
+    [Arguments("temporal http persistence sqlite")]
+    public async Task Document_ListingPersistenceBesideAVendor_LoadsTheVendorOnly(string list) {
+        var uses = list.Split(' ');
+        var catalog = ProductCatalog.Create("sqlite");
+
+        var ids = LibrarySelection.Resolve(DslSyntaxTree.Parse(Doc(uses)).Uses, new SessionOptions(catalog, ProductCatalog.ImplicitIds));
+        var compiled = new PolyCompiler(catalog, SessionOptions.Bare(catalog)).Compile(Doc(uses), "both.poly");
+
+        await Assert.That(ids).IsEquivalentTo(uses.Where(id => id != "persistence"));
+        await Assert.That(compiled.Succeeded).IsTrue();
+    }
+
+    /// <summary>
     /// C-04 row test (D2): the facade selects what polyc's session path selects. The oracle is an
     /// independent compile of the document with the ids written out and no facade rule.
     /// </summary>
@@ -125,6 +145,18 @@ public sealed class DslCompilerSelectionTests {
         var diagnostic = result.Diagnostics.Single(d => d.Code == DiagnosticCodes.UnknownExtension);
         await Assert.That(diagnostic.Message).Contains("nope");
         await Assert.That(diagnostic.Placed).IsTrue();
+    }
+
+    /// <summary>#640: the refusal names the ids this catalog resolves, so the author can pick one.</summary>
+    [Test]
+    public async Task UnknownUses_NamesTheIdsTheCatalogResolves() {
+        var catalog = ProductCatalog.Create("sqlite");
+        var result = new PolyCompiler(catalog, DbOptions(catalog, DbmsPack.Sqlite)).Compile(Doc("nope"), "x.poly");
+
+        var diagnostic = result.Diagnostics.Single(d => d.Code == DiagnosticCodes.UnknownExtension);
+        await Assert.That(diagnostic.Message).Contains("storage");
+        await Assert.That(diagnostic.Message).Contains("sqlite");
+        await Assert.That(diagnostic.Message).Contains("temporal");
     }
 
     /// <summary>The seed and hook overloads are gone; the catalog and the options are the whole input.</summary>

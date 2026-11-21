@@ -126,11 +126,11 @@ public class GuideClaimsTests {
     /// </summary>
     private static readonly ClaimProbe[] Probes = [
         new("c600", "#600",
-            "Store notify runs stage-scoped handlers first, then entity-level.",
-            ["entity-first", "stage-first"], "stage-first", "M-02", NotifyOrder),
+            "Store notify runs entity-level handlers first, then stage-scoped ones.",
+            ["entity-first", "stage-first"], "entity-first", "M-02", NotifyOrder),
         new("c601", "#601",
-            "Fires **once** when **at least one** linked related entity is in a matching stage",
-            ["once", "each-transition"], "once", "M-02", AnyFiresOnce),
+            "Fires on **each** matching transition while **at least one** linked related entity is in a matching stage",
+            ["once", "each-transition"], "each-transition", "M-02", AnyFiresOnce),
         new("c637", "#637",
             "removing the owner instance entirely is not an unlink, so it is exempt from the minimum.",
             ["present", "absent"], "present", "M-02", OwnedRemoval),
@@ -154,25 +154,17 @@ public class GuideClaimsTests {
     /// The rows this slice knows about: the id, the one slice that deletes the row, the measured detail,
     /// and which resolution retires it. Each entry is a recorded contradiction, never a pass.
     /// <para>
-    /// c576 and c577 share one claim sentence — the guide's only statement about a stage <c>require</c>
-    /// being an invariant — so one M-02 reword retires both rows, and neither can outlive the sentence.
+    /// c576 is the remaining row for the guide's one stage-<c>require</c> invariant sentence: <c>Create</c>
+    /// still accepts an instance whose initial values falsify the requirement. Its sibling c577 (an action
+    /// that falsifies it) was retired by V-10's post-check (#518/#577) and its row deleted, as R6a requires.
     /// </para>
     /// </summary>
     private static readonly DriftRow[] KnownGuideDrift = [
-        new("c600", "M-02", "entity-first: Trace=12",
-            "M-02 reword: the guide says stage-scoped first; it must say entity-level first."),
-        new("c601", "M-02", "each-transition: AnyN=2, EachN=2",
-            "M-02 reword: 'once' becomes 'each matching transition'."),
         new("c637", "M-02", "absent: 3/3 effect verbs are parse errors; last-owner unlink refused",
             "M-02 reword: the removal exemption goes, or a removal operation lands."),
-        new("c492", "G-05", "accepted: 0 errors",
-            "G-05 refuses `action when S` in analysis, at the action's own line; the section 10 row is then true."),
         new("c576", "L-17", "accepted: created in Open with Cleared=true",
-            "L-17 refuses create in a stage whose require the initial values falsify. Shares c577's claim "
-            + "sentence, so one M-02 reword retires both rows."),
-        new("c577", "V-10", "accepted: 0 errors; the clearing action succeeds; the following action is blocked",
-            "V-10 refuses or post-checks an action that falsifies the stage require. Shares c576's claim "
-            + "sentence, so one M-02 reword retires both rows."),
+            "L-17 refuses create in a stage whose require the initial values falsify. Shares the claim "
+            + "sentence with the retired c577 row."),
     ];
 
     /// <summary>The audit's answer: contradictions with no row, and rows with no contradiction.</summary>

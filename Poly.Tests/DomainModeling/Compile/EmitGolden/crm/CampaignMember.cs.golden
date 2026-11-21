@@ -16,6 +16,16 @@ internal class CampaignMember : Poly.Runtime.IActionScoped
     }
     public Contact? Contact { get; private set; }
     public Campaign? Campaign { get; private set; }
+    internal void AttachContact(Contact child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Contact = child;
+    }
+    internal void AttachCampaign(Campaign child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Campaign = child;
+    }
     internal static DomainResult<CampaignMember> Create(Contact? contact = default, Campaign? campaign = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

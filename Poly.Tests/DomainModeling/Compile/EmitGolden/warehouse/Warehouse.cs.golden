@@ -29,7 +29,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     public TruckStatus Status { get; private set; }
     public IReadOnlyList<Truck> Trucks
     {
-        get => this._trucks;
+        get => new List<Truck>(this._trucks);
     }
     internal DomainResult<Truck> CreateTrucks(Poly.Runtime.IStoragePort db, string? vin = default, long? maxLoad = default, long? currentLoad = default, TruckStatus? status = default)
     {
@@ -278,7 +278,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         db.Record("Warehouse", "Code", __code);
         return DomainResult<Warehouse>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

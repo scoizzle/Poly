@@ -39,11 +39,11 @@ internal class Guest : Poly.Runtime.IActionScoped
     public long EventCount { get; private set; }
     public IReadOnlyList<EventHold> Events
     {
-        get => this._events;
+        get => new List<EventHold>(this._events);
     }
     public IReadOnlyList<Reservation> Reservations
     {
-        get => this._reservations;
+        get => new List<Reservation>(this._reservations);
     }
     public GuestStage CurrentStage { get; private set; }
     internal DomainResult<EventHold> CreateEvents(long? headcount = default, long? capacity = default, decimal? dayRate = default, DateOnly? startDate = default, DateOnly? endDate = default, Hall? hall = default, Section? section = default)
@@ -78,6 +78,11 @@ internal class Guest : Poly.Runtime.IActionScoped
             return DomainResult<EventHold>.Failure(eventHoldResult.Error!);
         }
         var eventHold = eventHoldResult.Value;
+        var __notify = eventHold.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<EventHold>.Failure(__notify.Error!);
+        }
         return DomainResult<EventHold>.Success(eventHold);
     }
     internal void AttachEvents(EventHold child)
@@ -118,6 +123,11 @@ internal class Guest : Poly.Runtime.IActionScoped
             return DomainResult<Reservation>.Failure(reservationResult.Error!);
         }
         var reservation = reservationResult.Value;
+        var __notify = reservation.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Reservation>.Failure(__notify.Error!);
+        }
         return DomainResult<Reservation>.Success(reservation);
     }
     internal void AttachReservations(Reservation child)
@@ -386,7 +396,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         db.Record("Guest", "Email", __email);
         return DomainResult<Guest>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Reservations)
         {
@@ -397,7 +407,7 @@ internal class Guest : Poly.Runtime.IActionScoped
             target.RegisterGuestEventsReleasedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

@@ -17,6 +17,8 @@ internal enum TicketStage
 internal class Ticket : Poly.Runtime.IActionScoped
 {
     private List<Account>? _accountTicketsClosedSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private Ticket() { }
     private Ticket(string subject, Account? account)
@@ -28,6 +30,11 @@ internal class Ticket : Poly.Runtime.IActionScoped
     public string Subject { get; private set; } = default!;
     public Account? Account { get; private set; }
     public TicketStage CurrentStage { get; private set; }
+    internal void AttachAccount(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Account = child;
+    }
     internal DomainResult Work()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -120,6 +127,11 @@ internal class Ticket : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Closed");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Closed");
+                return DomainResult.Success();
+            }
             if (this._accountTicketsClosedSubscribers != null)
             {
                 foreach (var sub in this._accountTicketsClosedSubscribers)
@@ -135,6 +147,37 @@ internal class Ticket : Poly.Runtime.IActionScoped
         finally
         {
             this.ExitNotifyCascade(__depth);
+        }
+        return DomainResult.Success();
+    }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "Closed")
+            {
+                var __notified0 = this.NotifyClosedSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
         }
         return DomainResult.Success();
     }
@@ -196,12 +239,14 @@ internal class Ticket : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[5];
+        var __state = new object?[7];
         __state[0] = this.Subject;
         __state[1] = this.Account;
         __state[2] = this.CurrentStage;
         __state[3] = (this._accountTicketsClosedSubscribers == null ? null : new List<Account>(this._accountTicketsClosedSubscribers));
-        __state[4] = this._notifyDepth;
+        __state[4] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[5] = this.__deferringStageNotifications;
+        __state[6] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -226,6 +271,23 @@ internal class Ticket : Poly.Runtime.IActionScoped
                 this._accountTicketsClosedSubscribers.Add(__item3);
             }
         }
-        this._notifyDepth = (int)__saved[4]!;
+        if (__saved[4] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item4 in(List<string>)__saved[4]!)
+            {
+                this.__pendingStageNotifications.Add(__item4);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[5]!;
+        this._notifyDepth = (int)__saved[6]!;
     }
 }

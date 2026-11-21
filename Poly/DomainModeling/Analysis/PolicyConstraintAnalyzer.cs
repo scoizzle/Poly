@@ -140,7 +140,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     /// <summary>
     /// Validates a collection quantified expression body property references against the
     /// target entity. Rejects unknown relationship, non-collection cardinality,
-    /// reverse-side, self-rel, and unknown body properties.
+    /// reverse-side, and unknown body properties.
     /// </summary>
     private static void ValidateQuantifierExpression(
         AnalysisContext context,
@@ -208,7 +208,8 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// Validates that a quantifier relationship exists, is OneToMany from the source,
-    /// source-side only, not self-rel. Returns the target entity or null on error.
+    /// and is read from its source side. A self-relationship is read like any other collection: the instance's own
+    /// members, one level (#482). Returns the target entity or null on error.
     /// </summary>
     private static (Entity? TargetEntity, Relationship? Relationship) ValidateQuantifierRelationship(
         AnalysisContext context,
@@ -259,13 +260,8 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             return (null, null);
         }
 
-        // No self-relationship
-        if (string.Equals(relationship.Source.TypeName, relationship.Target.TypeName, StringComparison.Ordinal)) {
-            context.ReportError(expr,
-                $"Quantifier on self-relationship '{resolvedRelName}' is not supported yet.",
-                DomainModelDiagnosticCodes.SemanticReferenceResolution);
-            return (null, null);
-        }
+        // A self-relationship is a collection of this entity's own type on the instance (#482): the loop below reads
+        // the instance's own members, exactly as it reads any other target's, so there is nothing to reject.
 
         // Resolve target entity
         if (!lookup.Types.TryGetValue(relationship.Target.TypeName, out var targetType)

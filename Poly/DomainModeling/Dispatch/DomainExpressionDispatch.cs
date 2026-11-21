@@ -4,6 +4,7 @@ using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
@@ -39,6 +40,7 @@ public abstract class DomainExpressionDispatch<TResult> {
     protected virtual TResult Add(Add e) => Default();
     protected virtual TResult Multiply(Multiply e) => Default();
     protected virtual TResult Divide(Divide e) => Default();
+    protected virtual TResult Negate(Negate e) => Default();
     protected virtual TResult MatchExpr(MatchExpr e) => Default();
     protected virtual TResult FunctionCall(FunctionCall e) => Default();
     protected virtual TResult RelationshipNavigation(RelationshipNavigation e) => Default();
@@ -64,7 +66,14 @@ public abstract class DomainExpressionDispatch<TResult> {
     /// <see cref="Library"/>. New core subtypes cause a compile error here
     /// if not added to the switch.
     /// </summary>
-    public TResult Route(DomainExpression expr) => expr switch {
+    public TResult Route(DomainExpression expr) {
+        // Every rewrite and print of an expression tree recurses through here: a tree deeper than the thread's
+        // stack is a typed failure, never an abort (#882).
+        ExecutionStack.Ensure();
+        return RouteCore(expr);
+    }
+
+    private TResult RouteCore(DomainExpression expr) => expr switch {
         PropertyAccess e => PropertyAccess(e),
         ParameterAccess e => ParameterAccess(e),
         Literal e => Literal(e),
@@ -75,6 +84,7 @@ public abstract class DomainExpressionDispatch<TResult> {
         Add e => Add(e),
         Multiply e => Multiply(e),
         Divide e => Divide(e),
+        Negate e => Negate(e),
         MatchExpr e => MatchExpr(e),
         FunctionCall e => FunctionCall(e),
         RelationshipNavigation e => RelationshipNavigation(e),

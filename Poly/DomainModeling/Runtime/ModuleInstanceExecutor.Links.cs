@@ -16,7 +16,7 @@ public sealed partial class ModuleInstanceExecutor {
     /// Links <paramref name="target"/> to <paramref name="source"/> over
     /// <paramref name="relationshipName"/>. Idempotent: a repeat succeeds with
     /// <see cref="LinkChange.AlreadyLinked"/> and leaves the bag unchanged. A second
-    /// link on a to-one source is refused.
+    /// link on a to-one source is refused, and so is an owned link from an instance to itself.
     /// </summary>
     public ModuleOutcome Link(string relationshipName, ModuleInstance source, ModuleInstance target) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
@@ -29,6 +29,11 @@ public sealed partial class ModuleInstanceExecutor {
                 var contract = RequireContract(relationshipName, source, target);
                 if (IsLinkedCore(contract, source.Bag, target.Bag))
                     return ModuleOutcome.Ok(change: LinkChange.AlreadyLinked);
+                // An instance cannot own itself (#1001); a cycle through other instances is a legal structure.
+                if (contract.SourceOwnsTarget && ReferenceEquals(source.Bag, target.Bag))
+                    return ModuleOutcome.Fail(DomainFailure.Link(
+                        Relationship.SelfOwnLinkViolationMessage(relationshipName),
+                        $"{source.EntityName}.{relationshipName}"));
 
                 if (IsToMany(contract)) {
                     var field = CollectionField(contract);

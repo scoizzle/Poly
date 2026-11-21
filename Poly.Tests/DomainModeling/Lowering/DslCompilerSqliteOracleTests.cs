@@ -24,7 +24,7 @@ public class DslCompilerSqliteOracleTests {
         new Compiler().Load(new HttpLibrary());
 
     [Test]
-    public async Task DslCompiler_OptionalProperty_IsNullableAndAbsentFromCreateDto() {
+    public async Task DslCompiler_OptionalProperty_IsNullableAndASettableCreateDtoMember() {
         var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain OptionalHost
@@ -48,11 +48,13 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(db).Contains("b.Property(x => x.Name).HasColumnName(\"name\").HasColumnType(\"TEXT\").IsRequired();");
         await Assert.That(db).Contains("b.Property(x => x.Note).HasColumnName(\"note\").HasColumnType(\"TEXT\");");
 
-        // Every create-DTO member is a required ctor slot; optional members are absent.
+        // #588: every settable property is a create-DTO member, so an omitted optional value keeps
+        // its authored meaning. Only a Required slot is [Required].
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(prog).Contains("[Required]\n    public string? Name { get; init; }");
-        await Assert.That(prog).DoesNotContain("string? Note");
-        await Assert.That(prog).DoesNotContain("long? Qty");
+        await Assert.That(prog).Contains("public string? Note { get; init; }");
+        await Assert.That(prog).Contains("public long? Qty { get; init; }");
+        await Assert.That(prog).DoesNotContain("[Required]\n    public string? Note");
     }
 
     [Test]
@@ -428,8 +430,8 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(db).DoesNotContain("qty <= 0");
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        // Open max caps at the CLR type bound (long.MaxValue as double), never 0.
-        await Assert.That(prog).Contains("[Range(0.0, 9.223372036854776E+18)]");
+        // Open max caps at the CLR type bound (long.MaxValue, exactly), never 0.
+        await Assert.That(prog).Contains("[Range(typeof(long), \"0\", \"9223372036854775807\")]");
         await Assert.That(prog).DoesNotContain("[Range(0, 0)]");
     }
 

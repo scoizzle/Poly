@@ -54,4 +54,54 @@ public class ConditionalTests {
         using (var exec = Interpreter.Execute(program, s => s.SetArgs(3)))
             await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
+
+    // #803: a conditional whose arms are one nullable and one non-nullable value of the
+    // same underlying type. C# lifts the non-nullable arm, so the result is the nullable
+    // type and a null arm yields null.
+    [Test]
+    public async Task Conditional_NullableThenNumber_NullTaken_YieldsNull() {
+        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var on = new Parameter("on", TypeReference.To<long?>());
+        var node = new Conditional(flag, on, new Constant(5L));
+        var program = Interpreter.Compile(node);
+
+        using var taken = Interpreter.Execute(program, s => s.SetArgs(true, null));
+        await Assert.That(taken.GetValue<long?>()).IsNull();
+    }
+
+    [Test]
+    public async Task Conditional_NullableThenNumber_ValueTaken_YieldsTheValue() {
+        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var on = new Parameter("on", TypeReference.To<long?>());
+        var program = Interpreter.Compile(new Conditional(flag, on, new Constant(5L)));
+
+        using var taken = Interpreter.Execute(program, s => s.SetArgs(true, 7L));
+        await Assert.That(taken.GetValue<long?>()).IsEqualTo(7L);
+        using var other = Interpreter.Execute(program, s => s.SetArgs(false, null));
+        await Assert.That(other.GetValue<long?>()).IsEqualTo(5L);
+    }
+
+    [Test]
+    public async Task Conditional_NumberThenNullable_NullTaken_YieldsNull() {
+        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var on = new Parameter("on", TypeReference.To<long?>());
+        var program = Interpreter.Compile(new Conditional(flag, new Constant(5L), on));
+
+        using var taken = Interpreter.Execute(program, s => s.SetArgs(false, null));
+        await Assert.That(taken.GetValue<long?>()).IsNull();
+    }
+
+    [Test]
+    public async Task Conditional_NullableDecimalThenDecimal_AgreesWithCSharp() {
+        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var od = new Parameter("od", TypeReference.To<decimal?>());
+        var program = Interpreter.Compile(new Conditional(flag, od, new Constant(5m)));
+
+        using var absent = Interpreter.Execute(program, s => s.SetArgs(true, null));
+        await Assert.That(absent.GetValue<decimal?>()).IsNull();
+        using var present = Interpreter.Execute(program, s => s.SetArgs(true, 0.1m));
+        await Assert.That(present.GetValue<decimal?>()).IsEqualTo(0.1m);
+        using var other = Interpreter.Execute(program, s => s.SetArgs(false, null));
+        await Assert.That(other.GetValue<decimal?>()).IsEqualTo(5m);
+    }
 }

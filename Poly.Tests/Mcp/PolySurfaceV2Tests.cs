@@ -200,6 +200,38 @@ public class PolySurfaceV2Tests {
         await Assert.That(bad["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
     }
 
+    /// <summary>
+    /// #481: an action selected by its unqualified name keeps the findings it carries inside a
+    /// stage ("Entity.Stage.Action"), so the select reports the same warning as the whole model.
+    /// </summary>
+    [Test]
+    public async Task PolyCheck_SelectStageActionByUnqualifiedName_KeepsItsOwnFinding() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain V2
+            A: entity {
+              N: Number range(0, 10) default(0)
+              Open: stage {
+                Inc: action { assign N to N + 1 }
+              }
+              Done: stage { }
+            }
+            """).Ok).IsTrue();
+
+        var whole = surface.Check(workspace);
+        var action = surface.Check(workspace, select: "A.Inc");
+        var staged = surface.Check(workspace, select: "A.Open.Inc");
+
+        await Assert.That(whole.Findings.Select(f => f.Code)).Contains("DMEFF008");
+        await Assert.That(action.Findings.Select(f => f.Code)).Contains("DMEFF008");
+        await Assert.That(action.Findings.Single(f => f.Code == "DMEFF008").Path).IsEqualTo("V2/A/Open/Inc");
+        await Assert.That(staged.Findings.Select(f => f.Code)).Contains("DMEFF008");
+
+        var data = JsonSerializer.SerializeToNode(action.Data)!;
+        await Assert.That(data["warningCount"]!.GetValue<int>()).IsEqualTo(1);
+    }
+
     [Test]
     public async Task PolyCheck_PatternWrite_IsUnknown() {
         var surface = Surface();
@@ -492,6 +524,79 @@ public class PolySurfaceV2Tests {
             .IsEqualTo("proven");
         await Assert.That(JsonSerializer.SerializeToNode(falsy.Data)!["verdict"]!.GetValue<string>())
             .IsEqualTo("violated");
+    }
+
+    [Test]
+    public async Task Check_ExpressionCallsAFunctionDeclaredInTheModel() {
+        // #496: the probe's model was a synthetic domain with no functions, so any call to a
+        // declared function was DMFUN001, and a pure expression needed a dummy binding.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain Probe
+            F: entity { N: Number default(0) }
+            function Within(x: Number, lo: Number, hi: Number): Boolean = x >= lo and x <= hi
+            """).Ok).IsTrue();
+
+        var proven = surface.Check(workspace, expression: "Within(5, 1, 10)");
+        var violated = surface.Check(workspace, expression: "Within(50, 1, 10)");
+
+        var provenData = JsonSerializer.SerializeToNode(proven.Data)!;
+        await Assert.That(provenData["verdict"]!.GetValue<string>()).IsEqualTo("proven").Because(proven.Summary);
+        await Assert.That(provenData["result"]!.GetValue<bool>()).IsTrue();
+        var violatedData = JsonSerializer.SerializeToNode(violated.Data)!;
+        await Assert.That(violatedData["verdict"]!.GetValue<string>()).IsEqualTo("violated").Because(violated.Summary);
+        await Assert.That(violatedData["result"]!.GetValue<bool>()).IsFalse();
+    }
+
+    [Test]
+    public async Task Check_ExpressionReadsABareEnumMember() {
+        // #497: `Level is Senior` read `Senior` as a missing property, because the probe's
+        // synthetic domain carried none of the model's enums.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain Probe
+            Grade: enum { Junior, Senior }
+            Emp: entity { Level: Grade default(Junior) }
+            """).Ok).IsTrue();
+
+        var proven = surface.Check(workspace, expression: "Level is Senior", bindings: """{"Level":"Senior"}""");
+        var violated = surface.Check(workspace, expression: "Level is Senior", bindings: """{"Level":"Junior"}""");
+
+        var provenData = JsonSerializer.SerializeToNode(proven.Data)!;
+        await Assert.That(provenData["verdict"]!.GetValue<string>()).IsEqualTo("proven").Because(proven.Summary);
+        var violatedData = JsonSerializer.SerializeToNode(violated.Data)!;
+        await Assert.That(violatedData["verdict"]!.GetValue<string>()).IsEqualTo("violated").Because(violated.Summary);
+    }
+
+    [Test]
+    public async Task Check_ExpressionUnknownProperty_NamesTheBindingsArgument() {
+        // #497: the message pointed at a `propertiesJson` parameter the tool does not have.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
+
+        var check = surface.Check(workspace, expression: "NonExistent == 1", bindings: """{"Total":5}""");
+
+        await Assert.That(JsonSerializer.SerializeToNode(check.Data)!["verdict"]!.GetValue<string>())
+            .IsEqualTo("unknown");
+        await Assert.That(check.Summary).Contains("bindings").Because(check.Summary);
+        await Assert.That(check.Summary).DoesNotContain("propertiesJson");
+        await Assert.That(check.Findings.Any(f => f.Message.Contains("bindings", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task Check_ExpressionUnknownFunction_FailsClosed() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
+
+        var check = surface.Check(workspace, expression: "Nope(1)");
+
+        await Assert.That(JsonSerializer.SerializeToNode(check.Data)!["verdict"]!.GetValue<string>())
+            .IsEqualTo("unknown");
+        await Assert.That(check.Summary).Contains("unknown function").Because(check.Summary);
     }
 
     [Test]

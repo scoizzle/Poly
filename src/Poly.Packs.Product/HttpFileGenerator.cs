@@ -37,12 +37,12 @@ public sealed class HttpFileGenerator {
     }
 
     /// <summary>
-    /// The entity's Required scalar create slots — the members of the create DTO the
-    /// JSON body sends to Entity.Create(...).
+    /// The entity's scalar create slots — every member of the create DTO, so the sample body
+    /// sends what the transport contract accepts (#588).
     /// </summary>
     private IReadOnlyList<CreateSlot> GetCreateScalarParams(Entity entity) {
         if (_analysis.GetStructure(entity) is { } esm)
-            return [.. esm.CreateSlots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })];
+            return [.. esm.CreateSlots.Where(s => s.Shape == CreateSlotShape.Scalar)];
         return [];
     }
 
@@ -105,9 +105,6 @@ public sealed class HttpFileGenerator {
             if (MinimalApiGenerator.CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) {
                 sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
                 sb.AppendLine($"POST {_baseUrl}/api/{route}");
-                sb.AppendLine("Content-Type: application/json");
-                sb.AppendLine();
-                sb.AppendLine("{");
                 var scalarProps = GetCreateScalarParams(entity)
                     .Select(p => entity.Properties.First(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal)))
                     .ToList();
@@ -118,9 +115,15 @@ public sealed class HttpFileGenerator {
                         $"\"{MinimalApiGenerator.CreateLinkMemberName(slot.Name)}\": "
                         + GetExampleJsonValue(MinimalApiGenerator.RouteKeyFor(_storageLookup[slot.Type.TypeName]).Property!)))
                     .ToList();
-                for (int i = 0; i < members.Count; i++)
-                    sb.AppendLine($"    {members[i]}{(i < members.Count - 1 ? "," : "")}");
-                sb.AppendLine("}");
+                // No member means no body: the route takes none, so the sample sends none.
+                if (members.Count > 0) {
+                    sb.AppendLine("Content-Type: application/json");
+                    sb.AppendLine();
+                    sb.AppendLine("{");
+                    for (int i = 0; i < members.Count; i++)
+                        sb.AppendLine($"    {members[i]}{(i < members.Count - 1 ? "," : "")}");
+                    sb.AppendLine("}");
+                }
                 sb.AppendLine();
             }
         }

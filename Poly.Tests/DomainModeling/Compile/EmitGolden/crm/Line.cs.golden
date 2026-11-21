@@ -20,6 +20,16 @@ internal class Line : Poly.Runtime.IActionScoped
     public decimal UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Opportunity? Opportunity { get; private set; }
+    internal void AttachProduct(Product child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Product = child;
+    }
+    internal void AttachOpportunity(Opportunity child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Opportunity = child;
+    }
     internal static DomainResult<Line> Create(long? qty = default, decimal? unitPrice = default, Product? product = default, Opportunity? opportunity = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

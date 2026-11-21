@@ -26,7 +26,7 @@ internal class Campaign : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public IReadOnlyList<CampaignMember> Members
     {
-        get => this._members;
+        get => new List<CampaignMember>(this._members);
     }
     public CampaignStage CurrentStage { get; private set; }
     internal DomainResult<CampaignMember> CreateMembers(Contact? contact = default)

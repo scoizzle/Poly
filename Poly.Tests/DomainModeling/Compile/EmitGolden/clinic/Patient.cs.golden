@@ -19,7 +19,7 @@ internal class Patient : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public IReadOnlyList<Visit> Visits
     {
-        get => this._visits;
+        get => new List<Visit>(this._visits);
     }
     internal void AttachVisits(Visit child)
     {

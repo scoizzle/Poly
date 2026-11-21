@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Syntactic = Poly.Ast.Nodes;
@@ -129,10 +130,17 @@ public sealed partial class DomainToCSharpExporter {
 
         // Target.Create already Attaches via singular nav args (including auto-wired
         // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
-        // _field.Add / Register* / peer Attach when Create wired this collection.
-        var (wiredInverse, _) = FindInverseCollectionInfo(entity, targetTypeName);
-        var createWiredThisCollection = filledName is not null
-            && fieldName is not null
+        // _field.Add / Register* / peer Attach when Create wired this collection. Use the
+        // factory's own pairing rule (CreateInWiring.Inverse), so an ambiguous pair skips
+        // both the factory attach and this Add, never one of them.
+        var filledNav = filledName is null
+            ? null
+            : targetEntity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, filledName, StringComparison.Ordinal));
+        var wiredInverse = filledNav is null
+            ? null
+            : CreateInWiring.Inverse(targetEntity, filledNav, entity);
+        var createWiredThisCollection = fieldName is not null
             && wiredInverse is not null
             && string.Equals(wiredInverse.Name, rel.Name, StringComparison.Ordinal);
 
@@ -191,6 +199,21 @@ public sealed partial class DomainToCSharpExporter {
                 bodyNodes.Add(new Assignment(notifyResult, new Invoke(
                     new Member(local, $"Notify{initialStage}Subscribers"),
                     needsPrevious ? [new Constant(null)] : [])));
+                bodyNodes.Add(new IfStatement(
+                    new Syntactic.Not(new Member(notifyResult, "IsSuccess")),
+                    new Block([FailureLowering.Propagate(createResultType, notifyResult)])));
+            }
+
+            // #630: the child's initial entry ran before this collection link and these registrations, so the
+            // transitions it raised were recorded on the child instead of delivered. Replay them now, in entry
+            // order, after the initial stage's own notification (the child entered it first). This relationship
+            // is one this create-in registers, so the target wrote its record and its replay
+            // (DefersCreationNotifications).
+            if (subscriberSubs is { Count: > 0 }
+                && subscriberSubs.Any(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))) {
+                notifyResult ??= new Variable("__notify");
+                bodyNodes.Add(new Assignment(notifyResult, new Invoke(
+                    new Member(local, ReplayStageNotificationsMethodName))));
                 bodyNodes.Add(new IfStatement(
                     new Syntactic.Not(new Member(notifyResult, "IsSuccess")),
                     new Block([FailureLowering.Propagate(createResultType, notifyResult)])));
@@ -424,6 +447,9 @@ public sealed partial class DomainToCSharpExporter {
         List<SubscriptionInfo>? subscriberSubs,
         List<MethodDefinitionNode> methods) {
         // ── Private constructor + public static Create factory ─────
+        // #630: one fact, read here (the entry's record window) and by AddSubscriptionRegistry (the record, its
+        // queue and the replay): this entity is a watched subscription target, so a create-time entry notifies.
+        var defersCreationNotifications = DefersCreationNotifications(esm, postTransitionNotifyStages);
         // Every entity publishes Create, including one with no slots, so
         // a type-name call resolves. No slots and no stages still emit a
         // single private parameterless constructor (CS0111).
@@ -476,10 +502,23 @@ public sealed partial class DomainToCSharpExporter {
                 var entryNodes = new List<Node>();
                 entryPass.AppendInlinedStageEffects(initialStage.OnEntryEffects, entryNodes);
                 if (entryNodes.Count > 0) {
+                    var entryBody = new List<Node> { TouchThis() };
+                    Node effects = new Block(entryNodes);
+                    if (defersCreationNotifications) {
+                        // #630: the window in which a watched stage's notify is recorded instead of delivered. The
+                        // create-in that made this instance links it and replays the record; `finally` closes the
+                        // window even when an effect returns early, so a later transition on a failed instance is
+                        // never recorded (the instance is discarded either way).
+                        var deferring = new Member(new ThisReference(), DeferringStageNotificationsFieldName);
+                        entryBody.Add(new Assignment(deferring, new Constant(true)));
+                        effects = new TryCatchFinally(new Block(entryNodes),
+                            FinallyBlock: new Assignment(deferring, new Constant(false)));
+                    }
+                    entryBody.Add(effects);
                     entryMethod = new MethodDefinitionNode(
                         EnterInitialStageMethodName,
                         new NamedTypeReference("DomainResult"),
-                        Body: WithSuccessTail(new Block([TouchThis(), .. entryNodes])),
+                        Body: WithSuccessTail(new Block(entryBody)),
                         AccessModifier: AccessModifier.Private);
                     methods.Add(entryMethod);
                 }
@@ -566,12 +605,13 @@ public sealed partial class DomainToCSharpExporter {
                 peerEntity = domain.Types.OfType<Entity>()
                     .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
 
-            // Unique collection inverse on the peer (FindInverseCollectionInfo).
-            // count == 0: OneToOne / no
-            // collection — ctor already set the to-one. count > 1: skip Attach
-            // (named create-in CreateNav fallback Add). count == 1: Attach*.
-            var inverse = peerEntity is not null
-                ? FindInverseCollectionInfo(peerEntity, entity.Name).Unique
+            // The navigation's paired inverse on the peer (CreateInWiring.Inverse), collection or
+            // singular: the factory wires the other side of every supplied argument (#587). No pair
+            // (or an ambiguous one) leaves the ctor's to-one only.
+            var navRel = entity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, navParam.Name, StringComparison.Ordinal));
+            var inverse = navRel is not null && peerEntity is not null
+                ? CreateInWiring.Inverse(entity, navRel, peerEntity)
                 : null;
 
             if (inverse is null)

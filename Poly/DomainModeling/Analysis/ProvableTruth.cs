@@ -3,6 +3,7 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
@@ -117,6 +118,8 @@ internal static class ProvableTruth {
                 return IntervalTransfers.Transfer(sub, [Interval(sub.Left, env), Interval(sub.Right, env)]);
             case Multiply mul:
                 return IntervalTransfers.Transfer(mul, [Interval(mul.Left, env), Interval(mul.Right, env)]);
+            case Negate negate:
+                return IntervalTransfers.Transfer(negate, [Interval(negate.Operand, env)]);
             default:
                 return null;
         }

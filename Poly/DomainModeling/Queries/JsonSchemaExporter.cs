@@ -232,22 +232,17 @@ public static class JsonSchemaExporter {
     }
 
     /// <summary>
-    /// A static default is a literal, or an enum member written as <c>default(MemberName)</c>.
-    /// Runtime defaults (<c>now</c>, <c>today</c>, <c>guid</c>) have no static JSON value and
-    /// are omitted rather than guessed.
+    /// A static default is a literal, or an enum member written as <c>default(MemberName)</c>, read through
+    /// <see cref="DefaultValueFacts"/> so every exporter agrees on which defaults are static. Runtime defaults
+    /// (<c>now</c>, <c>today</c>, <c>guid</c>) have no static JSON value and are omitted rather than guessed.
     /// </summary>
     private static JsonNode? TryDefault(
         DefaultValueConstraint constraint,
         Property property,
         IReadOnlyDictionary<string, DomainType> byName) {
-        return constraint.Expression switch {
-            Literal { Value: not null } literal => JsonSerializer.SerializeToNode(literal.Value),
-            PropertyAccess access when byName.TryGetValue(property.Type.TypeName, out var declared)
-                && declared is EnumType enumType
-                && enumType.MemberNames.Contains(access.Name, StringComparer.Ordinal) =>
-                    JsonValue.Create(access.Name),
-            _ => null,
-        };
+        if (!DefaultValueFacts.TryRead(constraint, property, byName, out var literal, out var enumMember))
+            return null;
+        return enumMember is not null ? JsonValue.Create(enumMember) : JsonSerializer.SerializeToNode(literal);
     }
 
     private static JsonObject TypeSchema(DomainTypeReference reference, IReadOnlyDictionary<string, DomainType> byName) {

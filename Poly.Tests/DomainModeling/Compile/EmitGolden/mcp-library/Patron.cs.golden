@@ -23,11 +23,11 @@ internal class Patron : Poly.Runtime.IActionScoped
     public string Status { get; private set; } = default!;
     public IReadOnlyList<Loan> Loans
     {
-        get => this._loans;
+        get => new List<Loan>(this._loans);
     }
     public IReadOnlyList<Fine> Fines
     {
-        get => this._fines;
+        get => new List<Fine>(this._fines);
     }
     internal DomainResult<Loan> CreateLoans(Book? book = default, long? amount = default)
     {
@@ -61,6 +61,11 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Loan>.Failure(loanResult.Error!);
         }
         var loan = loanResult.Value;
+        var __notify = loan.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Loan>.Failure(__notify.Error!);
+        }
         return DomainResult<Loan>.Success(loan);
     }
     internal void AttachLoans(Loan child)
@@ -194,7 +199,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         created.InitializeSubscriptions();
         return DomainResult<Patron>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Loans)
         {

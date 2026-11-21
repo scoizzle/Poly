@@ -236,8 +236,18 @@ internal static class ReservedNames {
     }
 
     /// <summary>True when <paramref name="identity"/> is reserved on <paramref name="owner"/>.</summary>
-    public static bool TryReserved(string identity, EnumType owner, out ReservedName row) {
-        foreach (var candidate in ForEnum(owner)) {
+    public static bool TryReserved(string identity, EnumType owner, out ReservedName row) =>
+        TryReserved(identity, ForEnum(owner), out row);
+
+    /// <summary>
+    /// True when a stage name cannot become a member of the generated <c>{Entity}Stage</c> enum
+    /// (S-17, #797): a stage name is an enum member, so the enum-scope rows apply.
+    /// </summary>
+    public static bool TryReservedAsStageName(string identity, out ReservedName row) =>
+        TryReserved(identity, EnumFixed, out row);
+
+    private static bool TryReserved(string identity, IReadOnlyList<ReservedName> rows, out ReservedName row) {
+        foreach (var candidate in rows) {
             if (!string.Equals(candidate.Name, identity, StringComparison.Ordinal))
                 continue;
             row = candidate;
@@ -328,15 +338,27 @@ internal static class ReservedNames {
                 $"{entity.Name}Stage", ReservedKind.GeneratedReference,
                 "the stage enum generated for this entity");
 
+        // #890: a subscription handler for a peer reads that peer's enum from expression position
+        // (`BookStage.Out`), so a member named like ANY generated stage enum of the domain shadows it
+        // (CS1061). The action-parameter and peer-binder rules already cover the domain-wide set
+        // (StageEnumOwner); this closes the member scope over the same names, from the same function.
+        if (domain is not null)
+            foreach (var other in domain.Types.OfType<Entity>()) {
+                if (ReferenceEquals(other, entity) || !HasStages(other, domain))
+                    continue;
+                yield return new ReservedName(
+                    $"{other.Name}Stage", ReservedKind.GeneratedReference,
+                    $"the generated stage enum of entity '{other.Name}'");
+            }
+
         foreach (var nav in entity.Navigations) {
             // Relationships.cs:143,164,184.
             var pascalName = DomainTypeMapping.ToPascalCase(nav.Name);
             // Create.cs:61; the factory exists only for a nav something creates in (Relationships.cs:173,182).
             if (EffectHelpers.CreatesIn(entity, nav.Name))
                 yield return new ReservedName($"Create{pascalName}", ReservedKind.GeneratedMember, "the create-in factory");
-            // Relationships.cs:39 — collection navs only.
-            if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-                yield return new ReservedName($"Attach{pascalName}", ReservedKind.GeneratedMember, "the attach method");
+            // Relationships.cs:39 — every navigation, collection or singular (#572, #587).
+            yield return new ReservedName($"Attach{pascalName}", ReservedKind.GeneratedMember, "the attach method");
             if (includeNavigationProperty)
                 yield return new ReservedName(pascalName, ReservedKind.GeneratedMember, "the navigation property");
             // Relationships.cs:149 — the backing field is its own member, so it is always checked.

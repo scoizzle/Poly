@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Libraries.Storage;
 using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
@@ -29,6 +30,10 @@ public sealed partial class MinimalApiGenerator {
 
     private readonly IStorageSyntaxEmitter? _emitter;
     private readonly string? _vendor;
+
+    /// <summary>The providers whose database enforces the unique index the model declares. The InMemory
+    /// fallback enforces no index, so it has no refusal to map.</summary>
+    private bool EnforcesUniqueIndex => _vendor is "sqlite" or "sqlserver";
 
     /// <param name="catalog">
     /// The lowered module the host reads. Without one (shape-only generation, a few tests) there is nothing to read, so an action
@@ -87,9 +92,20 @@ public sealed partial class MinimalApiGenerator {
         return metadata.CreateSlots;
     }
 
-    /// <summary>The Required scalar create slots: the values a host must supply (the create DTO's members).</summary>
+    /// <summary>The Required scalar create slots: a caller must supply these values.</summary>
     private IReadOnlyList<CreateSlot> GetRequiredScalarSlots(Entity entity) =>
         [.. GetCreateSlots(entity).Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })];
+
+    /// <summary>Every scalar create slot: Required, Defaulted and Optional. These are the create DTO's members
+    /// (#588) — a Defaulted member's null takes the authored default, an Optional member's null is stored.</summary>
+    private IReadOnlyList<CreateSlot> GetScalarSlots(Entity entity) =>
+        [.. GetCreateSlots(entity).Where(s => s.Shape == CreateSlotShape.Scalar)];
+
+    /// <summary>True when the entity's POST body carries at least one member: any scalar create slot, or a
+    /// Required link. False means the route takes no body at all: a record with no members is a parameter no
+    /// client can set, and emitting it undeclared is a compile error (#641).</summary>
+    private bool HasCreateDto(Entity entity) =>
+        GetCreateSlots(entity).Any(s => s.Shape == CreateSlotShape.Scalar) || GetRequiredLinkSlots(entity).Count > 0;
 
     /// <summary>A Required link: a Required singular-navigation create slot, which the POST body carries as the target's key.</summary>
     internal static bool IsRequiredLink(CreateSlot slot) =>
@@ -105,16 +121,19 @@ public sealed partial class MinimalApiGenerator {
     /// One argument per create slot, in slot order: a Required scalar slot comes from
     /// <paramref name="scalar"/>, a Required link from <paramref name="link"/> when given, and every other slot is
     /// <c>null</c>, which the lowered <c>Create</c> reads as "not supplied" (its default applies, or it stays unset,
-    /// or a Required link answers Required).
+    /// or a Required link answers Required). With <paramref name="passAllScalars"/>, a Defaulted or Optional scalar
+    /// slot also comes from <paramref name="scalar"/>: the POST body carries it (#588).
     /// </summary>
-    private Dictionary<string, Node> BuildCreateArgs(Entity entity, Func<Property, Node> scalar, Func<CreateSlot, Node>? link = null) {
+    private Dictionary<string, Node> BuildCreateArgs(Entity entity, Func<Property, Node> scalar, Func<CreateSlot, Node>? link = null,
+        bool passAllScalars = false) {
         var args = new Dictionary<string, Node>(StringComparer.Ordinal);
         foreach (var slot in GetCreateSlots(entity)) {
             if (link is not null && IsRequiredLink(slot)) {
                 args[ToCamelCase(slot.Name)] = link(slot);
                 continue;
             }
-            if (slot is not { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required }) {
+            if (slot is not { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required }
+                && !(passAllScalars && slot.Shape == CreateSlotShape.Scalar)) {
                 args[ToCamelCase(slot.Name)] = new Constant(null!);
                 continue;
             }
@@ -264,6 +283,13 @@ public sealed partial class MinimalApiGenerator {
             scopeBody.AddRange(BuildSqliteSchemaCheck(dbVar, createdVar, schemaId));
             scopeVariables.Add(createdVar);
         }
+        else {
+            // #591: every other provider creates its schema before the seed reads a table. The generated
+            // program emits no migration, so EnsureCreated is the only schema creation it has; seeding
+            // first made a fresh database fail on the missing table instead of creating it.
+            scopeBody.Add(new Await(new Invoke(
+                new Member(new Member(dbVar, "Database"), "EnsureCreatedAsync"))));
+        }
         scopeBody.Add(new Await(new Invoke(new Variable("SeedAsync"), new Variable("db"))));
         topLevelStatements.Add(new UsingStatement(
             Init("scope",
@@ -325,8 +351,9 @@ public sealed partial class MinimalApiGenerator {
     /// slot in slot order. A contributed dependency sits where the lowered signature
     /// puts it, so it is woven into the slot arguments rather than appended.
     /// </summary>
-    private List<Node> BuildCreateCallArgs(Entity entity, Func<Property, Node> scalar, Func<CreateSlot, Node>? link = null) {
-        var declared = BuildCreateArgs(entity, scalar, link);
+    private List<Node> BuildCreateCallArgs(Entity entity, Func<Property, Node> scalar, Func<CreateSlot, Node>? link = null,
+        bool passAllScalars = false) {
+        var declared = BuildCreateArgs(entity, scalar, link, passAllScalars);
         var method = RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0
             ? null
             : ModuleMethod(entity, "Create");
@@ -355,6 +382,12 @@ public sealed partial class MinimalApiGenerator {
             return null;
         return _catalog.Method(entity.Name, methodName);
     }
+
+    /// <summary>
+    /// The module registers a subscriber on create/link through <c>InitializeSubscriptions</c>, and that method is the one
+    /// path the host calls after a load (#560). Shape-only generation (no catalog) emits no call.
+    /// </summary>
+    private bool HasSubscriptionInitializer(Entity entity) => ModuleMethod(entity, "InitializeSubscriptions") is not null;
 
     /// <summary>The failure's typed kind picks the status; the body is ProblemDetails.</summary>
     private static Return DomainFailureReturn(Node result) =>

@@ -56,6 +56,27 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(executor.Storage.Exists("Widget", "Code", "A")).IsTrue();
     }
 
+    /// <summary>A unique <c>Number</c> key is the number's text on the port: every create used to
+    /// fail with a NullReferenceException, because the VM treated the inline number as a heap
+    /// handle when it called <c>ToString</c> (#493).</summary>
+    [Test]
+    public async Task Create_UniqueNumber_UsesTheNumbersTextAsThePortKey() {
+        var executor = ExecutorFor("""
+            domain Lab
+            Thing: entity {
+              K: Number unique
+            }
+            """);
+
+        var first = executor.Create("Thing", Values(("K", 9L)));
+        var second = executor.Create("Thing", Values(("K", 9L)));
+
+        await Assert.That(first.Succeeded).IsTrue();
+        await Assert.That(second.Succeeded).IsFalse();
+        await Assert.That(second.Error).Contains("Unique constraint violated");
+        await Assert.That(executor.Storage.Exists("Thing", "K", "9")).IsTrue();
+    }
+
     [Test]
     public async Task Storage_IsScopedToTheExecutor() {
         var domain = Lower(Unique);
@@ -80,6 +101,32 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(widget.Bag["Code"]).IsEqualTo("B");
         await Assert.That(executor.Storage.Exists("Widget", "Code", "B")).IsTrue();
         await Assert.That(executor.Storage.Exists("Widget", "Code", "A")).IsFalse();
+    }
+
+    /// <summary>
+    /// X-11 (#793): a parameterised action's bound body must be the same tree on every invoke,
+    /// so the executor's compiled-body cache hits. Binding per call built a fresh tree, and the
+    /// reference check never matched: every invoke re-analyzed and re-compiled.
+    /// </summary>
+    [Test]
+    public async Task Invoke_ParameterisedAction_CompilesOnceAcrossInvokes() {
+        var executor = ExecutorFor(Unique);
+        var widget = executor.Create("Widget", Values(("Code", "A"))).Instance!;
+
+        var first = executor.Invoke(widget, "Relabel", Values(("code", "B")));
+        await Assert.That(first.Succeeded).IsTrue().Because(first.Error ?? "");
+        var body = executor.CompiledBodyFor("Widget", "Relabel");
+        await Assert.That(body).IsNotNull();
+        var compiles = executor.CompileCount;
+
+        for (var i = 0; i < 3; i++) {
+            var again = executor.Invoke(widget, "Relabel", Values(("code", $"C{i}")));
+            await Assert.That(again.Succeeded).IsTrue().Because(again.Error ?? "");
+        }
+
+        await Assert.That(executor.CompileCount).IsEqualTo(compiles);
+        await Assert.That(ReferenceEquals(executor.CompiledBodyFor("Widget", "Relabel"), body)).IsTrue();
+        await Assert.That(widget.Bag["Code"]).IsEqualTo("C2");
     }
 
     [Test]
@@ -159,6 +206,34 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(fractional.Error).Contains("Number is integral");
         await Assert.That(unknown.Succeeded).IsFalse();
         await Assert.That(unknown.Error).Contains("Unknown property 'nope'");
+        await Assert.That(executor.Instances.Count).IsEqualTo(0);
+    }
+
+    /// <summary>A declared property the initial stage's entry assigns has no Create slot, so the message
+    /// names that stage instead of calling the property unknown (#636).</summary>
+    [Test]
+    public async Task Create_EntryAssignedProperty_NamesWhyItCannotBeSupplied() {
+        var executor = ExecutorFor("""
+            domain T
+            Issue: entity {
+              Title: Text length(1, 200)
+              Points: Number range(0, 100) default(0)
+              Backlog: stage {
+                entry { assign Points to 0 }
+                Go: action { transition to Todo }
+              }
+              Todo: stage { }
+            }
+            """);
+
+        var outcome = executor.Create("Issue", Values(("Title", "T"), ("Points", 7L)));
+
+        await Assert.That(outcome.Succeeded).IsFalse();
+        await Assert.That(outcome.Error).IsNotNull();
+        await Assert.That(outcome.Error!).Contains("Property 'Points' for entity 'Issue'");
+        await Assert.That(outcome.Error!).Contains("initial stage 'Backlog'");
+        await Assert.That(outcome.Error!).Contains("cannot be supplied at create");
+        await Assert.That(outcome.Error!).DoesNotContain("Unknown property");
         await Assert.That(executor.Instances.Count).IsEqualTo(0);
     }
 
@@ -270,6 +345,32 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(outcome.Instance).IsNotNull();
         await Assert.That(ReferenceEquals(outcome.Instance, outcome.CreatedChildren[0])).IsTrue();
         await Assert.That(outcome.Instance!.Bag["Subject"]).IsEqualTo("Printer");
+    }
+
+    [Test]
+    public async Task Invoke_RequiredFailure_ListsTheCurrentStageCopysPolicies() {
+        // #945: the module dispatches the stage copy; the action the executor looks up
+        // must be that copy, so its policy list is the one the failure reports.
+        var executor = ExecutorFor("""
+            domain EnrollSlice
+            Section: entity { SeatsTaken: Number default(0) }
+            Enrollment: entity {
+              section: Section optional
+              SectionFull: policy { section SeatsTaken >= 1 }
+              Pending: stage {
+                Confirm: action require not SectionFull { transition to Confirmed }
+              }
+              Confirmed: stage { }
+              Confirm: action { }
+            }
+            """);
+        var enrollment = executor.Create("Enrollment", Values()).Instance!;
+
+        var blocked = executor.Invoke(enrollment, "Confirm");
+
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Enrollment.section");
+        await Assert.That(string.Join(",", blocked.FailedGuards)).IsEqualTo("not_SectionFull");
     }
 
     [Test]
@@ -442,6 +543,40 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(executor.Unlink("profile", person, first).Succeeded).IsTrue();
         await Assert.That(person.Bag["Profile"]).IsNull();
         await Assert.That(executor.Link("profile", person, second).Succeeded).IsTrue();
+    }
+
+    private const string Folders = """
+        domain Folders
+        Entry: entity {
+          Name: Text
+          children: many owned Entry
+          related: many Entry
+        }
+        """;
+
+    [Test]
+    public async Task Link_AnInstanceToItself_OverAnOwnedRelationship_IsRefused() {
+        // #1001 (owner ruling): an instance cannot own itself.
+        var executor = ExecutorFor(Folders);
+        var docs = executor.Create("Entry", Values(("Name", "docs"))).Instance!;
+
+        var refused = executor.Link("children", docs, docs);
+
+        await Assert.That(refused.Succeeded).IsFalse();
+        await Assert.That(refused.Error).IsEqualTo(Relationship.SelfOwnLinkViolationMessage("children"));
+        await Assert.That(executor.IsLinked("children", docs, docs)).IsFalse();
+    }
+
+    [Test]
+    public async Task Link_ACycle_AndANonOwningSelfLink_AreAccepted() {
+        // #1001 (owner ruling): a cycle is a legitimate data structure; only owning oneself is refused.
+        var executor = ExecutorFor(Folders);
+        var a = executor.Create("Entry", Values(("Name", "a"))).Instance!;
+        var b = executor.Create("Entry", Values(("Name", "b"))).Instance!;
+
+        await Assert.That(executor.Link("children", a, b).Succeeded).IsTrue();
+        await Assert.That(executor.Link("children", b, a).Succeeded).IsTrue();
+        await Assert.That(executor.Link("related", a, a).Succeeded).IsTrue();
     }
 
     [Test]
@@ -1038,6 +1173,38 @@ public sealed class ModuleInstanceExecutorTests {
 
         await Assert.That(outcome.Succeeded).IsTrue().Because(outcome.Error ?? "");
         await Assert.That(outcome.Instance!.Bag["Qty"]).IsEqualTo(5L);
+    }
+
+    /// <summary>The issue's second symptom: a <c>create in</c> initializer for a unique Number child, written
+    /// as a literal and through a parameter, runs and records the key (#493).</summary>
+    [Test]
+    public async Task CreateIn_UniqueNumberChild_LiteralAndParameter_RecordsTheKey() {
+        var literal = ExecutorFor("""
+            domain M
+            Visit: entity { K: Number unique }
+            Doc: entity {
+              Seen: many Visit
+              Go: action { create in Seen { K: 1 } }
+            }
+            """);
+        var doc = literal.Create("Doc", Values());
+        var literalOutcome = literal.Invoke(doc.Instance!, "Go");
+
+        var parameter = ExecutorFor("""
+            domain M
+            Visit: entity { K: Number unique }
+            Doc: entity {
+              Seen: many Visit
+              Go: action (n: Number) { create in Seen { K: n } }
+            }
+            """);
+        var doc2 = parameter.Create("Doc", Values());
+        var parameterOutcome = parameter.Invoke(doc2.Instance!, "Go", Values(("n", 2L)));
+
+        await Assert.That(literalOutcome.Succeeded).IsTrue().Because(literalOutcome.Error ?? "");
+        await Assert.That(literal.Storage.Exists("Visit", "K", "1")).IsTrue();
+        await Assert.That(parameterOutcome.Succeeded).IsTrue().Because(parameterOutcome.Error ?? "");
+        await Assert.That(parameter.Storage.Exists("Visit", "K", "2")).IsTrue();
     }
 
     private static ModuleInstanceExecutor ExecutorFor(string poly) =>

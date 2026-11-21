@@ -20,6 +20,16 @@ internal class QuoteLine : Poly.Runtime.IActionScoped
     public decimal UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Quote? Quote { get; private set; }
+    internal void AttachProduct(Product child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Product = child;
+    }
+    internal void AttachQuote(Quote child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Quote = child;
+    }
     internal static DomainResult<QuoteLine> Create(long? qty = default, decimal? unitPrice = default, Product? product = default, Quote? quote = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

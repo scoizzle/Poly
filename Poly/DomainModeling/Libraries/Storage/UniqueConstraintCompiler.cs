@@ -197,7 +197,12 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private static FailureLowering.Spec UniqueFailure(string entity, string property) =>
         new(DomainFailureKind.Unique, new Constant(Violation(entity, property)), $"{entity}.{property}");
 
-    private static string Violation(string entity, string property) =>
+    /// <summary>
+    /// The failure text a duplicate <paramref name="property"/> on <paramref name="entity"/> produces,
+    /// shared by the port guard the library emits and the host's save-time mapping of a unique index's
+    /// refusal (#562), so a race and a pre-checked duplicate answer the same body.
+    /// </summary>
+    public static string Violation(string entity, string property) =>
         $"Unique constraint violated: '{property}' value is already used on another '{entity}'.";
 
     /// <summary>A reference to <paramref name="type"/> the analysis can resolve: the type system's definition when its

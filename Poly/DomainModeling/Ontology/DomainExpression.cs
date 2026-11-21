@@ -32,6 +32,9 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression Divide(DomainExpression left, DomainExpression right) =>
         new Divide(left, right);
 
+    public static DomainExpression Negate(DomainExpression operand) =>
+        new Negate(operand);
+
     public static DomainExpression Match(
         IReadOnlyList<MatchArm> arms, DomainExpression @else, int line = 0, int col = 0) =>
         new MatchExpr(arms, @else, line, col);
@@ -197,6 +200,15 @@ public sealed record Divide(
     DomainExpression Right
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => [Left, Right];
+}
+
+/// <summary>
+/// Unary minus: the arithmetic negation of one operand (<c>-3</c>, <c>-Balance</c>). The operand is a
+/// Number, a Decimal or a Duration; analysis refuses any other operand. Binding is C#'s: tighter than
+/// <c>*</c> and <c>/</c>, looser than a primary, so <c>-2 * 3</c> is <c>(-2) * 3</c>.
+/// </summary>
+public sealed record Negate(DomainExpression Operand) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Operand];
 }
 
 /// <summary>One <c>condition -&gt; value</c> arm of a <see cref="MatchExpr"/>.</summary>

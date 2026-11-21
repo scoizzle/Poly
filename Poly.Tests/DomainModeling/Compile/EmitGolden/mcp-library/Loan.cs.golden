@@ -17,6 +17,8 @@ internal enum LoanStage
 internal class Loan : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronLoansOverdueSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private Loan() { }
     private Loan(Book? book, Patron? patron, long amount)
@@ -30,6 +32,16 @@ internal class Loan : Poly.Runtime.IActionScoped
     public Book? Book { get; private set; }
     public Patron? Patron { get; private set; }
     public LoanStage CurrentStage { get; private set; }
+    internal void AttachBook(Book child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Book = child;
+    }
+    internal void AttachPatron(Patron child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Patron = child;
+    }
     internal DomainResult MarkOverdue()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -123,6 +135,11 @@ internal class Loan : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Overdue");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Overdue");
+                return DomainResult.Success();
+            }
             if (this._patronLoansOverdueSubscribers != null)
             {
                 foreach (var sub in this._patronLoansOverdueSubscribers)
@@ -138,6 +155,37 @@ internal class Loan : Poly.Runtime.IActionScoped
         finally
         {
             this.ExitNotifyCascade(__depth);
+        }
+        return DomainResult.Success();
+    }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "Overdue")
+            {
+                var __notified0 = this.NotifyOverdueSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
         }
         return DomainResult.Success();
     }
@@ -208,13 +256,15 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[6];
+        var __state = new object?[8];
         __state[0] = this.Amount;
         __state[1] = this.Book;
         __state[2] = this.Patron;
         __state[3] = this.CurrentStage;
         __state[4] = (this._patronLoansOverdueSubscribers == null ? null : new List<Patron>(this._patronLoansOverdueSubscribers));
-        __state[5] = this._notifyDepth;
+        __state[5] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[6] = this.__deferringStageNotifications;
+        __state[7] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -240,6 +290,23 @@ internal class Loan : Poly.Runtime.IActionScoped
                 this._patronLoansOverdueSubscribers.Add(__item4);
             }
         }
-        this._notifyDepth = (int)__saved[5]!;
+        if (__saved[5] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item5 in(List<string>)__saved[5]!)
+            {
+                this.__pendingStageNotifications.Add(__item5);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[6]!;
+        this._notifyDepth = (int)__saved[7]!;
     }
 }

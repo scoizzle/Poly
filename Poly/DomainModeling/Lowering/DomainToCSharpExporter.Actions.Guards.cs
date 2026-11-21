@@ -16,50 +16,66 @@ public sealed partial class DomainToCSharpExporter {
     /// </summary>
     private static void EmitStagePolicyGuards(
         Action action, Entity entity, string? policyStageName, string? stageEnumTypeName,
-        List<Node> nodes, Func<FailureLowering.Spec, Node> failureReturn) {
-        void EmitOne(Policy policy) {
-            if (PolicyGuardFacts.SuppressesStageGate(action, policy))
+        List<Node> nodes, Func<FailureLowering.Spec, Node> failureReturn) =>
+        nodes.AddRange(StagePolicyGuards(action, entity, policyStageName, stageEnumTypeName,
+            subject: new ThisReference(), messageSuffix: null, failureReturn));
+
+    /// <summary>
+    /// The stage <c>require</c> checks for one context, ready to prepend (the pre-guard) or
+    /// insert before the final return (the post-check, #576/#577/#518 — a stage requirement is an
+    /// INVARIANT, so the body must keep it true, not only meet it on entry). <paramref name="subject"/>
+    /// owns the policies: <c>this</c> for an action, the created local for <c>Create</c>.
+    /// <paramref name="messageSuffix"/> tells a refusal after the body from one before it. A
+    /// stage-scoped body checks its stage unconditionally; an entity-level body checks while
+    /// <c>CurrentStage</c> is that stage, so an action that transitioned away is judged by the stage
+    /// it landed in.
+    /// </summary>
+    private static List<Node> StagePolicyGuards(
+        Action? action, Entity entity, string? policyStageName, string? stageEnumTypeName,
+        Node subject, Func<Stage, string>? messageSuffix, Func<FailureLowering.Spec, Node> failureReturn) {
+        var name = action?.Name ?? "Create";
+        var checks = new List<Node>();
+        void EmitOne(Policy policy, Stage stage, List<Node> into) {
+            if (action is not null && PolicyGuardFacts.SuppressesStageGate(action, policy))
                 return;
             var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
             var realName = negated ? policy.Name[4..] : policy.Name;
-            Node call = new Invoke(new Member(new ThisReference(), realName));
-            nodes.Add(new IfStatement(
+            Node call = new Invoke(new Member(subject, realName));
+            into.Add(new IfStatement(
                 negated ? call : new Syntactic.Not(call),
                 new Block([failureReturn(new FailureLowering.Spec(
                     DomainFailureKind.Policy,
-                    new Constant($"'{action.Name}' blocked by policy '{realName}'."),
-                    $"{entity.Name}.{action.Name}", realName))])));
+                    new Constant($"'{name}' blocked by policy '{realName}'." + (messageSuffix?.Invoke(stage) ?? "")),
+                    $"{entity.Name}.{name}", realName))])));
         }
 
         if (policyStageName is not null) {
             var stage = entity.Stages.FirstOrDefault(s =>
                 string.Equals(s.Name, policyStageName, StringComparison.Ordinal));
             if (stage is null)
-                return;
+                return checks;
             foreach (var policy in stage.Policies)
-                EmitOne(policy);
-            return;
+                EmitOne(policy, stage, checks);
+            return checks;
         }
 
         if (stageEnumTypeName is null)
-            return;
+            return checks;
         foreach (var stage in entity.Stages) {
             if (stage.Policies.Count == 0)
                 continue;
-            var checks = new List<Node>();
-            var outer = nodes;
-            nodes = checks;
+            var stageChecks = new List<Node>();
             foreach (var policy in stage.Policies)
-                EmitOne(policy);
-            nodes = outer;
-            if (checks.Count == 0)
+                EmitOne(policy, stage, stageChecks);
+            if (stageChecks.Count == 0)
                 continue;
-            nodes.Add(new IfStatement(
+            checks.Add(new IfStatement(
                 new Equal(
-                    new Member(new ThisReference(), "CurrentStage"),
+                    new Member(subject, "CurrentStage"),
                     new Member(new NamedTypeReference(stageEnumTypeName), stage.Name)),
-                new Block(checks)));
+                new Block(stageChecks)));
         }
+        return checks;
     }
 
     /// <summary>
@@ -260,6 +276,21 @@ public sealed partial class DomainToCSharpExporter {
                         new Constant(
                             $"Action '{action.Name}' has return type but has no effects."))));
             }
+        }
+
+        // #576/#577/#518: a stage `require` is an invariant, so the same checks run again after the
+        // effects: an action that stayed in its stage may not falsify its requirement (the failure
+        // rolls the body back). They go before the final return — the success path only — and are
+        // stage-guarded, so an action that transitioned away is judged by the stage it landed in.
+        // A body that ends in its own return or a throw cannot reach them, so nothing is inserted.
+        if (nodes.Count > 0 && nodes[^1] is Return) {
+            var postStageName = stageEnumTypeName is null
+                ? policyStageName ?? sourceStageName ?? entity.InitialStage()?.Name
+                : null;
+            nodes.InsertRange(nodes.Count - 1, StagePolicyGuards(
+                action, entity, postStageName, stageEnumTypeName, subject: new ThisReference(),
+                messageSuffix: stage => $" It would leave stage '{stage.Name}' invalid.",
+                failureReturn: FailureReturn));
         }
 
         // Block is a sequence; an empty action body is an empty block.

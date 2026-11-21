@@ -43,17 +43,22 @@ internal class Account : Poly.Runtime.IActionScoped
     public Site? Hq { get; private set; }
     public IReadOnlyList<Contact> Contacts
     {
-        get => this._contacts;
+        get => new List<Contact>(this._contacts);
     }
     public IReadOnlyList<Opportunity> Opportunities
     {
-        get => this._opportunities;
+        get => new List<Opportunity>(this._opportunities);
     }
     public IReadOnlyList<Ticket> Tickets
     {
-        get => this._tickets;
+        get => new List<Ticket>(this._tickets);
     }
     public AccountStage CurrentStage { get; private set; }
+    internal void AttachParent(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Parent = child;
+    }
     internal DomainResult<Site> CreateHq(string? city = default, string? region = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -88,6 +93,11 @@ internal class Account : Poly.Runtime.IActionScoped
         var site = siteResult.Value;
         this.Hq = site;
         return DomainResult<Site>.Success(site);
+    }
+    internal void AttachHq(Site child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Hq = child;
     }
     internal DomainResult<Contact> CreateContacts(Poly.Runtime.IStoragePort db, string? name = default, string? email = default)
     {
@@ -160,6 +170,11 @@ internal class Account : Poly.Runtime.IActionScoped
             return DomainResult<Opportunity>.Failure(opportunityResult.Error!);
         }
         var opportunity = opportunityResult.Value;
+        var __notify = opportunity.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Opportunity>.Failure(__notify.Error!);
+        }
         return DomainResult<Opportunity>.Success(opportunity);
     }
     internal void AttachOpportunities(Opportunity child)
@@ -202,6 +217,11 @@ internal class Account : Poly.Runtime.IActionScoped
             return DomainResult<Ticket>.Failure(ticketResult.Error!);
         }
         var ticket = ticketResult.Value;
+        var __notify = ticket.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Ticket>.Failure(__notify.Error!);
+        }
         return DomainResult<Ticket>.Success(ticket);
     }
     internal void AttachTickets(Ticket child)
@@ -549,7 +569,7 @@ internal class Account : Poly.Runtime.IActionScoped
         created.InitializeSubscriptions();
         return DomainResult<Account>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Opportunities)
         {

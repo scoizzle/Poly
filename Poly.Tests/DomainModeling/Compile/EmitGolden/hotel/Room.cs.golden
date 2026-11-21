@@ -42,9 +42,19 @@ internal class Room : Poly.Runtime.IActionScoped
     public RoomType? RoomType { get; private set; }
     public IReadOnlyList<Reservation> Stays
     {
-        get => this._stays;
+        get => new List<Reservation>(this._stays);
     }
     public RoomStage CurrentStage { get; private set; }
+    internal void AttachProperty(Property child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Property = child;
+    }
+    internal void AttachRoomType(RoomType child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.RoomType = child;
+    }
     internal void AttachStays(Reservation child)
     {
         Poly.Runtime.ActionScope.Touch(this);
@@ -295,7 +305,7 @@ internal class Room : Poly.Runtime.IActionScoped
         db.Record("Room", "Number", __number);
         return DomainResult<Room>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Stays)
         {
@@ -314,7 +324,7 @@ internal class Room : Poly.Runtime.IActionScoped
             target.RegisterRoomStaysNoShowSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

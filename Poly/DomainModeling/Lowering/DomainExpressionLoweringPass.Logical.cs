@@ -25,6 +25,13 @@ public sealed partial class DomainExpressionLoweringPass {
         var loweredLeft = left.Value;
         var loweredRight = right.Value;
 
+        // A DateTime ordering compares instants, not clock times (#569): a Local value is its UTC instant.
+        var presenceGuards = new List<Node>();
+        if (IsInstantOrdering(c.Kind)) {
+            loweredLeft = AsUtcInstant(c.Left, loweredLeft, presenceGuards);
+            loweredRight = AsUtcInstant(c.Right, loweredRight, presenceGuards);
+        }
+
         // Count is an int; compare it to an int literal so the printed form is
         // `Count > 0`, not `Count > 0L` (G18). Sum accumulators stay long.
         if (IsCount(loweredLeft)
@@ -60,6 +67,10 @@ public sealed partial class DomainExpressionLoweringPass {
                 _ => throw new NotSupportedException($"Comparison kind '{c.Kind}' is not supported."),
             };
         }
+
+        // An optional DateTime is ordered only when it is present: C#'s lifted rule for `<` and friends.
+        for (var i = presenceGuards.Count - 1; i >= 0; i--)
+            value = new SN.And(presenceGuards[i], value);
 
         // Value hops (`Age < advisor Age`) do not get the predicate-shape
         // `rel != null && leaf` from RelationshipNavigation. Guard each to-one hop

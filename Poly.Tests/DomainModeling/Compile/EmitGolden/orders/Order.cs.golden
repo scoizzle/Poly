@@ -37,9 +37,14 @@ internal class Order : Poly.Runtime.IActionScoped
     public Customer? Customer { get; private set; }
     public IReadOnlyList<OrderItem> Items
     {
-        get => this._items;
+        get => new List<OrderItem>(this._items);
     }
     public OrderStage CurrentStage { get; private set; }
+    internal void AttachCustomer(Customer child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Customer = child;
+    }
     internal void AttachItems(OrderItem child)
     {
         Poly.Runtime.ActionScope.Touch(this);

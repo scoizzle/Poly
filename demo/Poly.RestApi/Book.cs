@@ -101,7 +101,7 @@ internal class Book : Poly.Runtime.IActionScoped
         db.Record("Book", "ISBN", __isbn);
         return DomainResult<Book>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

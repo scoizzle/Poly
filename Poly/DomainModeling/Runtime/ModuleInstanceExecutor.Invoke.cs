@@ -18,7 +18,7 @@ public sealed partial class ModuleInstanceExecutor {
                 SyncSubscriptionBodies();
                 _born.Clear();
                 RequireRegistered(target);
-                var action = FindAction(target.EntityName, actionName);
+                var action = FindAction(target, actionName);
                 var method = action is null ? null : FindMethod(target.EntityName, actionName, isStatic: false);
                 if (action is not null && method is null)
                     throw new InvalidOperationException(

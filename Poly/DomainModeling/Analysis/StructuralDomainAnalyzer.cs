@@ -57,6 +57,22 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                 }
             });
 
+        // S-17 (#797): a stage name becomes a member of the generated {Entity}Stage enum, so the
+        // enum-scope reserved names apply wherever that enum is generated.
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            if (!ReservedNames.HasStages(entity, domain))
+                continue;
+            foreach (var stage in entity.Stages) {
+                if (!ReservedNames.TryReservedAsStageName(stage.Name, out var row))
+                    continue;
+                context.ReportError(
+                    stage,
+                    $"Stage '{stage.Name}' on entity '{entity.Name}' becomes a member of the generated " +
+                    $"stage enum '{entity.Name}Stage', where it collides with {row.Reason}; rename it.",
+                    DomainModelDiagnosticCodes.ReservedMemberName);
+            }
+        }
+
         // Relationship names must not collide with type names (DSL/export ambiguity).
         var typeNames = domain.Types.Cast<DomainMember>()
             .GroupBy(static t => t.Name, StringComparer.Ordinal)

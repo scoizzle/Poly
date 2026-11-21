@@ -42,11 +42,11 @@ internal class Patron : Poly.Runtime.IActionScoped
     public long OutstandingFines { get; private set; }
     public IReadOnlyList<Loan> Loans
     {
-        get => this._loans;
+        get => new List<Loan>(this._loans);
     }
     public IReadOnlyList<Fine> Fines
     {
-        get => this._fines;
+        get => new List<Fine>(this._fines);
     }
     public PatronStage CurrentStage { get; private set; }
     internal DomainResult<Loan> CreateLoans(string? status = default, DateTime? dueDate = default, DateTime? returnedAt = default, long? timesRenewed = default, Book? book = default)
@@ -81,6 +81,11 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Loan>.Failure(loanResult.Error!);
         }
         var loan = loanResult.Value;
+        var __notify = loan.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Loan>.Failure(__notify.Error!);
+        }
         return DomainResult<Loan>.Success(loan);
     }
     internal void AttachLoans(Loan child)
@@ -122,6 +127,11 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Fine>.Failure(fineResult.Error!);
         }
         var fine = fineResult.Value;
+        var __notify = fine.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Fine>.Failure(__notify.Error!);
+        }
         return DomainResult<Fine>.Success(fine);
     }
     internal void AttachFines(Fine child)
@@ -402,7 +412,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         db.Record("Patron", "Email", __email);
         return DomainResult<Patron>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Loans)
         {
@@ -417,7 +427,7 @@ internal class Patron : Poly.Runtime.IActionScoped
             target.RegisterPatronFinesResolvedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

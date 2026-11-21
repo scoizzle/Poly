@@ -163,6 +163,17 @@ public partial class MinimalApiGeneratorTests {
     }
 
     [Test]
+    public async Task Post_EntityWithoutNaturalKey_ReturnsCreatedWithTheShadowId() {
+        // #589: `Item` has no natural key, so its route key is EF's shadow `Id`. The create publishes it as
+        // the Location the client GETs next, instead of a 200 that names no row.
+        var d = ParseDomain("domain T\nItem: entity { Name: Text }");
+        var program = Render(d);
+
+        await Assert.That(program).Contains("Results.Created(");
+        await Assert.That(program).Contains("Property<int>(\"Id\").CurrentValue");
+    }
+
+    [Test]
     public async Task Post_ChecksIsSuccess() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("IsSuccess")).IsTrue();

@@ -39,7 +39,8 @@ app.MapPost("/api/gauges", async (GaugeDto dto, TDbCtx db) => {
     }
     db.Gauges.Add(gaugeResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(gaugeResult.Value);
+    var createdId = db.Entry(gaugeResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/gauges/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), gaugeResult.Value);
 });
 
 app.MapPost("/api/gauges/{id}/setlevel", async (int id, SetLevelDto dto, TDbCtx db) => {

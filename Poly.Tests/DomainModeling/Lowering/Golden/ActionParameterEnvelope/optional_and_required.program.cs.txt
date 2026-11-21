@@ -39,7 +39,8 @@ app.MapPost("/api/notes", async (NoteDto dto, TDbCtx db) => {
     }
     db.Notes.Add(noteResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(noteResult.Value);
+    var createdId = db.Entry(noteResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/notes/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), noteResult.Value);
 });
 
 app.MapPost("/api/notes/{id}/setbody", async (int id, SetBodyDto dto, TDbCtx db) => {

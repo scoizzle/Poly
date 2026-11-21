@@ -166,9 +166,25 @@ public sealed partial class MinimalApiGenerator {
                     new Member(new Variable(resultVarName), "Value"))));
         }
         else {
+            // #589: no natural key means EF owns a shadow key, so the row's id is read back from the tracked
+            // entry. Publishing it in the Location is what makes the per-id routes this host maps reachable.
+            var entry = new Invoke(
+                new Member(new TypeReference("db"), "Entry"),
+                new Member(new Variable(resultVarName), "Value"));
+            bodyNodes.Add(Init("createdId", new Member(
+                new Invoke(new Member(entry, "Property"),
+                    new Constant(DbContextGenerator.ShadowKeyName(entity, GetStorageEntity(entity)))) {
+                    TypeArguments = [ClrTypeNode(key.ClrType)]
+                },
+                "CurrentValue")));
+            var uri = new Invoke(
+                new Member(new TypeReference("string"), "Concat"),
+                new Constant(route + "/"),
+                RouteKeySegment(key, new Variable("createdId")));
             bodyNodes.Add(new Return(
                 new Invoke(
-                    new Member(new TypeReference("Results"), "Ok"),
+                    new Member(new TypeReference("Results"), "Created"),
+                    uri,
                     new Member(new Variable(resultVarName), "Value"))));
         }
 

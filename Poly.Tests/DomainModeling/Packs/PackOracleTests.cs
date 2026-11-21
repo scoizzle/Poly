@@ -36,8 +36,8 @@ public class PackOracleTests {
         using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
         await Assert.That(json.RootElement.ValueKind).IsEqualTo(JsonValueKind.Array);
 
-        // Pinned: a 404 for an unknown id is the correct behaviour and does not flip with #589.
-        // #589 is the unserialised synthetic Id (and a POST that answers 200 without Location), not this status.
+        // Pinned: a 404 for an unknown id is the correct behaviour. #589 gave a shadow-key create its 201 and Location;
+        // P-12's remaining half is the body, which still carries no id member. Neither is this status.
         using var missing = await oracle.Client.GetAsync("/api/orders/999");
         await Assert.That(missing.StatusCode).IsEqualTo(HttpStatusCode.NotFound);
     }
@@ -230,6 +230,29 @@ public class PackOracleTests {
         // #595 pin: the generated Program.cs seeds a placeholder row into a fresh database.
         // P-07 removes the seed and flips this assertion to zero.
         await Assert.That(json.RootElement.GetArrayLength()).IsEqualTo(1);
+    }
+
+    /// <summary>#589: an entity without a natural key has a shadow <c>Id</c> no JSON body carries. Its create
+    /// answers 201 with a <c>Location</c> naming the row EF just inserted, so the per-id routes the same host
+    /// maps are reachable from the response a client already holds.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task Create_ShadowKeyEntity_AnswersCreatedWithAGettableLocation_Issue589(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Inventory588);
+
+        using var post = await oracle.Client.PostAsync("/api/orders",
+            new StringContent("""{"Qty":2,"Total":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)post.StatusCode).IsEqualTo(201);
+
+        var location = post.Headers.Location;
+        await Assert.That(location).IsNotNull();
+        await Assert.That(location!.OriginalString).StartsWith("/api/orders/");
+
+        using var get = await oracle.Client.GetAsync(location);
+        await Assert.That((int)get.StatusCode).IsEqualTo(200);
+        using var json = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
+        await Assert.That(json.RootElement.GetProperty("qty").GetInt64()).IsEqualTo(2);
     }
 
     /// <summary>Two boots: the worst case (2 x 135 s) exceeds the assembly's 180 s default, so this test carries
@@ -1274,7 +1297,8 @@ public class PackOracleTests {
         await Assert.That((int)list.StatusCode).IsEqualTo(200);
         using var customer = await oracle.Client.PostAsync(
             "/api/customers", new StringContent("""{"Name":"Ada"}""", Encoding.UTF8, "application/json"));
-        await Assert.That((int)customer.StatusCode).IsEqualTo(200);
+        // A shadow-key create answers 201 with its id's route (#589); this test's subject is the order's 405.
+        await Assert.That((int)customer.StatusCode).IsEqualTo(201);
         using var order = await oracle.Client.PostAsync(
             "/api/orders", new StringContent("""{"Number":"A1"}""", Encoding.UTF8, "application/json"));
         await Assert.That((int)order.StatusCode).IsEqualTo(405).Because(await order.Content.ReadAsStringAsync());
@@ -1723,7 +1747,8 @@ public class PackOracleTests {
     }
 
     /// <summary>P-12a regression guard: a key that needs no escaping gets the same <c>Location</c> as before, a Number
-    /// key included, and a shadow-key entity's POST is still a 200 with no <c>Location</c>.</summary>
+    /// key included. A shadow-key entity's POST used to answer 200 with no <c>Location</c>, which left its per-id routes
+    /// unreachable (#589); it is now a 201 whose <c>Location</c> is the shadow id's route, and that route reads back.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
@@ -1742,8 +1767,10 @@ public class PackOracleTests {
         await Assert.That(readNumber.StatusCode).IsEqualTo(HttpStatusCode.OK);
 
         using var shadow = await PostJsonAsync(oracle, "/api/notes", "Body", "hello");
-        await Assert.That((int)shadow.StatusCode).IsEqualTo(200);
-        await Assert.That(shadow.Headers.Location).IsNull();
+        await Assert.That((int)shadow.StatusCode).IsEqualTo(201);
+        await Assert.That(shadow.Headers.Location?.OriginalString).Matches("^/api/notes/[0-9]+$");
+        using var readShadow = await oracle.Client.GetAsync(shadow.Headers.Location!.OriginalString);
+        await Assert.That(readShadow.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
     /// <summary>P-12a: a Date key's Location is culture-invariant ISO text that the route binds back. Before, it was the

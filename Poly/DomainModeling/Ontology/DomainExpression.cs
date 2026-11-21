@@ -32,6 +32,10 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression Divide(DomainExpression left, DomainExpression right) =>
         new Divide(left, right);
 
+    /// <summary>The remainder of <paramref name="left"/> divided by <paramref name="right"/>, with C#'s sign rule: the result takes the dividend's sign.</summary>
+    public static DomainExpression Modulo(DomainExpression left, DomainExpression right) =>
+        new Modulo(left, right);
+
     public static DomainExpression Match(
         IReadOnlyList<MatchArm> arms, DomainExpression @else, int line = 0, int col = 0) =>
         new MatchExpr(arms, @else, line, col);
@@ -193,6 +197,17 @@ public sealed record Multiply(
 }
 
 public sealed record Divide(
+    DomainExpression Left,
+    DomainExpression Right
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Left, Right];
+}
+
+/// <summary>
+/// The remainder of <see cref="Left"/> divided by <see cref="Right"/>: C#'s <c>%</c>. It takes the
+/// dividend's sign (<c>-10 % 7</c> is <c>-3</c>), and a zero divisor is not diagnosed yet (#502).
+/// </summary>
+public sealed record Modulo(
     DomainExpression Left,
     DomainExpression Right
 ) : DomainExpression {

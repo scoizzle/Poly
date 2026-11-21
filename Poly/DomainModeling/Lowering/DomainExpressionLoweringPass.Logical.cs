@@ -169,7 +169,7 @@ public sealed partial class DomainExpressionLoweringPass {
         DomainExpression operand, Node subject, string subjectPath,
         List<Node> hops, HashSet<string> seenPaths) {
         switch (operand) {
-            case Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide
+            case Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide or Ontology.Modulo
                 or Ontology.Not or Ontology.And or Ontology.Or:
                 foreach (var child in operand.Children.OfType<DomainExpression>())
                     CollectValueHops(child, subject, subjectPath, hops, seenPaths);

@@ -80,6 +80,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         if (ch == '-') return Advance(DslTokenKind.Minus);
         if (ch == '*') return Advance(DslTokenKind.Star);
         if (ch == '/') return Advance(DslTokenKind.Slash);
+        if (ch == '%') return Advance(DslTokenKind.Percent);
 
         if (ch == '"')
             return ScanString();

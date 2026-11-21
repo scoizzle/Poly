@@ -29,6 +29,7 @@ public enum DslTokenKind {
     Minus,          // -
     Star,           // *
     Slash,          // /
+    Percent,        // %
     Is,
     Not,
     And,

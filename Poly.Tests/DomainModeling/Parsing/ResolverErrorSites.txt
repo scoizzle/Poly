@@ -180,6 +180,7 @@ E	kind:expect:Plus	Constraints:ParseConstraint#9	-	domain A\nX: entity {\n  N: T
 E	kind:expect:Minus	Constraints:ParseConstraint#9	-	domain A\nX: entity {\n  N: Text length -	GrammarException @3:18 off=-1 len=0 :: Expected LParen, got '-' (Minus)
 E	kind:expect:Star	Constraints:ParseConstraint#9	-	domain A\nX: entity {\n  N: Text length *	GrammarException @3:18 off=-1 len=0 :: Expected LParen, got '*' (Star)
 E	kind:expect:Slash	Constraints:ParseConstraint#9	-	domain A\nX: entity {\n  N: Text length /	GrammarException @3:18 off=-1 len=0 :: Expected LParen, got '/' (Slash)
+E	kind:expect:Percent	Constraints:ParseConstraint#9	-	domain A\nX: entity {\n  N: Text length %	GrammarException @3:18 off=-1 len=0 :: Expected LParen, got '%' (Percent)
 E	kind:expect:Is	Constraints:ParseConstraint#9	-	domain A\nX: entity {\n  N: Text length is	GrammarException @3:18 off=-1 len=0 :: Expected LParen, got 'is' (Is)
 E	kind:expect:Not	Constraints:ParseConstraint#9	-	domain A\nX: entity {\n  N: Text length not	GrammarException @3:18 off=-1 len=0 :: Expected LParen, got 'not' (Not)
 E	kind:expect:And	Constraints:ParseConstraint#9	-	domain A\nX: entity {\n  N: Text length and	GrammarException @3:18 off=-1 len=0 :: Expected LParen, got 'and' (And)
@@ -246,6 +247,7 @@ E	kind:plain:Plus	Types:ParseTypeName#3	-	domain A\nfunction F(a: +	GrammarExcep
 E	kind:plain:Minus	Types:ParseTypeName#3	-	domain A\nfunction F(a: -	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got '-'
 E	kind:plain:Star	Types:ParseTypeName#3	-	domain A\nfunction F(a: *	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got '*'
 E	kind:plain:Slash	Types:ParseTypeName#3	-	domain A\nfunction F(a: /	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got '/'
+E	kind:plain:Percent	Types:ParseTypeName#3	-	domain A\nfunction F(a: %	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got '%'
 E	kind:plain:Is	Types:ParseTypeName#3	-	domain A\nfunction F(a: is	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got 'is'
 E	kind:plain:Not	Types:ParseTypeName#3	-	domain A\nfunction F(a: not	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got 'not'
 E	kind:plain:And	Types:ParseTypeName#3	-	domain A\nfunction F(a: and	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got 'and'
@@ -628,6 +630,7 @@ U	kind:ident:Plus	Stages:ParseStage#15	6DAFBB8CC871
 U	kind:ident:Minus	Stages:ParseStage#15	6DAFBB8CC871
 U	kind:ident:Star	Stages:ParseStage#15	6DAFBB8CC871
 U	kind:ident:Slash	Stages:ParseStage#15	6DAFBB8CC871
+U	kind:ident:Percent	Stages:ParseStage#15	6DAFBB8CC871
 U	kind:ident:Is	Stages:ParseStage#15	6DAFBB8CC871
 U	kind:ident:Not	Stages:ParseStage#15	6DAFBB8CC871
 U	kind:ident:And	Stages:ParseStage#15	6DAFBB8CC871

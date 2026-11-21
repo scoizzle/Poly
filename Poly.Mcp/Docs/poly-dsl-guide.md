@@ -444,6 +444,8 @@ in a condition (`if`, an `and`/`or`/`not` operand, a `for … where`, a `match` 
 
 A property without `optional` rejects a missing (null) value when it is written, for every
 type. An empty string is a value: refusing it is the job of `length(1, …)` (a `Length` failure).
+An unset optional Text reads as `null`, never as `""`: `is null` is true and `exists` is false
+on every host, and a copy of it into another optional Text stays absent.
 The word `required` is not a constraint. Writing it is a positioned parse error:
 a property is required unless it is marked `optional`.
 
@@ -2283,7 +2285,6 @@ What the id does not cover, and what that costs:
 - **Names**: a property named `Created` (#927) and an action named `Add` on an entity that has a `many` link and a
   `unique` property (#934) fail to build. A domain named like a C# keyword is refused, and a domain named `DateTime`
   that declares a `DateTime` property does not compile (CS0118) (E-10).
-- **Assigning an absent optional Text**: the simulator stores `""`, the generated C# stores `null` (#929).
 - **A stage `require` at create**: it is not checked when an instance is created (#576, L-17).
 - **`assign Qty to Dec * 2`** (a Number target, a Decimal operand): analysis accepts it and the generated C# does not
   compile (T-07).

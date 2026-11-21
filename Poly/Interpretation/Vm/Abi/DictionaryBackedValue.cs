@@ -90,9 +90,19 @@ internal static class DictionaryBackedValue {
                 GuardCompatibleInfo,
                 Expression.Convert(dictValue, typeof(object)),
                 Expression.Constant(target, typeof(Type)));
-            return Expression.Convert(
+            var converted = Expression.Convert(
                 Expression.Call(null, convertMethod, guarded),
                 typeof(object));
+            // Null is the absence of a value, and an empty string is a value: a Text read
+            // of a null bag value stays null instead of becoming "" (owner ruling 2026-11-13).
+            if (target != typeof(string))
+                return converted;
+            return Expression.Condition(
+                Expression.Equal(
+                    Expression.Convert(dictValue, typeof(object)),
+                    Expression.Constant(null, typeof(object))),
+                Expression.Constant(null, typeof(object)),
+                converted);
         }
 
         return dictValue;
@@ -152,6 +162,10 @@ internal static class DictionaryBackedValue {
     /// the same Convert.* as the member-read expression.
     /// </summary>
     internal static object? CoerceReadValue(object? raw, Type target) {
+        // Null is the absence of a value, and an empty string is a value (owner ruling
+        // 2026-11-13): Convert.ToString(null) would turn the absence into a value.
+        if (raw is null && target == typeof(string))
+            return null;
         var guarded = GuardCompatible(raw, target);
         return target == typeof(long) ? Convert.ToInt64(guarded)
             : target == typeof(int) ? Convert.ToInt32(guarded)

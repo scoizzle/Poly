@@ -30,11 +30,11 @@ internal class Property : Poly.Runtime.IActionScoped
     public string City { get; private set; } = default!;
     public IReadOnlyList<Hall> Halls
     {
-        get => this._halls;
+        get => new List<Hall>(this._halls);
     }
     public IReadOnlyList<Room> Rooms
     {
-        get => this._rooms;
+        get => new List<Room>(this._rooms);
     }
     public PropertyStage CurrentStage { get; private set; }
     internal DomainResult<Hall> CreateHalls(string? name = default, long? capacity = default, decimal? dayRate = default, bool? occupied = default, bool? offline = default, long? busySections = default)

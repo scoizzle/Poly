@@ -32,7 +32,7 @@ internal class Quote : Poly.Runtime.IActionScoped
     public Opportunity? Opportunity { get; private set; }
     public IReadOnlyList<QuoteLine> Lines
     {
-        get => this._lines;
+        get => new List<QuoteLine>(this._lines);
     }
     public QuoteStage CurrentStage { get; private set; }
     internal void AttachOpportunity(Opportunity child)

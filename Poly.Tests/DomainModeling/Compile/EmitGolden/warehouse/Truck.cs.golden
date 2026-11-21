@@ -35,7 +35,7 @@ internal class Truck : Poly.Runtime.IActionScoped
     public Warehouse? Warehouse { get; private set; }
     public IReadOnlyList<Delivery> Deliveries
     {
-        get => this._deliveries;
+        get => new List<Delivery>(this._deliveries);
     }
     public TruckStage CurrentStage { get; private set; }
     internal void AttachWarehouse(Warehouse child)

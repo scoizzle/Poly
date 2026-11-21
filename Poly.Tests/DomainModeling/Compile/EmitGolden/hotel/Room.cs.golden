@@ -42,7 +42,7 @@ internal class Room : Poly.Runtime.IActionScoped
     public RoomType? RoomType { get; private set; }
     public IReadOnlyList<Reservation> Stays
     {
-        get => this._stays;
+        get => new List<Reservation>(this._stays);
     }
     public RoomStage CurrentStage { get; private set; }
     internal void AttachProperty(Property child)

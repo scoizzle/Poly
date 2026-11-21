@@ -65,6 +65,15 @@ public sealed partial class DbContextGenerator {
         ));
 
         // Column configurations
+        // A unique text column whose mapped type is unbounded cannot be an index key on the provider that
+        // declares it (SQL Server: nvarchar(max) → error 1919). Refuse the schema at generation, with what to
+        // write, rather than emit DDL the database rejects — and never invent a length the model does not
+        // state (#627).
+        foreach (var unbounded in store.Columns.Where(IsUnindexableUniqueText))
+            throw new InvalidOperationException(
+                $"Column '{entity.Name}.{unbounded.Name}' is unique but has no length: a {unbounded.ColumnType} column "
+                + "cannot be a unique index key on this provider. Give the property a length, for example length(1, 255).");
+
         foreach (var col in store.Columns)
             bodyNodes.Add(BuildColumnConfigNode(bParam, col));
 
@@ -210,4 +219,12 @@ public sealed partial class DbContextGenerator {
             || store.Columns.Any(c => c.Name == "Id");
         return taken ? "PolyId" : "Id";
     }
+
+    /// <summary>A <c>unique</c> Text column whose provider type is unbounded (<c>nvarchar(max)</c>): no such
+    /// provider can use it as an index key, so the schema is refused at generation (#627).</summary>
+    private static bool IsUnindexableUniqueText(StorageColumn col) =>
+        col.IsUnique
+        && col.MaxLength is null
+        && col.DomainType is "Text" or "String"
+        && col.ColumnType.EndsWith("(max)", StringComparison.OrdinalIgnoreCase);
 }

@@ -335,10 +335,12 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         var targetProps = new HashSet<string>(
             targetEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
         var peerBinding = subscription.PeerBinding;
+        // #509: a bare name can be an enum member used as a value, not a property read.
+        var enumValues = EnumValues.Of(context);
 
         foreach (var effect in subscription.Effects) {
             var flags = new SubBindingFlags();
-            CollectPropertyAccesses(effect, peerBinding, subscriberRelNames, flags);
+            CollectPropertyAccesses(effect, subscriberEntity, peerBinding, subscriberRelNames, flags, enumValues);
 
             if (flags.UsesLegacyEvent) {
                 context.ReportError(
@@ -374,7 +376,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                         subscription,
                         $"Subscription effect references property '{propName}' on subscriber entity " +
                         $"'{subscriberEntity.Name}', but that property does not exist. " +
-                        $"Available: {string.Join(", ", subscriberProps)}.",
+                        Available(subscriberProps),
                         DomainModelDiagnosticCodes.SubscriptionEffectBinding);
                 }
             }
@@ -386,13 +388,19 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                             subscription,
                             $"Subscription effect references peer property '{propName}' via binder " +
                             $"'{peerBinding}' on target entity '{targetEntity.Name}', but that property " +
-                            $"does not exist. Available: {string.Join(", ", targetProps)}.",
+                            $"does not exist. " +
+                            Available(targetProps),
                             DomainModelDiagnosticCodes.SubscriptionEffectBinding);
                     }
                 }
             }
         }
     }
+
+    private static string Available(HashSet<string> props) =>
+        props.Count == 0
+            ? "The entity declares no properties."
+            : $"Available: {string.Join(", ", props)}.";
 
     private sealed class SubBindingFlags {
         public HashSet<string> SubscriberRefs { get; } = new(StringComparer.Ordinal);
@@ -402,50 +410,87 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         public bool NestedPeerPath;
     }
 
+    /// <summary>
+    /// #509: the bare names that are enum members used as values — the same rule
+    /// <c>ExpressionTypeAnalyzer</c> applies to a name with no property behind it: a member of the
+    /// hinted enum (the initializer's target property's type), else of the one enum declaring it.
+    /// A name two enums declare and nothing hints is left unresolved.
+    /// </summary>
+    private sealed class EnumValues(DomainTypeLookupMetadata lookup) {
+        private readonly Dictionary<string, EnumType> _enums = lookup.Domain.Types
+            .OfType<EnumType>().ToDictionary(e => e.Name, StringComparer.Ordinal);
+
+        public static EnumValues? Of(AnalysisContext context) =>
+            context.GetTypeLookup() is { } lookup ? new EnumValues(lookup) : null;
+
+        /// <summary>The declared type name of <paramref name="propertyName"/> on <paramref name="entityTypeName"/>.</summary>
+        public string? DeclaredTypeOf(string? entityTypeName, string propertyName) =>
+            entityTypeName is not null
+            && lookup.Types.TryGetValue(entityTypeName, out var type)
+            && type is Entity entity
+            && entity.Properties.FirstOrDefault(p => string.Equals(p.Name, propertyName, StringComparison.Ordinal)) is { } property
+                ? property.Type.TypeName
+                : null;
+
+        public bool IsValue(string name, string? hintedEnumTypeName) =>
+            (hintedEnumTypeName is not null
+                && _enums.TryGetValue(hintedEnumTypeName, out var hinted)
+                && hinted.MemberNames.Contains(name, StringComparer.Ordinal))
+            || _enums.Values.Count(e => e.MemberNames.Contains(name, StringComparer.Ordinal)) == 1;
+    }
+
     private static void CollectPropertyAccesses(
         Effect effect,
+        Entity subscriberEntity,
         string? peerBinding,
         HashSet<string> subscriberRelNames,
-        SubBindingFlags flags) {
+        SubBindingFlags flags,
+        EnumValues? enumValues) {
         switch (effect) {
             case AssignEffect ae:
                 // EffectAnalyzer reports every assign target other than a bare property
                 // (a peer or relationship path, an owned field), so only a bare one is read here.
                 if (ae.Target is PropertyAccess)
-                    CollectFromExpression(ae.Target, peerBinding, subscriberRelNames, flags);
-                CollectFromExpression(ae.Value, peerBinding, subscriberRelNames, flags);
+                    CollectFromExpression(ae.Target, peerBinding, subscriberRelNames, flags, enumValues);
+                CollectFromExpression(ae.Value, peerBinding, subscriberRelNames, flags, enumValues);
                 break;
             case StageTransitionEffect:
                 break;
             case CreateEntityInstance cei:
                 foreach (var init in cei.Initializers)
-                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags);
+                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags, enumValues,
+                        enumValues?.DeclaredTypeOf(cei.Type.TypeName, init.PropertyName));
                 break;
-            case CreateEntityInRelationshipEffect cir:
-                foreach (var init in cir.Initializers)
-                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags);
-                break;
+            case CreateEntityInRelationshipEffect cir: {
+                    var createdTypeName = subscriberEntity.Navigations
+                        .FirstOrDefault(n => string.Equals(n.Name, cir.RelationshipName, StringComparison.Ordinal))
+                        ?.Target.TypeName;
+                    foreach (var init in cir.Initializers)
+                        CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags, enumValues,
+                            enumValues?.DeclaredTypeOf(createdTypeName, init.PropertyName));
+                    break;
+                }
             case InvokeActionEffect iae:
                 foreach (var binding in iae.ParameterBindings)
-                    CollectFromExpression(binding.Expression, peerBinding, subscriberRelNames, flags);
+                    CollectFromExpression(binding.Expression, peerBinding, subscriberRelNames, flags, enumValues);
                 break;
             case ConditionalEffect ce:
-                CollectFromExpression(ce.Condition, peerBinding, subscriberRelNames, flags);
+                CollectFromExpression(ce.Condition, peerBinding, subscriberRelNames, flags, enumValues);
                 foreach (var e in ce.ThenEffects)
-                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
+                    CollectPropertyAccesses(e, subscriberEntity, peerBinding, subscriberRelNames, flags, enumValues);
                 if (ce.ElseEffects is not null)
                     foreach (var e in ce.ElseEffects)
-                        CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
+                        CollectPropertyAccesses(e, subscriberEntity, peerBinding, subscriberRelNames, flags, enumValues);
                 break;
             case CompositeEffect ce:
                 foreach (var e in ce.Effects)
-                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
+                    CollectPropertyAccesses(e, subscriberEntity, peerBinding, subscriberRelNames, flags, enumValues);
                 break;
             case ForEachEffect fe:
                 if (fe.Where is not null)
-                    CollectFromExpression(fe.Where, peerBinding, subscriberRelNames, flags);
+                    CollectFromExpression(fe.Where, peerBinding, subscriberRelNames, flags, enumValues);
                 foreach (var e in fe.Body)
-                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
+                    CollectPropertyAccesses(e, subscriberEntity, peerBinding, subscriberRelNames, flags, enumValues);
                 break;
         }
     }
@@ -454,14 +499,16 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         DomainExpression expr,
         string? peerBinding,
         HashSet<string> subscriberRelNames,
-        SubBindingFlags flags) {
+        SubBindingFlags flags,
+        EnumValues? enumValues,
+        string? enumHint = null) {
         switch (expr) {
             case PropertyAccess pa:
                 if (pa.Name.StartsWith(SubscriptionEventAccess.Prefix, StringComparison.Ordinal)
                     || string.Equals(pa.Name, SubscriptionEventAccess.RelationshipName, StringComparison.Ordinal)) {
                     flags.UsesLegacyEvent = true;
                 }
-                else {
+                else if (enumValues?.IsValue(pa.Name, enumHint) != true) {
                     flags.SubscriberRefs.Add(pa.Name);
                 }
                 break;
@@ -493,12 +540,12 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                 }
 
                 // Real subscriber relationship path-prefix (a read): walk its inner properties.
-                CollectFromExpression(rn.TargetProperty, peerBinding, subscriberRelNames, flags);
+                CollectFromExpression(rn.TargetProperty, peerBinding, subscriberRelNames, flags, enumValues);
                 return;
         }
 
         foreach (var child in expr.Children.OfType<DomainExpression>())
-            CollectFromExpression(child, peerBinding, subscriberRelNames, flags);
+            CollectFromExpression(child, peerBinding, subscriberRelNames, flags, enumValues);
     }
 
     private static void CollectPeerScalars(DomainExpression expr, SubBindingFlags flags) {

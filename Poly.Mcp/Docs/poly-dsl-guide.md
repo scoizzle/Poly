@@ -1431,6 +1431,7 @@ Replenished: policy { DueDate + 14 Days > ExpiryDate }
 
 | `DateExpr ± N <unit>` | Offset a date/time by a duration | `Now`, `Today`, or a Date/DateTime/Time property on the left |
 | `DateProp ± count` | Offset a Date or DateTime by a whole day count (`Due + n`) | the left is a Date or DateTime property or action parameter; the count is a Number, never a Decimal |
+| `DateTimeProp ± DurationProp` | Offset a DateTime by a Duration value (`StartsAt + Length`) | the left is a DateTime property, parameter or `Now`; the Duration is a property, a parameter or a date difference (`Stamp + (Finished - Started)`). Lowers to `DateTime.Add`/`Subtract(TimeSpan)` on every door. A Date left is refused (it has no `TimeSpan` addition) |
 | `DateProp - DateProp` | The difference, a Duration (`Finished - Started`) | two Date or two DateTime properties or parameters; assign it to a Duration property or compare it with a Duration |
 | `assign Len to 30 Minutes`, `Len > 1 Hours` | A bare duration as a Duration value | assigned to a `Duration` property or compared with one, as a `default(...)` is; Months and Years have no fixed length and are rejected |
 
@@ -1449,8 +1450,11 @@ Product sessions load Temporal implicitly at Load. A raw `SessionBuilder` that n
 
 **Refused at analysis, so no door runs a different answer:** a Decimal day count of any kind (`Due + 1.5`,
 `Due + Days` with a Decimal `Days`, on a Date or a DateTime): use a whole Number count or a unit literal such as
-`36 Hours`; a date plus or minus a Duration *value* (`Due + Len`: not supported yet, F-11, #550); a count offset whose left
-is not a date property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
+`36 Hours`; a **Date** plus or minus a Duration *value* (`Due + Len` on a `Date` property: a Date has no `TimeSpan`
+addition, so write the property as `DateTime`); a Duration offset whose left or Duration operand is a path, an owned
+member, a `match` or a call (`part Due + Len`, `Start + part Len`: read it into a property first); an optional Duration
+operand and an optional DateTime left (an absent value has nothing to add); a count offset whose left is not a date
+property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
 `default(Now + 7 Days)` (a date operation has no default lowering: use `default(Now)` or `default(Today)`); and a bare
 duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration one too long for a `TimeSpan` is rejected. An `optional` Date, DateTime, Time or Duration compared with a required value of the same type (`OptDue < Today`, `OptLen > 1 Hours`) is C#'s lifted comparison on every door: an absent operand makes `<`, `<=`, `>`, `>=` and `==` false and `!=` true.
 

@@ -501,9 +501,28 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             case Multiply mul:
                 return EvalArithmetic(mul, mul.Left, mul.Right,
                     operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
+            case FunctionCall call:
+                return EvalCall(call, operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain), domain);
             default:
                 return AbstractValue.Unknown;
         }
+    }
+
+    /// <summary>
+    /// A built-in numeric call's abstract value (#547): only with a domain, so a declared function of the same
+    /// name is known to win (<see cref="BuiltinFunctions.Find(Domain?, string)"/>), and only where
+    /// <see cref="IntervalTransfers.TransferCall"/> has a sound row. No usable range is Unknown, never a guess.
+    /// </summary>
+    private static AbstractValue EvalCall(
+        FunctionCall call, Func<DomainExpression, AbstractValue> evalOperand, Domain? domain) {
+        if (domain is null
+            || BuiltinFunctions.Find(domain, call.Name) is not { } builtin
+            || call.Arguments.Count != builtin.Parameters.Count)
+            return AbstractValue.Unknown;
+        var operands = call.Arguments.Select(argument => evalOperand(argument).NumericRange).ToList();
+        return IntervalTransfers.TransferCall(builtin.Function, operands)?.ToRangeConstraint() is { } range
+            ? AbstractValue.From([range])
+            : AbstractValue.Unknown;
     }
 
     private static readonly IReadOnlyDictionary<string, AbstractValue> EmptyEnv =

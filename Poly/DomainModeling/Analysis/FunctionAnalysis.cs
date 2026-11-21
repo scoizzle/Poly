@@ -111,6 +111,15 @@ internal static class FunctionAnalysis {
         if (function is null) {
             if (IsEndpointCall(context, call))
                 return;
+            // #547: a built-in numeric name no declared function owns. Arity is a function fact; its argument
+            // types are ExpressionTypeAnalyzer's (a call to a builtin has no declared parameter list there).
+            if (BuiltinFunctions.Find(context.GetTypeLookup()?.Domain, call.Name) is { } builtin) {
+                if (call.Arguments.Count != builtin.Parameters.Count)
+                    context.ReportError(call,
+                        $"Function '{call.Name}' expects {builtin.Parameters.Count} argument(s), got {call.Arguments.Count}{where}.",
+                        DomainModelDiagnosticCodes.FunctionArity);
+                return;
+            }
             context.ReportError(call,
                 $"Call to unknown function '{call.Name}'{where}.",
                 DomainModelDiagnosticCodes.FunctionUnknown);

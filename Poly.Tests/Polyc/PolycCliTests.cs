@@ -78,6 +78,22 @@ public class PolycCliTests {
         await Assert.That(File.Exists(Path.Combine(outDir, "Orders", "Poly.Types.cs"))).IsTrue();
     }
 
+    /// <summary>
+    /// The build summary says what the written C# needs to compile (#490): a Poly.Runtime
+    /// reference, and EF Core when a generated DbContext was written.
+    /// </summary>
+    [Test]
+    public async Task Build_SuccessSummary_NamesTheCompileDependencies() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "compiled.poly", "domain Compiled\nuses sqlite\n\nWidget: entity {\n  Name: Text\n}\n");
+        var outDir = Path.Combine(dir, "out");
+        var (exit, stdout, _) = Run(["build", path, "--out", outDir]);
+        await Assert.That(exit).IsEqualTo(0);
+        await Assert.That(stdout).Contains("Poly.Runtime");
+        await Assert.That(stdout).Contains("Microsoft.EntityFrameworkCore");
+        await Assert.That(stdout).Contains("CompiledDbContext.cs");
+    }
+
     [Test]
     public async Task Build_ArtifactFilter_KeepsEachUnitsCatalog() {
         var dir = PolycTestSupport.TempDir();

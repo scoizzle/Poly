@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using ModelContextProtocol.Server;
 
+using Poly.Compile;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
@@ -429,7 +430,9 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
         return new PolyResponse(
             Ok: true,
-            Summary: $"Exported {normalized} ({bytes} bytes).",
+            Summary: normalized == "csharp"
+                ? $"Exported csharp ({bytes} bytes); compile it against {CSharpHostDependencies.Requirement(ExportFileNames(response))}."
+                : $"Exported {normalized} ({bytes} bytes).",
             Findings: [],
             Data: data,
             Next: Next(workspace, "poly_inspect", "poly_check"),
@@ -648,6 +651,15 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             return null;
         var node = JsonSerializer.SerializeToNode(response.Data);
         return node?[property]?.GetValue<string>();
+    }
+
+    /// <summary>
+    /// The file names a producing tool reported in <c>Data.files</c>, so a success summary can
+    /// name what the artifact needs to compile.
+    /// </summary>
+    private static IReadOnlyList<string> ExportFileNames(DomainToolResponse response) {
+        var files = JsonSerializer.SerializeToNode(response.Data)?["files"] as JsonArray;
+        return files?.Select(file => file?.GetValue<string>()).OfType<string>().ToList() ?? [];
     }
 
     private static string Required(JsonElement step, string name) =>

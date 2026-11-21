@@ -2018,7 +2018,9 @@ A `201 Created` response's `Location` is the route plus the row's natural key as
 (`Uri.EscapeDataString`; non-text keys are formatted culture-invariantly, a Date key as `2026-01-05`), so a key
 with a space, `?`, `#` or a non-ASCII letter reads back at that `Location`. **Known gap:** a key containing `/`
 gets the escaped `Location` but the route cannot read it back, because ASP.NET does not turn `%2F` into `/` in a
-route value.
+route value. An entity with no natural key has a shadow key EF assigns on save: its create answers `201` with the
+same shape of `Location` (`/api/orders/1`), read back from the tracked entry (#589), so the per-id routes are
+reachable from the response even though that `id` is not in the JSON body (see *Known wrong*).
 
 ### HTTP actions: what the host loads (`uses http`)
 
@@ -2253,8 +2255,9 @@ What the id does not cover, and what that costs:
 - **The library demo's `Overdue` stage** has no transition into it (DMSS007), so `when loans Overdue` cannot fire on any
   host. This is a defect of the demo document, not of a host; the document's author removes it.
 - **Links and ids in a `GET`** (generated app): a link comes back null or unloaded, and a `many` collection comes back
-  empty although it has members (#594). An entity without a natural key has no `id` in its JSON body, and its create
-  answers `200` with no `Location` (P-12).
+  empty although it has members (#594). An entity without a natural key has no `id` in its JSON body, so a list names
+  no value to `GET` by; its create answers `201` with a `Location` that does name the row (#589), and publishing the
+  `id` as a body member is P-12.
 - **An action called with `{}`, or with a `null` Number or Boolean argument** (simulator and HTTP): it stores `0` or
   `false`. Over HTTP an explicit JSON `null` is a `400` with an empty body. Removed by X-05.
 - **Overloads, `M(decimal?)` declared before `M(long?)`** (C# surface only): an `int` argument binds `decimal?` where C#

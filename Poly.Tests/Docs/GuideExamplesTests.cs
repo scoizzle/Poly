@@ -32,7 +32,7 @@ public class GuideExamplesTests {
     private static readonly (string Info, int Count)[] FenceCounts = [
         ("poly", 47),
         ("", 5),
-        ("json", 1),
+        ("json", 2),
     ];
 
     /// <summary>Skip counts per reason. Pinned exactly: skips cannot grow silently (F2).</summary>

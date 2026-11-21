@@ -2304,3 +2304,40 @@ What the id does not cover, and what that costs:
   defines the comparison (T-21b).
 - **`poly_check`** answers `unknown` for every write it did not verify, and an action parameter cannot carry a
   constraint (F-08), so a parameter written to a bounded property is always `unknown`.
+
+## 15. Simulating a scenario
+
+`poly_simulate` runs an ordered list of steps against the current workspace and returns one trace
+entry per step. `steps` is a JSON array of objects; every object carries `op` plus only that op's
+own keys. Any other key is a failed step naming the valid ones — the tool never drops a misspelled
+key and runs a different scenario.
+
+| `op` | required keys | optional keys |
+|------|---------------|---------------|
+| `create` | `entity` | `properties` (JSON object of property values), `as` (alias for later steps) |
+| `link` | `sourceInstanceId`, `relationship`, `targetInstanceId` | — |
+| `unlink` | `sourceInstanceId`, `relationship`, `targetInstanceId` | — |
+| `invoke` | `instanceId`, `action` | `args` (JSON object of action parameter values) |
+| `evaluate` | `entity`, `policy`, `instanceId` | — |
+| `get` | `instanceId` | — |
+| `list` | — | `entity` (filter to one entity) |
+
+An `instanceId`, `sourceInstanceId` or `targetInstanceId` takes a 32-hex instance id from an earlier
+step, or the `as` alias an earlier `create` gave that instance:
+
+```json
+[{"op":"create","entity":"Account","properties":{"Name":"Acme"},"as":"acme"},
+ {"op":"create","entity":"Order","properties":{"Total":42},"as":"o"},
+ {"op":"invoke","instanceId":"o","action":"Submit"},
+ {"op":"get","instanceId":"acme"}]
+```
+
+A create's `properties` may name a singular navigation whose value is an instance id or an alias
+(`{"account":"acme"}`). Wrong-typed
+values fail the step: the property coercions (`Date`, `DateTime`, `Time`, `Duration`, `Guid`,
+`Decimal`) and the declared `range`/`length`/`pattern` constraints are the create's own.
+
+A step failure does not fail the call: `ok` is true when the scenario ran, `data.trace` carries
+`ok:false` and the message on the failing step, earlier steps stay committed, and `stopOnError`
+(default true) ends the run there. `reset: true` clears existing instances first; a successful
+`poly_define` clears them too (see section 12).

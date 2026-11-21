@@ -23,7 +23,10 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<TDbCtx>();
-    await SeedAsync(db);
+    if (builder.Configuration.GetValue<bool>("SeedDemoData"))
+    {
+        await SeedAsync(db);
+    }
 }
 
 app.MapGet("/api/notes", async (TDbCtx db) => await db.Notes.ToListAsync());

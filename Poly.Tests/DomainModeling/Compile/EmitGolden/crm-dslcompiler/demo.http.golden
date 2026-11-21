@@ -4,6 +4,9 @@
 ###  Start the server:
 ###    dotnet run --project path/to/project --urls "http://localhost:5201"
 ###
+###  The database starts empty. Add "--SeedDemoData true" to insert one
+###  sample row per entity.
+###
 ###  Then click "Send Request" above any request below.
 ### ═══════════════════════════════════════════════════════════
 

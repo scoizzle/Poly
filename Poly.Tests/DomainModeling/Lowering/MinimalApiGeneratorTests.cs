@@ -186,6 +186,59 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(Render(d).Contains("ItemDto")).IsTrue();
     }
 
+    /// <summary>#588: the create DTO carries every settable property, not only the Required ones. A
+    /// defaulted, optional or enum-defaulted value the client sends is otherwise silently dropped
+    /// (Create keeps the default) while <c>poly_simulate</c> keeps it, so HTTP and simulation disagree.</summary>
+    [Test]
+    public async Task CreateDto_CarriesDefaultedOptionalAndEnumProperties() {
+        var d = ParseDomain("""
+            domain T
+            Category: enum { Tools, Toys }
+            Item: entity {
+              Sku: Text unique length(3, 12)
+              Stock: Number range(0, 100000) default(0)
+              Cat: Category default(Tools)
+              Note: Text optional length(0, 100)
+            }
+            """);
+        var dto = IrUnit(d).FindType("ItemDto");
+        await Assert.That(dto).IsNotNull();
+        foreach (var name in new[] { "Sku", "Stock", "Cat", "Note" }) {
+            await Assert.That(dto!.FindProperty(name)).IsNotNull().Because(name);
+        }
+
+        // A member the caller may omit is never [Required]: only a Required slot fails on null.
+        foreach (var name in new[] { "Stock", "Cat", "Note" }) {
+            var prop = dto!.FindProperty(name)!;
+            var attributes = prop.Attributes ?? [];
+            await Assert.That(attributes.Any(a => a.Name == "Required")).IsFalse().Because(name);
+        }
+
+        // And the route passes them to Create, so a supplied value reaches the model.
+        var rendered = Render(d);
+        foreach (var name in new[] { "dto.Stock", "dto.Cat", "dto.Note" }) {
+            await Assert.That(rendered).Contains(name).Because(name);
+        }
+    }
+
+    /// <summary>#641: an entity whose create DTO would have no members takes no body parameter. The
+    /// route used to bind <c>CartDto</c> and never declare the record, so the generated Web project
+    /// did not compile (CS0246) while polyc reported success.</summary>
+    [Test]
+    public async Task CreateRoute_EntityWithNoCreateMembers_BindsNoBody() {
+        var d = ParseDomain("""
+            domain T
+            Cart: entity { lines: many CartLine }
+            CartLine: entity {
+              cart: Cart
+              N: Number
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).DoesNotContain("CartDto");
+        await Assert.That(rendered).Contains("app.MapPost(\"/api/carts\", async (TDbCtx db)");
+    }
+
     [Test]
     public async Task CreatedKeyAccess_Present() {
         var d = ParseDomain("domain T\nItem: entity { Sku: Text unique }");

@@ -636,7 +636,17 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
         [Description("Name of the action to invoke")] string actionName,
         [Description("Optional JSON object of action parameter values, " +
             "e.g. {\"amount\":100,\"reason\":\"urgent\"}")]
-        string? argsJson = null) {
+        string? argsJson = null) =>
+        InvokeAction(sessionId, instanceId, actionName, argsJson, aliases: null);
+
+    /// <summary>
+    /// <see cref="InvokeAction(string, string, string, string?)"/>, with a scenario's step aliases: a
+    /// string value for an entity-typed parameter that names an alias is the instance that alias was
+    /// given to. A Text parameter keeps its text, so only the entity-typed slot resolves (#500).
+    /// </summary>
+    internal DomainToolResponse InvokeAction(
+        string sessionId, string instanceId, string actionName, string? argsJson,
+        IReadOnlyDictionary<string, string>? aliases) {
         if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
@@ -674,6 +684,20 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
         // The action the module runs is the one for the stage the instance is in now; a
         // transition changes the stage, so capture it before the invoke.
         var stageBefore = StageOf(state, instance);
+        var action = ResolveAction(state, instance, stageBefore, actionName);
+        if (args is { Count: > 0 } && aliases is { Count: > 0 } && action is not null) {
+            foreach (var key in args.Keys.ToList()) {
+                var parameter = action.Parameters.FirstOrDefault(p =>
+                    string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase));
+                if (parameter is null
+                    || !state.Domain.Types.OfType<Entity>().Any(e =>
+                        string.Equals(e.Name, parameter.Type.TypeName, StringComparison.Ordinal)))
+                    continue;
+                if (args[key] is string given && aliases.TryGetValue(given, out var resolved))
+                    args[key] = resolved;
+            }
+        }
+
         ModuleOutcome outcome;
         try {
             outcome = executor.Invoke(instance, actionName, args);
@@ -687,7 +711,6 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
                 Affordances: ["get_instance", "list_instances"]);
         }
 
-        var action = ResolveAction(state, instance, stageBefore, actionName);
         var returnedType = action?.Result.Members.Count > 0 ? action.Result.Members[0].Type.TypeName : null;
         var errorMessage = outcome.Error;
         IReadOnlyList<string>? failedGuards = null;

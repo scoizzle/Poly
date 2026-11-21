@@ -443,7 +443,8 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42},\"as\":\"p\"}]. " +
             "A create's properties may name a singular navigation whose value is an instance id or an earlier step's alias, " +
-            "e.g. {\"Name\":\"Grace\",\"account\":\"acme\"}; a required navigation must be given at create.")] string steps,
+            "e.g. {\"Name\":\"Grace\",\"account\":\"acme\"}; a required navigation must be given at create. " +
+            "An invoke's entity-typed args value takes an instance id or an earlier step's alias the same way.")] string steps,
         [Description("Clear existing instances before running (default false).")] bool reset = false,
         [Description("Stop at the first failed step (default true).")] bool stopOnError = true) {
         if (!TryWorkspace(workspace, out var state))
@@ -498,7 +499,8 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                         workspace,
                         Resolve(Required(step, "instanceId"), aliases),
                         Required(step, "action"),
-                        OptionalJson(step, "args")),
+                        OptionalJson(step, "args"),
+                        aliases),
                     "evaluate" => _policy.EvaluatePolicy(
                         workspace,
                         Required(step, "entity"),

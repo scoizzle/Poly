@@ -34,6 +34,11 @@ internal class Fine : Poly.Runtime.IActionScoped
     public bool? Paid { get; private set; }
     public Patron? Patron { get; private set; }
     public FineStage CurrentStage { get; private set; }
+    internal void AttachPatron(Patron child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Patron = child;
+    }
     internal DomainResult Pay()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

@@ -26,6 +26,11 @@ internal class Contact : Poly.Runtime.IActionScoped
     public string Email { get; private set; } = default!;
     public Account? Account { get; private set; }
     public ContactStage CurrentStage { get; private set; }
+    internal void AttachAccount(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Account = child;
+    }
     internal DomainResult Retire()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

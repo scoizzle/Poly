@@ -45,6 +45,16 @@ internal class Room : Poly.Runtime.IActionScoped
         get => this._stays;
     }
     public RoomStage CurrentStage { get; private set; }
+    internal void AttachProperty(Property child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Property = child;
+    }
+    internal void AttachRoomType(RoomType child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.RoomType = child;
+    }
     internal void AttachStays(Reservation child)
     {
         Poly.Runtime.ActionScope.Touch(this);

@@ -381,7 +381,7 @@ public entity Order {
 | Equality | `equals(value)` | `Status: Text equals("Active")` |
 | Default | `default(value)` | `Status: MemberStatus default(Active)` |
 
-`Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`.
+`Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`. A `Decimal` *expression* cannot be stored in `Number` either (`assign N to N + D`): the fraction would be rounded away, so analysis refuses it — see the expression section below.
 
 A number literal is ASCII digits `0-9` with at most one `.` between digits: no sign, exponent or digit separator, and a non-ASCII digit such as `٣` is a positioned error. It is held exactly or it is a positioned error that states the limit: at most 28 digits after the point and no larger than `79228162514264337593543950335` (less with digits after the point). Nothing is rounded. Leading zeros and trailing fraction zeros are free (`007`, `1.0`). `length(...)` bounds and duration amounts are whole numbers written without a decimal point (`length(1.0)` and `1.0 Days` are errors), from 0 to `2147483647` and from 0 to `9223372036854775807`.
 
@@ -1321,6 +1321,14 @@ zero fraction is a whole number, so `7.0 / 2` is also 3; divide by a `Decimal` p
 function's return, a function argument and an invoke or fan-out argument, along the `+ - * /` spine of the value and
 into the arm values of a `match` (each arm is converted to the match's type, so `match { c -> 7 / 2, else -> 1.5 }`
 stores 3 for that arm). Like every analysis warning, it is not yet suppressible by an allowance (row T-08).
+
+The other direction is refused, not rounded: a `Decimal` value cannot be stored in a `Number` property, parameter or
+return. `assign N to N + D` (with `N: Number` and `D: Decimal`) is DMSEM003, `cannot assign 'Decimal' to 'Number'`,
+because the fraction would be rounded away (`3 + 0.5` would store 4). Store it in a `Decimal`, or compute it as a
+`Number`. The rule holds at every door — an `assign`, a `create` initializer, a function or action argument and a
+`default(...)`. A `Number` value widens onto a `Decimal` target, so `assign Total to N + M` into a `Decimal` is fine.
+Ruling Q6 allows a proven-safe rounding instead; that proof does not exist yet (row T-12), so nothing is rounded
+silently.
 
 #### Subject-First Related Reads (Q1′)
 

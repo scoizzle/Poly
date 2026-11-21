@@ -472,7 +472,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         DomainTypeLookupMetadata lookup,
         string? currentStage,
         string? peerBinding,
-        IReadOnlyDictionary<string, string?>? forBinders = null)
+        IReadOnlyDictionary<string, string?>? forBinders = null,
+        IReadOnlySet<string>? iteratedRelationships = null)
         : EffectDispatch<object?> {
         protected override object? Default() => null;
 
@@ -481,12 +482,33 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 Route(effect);
         }
 
+        /// <summary>
+        /// #607: a create that adds to the collection an enclosing <c>for</c> is enumerating
+        /// invalidates that enumeration part-way through the action — both hosts fail with
+        /// "Collection was modified", and the printed C# throws instead of returning a
+        /// <c>DomainResult</c>. Refuse it at analysis, naming the collection.
+        /// </summary>
+        private void RefuseCreateInIteratedRelationship(Effect effect, string relationshipName) {
+            if (iteratedRelationships?.Contains(relationshipName) != true)
+                return;
+            context.ReportError(
+                effect,
+                $"This create adds to '{relationshipName}', the collection the enclosing 'for' is iterating, " +
+                "so the loop's enumeration is invalidated part-way through the action (\"Collection was " +
+                "modified\") in both the simulator and the generated C#. Iterate a different relationship, " +
+                $"or create into a relationship the loop does not read (e.g. not '{relationshipName}').",
+                DomainModelDiagnosticCodes.CreateInIteratedRelationship);
+        }
+
         protected override object? CreateEntityInstance(CreateEntityInstance e) {
+            if (e.RelationshipName is { } relationshipName)
+                RefuseCreateInIteratedRelationship(e, relationshipName);
             ValidateCreateEntityInstance(context, e, entity, lookup, domain, action);
             return null;
         }
 
         protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect e) {
+            RefuseCreateInIteratedRelationship(e, e.RelationshipName);
             ValidateCreateEntityInRelationship(context, e, entity, domain, lookup, action);
             return null;
         }
@@ -543,10 +565,15 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             binders[e.BinderName] = null;
             if (ValidateForRelationship(context, domain, entity, e.RelationshipName, e, "ForEach") is { } iterated)
                 binders[e.BinderName] = iterated.Name;
+            // #607: the body cannot add to the collection this loop enumerates. The set is copied
+            // per loop so a nested `for` reports against every collection still being iterated.
+            var enclosingRelationships = new HashSet<string>(
+                iteratedRelationships ?? Enumerable.Empty<string>(), StringComparer.Ordinal) { e.RelationshipName };
             // Legality: the body may write only the owning entity's own state. An assign
             // through a relationship or the loop binder is another entity's state (DMEFF012,
             // the same rule as actions and `when`); mutate that entity with `invoke binder.Action`.
-            new EffectValidationDispatch(context, action, entity, domain, lookup, currentStage, peerBinding, binders)
+            new EffectValidationDispatch(
+                context, action, entity, domain, lookup, currentStage, peerBinding, binders, enclosingRelationships)
                 .RouteAll(e.Body);
             return null;
         }

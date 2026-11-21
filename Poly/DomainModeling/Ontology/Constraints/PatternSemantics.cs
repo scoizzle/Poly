@@ -30,6 +30,8 @@ internal static class PatternSemantics {
     /// True when <paramref name="value"/> matches <paramref name="pattern"/> under
     /// <see cref="EndAnchored"/>'s meaning. An unparsable pattern matches nothing
     /// instead of throwing; the caller's own validity diagnostic already reported it.
+    /// Default options, the same the printed <c>Regex.IsMatch(value, pattern)</c> uses: one
+    /// pattern matches the same way here, at the contract boundary and on the generated host.
     /// </summary>
     internal static bool TryMatch(string value, string pattern) {
         ArgumentNullException.ThrowIfNull(value);

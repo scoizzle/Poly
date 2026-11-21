@@ -126,6 +126,16 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
         var __name = name;
+        if (fines != null)
+        {
+            foreach (var __finesElement in fines)
+            {
+                if (__finesElement == null)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'fines' contains a null element.", "Patron.fines"));
+                }
+            }
+        }
         var created = new Patron(__name, fines);
         Poly.Runtime.ActionScope.Create(created, "Patron");
         return DomainResult<Patron>.Success(created);

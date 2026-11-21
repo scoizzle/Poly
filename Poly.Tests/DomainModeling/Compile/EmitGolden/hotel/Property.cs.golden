@@ -237,6 +237,26 @@ internal class Property : Poly.Runtime.IActionScoped
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'City' must be at most 60 characters.", "Property.City"));
         }
+        if (halls != null)
+        {
+            foreach (var __hallsElement in halls)
+            {
+                if (__hallsElement == null)
+                {
+                    return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Required("'halls' contains a null element.", "Property.halls"));
+                }
+            }
+        }
+        if (rooms != null)
+        {
+            foreach (var __roomsElement in rooms)
+            {
+                if (__roomsElement == null)
+                {
+                    return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Required("'rooms' contains a null element.", "Property.rooms"));
+                }
+            }
+        }
         var created = new Property(__name, __city, halls, rooms);
         Poly.Runtime.ActionScope.Create(created, "Property");
         return DomainResult<Property>.Success(created);

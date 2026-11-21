@@ -338,6 +338,16 @@ internal class Hall : Poly.Runtime.IActionScoped
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'property' is required.", "Hall.property"));
         }
         var __property = property;
+        if (sections != null)
+        {
+            foreach (var __sectionsElement in sections)
+            {
+                if (__sectionsElement == null)
+                {
+                    return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'sections' contains a null element.", "Hall.sections"));
+                }
+            }
+        }
         var created = new Hall(__name, __capacity, __dayRate, __occupied, __offline, __busySections, __property, sections);
         Poly.Runtime.ActionScope.Create(created, "Hall");
         if (property != null)

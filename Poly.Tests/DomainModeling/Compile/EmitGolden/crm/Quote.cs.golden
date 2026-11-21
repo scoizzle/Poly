@@ -269,6 +269,16 @@ internal class Quote : Poly.Runtime.IActionScoped
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Required("'opportunity' is required.", "Quote.opportunity"));
         }
         var __opportunity = opportunity;
+        if (lines != null)
+        {
+            foreach (var __linesElement in lines)
+            {
+                if (__linesElement == null)
+                {
+                    return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Required("'lines' contains a null element.", "Quote.lines"));
+                }
+            }
+        }
         var created = new Quote(__title, __amount, __opportunity, lines);
         Poly.Runtime.ActionScope.Create(created, "Quote");
         if (opportunity != null)

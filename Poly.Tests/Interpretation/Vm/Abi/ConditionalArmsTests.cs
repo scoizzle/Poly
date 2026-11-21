@@ -146,17 +146,19 @@ public class ConditionalArmsTests {
         await Assert.That(exec.GetValue<decimal>()).IsEqualTo((decimal)expected);
     }
 
-    /// <summary>Characterization of a known residual (#803, T-06): a nullable arm that is null when taken has no
-    /// value to merge and the VM throws today. Pinned so the row that fixes it flips this test.</summary>
+    /// <summary>#803: a nullable arm that is null when taken is null — the conditional's type is the
+    /// lifted one, so the taken arm has no value to read and the root is absent.</summary>
     [Test]
-    public async Task Conditional_NullableArmTakenWhileNull_ThrowsToday() {
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task Conditional_NullableArmTakenWhileNull_YieldsNull(bool nullableFirst) {
+        var nullable = new Parameter("p", TypeReference.To<long?>());
         var body = new Block([new Conditional(
-            new Parameter("flag", TypeReference.To<bool>()), new Parameter("p", TypeReference.To<long?>()), new Constant(5L))]);
-        var thrown = Assert.Throws<InvalidOperationException>(() => {
-            using var exec = Run(body, true, (object?)null);
-            _ = exec.GetValue<long?>();
-        });
-        await Assert.That(thrown.Message).Contains("Nullable object must have a value");
+            new Parameter("flag", TypeReference.To<bool>()),
+            nullableFirst ? nullable : new Constant(5L),
+            nullableFirst ? new Constant(5L) : nullable)]);
+        using var exec = Run(body, nullableFirst, (object?)null);
+        await Assert.That(exec.GetValue<long?>()).IsNull();
     }
 
     // The predicate's edges: only a scalar against a heap handle is rejected.

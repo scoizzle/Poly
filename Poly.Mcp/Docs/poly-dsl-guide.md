@@ -705,7 +705,12 @@ two sides contradict (the named navigation points elsewhere, declares a differen
 inverse, is the navigation itself, both ends are owned, an owned navigation is paired with a
 collection inverse, or two navigations on one entity claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
 cardinality class pair with a side that declares none. `create in` reads the declared
-inverse to pick the back-reference it fills; nothing else dispatches from it yet. `via <name>` is legal on an owned
+inverse to pick the back-reference it fills, and a create argument reads it to pick the peer
+navigation it wires: the one `via` names, or the one that declares `via` back. With neither
+declaration the pairing is the only navigation of the target's type — and on a
+self-relationship, where every navigation targets that type, only when nothing else points
+back: `referrer: Person` beside `friends: many Person` leaves `referrer` paired with nothing
+rather than guessed into `friends` (#584). Nothing else dispatches from `via` yet. `via <name>` is legal on an owned
 navigation too — that is how the back-reference names its owner, and only one side of a
 pair may own it. A member may still be named `via` (`via: Text`, `via(x: Text): action { }`): the
 clause starts whenever `via` is followed by anything other than `:` or `(`, so `via 123`

@@ -365,7 +365,8 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>Bitwise NOT in the operand's own ring slot — an in-place shape, not a spill
-    /// of a value form. A nullable operand uses the lifted operator.</summary>
+    /// of a value form. A nullable operand uses the lifted operator. A <c>uint</c> is 32 bits
+    /// wide, so its complement is the 32-bit one, zero-extended into the word.</summary>
     private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
         var ring = ctx.OpenRing();
         var compiled = CompileNode(n.Operand, ctx);
@@ -374,6 +375,9 @@ public static partial class AbiEmitter {
         if (HeapUnary(n.Operand, compiled, OnesComplement, "~", ctx) is { } heap)
             return heap;
         var slot = ring.AddValue(compiled);
+        if (IntegerWidthOf(n.Operand, ctx) == typeof(uint))
+            return ring.Then(Assign(slot.Read,
+                RingCodec.ToFrame(Not(RingCodec.AsRepresentation(slot.Read, typeof(uint))), typeof(uint), ctx.HeapLocal)));
         return ring.Then(Assign(slot.Read, Not(slot.Read)));
     }
 

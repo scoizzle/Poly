@@ -61,6 +61,11 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Loan>.Failure(loanResult.Error!);
         }
         var loan = loanResult.Value;
+        var __notify = loan.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Loan>.Failure(__notify.Error!);
+        }
         return DomainResult<Loan>.Success(loan);
     }
     internal void AttachLoans(Loan child)

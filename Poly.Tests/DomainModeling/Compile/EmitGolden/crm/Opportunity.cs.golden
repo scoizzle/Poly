@@ -25,6 +25,8 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     private List<Account>? _accountOpportunitiesWonSubscribers;
     private List<Account>? _accountOpportunitiesProposeSubscribers;
     private List<Account>? _accountOpportunitiesLostSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private Opportunity() { }
     private Opportunity(string title, decimal amount, DateOnly closeBy, Account? account, Contact? contact, IEnumerable<Activity>? activities, IEnumerable<Line>? lines, IEnumerable<Quote>? quotes)
@@ -600,6 +602,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Won");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Won");
+                return DomainResult.Success();
+            }
             if (this._accountOpportunitiesWonSubscribers != null)
             {
                 foreach (var sub in this._accountOpportunitiesWonSubscribers)
@@ -628,6 +635,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Propose");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Propose");
+                return DomainResult.Success();
+            }
             if (this._accountOpportunitiesProposeSubscribers != null)
             {
                 foreach (var sub in this._accountOpportunitiesProposeSubscribers)
@@ -651,6 +663,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Lost");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Lost");
+                return DomainResult.Success();
+            }
             if (this._accountOpportunitiesLostSubscribers != null)
             {
                 foreach (var sub in this._accountOpportunitiesLostSubscribers)
@@ -669,10 +686,65 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "Won")
+            {
+                var __notified0 = this.NotifyWonSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
+            if (__stage == "Propose")
+            {
+                var __notified1 = this.NotifyProposeSubscribers();
+                if (!__notified1.IsSuccess)
+                {
+                    return __notified1;
+                }
+            }
+            if (__stage == "Lost")
+            {
+                var __notified2 = this.NotifyLostSubscribers();
+                if (!__notified2.IsSuccess)
+                {
+                    return __notified2;
+                }
+            }
+        }
+        return DomainResult.Success();
+    }
     private DomainResult __EnterInitialStage()
     {
         Poly.Runtime.ActionScope.Touch(this);
-        this.Probability = 10L;
+        this.__deferringStageNotifications = true;
+        try
+        {
+            this.Probability = 10L;
+        }
+        finally
+        {
+            this.__deferringStageNotifications = false;
+        }
         return DomainResult.Success();
     }
     internal static DomainResult<Opportunity> Create(string? title = default, decimal? amount = default, DateOnly? closeBy = default, Account? account = default, Contact? contact = default, IEnumerable<Activity>? activities = default, IEnumerable<Line>? lines = default, IEnumerable<Quote>? quotes = default)
@@ -752,7 +824,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[14];
+        var __state = new object?[16];
         __state[0] = this.Title;
         __state[1] = this.Amount;
         __state[2] = this.CloseBy;
@@ -766,7 +838,9 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         __state[10] = (this._accountOpportunitiesWonSubscribers == null ? null : new List<Account>(this._accountOpportunitiesWonSubscribers));
         __state[11] = (this._accountOpportunitiesProposeSubscribers == null ? null : new List<Account>(this._accountOpportunitiesProposeSubscribers));
         __state[12] = (this._accountOpportunitiesLostSubscribers == null ? null : new List<Account>(this._accountOpportunitiesLostSubscribers));
-        __state[13] = this._notifyDepth;
+        __state[13] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[14] = this.__deferringStageNotifications;
+        __state[15] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -842,6 +916,23 @@ internal class Opportunity : Poly.Runtime.IActionScoped
                 this._accountOpportunitiesLostSubscribers.Add(__item12);
             }
         }
-        this._notifyDepth = (int)__saved[13]!;
+        if (__saved[13] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item13 in(List<string>)__saved[13]!)
+            {
+                this.__pendingStageNotifications.Add(__item13);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[14]!;
+        this._notifyDepth = (int)__saved[15]!;
     }
 }

@@ -454,6 +454,11 @@ public sealed class NameScopeTests {
             "_notifyDepth",
             "EnterNotifyCascade",
             "ExitNotifyCascade",
+            // #630: the creation-time notification record and its replay on a watched target.
+            "__pendingStageNotifications",
+            "__deferringStageNotifications",
+            "__DeferStageNotification",
+            "__ReplayStageNotifications",
         };
         var reserved = ReservedNames.ForEntity(group, domain).Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
 

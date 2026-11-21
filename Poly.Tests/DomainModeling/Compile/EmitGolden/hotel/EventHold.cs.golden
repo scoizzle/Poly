@@ -20,6 +20,8 @@ internal enum EventHoldStage
 internal class EventHold : Poly.Runtime.IActionScoped
 {
     private List<Guest>? _guestEventsReleasedSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private EventHold() { }
     private EventHold(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest, Hall? hall, Section? section)
@@ -350,6 +352,11 @@ internal class EventHold : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Released");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Released");
+                return DomainResult.Success();
+            }
             if (this._guestEventsReleasedSubscribers != null)
             {
                 foreach (var sub in this._guestEventsReleasedSubscribers)
@@ -365,6 +372,37 @@ internal class EventHold : Poly.Runtime.IActionScoped
         finally
         {
             this.ExitNotifyCascade(__depth);
+        }
+        return DomainResult.Success();
+    }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "Released")
+            {
+                var __notified0 = this.NotifyReleasedSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
         }
         return DomainResult.Success();
     }
@@ -475,7 +513,7 @@ internal class EventHold : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[11];
+        var __state = new object?[13];
         __state[0] = this.Headcount;
         __state[1] = this.Capacity;
         __state[2] = this.DayRate;
@@ -486,7 +524,9 @@ internal class EventHold : Poly.Runtime.IActionScoped
         __state[7] = this.Section;
         __state[8] = this.CurrentStage;
         __state[9] = (this._guestEventsReleasedSubscribers == null ? null : new List<Guest>(this._guestEventsReleasedSubscribers));
-        __state[10] = this._notifyDepth;
+        __state[10] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[11] = this.__deferringStageNotifications;
+        __state[12] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -517,6 +557,23 @@ internal class EventHold : Poly.Runtime.IActionScoped
                 this._guestEventsReleasedSubscribers.Add(__item9);
             }
         }
-        this._notifyDepth = (int)__saved[10]!;
+        if (__saved[10] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item10 in(List<string>)__saved[10]!)
+            {
+                this.__pendingStageNotifications.Add(__item10);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[11]!;
+        this._notifyDepth = (int)__saved[12]!;
     }
 }

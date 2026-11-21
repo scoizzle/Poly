@@ -1177,6 +1177,14 @@ collection relationship is read by a subscription or a `for` loop while nothing 
 domain writes it. The loop itself is then a no-op (zero records); the warning, not a
 runtime failure, is the signal.
 
+**A create-time entry reports every stage it entered.** The child is related to nobody
+while its initial stage's `entry` runs, so nothing fires then; `create in` links the child
+first and only then reports, in entry order, the initial stage and each stage that entry
+`transition`ed into. A parent watching `items Ready` therefore fires when the child reaches
+`Ready` inside its own entry, and a parent watching both `items Start` and `items Ready`
+fires `Start` then `Ready`. A failing handler there fails the `create in` and rolls it
+back like any other handler failure.
+
 | Placement | Active when | Optional `as name` |
 |-----------|-------------|--------------------|
 | **Stage-scoped** (`when` inside a stage body) | Only while the subscriber is **in that stage** | Yes — same peer rules |

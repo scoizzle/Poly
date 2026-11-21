@@ -199,7 +199,8 @@ public class ActionScopeEmitTests {
         var (cs, _) = Print(Dsl, "ActionScopeNames");
         // L-03c adds `__depth`, the notify cascade's entry depth (a local of Notify{Stage}Subscribers).
         // L-08b adds the effective-value local of each Required or Defaulted create slot (`__` + the slot).
-        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+|code|label|score)$");
+        // #630 adds the create-time notification record: its queue, its window flag, and the record and replay methods.
+        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+|code|label|score|pending\w*|stage|notified\d+|deferringStageNotifications|DeferStageNotification|ReplayStageNotifications)$");
         var stray = Regex.Matches(cs, @"\b__\w+").Select(m => m.Value).Where(n => !allowed.IsMatch(n)).Distinct().ToList();
         await Assert.That(string.Join(",", stray)).IsEqualTo("");
 
@@ -373,7 +374,10 @@ public class ActionScopeEmitTests {
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)) {
             var element = type.GetGenericArguments()[0];
             var list = (IList)(current ?? Activator.CreateInstance(type)!);
-            list.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(element));
+            // #630: the creation-time notification queue holds strings, which GetUninitializedObject refuses.
+            list.Add(element == typeof(string)
+                ? "mutated"
+                : System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(element));
             field.SetValue(instance, list);
         }
         else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(HashSet<>)) {

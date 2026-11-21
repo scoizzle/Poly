@@ -17,6 +17,8 @@ internal enum FineStage
 internal class Fine : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronFinesResolvedSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private Fine() { }
     private Fine(long amount, string reason, DateTime dateIssued, bool? paid, Patron? patron)
@@ -148,6 +150,11 @@ internal class Fine : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Resolved");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Resolved");
+                return DomainResult.Success();
+            }
             if (this._patronFinesResolvedSubscribers != null)
             {
                 foreach (var sub in this._patronFinesResolvedSubscribers)
@@ -163,6 +170,37 @@ internal class Fine : Poly.Runtime.IActionScoped
         finally
         {
             this.ExitNotifyCascade(__depth);
+        }
+        return DomainResult.Success();
+    }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "Resolved")
+            {
+                var __notified0 = this.NotifyResolvedSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
         }
         return DomainResult.Success();
     }
@@ -230,7 +268,7 @@ internal class Fine : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[8];
+        var __state = new object?[10];
         __state[0] = this.Amount;
         __state[1] = this.Reason;
         __state[2] = this.DateIssued;
@@ -238,7 +276,9 @@ internal class Fine : Poly.Runtime.IActionScoped
         __state[4] = this.Patron;
         __state[5] = this.CurrentStage;
         __state[6] = (this._patronFinesResolvedSubscribers == null ? null : new List<Patron>(this._patronFinesResolvedSubscribers));
-        __state[7] = this._notifyDepth;
+        __state[7] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[8] = this.__deferringStageNotifications;
+        __state[9] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -266,6 +306,23 @@ internal class Fine : Poly.Runtime.IActionScoped
                 this._patronFinesResolvedSubscribers.Add(__item6);
             }
         }
-        this._notifyDepth = (int)__saved[7]!;
+        if (__saved[7] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item7 in(List<string>)__saved[7]!)
+            {
+                this.__pendingStageNotifications.Add(__item7);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[8]!;
+        this._notifyDepth = (int)__saved[9]!;
     }
 }

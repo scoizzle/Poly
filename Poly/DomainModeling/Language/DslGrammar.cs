@@ -298,6 +298,7 @@ public static class DslGrammar {
             .Pattern("null").Kind(DslTokenKind.Null).Fold(ExpressionFoldTable.Null).Commit()
             .Pattern("group").Kind(DslTokenKind.LParen).Commit()
             .Pattern("not").Kind(DslTokenKind.Not).Commit()
+            .Pattern("minus").Kind(DslTokenKind.Minus).Commit()
             .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
             .Pattern("match", priority: 3)

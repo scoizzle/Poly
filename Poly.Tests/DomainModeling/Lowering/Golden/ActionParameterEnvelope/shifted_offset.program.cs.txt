@@ -38,7 +38,8 @@ app.MapPost("/api/books", async (BookDto dto, TDbCtx db) => {
     }
     db.Books.Add(bookResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(bookResult.Value);
+    var createdId = db.Entry(bookResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/books/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), bookResult.Value);
 });
 
 app.MapPost("/api/books/{id}/shift", async (int id, ShiftDto dto, TDbCtx db) => {

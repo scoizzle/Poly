@@ -92,7 +92,8 @@ app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
     }
     db.Accounts.Add(accountResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(accountResult.Value);
+    var createdId = db.Entry(accountResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/accounts/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), accountResult.Value);
 });
 
 app.MapGet("/api/campaigns", async (CrmDbContext db) => await db.Campaigns.ToListAsync());
@@ -107,7 +108,8 @@ app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
     }
     db.Campaigns.Add(campaignResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(campaignResult.Value);
+    var createdId = db.Entry(campaignResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/campaigns/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), campaignResult.Value);
 });
 
 app.MapGet("/api/accounts/{id}/hq", async (int id, CrmDbContext db) => {

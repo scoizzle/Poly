@@ -205,7 +205,8 @@ public sealed partial class DbContextGenerator {
             ? Pluralize(entity.Name)
             : store.TableName;
 
-    private static string ShadowKeyName(Entity entity, StorageEntity store) {
+    /// <summary>The shadow key's EF property name, shared with the create route's <c>Location</c> (#589).</summary>
+    internal static string ShadowKeyName(Entity entity, StorageEntity store) {
         var taken = entity.Properties.Any(p => p.Name == "Id")
             || store.Columns.Any(c => c.Name == "Id");
         return taken ? "PolyId" : "Id";

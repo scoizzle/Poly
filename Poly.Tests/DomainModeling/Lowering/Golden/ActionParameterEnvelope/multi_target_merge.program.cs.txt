@@ -38,7 +38,8 @@ app.MapPost("/api/pairs", async (PairDto dto, TDbCtx db) => {
     }
     db.Pairs.Add(pairResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(pairResult.Value);
+    var createdId = db.Entry(pairResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/pairs/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), pairResult.Value);
 });
 
 app.MapPost("/api/pairs/{id}/both", async (int id, BothDto dto, TDbCtx db) => {

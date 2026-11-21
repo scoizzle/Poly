@@ -18,6 +18,9 @@
 > `Entity.Action` select carries a witness; a stage-qualified `Entity.Stage.Action` select does not.
 > Each result's text block is a prose summary (outcome, `workspace:` handle, findings, `next:`
 > calls, flattened data); the full envelope is in `structuredContent`.
+> `poly_check` findings carry the source `line`/`column` when the stored document's outline reaches
+> the element, the same position `poly_define` reports; `data.hints` lists the hints the summary
+> counts (`data.hintCount` is the total, up to 20 are listed).
 
 ---
 

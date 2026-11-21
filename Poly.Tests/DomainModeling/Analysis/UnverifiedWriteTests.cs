@@ -161,9 +161,9 @@ public class UnverifiedWriteTests {
     }
 
     [Test]
-    public async Task DivisionIntoRangedProperty_WarnsUnverified() {
-        // Division is not modelled by the interval flow: it is a named, unsupported operator.
-        // (V-06 flips this to a decided write; the hand-off note lives on the unit's PR.)
+    public async Task DivisionIntoRangedProperty_ReportsTheQuotientRange() {
+        // #579's example, decided by #1040: `Q / 2` is [0, 50], which can fall outside range(0, 10).
+        // (This test pinned "not modelled" until the interval row landed; V-06 flips it to a decided write.)
         var result = Parse("""
             domain Test
             Box: entity {
@@ -176,8 +176,10 @@ public class UnverifiedWriteTests {
         var findings = Findings(result.Analysis, "T");
 
         await Assert.That(findings.Count).IsEqualTo(1);
-        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
-        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnsupportedOperator);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(findings[0].Message).Contains("[0, 50] can fall outside");
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
     }
 
     // ── the fail-closed kind default, end to end ─────────────────────────
@@ -531,9 +533,10 @@ public class UnverifiedWriteTests {
     }
 
     [Test]
-    public async Task AssignLongerTextProperty_IntoShorterTarget_IsUnverified() {
+    public async Task AssignLongerTextProperty_IntoShorterTarget_ReportsTheLengthRange() {
         // #582, and the review H8 pin flipped by V-08: Length is write-relevant, so a Text copy whose
         // own length range is not inside the target's is an unverified write, never a silent one.
+        // #1040 makes that length range known, so the finding names it as a DMEFF008 warning.
         var result = Parse("""
             domain Test
             Box: entity {
@@ -546,8 +549,9 @@ public class UnverifiedWriteTests {
         var findings = Findings(result.Analysis, "Short");
 
         await Assert.That(findings.Count).IsEqualTo(1);
-        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
         await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(findings[0].Message).Contains("[0, 50] can fall outside");
         await Assert.That(findings[0].Message).Contains("length(0, 5)");
         var facts = Facts(result);
         await Assert.That(facts.Unverified.Count).IsEqualTo(1);
@@ -557,8 +561,8 @@ public class UnverifiedWriteTests {
     }
 
     [Test]
-    public async Task ConcatOntoBoundedText_IsUnverified() {
-        // #582: `S + "xx"` carries no length range, so the write cannot be proven inside length(1, 3).
+    public async Task ConcatOntoBoundedText_ReportsTheLengthRange() {
+        // #582's example, decided by #1040: `S + "xx"` is length [3, 5], which can fall outside length(1, 3).
         var result = Parse("""
             domain Test
             Box: entity {
@@ -570,7 +574,10 @@ public class UnverifiedWriteTests {
         var findings = Findings(result.Analysis, "S");
 
         await Assert.That(findings.Count).IsEqualTo(1);
-        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(findings[0].Message).Contains("[3, 5] can fall outside");
+        await Assert.That(findings[0].Message).Contains("length(1, 3)");
         await Assert.That(Facts(result).Unverified.Count).IsEqualTo(1);
     }
 
@@ -766,14 +773,16 @@ public class UnverifiedWriteTests {
 
     [Test]
     public async Task NestedUnmodelledOperator_ReasonIsUnsupportedOperator() {
-        // Division is nested inside an Add: the reason is the operator analysis does not model, not
-        // "UnknownBound" from the top-level Add.
+        // A call has no interval row and is nested inside an Add: the reason is the operator analysis
+        // does not model, not "UnknownBound" from the top-level Add. (This was `Q / 2 + 1` until
+        // #1040 gave `/` a row; a call is still unmodelled.)
         var result = Parse("""
             domain Test
+            function Bump(n: Number): Number = n + 1
             Box: entity {
               Q: Number range(0, 100)
               T: Number range(0, 10)
-              Run: action { assign T to Q / 2 + 1 }
+              Run: action { assign T to Bump(Q) + 1 }
             }
             """);
 
@@ -809,5 +818,280 @@ public class UnverifiedWriteTests {
         await Assert.That(findings[0].Message).Contains("has no range(0, 100) constraint");
         await Assert.That(findings[0].Message).DoesNotContain("Effect-chain constraint");
         await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(domain)!.Unverified.Count).IsEqualTo(1);
+    }
+
+    // ── #1040: division, Text length and match arms carry an interval ────
+
+    [Test]
+    public async Task Division_EntirelyOutsideTheTarget_IsAnError() {
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Q: Number range(20, 40)
+              T: Number range(0, 3)
+              Run: action { assign T to Q / 2 }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "T");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(findings[0].Message).Contains("[10, 20] is entirely outside");
+    }
+
+    [Test]
+    public async Task Division_ProvenInsideTheTarget_IsSilent() {
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Q: Number range(0, 10)
+              T: Number range(0, 5)
+              Run: action { assign T to Q / 2 }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "T")).IsEmpty();
+        await Assert.That(Facts(result).Verified).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Division_ByAnIntervalIncludingZero_IsUnknown() {
+        // A divisor that can be zero has no quotient range; the reason is a missing bound, not an
+        // operator the analysis does not model (division by zero is #502's).
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Q: Number range(0, 10)
+              D: Number range(-5, 5)
+              T: Number range(0, 10)
+              Run: action { assign T to Q / D }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "T");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+    }
+
+    [Test]
+    public async Task Division_WithANegativeDivisor_IsDecided() {
+        // The DSL number literal is unsigned, so a negative divisor is written as a subtraction.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Q: Number range(0, 10)
+              T: Number range(-5, 5)
+              Run: action { assign T to Q / (0 - 2) }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "T")).IsEmpty();
+        await Assert.That(Facts(result).Verified).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ConcatWithinTheTarget_IsSilent() {
+        // A LengthInterval through `+` with a literal: [1, 1] + [2, 2] = [3, 3], inside length(1, 3).
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Short: Text length(1, 1)
+              T: Text length(1, 3)
+              Run: action { assign T to Short + "xx" }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "T")).IsEmpty();
+        await Assert.That(Facts(result).Verified).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task TextWithoutALengthConstraint_IsZeroToUnbounded() {
+        // A Text with no `length(...)` is still [0, +∞): a lower bound exists, so the message names the
+        // interval rather than claiming the value has no bound.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Bounded: Text length(1, 5)
+              Plain: Text
+              Run: action { assign Bounded to Plain }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Bounded");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(findings[0].Message).Contains("[0, +∞] can fall outside");
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+    }
+
+    [Test]
+    public async Task MatchArms_PartlyOutsideTheTarget_ReportTheHull() {
+        // #608's example, decided: the union of the arm values is [1, 500].
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Qty: Number range(0, 100)
+              Run: action { assign Qty to match { Qty >= 0 -> 500, else -> 1 } }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Qty");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(findings[0].Message).Contains("[1, 500] can fall outside");
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+    }
+
+    [Test]
+    public async Task MatchArms_EntirelyOutsideTheTarget_IsAnError() {
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Qty: Number range(0, 100)
+              Run: action { assign Qty to match { Qty >= 0 -> 500, else -> 600 } }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Qty");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(findings[0].Message).Contains("[500, 600] is entirely outside");
+    }
+
+    [Test]
+    public async Task MatchArms_AllInsideTheTarget_AreSilent() {
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Qty: Number range(0, 10)
+              Run: action { assign Qty to match { Qty >= 5 -> 5, else -> 7 } }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "Qty")).IsEmpty();
+        await Assert.That(Facts(result).Verified).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task PatternMismatch_IsNeverReportedAsALengthProblem() {
+        // A Text carrying a different pattern is a PossibleViolation, but it is a pattern's finding:
+        // the length interval #1040 computes must not be read against a pattern constraint.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              A: Text pattern("^a+$")
+              B: Text pattern("^b+$")
+              Run: action { assign A to B }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "A");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(findings[0].Message).Contains("pattern(^a+$)");
+        await Assert.That(findings[0].Message).DoesNotContain("length");
+    }
+
+    [Test]
+    public async Task ConcatOfAnOptionalText_IsNotProvenFromItsDeclaredMinimum() {
+        // C# string concatenation treats a null operand as "": `A + "!"` with a null A is "!" (length 1),
+        // and the runtime length guard applies to a present value only. So an absence-capable member
+        // contributes 0, never its declared minimum — [1, 11], not the [6, 11] that would be "proven".
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              A: Text optional length(5, 10)
+              B: Text length(4, 11)
+              Run: action { assign B to A + "!" }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "B");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Message).Contains("[1, 11] can fall outside");
+    }
+
+    [Test]
+    public async Task MatchInAForEachBinding_ReadsTheIteratedEntity() {
+        // A binder-rooted read inside a match arm belongs to the ITERATED entity. The caller's to-one
+        // navigation of the same name (`line: Filter`) must not supply the interval: [0, 5] from Filter
+        // would prove the callee's write, while the iterated Line's Qty is [100, 200].
+        var result = Parse("""
+            domain Test
+            Filter: entity {
+              Qty: Number range(0, 5)
+            }
+            Line: entity {
+              Qty: Number range(100, 200)
+              T: Number range(0, 10)
+              Mark: action (amount: Number) { assign T to amount }
+            }
+            Order: entity {
+              line: Filter
+              lines: many Line
+              Go: action { for lines as line invoke line.Mark(amount: match { line Qty > 0 -> line Qty, else -> 0 }) }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "T").Where(f =>
+            f.Code == DomainModelDiagnosticCodes.EffectConstraintViolation).ToList();
+
+        // The iterated Line's [0, 200] (its arm, hulled with the else's 0) is what can fall outside
+        // range(0, 10) — never Filter's [0, 5], which would have been proven silently.
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Message).Contains("[0, 200] can fall outside");
+    }
+
+    [Test]
+    public async Task Division_QuotientBeyondDecimalRange_IsUnknownNotACrash() {
+        // 10^21 / 10^-8 is 10^29, beyond decimal.MaxValue: that corner has no representable endpoint,
+        // so the row answers unknown. It must not throw out of the analysis.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Big: Decimal range(0, 1000000000000000000000)
+              Tiny: Decimal range(0.00000001, 1)
+              T: Decimal range(0, 10)
+              Run: action { assign T to Big / Tiny }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "T");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+    }
+
+    [Test]
+    public async Task MatchArm_WithNoInterval_IsUnknown() {
+        // One arm is unbounded, so the match has no hull: unknown, never a guess.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Qty: Number range(0, 100)
+              U: Number
+              Run: action { assign Qty to match { Qty >= 0 -> U, else -> 1 } }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Qty");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
     }
 }

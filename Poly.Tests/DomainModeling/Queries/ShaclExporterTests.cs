@@ -95,6 +95,91 @@ public class ShaclExporterTests {
             .Because("RDF-term equality needs the literal datatype");
     }
 
+    /// <summary>#553: a default is one typed literal of the property's datatype — the same datatype the shape declares —
+    /// so a consumer reads `true` as a boolean and `x` as text, not the text <c>True</c> or the DSL's quotes. An enum
+    /// member is the member's IRI, as <c>sh:in</c> writes it, and a runtime default (<c>Now</c>) is omitted: it has no
+    /// static value on any door.</summary>
+    [Test]
+    public async Task Export_DefaultIsATypedLiteralAndARuntimeDefaultIsOmitted() {
+        var root = Export("""
+            domain Defaults
+            uses temporal
+            uses persistence
+
+            Color: enum { Red, Green }
+
+            Job: entity {
+              At: DateTime default(Now)
+              Active: Boolean default(true)
+              Mode: Text default("x")
+              Count: Number default(3)
+              Shade: Color default(Red)
+            }
+            """);
+
+        var active = PropertyShape(root, "urn:poly:Defaults/Job/Active")!;
+        await Assert.That(active["x-poly-default"]!["@value"]!.GetValue<bool>()).IsTrue();
+        await Assert.That(active["x-poly-default"]!["@type"]!.GetValue<string>())
+            .IsEqualTo("http://www.w3.org/2001/XMLSchema#boolean")
+            .Because("a default carries the datatype its sh:datatype declares");
+
+        var mode = PropertyShape(root, "urn:poly:Defaults/Job/Mode")!;
+        await Assert.That(mode["x-poly-default"]!["@value"]!.GetValue<string>()).IsEqualTo("x")
+            .Because("the DSL's quotes are the syntax, not the value");
+        await Assert.That(mode["x-poly-default"]!["@type"]!.GetValue<string>())
+            .IsEqualTo("http://www.w3.org/2001/XMLSchema#string");
+
+        var count = PropertyShape(root, "urn:poly:Defaults/Job/Count")!;
+        await Assert.That(count["x-poly-default"]!["@value"]!.GetValue<long>()).IsEqualTo(3);
+        await Assert.That(count["x-poly-default"]!["@type"]!.GetValue<string>())
+            .IsEqualTo("http://www.w3.org/2001/XMLSchema#integer");
+
+        var shade = PropertyShape(root, "urn:poly:Defaults/Job/Shade")!;
+        await Assert.That(shade["x-poly-default"]!["@id"]!.GetValue<string>())
+            .IsEqualTo("urn:poly:Defaults/Color/Red");
+
+        var at = PropertyShape(root, "urn:poly:Defaults/Job/At")!;
+        await Assert.That(at["x-poly-default"]).IsNull()
+            .Because("Now is a runtime default: SHACL's defaults are constants, so it is omitted, not a placeholder");
+    }
+
+    /// <summary>#553: the default the SHACL export carries is the one the JSON Schema export carries, on the same
+    /// domain: a literal is present on both, an enum member on both, and a runtime default on neither. The two cannot
+    /// disagree about which defaults are static.</summary>
+    [Test]
+    public async Task Export_Default_AgreesWithJsonSchemaOnWhichDefaultsAreStatic() {
+        const string poly = """
+            domain Defaults
+            uses temporal
+            uses persistence
+
+            Color: enum { Red, Green }
+
+            Job: entity {
+              At: DateTime default(Now)
+              Active: Boolean default(true)
+              Mode: Text default("x")
+              Shade: Color default(Red)
+            }
+            """;
+        var (domain, _) = EvolvedDomain.FromDsl(poly);
+        var shacl = JsonNode.Parse(ShaclExporter.Export(domain))!;
+        var schema = JsonNode.Parse(JsonSchemaExporter.Export(domain))!;
+        var properties = schema["$defs"]!["Job"]!["properties"]!;
+
+        foreach (var (name, iri) in new[] {
+            ("At", "urn:poly:Defaults/Job/At"),
+            ("Active", "urn:poly:Defaults/Job/Active"),
+            ("Mode", "urn:poly:Defaults/Job/Mode"),
+            ("Shade", "urn:poly:Defaults/Job/Shade"),
+        }) {
+            var shape = PropertyShape(shacl, iri)!;
+            await Assert.That(shape["x-poly-default"] is not null)
+                .IsEqualTo(properties[name]!["default"] is not null)
+                .Because(name);
+        }
+    }
+
     [Test]
     public async Task Export_RequirednessUsesTheCreateRule() {
         var root = Export(Catalog);

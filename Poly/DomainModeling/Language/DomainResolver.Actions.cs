@@ -124,7 +124,13 @@ public sealed partial class DomainResolver {
 
     private void ParsePolicy(string name, List<DomainChange> changes) {
         Advance(); // consume 'policy'
-        Expect(TokenKind.LBrace);
+        // `policy external` has no body of its own; name it instead of reporting the body's missing '{' (#522).
+        if (Current.Kind != TokenKind.LBrace) {
+            throw Error(Current.Kind == TokenKind.Identifier && Current.TextEquals("external")
+                ? "'policy external' is not supported. Write the policy body inline: P: policy { <expression> }."
+                : $"Expected LBrace, got '{Shown(Current)}' ({Current.Kind})");
+        }
+        Advance(); // consume '{'
         var expr = ParseExpression();
         changes.Add(new AddPolicyToEntityChange(_currentEntityName, new Policy(name, expr)));
         _entityPolicies[name] = expr;

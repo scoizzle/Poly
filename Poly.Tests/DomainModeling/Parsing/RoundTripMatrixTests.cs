@@ -136,7 +136,7 @@ public sealed class RoundTripMatrixTests {
             "G-30", "#850", "compare", null),
         ("a bare many-to-one to a target named like an unsupported keyword prints text the reader refuses",
             id => IsKeywordTarget(id, "ManyToOne", unsupported: true),
-            "G-30", "#799", "parse", nameof(FormatException)),
+            "G-30", "#799", "parse", nameof(GrammarException)),
         ("a Duration default prints (T-10a added its print binder) and reads back without the `temporal` extension: the printer elides the implicit `uses temporal` (the cause the date offset cell below shares)",
             id => id.StartsWith("duration/", StringComparison.Ordinal),
             "G-34", "none", "compare", null),

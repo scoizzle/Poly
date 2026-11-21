@@ -89,7 +89,10 @@ public sealed class PolyCompiler {
         ArgumentNullException.ThrowIfNull(analysis);
         var build = new DiagnosticBuilder(file, "");
         var diags = new List<CompileDiagnostic>();
-        var files = ProduceFiles(build, diags, session, domain, analysis);
+        // Lower, the lowered module's VM analysis and the C# print all recurse over the tree, so this door runs on the
+        // same parse stack Compile and Analyze use: the caller's stack must not decide whether a legal document emits
+        // (#882, where a 256-level policy aborted a 512 KB caller in ConstantFoldingPass).
+        var files = DslLimits.RunOnParseStack(() => ProduceFiles(build, diags, session, domain, analysis));
         return new CompileResult(file, domain.Name, diags, files, domain, analysis, session, session.ArtifactCatalog);
     }
 

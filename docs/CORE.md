@@ -242,7 +242,7 @@ Host-neutral types/members (`Poly/Introspection/`); CLR is first provider. Consu
 
 Simulate = Interpreter on lowered module bodies with caller-supplied context — not Domain/Effect IR. Extensions: one `.poly` language; session loads `uses` ids (unknown/duplicate fail closed). Persistence/HTTP emit doors only when listed. Core seed does not emit `Program.cs`.
 
-Tool arguments are validated before the SDK binder from each tool's published `inputSchema`; caller errors are `UNKNOWN_ARGUMENT`, `INVALID_ARGUMENT`, `WORKSPACE_REQUIRED` or (`poly_inspect` only) `ELEMENT_NOT_FOUND`, and `INTERNAL_ERROR` means a defect. A JSON error inside a tool body (`steps`, `bindings`, `args`) still returns `ok:false` with no `errorCode` until M-07.
+Tool arguments are validated before the SDK binder from each tool's published `inputSchema`; caller errors are `UNKNOWN_ARGUMENT`, `INVALID_ARGUMENT`, `WORKSPACE_REQUIRED` or (`poly_inspect` only) `ELEMENT_NOT_FOUND`, and `INTERNAL_ERROR` means a defect. `poly_simulate.steps` publishes `string` **or** `array` (M-07's array half of #488): the host builds its tools through `PolySurfaceTools.McpTools`, so the union is in `tools/list` and the validator derives the acceptance from it, and an array and its JSON text run one scenario. JSON text that is not a step array, and a body-level `bindings`/`args` error, still return `ok:false` with no `errorCode` until M-07's typed-step half.
 
 ### 3.7 Debugging
 

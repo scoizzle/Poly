@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
@@ -38,11 +39,10 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         var created = request.ParameterOn("Create");
         var parameter = created ?? new Parameter(parameterName, text);
         var value = created is null ? parameter : DomainToCSharpExporter.CreateValueOf(request.Property, created);
-        // The effective-value local holds the slot's own type (`T`, not `T?`); an Optional slot's
-        // parameter keeps its declared `T?`, whose port value is `.ToString()` as before (#611).
-        var valueType = created is not null && value is not Parameter && parameter.TypeReference is OptionalTypeReference optional
-            ? optional.InnerType
-            : parameter.TypeReference;
+        // The port value is the value itself for a Text and its string form otherwise. A slot's
+        // parameter is `T?`; the presence guard below narrows it to `T`, so the argument is clean
+        // and no nullable value is dereferenced (#634).
+        var valueType = parameter.TypeReference is OptionalTypeReference optional ? optional.InnerType : parameter.TypeReference;
         Node portValue = IsString(valueType) ? value : new Invoke(new Member(value, "ToString"));
 
         var methodName = "ExistsWith" + propertyName;
@@ -74,6 +74,15 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
             new Constant(entityName),
             new Constant(propertyName),
             portValue);
+        // An absent optional value is not a key: it is neither checked nor recorded, so any number
+        // of instances may omit it and no null is ever stored as a key (#611, #634). A Required or
+        // Defaulted slot's value cannot be null here; its own check has already refused a missing one.
+        if (created is not null
+            && EntityStructureAnalyzer.SlotKindFor(request.Property) is CreateSlotKind.Optional) {
+            var present = new NotEqual(value, new Constant(null));
+            guard = new IfStatement(present, new Block([guard]));
+            record = new IfStatement(present, new Block([record]));
+        }
 
         return new ConstraintContribution(
             LibraryId,

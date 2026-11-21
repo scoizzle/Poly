@@ -185,15 +185,18 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
 
     protected override object? EvaluateCore(string policy) => Method(policy).Invoke(Current, null);
 
-    /// <summary>The printed inverse of a create-in: <c>Attach&lt;Nav&gt;(child)</c>, internal, void.</summary>
+    /// <summary>The printed inverse of a create-in: <c>Attach&lt;Nav&gt;(child)</c>, internal, returning the result.</summary>
     protected override StepResult LinkCore(string relationship, object?[] targets) {
         var name = "Attach" + char.ToUpperInvariant(relationship[0]) + relationship[1..];
         var method = Current.GetType()
             .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             .FirstOrDefault(m => m.Name == name && m.GetParameters().Length == 1)
             ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no '{name}'.");
-        foreach (var target in targets)
-            method.Invoke(Current, [target]);
+        foreach (var target in targets) {
+            var outcome = Unpack(method.Invoke(Current, [target])!);
+            if (!outcome.Success)
+                return outcome;
+        }
         return (true, null, null);
     }
 

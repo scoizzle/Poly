@@ -206,7 +206,11 @@ internal class Fine : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Fine");
         if (patron != null)
         {
-            patron.AttachFines(created);
+            var __attach = patron.AttachFines(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Fine>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Fine>.Success(created);
     }

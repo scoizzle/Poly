@@ -76,12 +76,13 @@ internal class Student : Poly.Runtime.IActionScoped
         var enrollment = enrollmentResult.Value;
         return DomainResult<Enrollment>.Success(enrollment);
     }
-    internal void AttachEnrollments(Enrollment child)
+    internal DomainResult AttachEnrollments(Enrollment child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._enrollments.Add(child);
         child.RegisterStudentEnrollmentsDroppedSubscriber(this);
         child.RegisterStudentEnrollmentsCompletedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Enrollment> Enroll(Section offering)
     {

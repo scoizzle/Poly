@@ -151,7 +151,11 @@ internal class Visit : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Visit");
         if (patient != null)
         {
-            patient.AttachVisits(created);
+            var __attach = patient.AttachVisits(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Visit>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Visit>.Success(created);
     }

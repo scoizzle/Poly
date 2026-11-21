@@ -92,10 +92,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var activity = activityResult.Value;
         return DomainResult<Activity>.Success(activity);
     }
-    internal void AttachActivities(Activity child)
+    internal DomainResult AttachActivities(Activity child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._activities.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult<Line> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
@@ -131,10 +132,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var line = lineResult.Value;
         return DomainResult<Line>.Success(line);
     }
-    internal void AttachLines(Line child)
+    internal DomainResult AttachLines(Line child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult<Quote> CreateQuotes(string? title = default, decimal? amount = default)
     {
@@ -170,10 +172,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var quote = quoteResult.Value;
         return DomainResult<Quote>.Success(quote);
     }
-    internal void AttachQuotes(Quote child)
+    internal DomainResult AttachQuotes(Quote child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._quotes.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult CompleteOpenWork()
     {
@@ -723,7 +726,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         if (account != null)
         {
-            account.AttachOpportunities(created);
+            var __attach = account.AttachOpportunities(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Opportunity>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Opportunity>.Success(created);
     }

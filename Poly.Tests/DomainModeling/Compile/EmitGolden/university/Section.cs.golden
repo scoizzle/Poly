@@ -47,12 +47,13 @@ internal class Section : Poly.Runtime.IActionScoped
         get => this._waitlist;
     }
     public SectionStage CurrentStage { get; private set; }
-    internal void AttachEnrollments(Enrollment child)
+    internal DomainResult AttachEnrollments(Enrollment child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._enrollments.Add(child);
         child.RegisterSectionEnrollmentsRegisteredSubscriber(this);
         child.RegisterSectionEnrollmentsDroppedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<WaitOffer> CreateWaitlist(Student? student = default)
     {
@@ -88,12 +89,13 @@ internal class Section : Poly.Runtime.IActionScoped
         var waitOffer = waitOfferResult.Value;
         return DomainResult<WaitOffer>.Success(waitOffer);
     }
-    internal void AttachWaitlist(WaitOffer child)
+    internal DomainResult AttachWaitlist(WaitOffer child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._waitlist.Add(child);
         child.RegisterSectionWaitlistOfferedSubscriber(this);
         child.RegisterSectionWaitlistCancelledSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult Close()
     {

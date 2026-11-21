@@ -55,7 +55,11 @@ internal class CampaignMember : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "CampaignMember");
         if (campaign != null)
         {
-            campaign.AttachMembers(created);
+            var __attach = campaign.AttachMembers(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<CampaignMember>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<CampaignMember>.Success(created);
     }

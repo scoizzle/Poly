@@ -266,7 +266,12 @@ public sealed partial class DomainResolver {
                 continue;
             }
 
-            throw Error($"Expected property, stage, action, or policy, got '{Shown(Current)}'");
+            // A member name that lexes as a keyword (`from: Text`) can never match a row. Say so and name the
+            // rename, rather than "Expected property, stage, action, or policy" (#549).
+            throw Error(PeekIs(TokenKind.Colon) && ReservedMemberWord(Current) is { Length: > 0 } reserved
+                ? $"'{reserved}' is a reserved word and cannot name a property; " +
+                  $"rename it (e.g. '{char.ToUpperInvariant(reserved[0])}{reserved[1..]}' or a synonym)."
+                : $"Expected property, stage, action, or policy, got '{Shown(Current)}'");
         }
 
         Expect(TokenKind.RBrace);

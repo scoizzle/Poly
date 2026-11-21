@@ -40,14 +40,15 @@ public sealed class TokenTextReaderTests {
     }
 
     /// <summary>
-    /// <c>Word</c> is the one read for a decision on a token of unchecked kind, and each of its five uses was reviewed
-    /// (G-13c). A sixth call fails here: check the kind and read <c>Name()</c> or <c>TextEquals</c> instead, or
-    /// review the new site and raise its count.
+    /// <c>Word</c> is the one read for a decision on a token of unchecked kind, and each of its six uses was reviewed
+    /// (G-13c; #549 added the reserved-member-word read). A further call fails here: check the kind and read
+    /// <c>Name()</c> or <c>TextEquals</c> instead, or review the new site and raise its count.
     /// </summary>
     [Test]
     public async Task WordCallSites_ArePinnedByFile() {
         var root = GuideBlocks.RepoRoot();
         var expected = new SortedDictionary<string, int>(StringComparer.Ordinal) {
+            ["Poly/DomainModeling/Language/DomainResolver.cs"] = 1,
             ["Poly/DomainModeling/Language/DomainResolver.Entities.cs"] = 1,
             ["Poly/DomainModeling/Language/DomainResolver.TopLevel.cs"] = 1,
             ["Poly/DomainModeling/Language/DslOutline.cs"] = 1,

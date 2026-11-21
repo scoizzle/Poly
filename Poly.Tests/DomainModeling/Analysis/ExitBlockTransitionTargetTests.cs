@@ -213,6 +213,54 @@ public class ExitBlockTransitionTargetTests {
             }
             """, "C", "entity-level 'when' subscription transitions to 'D'");
 
+    /// <summary>
+    /// #802: the stage requires <c>not InB</c> and the entity-level action requires <c>InB</c>, so the
+    /// lowered body refuses the action before its effects run: it cannot leave the stage.
+    /// </summary>
+    [Test]
+    public async Task Analyze_EntityLevelHopExcludedByStageRequire_IsAccepted() {
+        var errors = ExitTargetErrors("""
+            domain G6
+            Z: entity {
+              Mode: Text optional
+              InB: policy { Mode is "b" }
+              Go: action require InB { transition to B }
+              A: stage require not InB { exit { transition to C } }
+              B: stage { }
+              C: stage { }
+            }
+            """);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Analyze_EntityLevelHopWhoseGuardDoesNotExcludeTheStage_IsRejected() =>
+        await AssertOneOverride("""
+            domain G7
+            Z: entity {
+              Mode: Text optional
+              InB: policy { Mode is "b" }
+              Go: action require InB { transition to B }
+              A: stage { exit { transition to C } }
+              B: stage { }
+              C: stage { }
+            }
+            """, "C", "entity-level action 'Go' transitions to 'B' and can leave 'A' at run time");
+
+    [Test]
+    public async Task Analyze_EntityLevelHopExcludedFromAnotherStage_KeepsExitConflict() =>
+        await AssertOneOverride("""
+            domain G8
+            Z: entity {
+              Mode: Text optional
+              InB: policy { Mode is "b" }
+              Go: action require InB { transition to B }
+              A: stage { exit { transition to C } }
+              B: stage require not InB { }
+              C: stage { }
+            }
+            """, "C", "entity-level action 'Go' transitions to 'B' and can leave 'A' at run time");
+
     [Test]
     public async Task Analyze_ExitTransitionSameTargetAsHop_IsAccepted() {
         var errors = ExitTargetErrors("""

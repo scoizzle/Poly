@@ -64,6 +64,32 @@ public sealed class NameScopeTests {
     }
 
     [Test]
+    public async Task StageNamedValueDoubleUnderscore_IsGeneratedStageEnumCollision() {
+        // #797 (S-17): a stage name is a member of the emitted {Entity}Stage enum, so value__ is CS0076.
+        var analysis = Analyze("""
+            domain Scope
+            X: entity { value__: stage { } Two: stage { } }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("value__");
+        await Assert.That(errors[0].Message).Contains("generated stage enum 'XStage'");
+        await Assert.That(errors[0].Message).Contains("value__");
+    }
+
+    [Test]
+    public async Task StageNamedValueDoubleUnderscore_OnTheImplicitSingleStage_IsAccepted() {
+        // The implicit single stage emits no enum, so there is no member to collide with.
+        var analysis = Analyze("""
+            domain Scope
+            X: entity { value__: stage { } }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName).Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("__Snapshot: Text", "__Snapshot")]
     [Arguments("__Restore: Text", "__Restore")]
     [Arguments("__x: Text", "__x")]

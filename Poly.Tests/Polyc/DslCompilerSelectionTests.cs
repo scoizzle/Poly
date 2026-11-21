@@ -147,6 +147,18 @@ public sealed class DslCompilerSelectionTests {
         await Assert.That(diagnostic.Placed).IsTrue();
     }
 
+    /// <summary>#640: the refusal names the ids this catalog resolves, so the author can pick one.</summary>
+    [Test]
+    public async Task UnknownUses_NamesTheIdsTheCatalogResolves() {
+        var catalog = ProductCatalog.Create("sqlite");
+        var result = new PolyCompiler(catalog, DbOptions(catalog, DbmsPack.Sqlite)).Compile(Doc("nope"), "x.poly");
+
+        var diagnostic = result.Diagnostics.Single(d => d.Code == DiagnosticCodes.UnknownExtension);
+        await Assert.That(diagnostic.Message).Contains("storage");
+        await Assert.That(diagnostic.Message).Contains("sqlite");
+        await Assert.That(diagnostic.Message).Contains("temporal");
+    }
+
     /// <summary>The seed and hook overloads are gone; the catalog and the options are the whole input.</summary>
     [Test]
     public async Task PolyCompiler_Ctors_TakeSessionOptionsOnly() {

@@ -55,12 +55,24 @@ public class PolycCompileTests {
     }
 
     [Test]
-    public async Task Compile_FindingWithoutSpan_IsKeptUnplacedAtOneOne() {
-        var result = Compiler().Compile("domain D\nA: entity {\n  X: Text\n  X: Text\n}\n", "dup.poly");
-        var finding = result.Diagnostics.Single(d => d.IsError);
+    public async Task FindingWithoutSpan_IsKeptUnplacedAtOneOne() {
+        // The one constructor of a spanless finding. A domain fixture would go stale as findings gain
+        // positions (the duplicate property this used to compile is placed since #514; see below).
+        var finding = new DiagnosticBuilder("x.poly", "domain D\n").Unplaced("error", "DSL0004", "no span");
         await Assert.That(finding.Placed).IsFalse();
         await Assert.That(finding.Line).IsEqualTo(1);
         await Assert.That(finding.Column).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Compile_DuplicateProperty_IsPlaced() {
+        // #514: the duplicate is the positioned DMSTR001 (on the member's first declaration), not an
+        // unplaced dictionary error.
+        var result = Compiler().Compile("domain D\nA: entity {\n  X: Text\n  X: Text\n}\n", "dup.poly");
+        var finding = result.Diagnostics.Single(d => d.IsError);
+        await Assert.That(finding.Code).IsEqualTo("DMSTR001");
+        await Assert.That(finding.Placed).IsTrue();
+        await Assert.That(finding.Line).IsEqualTo(3);
     }
 
     [Test]

@@ -27,6 +27,10 @@ public sealed partial class DomainResolver {
             var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
             Expect(TokenKind.Colon);
             var paramType = ParseTypeName();
+            if (IsConstraint(Current.Kind))
+                throw Error(
+                    $"Action parameter '{paramName}' cannot carry a constraint " +
+                    $"('{Shown(Current)}'). Constrain the target property, or guard the assign, instead.");
             list.Add((paramName, paramType));
             if (Current.Kind == TokenKind.Comma)
                 Advance();
@@ -64,23 +68,21 @@ public sealed partial class DomainResolver {
 
         // Stage gates and require policies (collected — resolved after entity body)
         while (Current.Kind == TokenKind.When || Current.Kind == TokenKind.Require) {
-            if (Current.Kind == TokenKind.When) {
-                Advance(); // consume 'when'
-                // Stage gates are not runtime-enforced in Phase 1a (BR.3.2).
-                // Silently consume the gate names so the parser advances past them.
-                ParseIdentifierList();
+            if (Current.Kind == TokenKind.When)
+                // #492 (G-05): the guide lists `action when Stage` as unsupported, and dropping the
+                // clause silently registers an action that runs in every stage.
+                throw Error(
+                    $"'action when Stage' is not supported: an action's stage is its placement. " +
+                    $"Put '{actionName}' inside the stage body, as in 'Stage: stage {{ {actionName}: action {{ … }} }}'.");
+            Advance(); // consume 'require'
+            bool negated = false;
+            if (Current.Kind == TokenKind.Not) {
+                negated = true;
+                Advance();
             }
-            else {
-                Advance(); // consume 'require'
-                bool negated = false;
-                if (Current.Kind == TokenKind.Not) {
-                    negated = true;
-                    Advance();
-                }
-                var policies = ParseIdentifierList();
-                foreach (var p in policies) {
-                    _pendingRequires.Add(new PendingRequire(actionName, stageName, p, negated));
-                }
+            var policies = ParseIdentifierList();
+            foreach (var p in policies) {
+                _pendingRequires.Add(new PendingRequire(actionName, stageName, p, negated));
             }
         }
 

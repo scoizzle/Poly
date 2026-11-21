@@ -65,9 +65,24 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
     return Results.Created(string.Concat("/api/products/", System.Uri.EscapeDataString(productResult.Value.Sku)), productResult.Value);
 });
 
-app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync());
+app.MapGet("/api/leads", async (CrmDbContext db) => {
+    var leads = await db.Leads.ToListAsync();
+    foreach (var lead in leads)
+    {
+        await db.Entry(lead).Reference(e => e.Account).LoadAsync();
+    }
+    return leads;
+});
 
-app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Crm.Lead lead ? Results.Ok(lead) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => {
+    var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
+    if (lead == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(lead).Reference(e => e.Account).LoadAsync();
+    return Results.Ok(lead);
+});
 
 app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
     var leadResult = Crm.Lead.Create(db, dto.Name, dto.Email, dto.Company, null);
@@ -80,9 +95,32 @@ app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
     return Results.Created(string.Concat("/api/leads/", System.Uri.EscapeDataString(leadResult.Value.Email)), leadResult.Value);
 });
 
-app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListAsync());
+app.MapGet("/api/accounts", async (CrmDbContext db) => {
+    var accounts = await db.Accounts.ToListAsync();
+    foreach (var account in accounts)
+    {
+        await db.Entry(account).Collection(e => e.Contacts).LoadAsync();
+        await db.Entry(account).Collection(e => e.Opportunities).LoadAsync();
+        await db.Entry(account).Collection(e => e.Tickets).LoadAsync();
+        await db.Entry(account).Reference(e => e.Parent).LoadAsync();
+        await db.Entry(account).Reference(e => e.Hq).LoadAsync();
+    }
+    return accounts;
+});
 
-app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Crm.Account account ? Results.Ok(account) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => {
+    var account = await db.Accounts.FindAsync(id);
+    if (account == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(account).Collection(e => e.Contacts).LoadAsync();
+    await db.Entry(account).Collection(e => e.Opportunities).LoadAsync();
+    await db.Entry(account).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(account).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(account).Reference(e => e.Hq).LoadAsync();
+    return Results.Ok(account);
+});
 
 app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
     var accountResult = Crm.Account.Create(dto.Name, dto.Industry, null, null, null, null, null, null, null, null);
@@ -95,9 +133,24 @@ app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
     return Results.Ok(accountResult.Value);
 });
 
-app.MapGet("/api/campaigns", async (CrmDbContext db) => await db.Campaigns.ToListAsync());
+app.MapGet("/api/campaigns", async (CrmDbContext db) => {
+    var campaigns = await db.Campaigns.ToListAsync();
+    foreach (var campaign in campaigns)
+    {
+        await db.Entry(campaign).Collection(e => e.Members).LoadAsync();
+    }
+    return campaigns;
+});
 
-app.MapGet("/api/campaigns/{id}", async (int id, CrmDbContext db) => (await db.Campaigns.FindAsync(id) is Crm.Campaign campaign ? Results.Ok(campaign) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/campaigns/{id}", async (int id, CrmDbContext db) => {
+    var campaign = await db.Campaigns.FindAsync(id);
+    if (campaign == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(campaign).Collection(e => e.Members).LoadAsync();
+    return Results.Ok(campaign);
+});
 
 app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
     var campaignResult = Crm.Campaign.Create(dto.Name, null);
@@ -127,6 +180,10 @@ app.MapGet("/api/accounts/{id}/contacts", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Contacts).LoadAsync();
+    foreach (var contact in parent.Contacts.ToList())
+    {
+        await db.Entry(contact).Reference(e => e.Account).LoadAsync();
+    }
     return Results.Ok(parent.Contacts);
 });
 
@@ -142,6 +199,7 @@ app.MapGet("/api/accounts/{id}/contacts/{email}", async (int id, string email, C
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Account).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -152,6 +210,14 @@ app.MapGet("/api/accounts/{id}/opportunities", async (int id, CrmDbContext db) =
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Opportunities).LoadAsync();
+    foreach (var opportunity in parent.Opportunities.ToList())
+    {
+        await db.Entry(opportunity).Collection(e => e.Activities).LoadAsync();
+        await db.Entry(opportunity).Collection(e => e.Lines).LoadAsync();
+        await db.Entry(opportunity).Collection(e => e.Quotes).LoadAsync();
+        await db.Entry(opportunity).Reference(e => e.Account).LoadAsync();
+        await db.Entry(opportunity).Reference(e => e.Contact).LoadAsync();
+    }
     return Results.Ok(parent.Opportunities);
 });
 
@@ -167,6 +233,11 @@ app.MapGet("/api/accounts/{id}/opportunities/{opportunityId}", async (int id, in
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Collection(e => e.Activities).LoadAsync();
+    await db.Entry(child).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(child).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(child).Reference(e => e.Account).LoadAsync();
+    await db.Entry(child).Reference(e => e.Contact).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -177,6 +248,10 @@ app.MapGet("/api/opportunities/{id}/activities", async (int id, CrmDbContext db)
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Activities).LoadAsync();
+    foreach (var activity in parent.Activities.ToList())
+    {
+        await db.Entry(activity).Reference(e => e.Opportunity).LoadAsync();
+    }
     return Results.Ok(parent.Activities);
 });
 
@@ -192,6 +267,7 @@ app.MapGet("/api/opportunities/{id}/activities/{activityId}", async (int id, int
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Opportunity).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -202,6 +278,11 @@ app.MapGet("/api/opportunities/{id}/quotes", async (int id, CrmDbContext db) => 
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Quotes).LoadAsync();
+    foreach (var quote in parent.Quotes.ToList())
+    {
+        await db.Entry(quote).Collection(e => e.Lines).LoadAsync();
+        await db.Entry(quote).Reference(e => e.Opportunity).LoadAsync();
+    }
     return Results.Ok(parent.Quotes);
 });
 
@@ -217,6 +298,8 @@ app.MapGet("/api/opportunities/{id}/quotes/{quoteId}", async (int id, int quoteI
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(child).Reference(e => e.Opportunity).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -227,6 +310,11 @@ app.MapGet("/api/campaigns/{id}/members", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Members).LoadAsync();
+    foreach (var campaignMember in parent.Members.ToList())
+    {
+        await db.Entry(campaignMember).Reference(e => e.Contact).LoadAsync();
+        await db.Entry(campaignMember).Reference(e => e.Campaign).LoadAsync();
+    }
     return Results.Ok(parent.Members);
 });
 
@@ -242,6 +330,8 @@ app.MapGet("/api/campaigns/{id}/members/{campaignMemberId}", async (int id, int 
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Contact).LoadAsync();
+    await db.Entry(child).Reference(e => e.Campaign).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -252,6 +342,10 @@ app.MapGet("/api/accounts/{id}/tickets", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Tickets).LoadAsync();
+    foreach (var ticket in parent.Tickets.ToList())
+    {
+        await db.Entry(ticket).Reference(e => e.Account).LoadAsync();
+    }
     return Results.Ok(parent.Tickets);
 });
 
@@ -267,6 +361,7 @@ app.MapGet("/api/accounts/{id}/tickets/{ticketId}", async (int id, int ticketId,
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Account).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -277,6 +372,11 @@ app.MapGet("/api/opportunities/{id}/lines", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
+    foreach (var line in parent.Lines.ToList())
+    {
+        await db.Entry(line).Reference(e => e.Product).LoadAsync();
+        await db.Entry(line).Reference(e => e.Opportunity).LoadAsync();
+    }
     return Results.Ok(parent.Lines);
 });
 
@@ -292,6 +392,8 @@ app.MapGet("/api/opportunities/{id}/lines/{lineId}", async (int id, int lineId, 
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Product).LoadAsync();
+    await db.Entry(child).Reference(e => e.Opportunity).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -302,6 +404,11 @@ app.MapGet("/api/quotes/{id}/lines", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
+    foreach (var quoteLine in parent.Lines.ToList())
+    {
+        await db.Entry(quoteLine).Reference(e => e.Product).LoadAsync();
+        await db.Entry(quoteLine).Reference(e => e.Quote).LoadAsync();
+    }
     return Results.Ok(parent.Lines);
 });
 
@@ -317,6 +424,8 @@ app.MapGet("/api/quotes/{id}/lines/{quoteLineId}", async (int id, int quoteLineI
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Product).LoadAsync();
+    await db.Entry(child).Reference(e => e.Quote).LoadAsync();
     return Results.Ok(child);
 });
 

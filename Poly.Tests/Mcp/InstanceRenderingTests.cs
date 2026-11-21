@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Poly.Tests.Mcp;
@@ -95,5 +96,35 @@ public class InstanceRenderingTests {
         await Assert.That(list.Ok).IsTrue();
         var summary = ((JsonArray)list.Data!["instances"]!).Single()!;
         await Assert.That(summary["currentStage"]!.GetValue<string>()).IsEqualTo("(none)");
+    }
+
+    /// <summary>
+    /// #656: a Date and a DateTime render as culture-invariant ISO 8601 with the stored precision,
+    /// so a snapshot transcript is the same on every machine and can be fed back into create.
+    /// The render runs under de-DE: the host culture's short format (02.01.2020) is the wrong answer.
+    /// </summary>
+    [Test]
+    public async Task TemporalProperties_RenderInvariantIso_NotHostCulture() {
+        var sessionId = McpTestTools.Surface.Open("InstanceTemporalRender");
+        await Assert.That(McpTestTools.Surface.Define(sessionId,
+            "domain InstanceTemporalRender Tm: entity { Dt: Date Dtm: DateTime }").Success).IsTrue();
+
+        var previous = CultureInfo.CurrentCulture;
+        string date, dateTime;
+        try {
+            // The store holds one domain: write and read on this thread, under a locale whose
+            // short date is 02.01.2020, before any await can move the continuation.
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            var create = McpTestTools.Surface.Create(sessionId, "Tm",
+                """{"Dt":"2020-01-02","Dtm":"2020-01-01T10:00:00.1234567Z"}""");
+            date = create.Property("Dt");
+            dateTime = create.Property("Dtm");
+        }
+        finally {
+            CultureInfo.CurrentCulture = previous;
+        }
+
+        await Assert.That(date).IsEqualTo("2020-01-02");
+        await Assert.That(dateTime).IsEqualTo("2020-01-01T10:00:00.1234567Z");
     }
 }

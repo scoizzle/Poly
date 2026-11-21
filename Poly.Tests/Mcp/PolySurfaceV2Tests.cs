@@ -200,6 +200,38 @@ public class PolySurfaceV2Tests {
         await Assert.That(bad["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
     }
 
+    /// <summary>
+    /// #481: an action selected by its unqualified name keeps the findings it carries inside a
+    /// stage ("Entity.Stage.Action"), so the select reports the same warning as the whole model.
+    /// </summary>
+    [Test]
+    public async Task PolyCheck_SelectStageActionByUnqualifiedName_KeepsItsOwnFinding() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain V2
+            A: entity {
+              N: Number range(0, 10) default(0)
+              Open: stage {
+                Inc: action { assign N to N + 1 }
+              }
+              Done: stage { }
+            }
+            """).Ok).IsTrue();
+
+        var whole = surface.Check(workspace);
+        var action = surface.Check(workspace, select: "A.Inc");
+        var staged = surface.Check(workspace, select: "A.Open.Inc");
+
+        await Assert.That(whole.Findings.Select(f => f.Code)).Contains("DMEFF008");
+        await Assert.That(action.Findings.Select(f => f.Code)).Contains("DMEFF008");
+        await Assert.That(action.Findings.Single(f => f.Code == "DMEFF008").Path).IsEqualTo("V2/A/Open/Inc");
+        await Assert.That(staged.Findings.Select(f => f.Code)).Contains("DMEFF008");
+
+        var data = JsonSerializer.SerializeToNode(action.Data)!;
+        await Assert.That(data["warningCount"]!.GetValue<int>()).IsEqualTo(1);
+    }
+
     [Test]
     public async Task PolyCheck_PatternWrite_IsUnknown() {
         var surface = Surface();

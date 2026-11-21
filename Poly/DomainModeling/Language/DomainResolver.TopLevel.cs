@@ -49,6 +49,13 @@ public sealed partial class DomainResolver {
         if (PeekIs(TokenKind.Colon)) {
             var name = Shown(Current);
             var typeWord = Peek(2);
+            if (typeWord.Kind == TokenKind.Identifier && typeWord.TextEquals("function")) {
+                // #638: functions ship; the author used the entity-declaration position.
+                return GrammarError.Error(
+                    $"'function' is declared at top level, as in 'function {name}(x: Number): Number = x', " +
+                    $"not '{name}: function …'.",
+                    typeWord.Line, typeWord.Col);
+            }
             if (typeWord.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(typeWord.Name())) {
                 return new FormatException(
                     $"'{Shown(typeWord)}' is not supported in Phase 1a (use 'entity' instead)");

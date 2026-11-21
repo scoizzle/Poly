@@ -106,8 +106,8 @@ internal static class ResolverErrorBaseline {
     /// <summary>A scanned site that no input can reach, with a closed reason code and why. A reached site in this list fails.</summary>
     public static readonly (string Site, string Code, string Why)[] Unreachable = [
         ("Actions:ParseActionParameterList#1", "CallerGuard", "every caller tests for `(` first (`Current.Kind == LParen`, or the legacy-action row `Identifier LParen`)"),
-        ("Actions:ParseActionParameterList#4", "LoopExit", "the `while (Current.Kind != RParen)` loop exits only on `)`"),
-        ("Actions:ParseActionBody#2", "LoopExit", "the effect loop exits only on `}`"),
+        ("Actions:ParseActionParameterList#5", "LoopExit", "the `while (Current.Kind != RParen)` loop exits only on `)`"),
+        ("Actions:ParseActionBody#3", "LoopExit", "the effect loop exits only on `}`"),
         ("Effects:ParseEffect#7", "DefaultArm", "every `effect` row has a case above; the default arm names a row no grammar defines"),
         ("Effects:ParseIfEffectCore#3", "LoopExit", "the then-body loop exits only on `}`"),
         ("Effects:ParseIfEffectCore#5", "LoopExit", "the else-body loop exits only on `}`"),

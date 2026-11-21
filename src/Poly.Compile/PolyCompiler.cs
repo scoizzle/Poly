@@ -305,7 +305,7 @@ public sealed class PolyCompiler {
             if (!_options.Catalog.Contains(id)) {
                 diags.Add(ExtensionDiagnostic(build, tree, id, occurrence: 1, Severities.Error,
                     DiagnosticCodes.UnknownExtension,
-                    $"Unknown domain extension '{id}'. Record only ids this catalog can resolve."));
+                    $"Unknown domain extension '{id}'. Known ids: {string.Join(", ", _options.Catalog.KnownIds)}."));
                 ok = false;
             }
         }

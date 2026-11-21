@@ -236,8 +236,18 @@ internal static class ReservedNames {
     }
 
     /// <summary>True when <paramref name="identity"/> is reserved on <paramref name="owner"/>.</summary>
-    public static bool TryReserved(string identity, EnumType owner, out ReservedName row) {
-        foreach (var candidate in ForEnum(owner)) {
+    public static bool TryReserved(string identity, EnumType owner, out ReservedName row) =>
+        TryReserved(identity, ForEnum(owner), out row);
+
+    /// <summary>
+    /// True when a stage name cannot become a member of the generated <c>{Entity}Stage</c> enum
+    /// (S-17, #797): a stage name is an enum member, so the enum-scope rows apply.
+    /// </summary>
+    public static bool TryReservedAsStageName(string identity, out ReservedName row) =>
+        TryReserved(identity, EnumFixed, out row);
+
+    private static bool TryReserved(string identity, IReadOnlyList<ReservedName> rows, out ReservedName row) {
+        foreach (var candidate in rows) {
             if (!string.Equals(candidate.Name, identity, StringComparison.Ordinal))
                 continue;
             row = candidate;

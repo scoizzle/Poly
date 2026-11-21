@@ -132,7 +132,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// </summary>
     private sealed class EntityScope : Dictionary<string, string> {
         public EntityScope(Entity entity)
-            : base(entity.Properties.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal), StringComparer.Ordinal) {
+            // A property declared twice is a positioned DMSTR001 the structural pass reports; keep the
+            // last declaration here so this pass reaches it instead of throwing on the repeated key.
+            : base(entity.Properties
+                .GroupBy(p => p.Name, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Last().Type.TypeName, StringComparer.Ordinal), StringComparer.Ordinal) {
             EntityName = entity.Name;
             Binders = new Dictionary<string, string>(StringComparer.Ordinal);
             Optional = entity.Properties.Where(p => !EntityStructureAnalyzer.IsRequired(p))

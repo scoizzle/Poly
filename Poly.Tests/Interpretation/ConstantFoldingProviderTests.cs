@@ -449,8 +449,9 @@ public class ConstantFoldingProviderTests {
         }
         await Assert.That(disagree).IsEmpty();
         await Assert.That(rejected).IsEmpty();
-        // int.MaxValue + 'b' and 'b' + int.MaxValue: the writer prints no unchecked around a char operand.
-        await Assert.That(checkedConstant).IsEquivalentTo(["Int32 Add Char S1", "Char Add Int32 S2"]);
+        // Empty: #853 added the char operand to the writer's unchecked guard, so no fold falls back to the
+        // checked-constant exemption and every one of them is compared as AGREE above.
+        await Assert.That(checkedConstant).IsEmpty();
         // Temporal and Guid constants have no C# literal, so the writer refuses them.
         await Assert.That(ConstantFoldGrid.Pin(unprintable)).IsEqualTo(UnprintableDefinedFolds);
     }

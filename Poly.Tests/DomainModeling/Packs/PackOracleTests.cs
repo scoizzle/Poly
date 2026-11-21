@@ -1002,6 +1002,53 @@ public class PackOracleTests {
         }
     }
 
+    /// <summary>#658, the refusal half of the issue's own child route: a task filed with no assignee. The guard reads a
+    /// to-one that is genuinely absent, so the policy is false in both hosts; HTTP answers the simulator's own guard
+    /// name with the policy status, and the stage does not move.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_GuardOverAbsentToOne_RefusesAsTheSimulatorDoes_Issue658(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var fixture = PackOracleDomains.DeskUnassigned658;
+
+        var harness = PolySurfaceHarness.New();
+        var workspace = harness.Open("desk");
+        var defined = harness.Define(workspace, fixture.Poly);
+        await Assert.That(defined.Success).IsTrue().Because(defined.Summary);
+        var project = harness.Create(workspace, "Project", """{"Key":"P2"}""").InstanceId;
+        var filed = harness.Invoke(workspace, project, "FileUnassigned").Result;
+        await Assert.That(filed.Succeeded).IsTrue().Because($"simulator FileUnassigned: {filed.ErrorMessage}");
+        var listed = harness.List(workspace, "Task").Data;
+        var task = ((listed?["instances"] as System.Text.Json.Nodes.JsonArray)?
+            .Select(i => i?["instanceId"]?.GetValue<string>()).OfType<string>() ?? []).Single();
+        var refused = harness.Invoke(workspace, task, "Triage").Result;
+        await Assert.That(refused.Succeeded).IsFalse();
+        await Assert.That(refused.FailedGuards.Single()).IsEqualTo("Assigned");
+
+        await using var oracle = await PackOracle.BootAsync(fixture);
+        static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+        using var created = await oracle.Client.PostAsync("/api/projects", Json("""{"Key":"P2"}"""));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        // The task is the only row in Tasks: a task is not a root and is never seeded (#595).
+        using var filedOverHttp = await oracle.Client.PostAsync("/api/projects/P2/fileunassigned", Json("{}"));
+        await Assert.That((int)filedOverHttp.StatusCode).IsEqualTo(200).Because(await filedOverHttp.Content.ReadAsStringAsync());
+
+        using var refusedOverHttp = await oracle.Client.PostAsync("/api/projects/P2/tasks/1/triage", Json("{}"));
+        var body = await refusedOverHttp.Content.ReadAsStringAsync();
+        await Assert.That((int)refusedOverHttp.StatusCode).IsEqualTo(422).Because(body);
+        await Assert.That(refusedOverHttp.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+        using (var problem = JsonDocument.Parse(body)) {
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Policy");
+            await Assert.That(problem.RootElement.GetProperty("guard").GetString()).IsEqualTo(refused.FailedGuards.Single());
+        }
+
+        using var row = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/projects/P2/tasks/1"));
+        await Assert.That(row.RootElement.GetProperty("currentStage").GetString()).IsEqualTo("Todo");
+    }
+
     /// <summary>#620 (slice P-03): an action that applies an effect and then fails must persist nothing.
     /// The rejected request has already bumped Capacity in memory; a save on the failure branch commits it.
     /// The second call is A3's pin on D2: a failed request must leave no pending change for the next

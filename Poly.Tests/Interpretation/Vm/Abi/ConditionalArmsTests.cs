@@ -86,6 +86,24 @@ public class ConditionalArmsTests {
         await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
     }
 
+    /// <summary>#805: a switch's value is its arms' common type, as in C#: a Decimal case and an integral default
+    /// is a <c>decimal</c>, so the default reads back as <c>2m</c>, never as the raw word of the other arm.</summary>
+    [Test]
+    [Arguments(1L, "1.5")]
+    [Arguments(0L, "2")]
+    public async Task Switch_DecimalCaseIntegralDefault_ReadsEachArmAsDecimal(long key, string expected) {
+        using var exec = Run(Switched(new Constant(1.5m), new Constant(2L)), key);
+        await Assert.That(exec.GetValue<decimal>()).IsEqualTo(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Test]
+    [Arguments(1L, "2")]
+    [Arguments(0L, "1.5")]
+    public async Task Switch_IntegralCaseDecimalDefault_ReadsEachArmAsDecimal(long key, string expected) {
+        using var exec = Run(Switched(new Constant(2L), new Constant(1.5m)), key);
+        await Assert.That(exec.GetValue<decimal>()).IsEqualTo(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     // Legal code that ran correctly before the guard must keep running (a nullable operand is judged by its
     // underlying type; a statement switch's discarded bodies are not a merged value).
 

@@ -73,9 +73,13 @@ public sealed partial class MinimalApiGenerator {
             var props = new List<PropertyDefinitionNode>();
             foreach (var param in ia.Parameters) {
                 if (param.IsEntityRef) {
+                    // The target's route key, as the create DTO's link members carry it: a shadow key is `int?`, a
+                    // Number key `long?`. A `string` compared with that column does not compile, and a `string`
+                    // handed to `FindAsync` throws, which was #940's 500. Nullable, so an absent key is null — 404 —
+                    // and not the default value of the key type, which could name a real row.
                     props.Add(new PropertyDefinitionNode(
                         ActionDtoPropertyName(param),
-                        ClrTypeNode("string"),
+                        NullableClrTypeNode(RouteKeyFor(_storageLookup[param.DomainType]).ClrType),
                         Getter: new PropertyGetterDefinitionNode(),
                         Initializer: new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))));
                     continue;

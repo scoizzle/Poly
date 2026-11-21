@@ -50,7 +50,7 @@ POST http://localhost:5201/api/patrons/example-value/checkOut
 Content-Type: application/json
 
 {
-    "BookId": "example-book-id"
+    "BookId": "example-isbn"
 }
 
 ### Action: Suspend

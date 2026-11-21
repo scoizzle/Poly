@@ -231,6 +231,12 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             case RelationshipNavigation or OwnedAccess when noEntity:
             case AnyExpr or AllExpr or NoneExpr or CountExpr or SumExpr when noEntity:
                 return "there is no entity here to read a relationship from (a function body has only its parameters)";
+            // #649: `n Days` reads as a path (`n`, then a hop `Days`); the author meant an amount and a unit.
+            case RelationshipNavigation { RelationshipName: var head, TargetProperty: PropertyAccess { Name: var unit } }
+                when Poly.DomainModeling.Libraries.Temporal.DurationUnits.IsUnit(unit)
+                     && (props?.ContainsKey(head) == true || parameters?.ContainsKey(head) == true):
+                return $"a duration amount is a number literal ('3 {unit}'), and '{head}' is a name; "
+                       + $"a Date or DateTime property or parameter takes a whole day count directly, as '<date> + {head}'";
             case RelationshipNavigation:
                 return "the path does not reach a property through to-one relationships";
             case OwnedAccess:

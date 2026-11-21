@@ -181,6 +181,25 @@ public class TemporalFailClosedAnalysisTests {
         await Assert.That(result.Succeeded).IsTrue();
     }
 
+    /// <summary>
+    /// #649: a duration's amount is a number literal; a name before a unit word (<c>n Days</c>) is read as a path and
+    /// refused. The refusal says what to write instead of describing a relationship path.
+    /// </summary>
+    [Test]
+    [Arguments("a parameter count", "Due: Date", "Bump: action (n: Number) { assign Due to Due + n Days }", "n", "Days")]
+    [Arguments("a property count", "Due: Date", "Bump: action { assign Due to Due + Qty Days }", "Qty", "Days")]
+    [Arguments("the clock", "At: DateTime", "Bump: action (s: Number) { assign At to Now + s Seconds }", "s", "Seconds")]
+    public async Task DurationAmount_ANameBeforeAUnit_IsRefusedWithTheFormToWrite(
+        string row, string property, string action, string name, string unit) {
+        var result = Evolve(DurationDocument(property + "\n  " + action), ExtensionCatalog.Core.Language);
+
+        var refusal = result.Analysis.Diagnostics.Single(d => d.Severity == DiagnosticSeverity.Error);
+        await Assert.That(refusal.Code).IsEqualTo(DomainModelDiagnosticCodes.SemanticUntypedExpression).Because(row);
+        await Assert.That(refusal.Message).Contains(
+            $"a duration amount is a number literal ('3 {unit}'), and '{name}' is a name").Because(row);
+        await Assert.That(refusal.Message).Contains($"'<date> + {name}'").Because(row);
+    }
+
     [Test]
     public async Task OptionalDate_ComparedWithABareDuration_KeepsTheBareDurationMessage() {
         var result = Evolve($$"""

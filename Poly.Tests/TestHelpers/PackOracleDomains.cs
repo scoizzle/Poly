@@ -910,6 +910,22 @@ public static class PackOracleDomains {
         """,
         "/api/slots");
 
+    /// <summary>#905. A <c>Binary</c> member is <c>byte[]</c> in the generated host, base64 over JSON
+    /// (System.Text.Json's own <c>byte[]</c> encoding). The issue's host did not compile: the create DTO carried
+    /// the member as a string (<c>CS1503</c>) and the module's property had no initializer (<c>CS8618</c>).</summary>
+    public static PackOracleDomain Binary905 { get; } = new(
+        "Binary905",
+        """
+        domain S
+        uses http
+        uses sqlite
+        Blob: entity {
+          Code: Text unique
+          Data: Binary
+        }
+        """,
+        "/api/blobs");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 

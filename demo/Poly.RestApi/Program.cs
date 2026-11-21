@@ -22,7 +22,7 @@ builder.Services.AddScoped<Poly.Runtime.IStoragePort, LibraryDbContext>();
 
 var app = builder.Build();
 
-var schemaId = 2021377792;
+var schemaId = 842337177;
 
 using (var scope = app.Services.CreateScope())
 {
@@ -30,7 +30,7 @@ using (var scope = app.Services.CreateScope())
     var created = await db.Database.EnsureCreatedAsync();
     if (created)
     {
-        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 2021377792");
+        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 842337177");
     }
     else
     {
@@ -163,6 +163,7 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
         var result = entity.CheckOut(book);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -170,6 +171,10 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Patron' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -191,6 +196,7 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
         var result = entity.Suspend();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -198,6 +204,10 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Patron' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -219,6 +229,7 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
         var result = entity.CloseAccount();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -226,6 +237,10 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Patron' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -247,6 +262,7 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
         var result = entity.Reinstate();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -254,6 +270,10 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Patron' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -285,6 +305,7 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
         var result = entity.Renew();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -292,6 +313,10 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Loan' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -323,6 +348,7 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
         var result = entity.Return();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -330,6 +356,10 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Loan' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -360,6 +390,7 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
         var result = entity.Pay();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -367,6 +398,10 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Fine' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -397,6 +432,7 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
         var result = entity.Waive();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -404,6 +440,10 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Fine' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {

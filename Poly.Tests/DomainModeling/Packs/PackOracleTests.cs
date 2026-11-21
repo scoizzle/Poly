@@ -1081,6 +1081,93 @@ public class PackOracleTests {
         await Assert.That(snapshot.RootElement.GetProperty("n").GetInt64()).IsEqualTo(1);
     }
 
+    /// <summary>#626: a stage-guarded action is a read-modify-write of one aggregate, and eight requests fired
+    /// together all read the pre-transition stage. The host's save is the arbiter: exactly one <c>Ship</c> commits,
+    /// every other request is a 409 — the host's <c>Conflict</c>, or the module's <c>Stage</c> once the winner's row is
+    /// what the loser read — never a second transition and never a 500. The seeded order is row 1 (#595); the entity
+    /// has no natural key, so the route key is the shadow id.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Ship_ConcurrentStageGuardedAction_OneTransitionRestConflict_Issue626(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Inventory626);
+
+        static StringContent Empty() => new("{}", Encoding.UTF8, "application/json");
+
+        using (var submitted = await oracle.Client.PostAsync("/api/orders/1/submit", Empty()))
+            await Assert.That((int)submitted.StatusCode).IsEqualTo(200);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 8)
+            .Select(_ => oracle.Client.PostAsync("/api/orders/1/ship", Empty())));
+        try {
+            var statuses = responses.Select(r => (int)r.StatusCode).ToArray();
+            await Assert.That(statuses.Count(s => s == 200)).IsEqualTo(1)
+                .Because("exactly one save may win the transition; got " + string.Join(",", statuses));
+
+            foreach (var loser in responses.Where(r => (int)r.StatusCode != 200)) {
+                await Assert.That((int)loser.StatusCode).IsEqualTo(409)
+                    .Because("a save that lost the race is a conflict, never a second transition and never a server error");
+                await Assert.That(loser.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+                using var problem = JsonDocument.Parse(await loser.Content.ReadAsStringAsync());
+                await Assert.That(problem.RootElement.GetProperty("status").GetInt32()).IsEqualTo(409);
+                // Either the module's Stage guard read the committed Shipped row, or the host's token lost the race:
+                // both are 409, and #653 pins the token's own title because there is no guard in the way.
+                await Assert.That(problem.RootElement.GetProperty("title").GetString() is "Stage" or "Conflict").IsTrue()
+                    .Because("a lost save is the host's Conflict, and a guard that read the committed row is Stage");
+            }
+        }
+        finally {
+            foreach (var response in responses)
+                response.Dispose();
+        }
+
+        using var after = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/orders/1"));
+        await Assert.That(after.RootElement.GetProperty("currentStage").GetString()).IsEqualTo("Shipped");
+    }
+
+    /// <summary>#653: 30 concurrent <c>assign N to N + 1</c> calls are 30 read-modify-writes of one row, so the
+    /// host's save is the arbiter. Every success applied exactly one increment to the value it read, so the number
+    /// of 200s equals the stored <c>N</c>; every other request is the 409 Conflict, and none is a 500.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Bump_ConcurrentIncrements_SuccessesEqualFinalValue_Issue653(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Tally653);
+
+        using (var created = await oracle.Client.PostAsync(
+            "/api/tallies", new StringContent("""{"Name":"t1"}""", Encoding.UTF8, "application/json")))
+            await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 30)
+            .Select(_ => oracle.Client.PostAsync(
+                "/api/tallies/t1/bump", new StringContent("{}", Encoding.UTF8, "application/json"))));
+        try {
+            var statuses = responses.Select(r => (int)r.StatusCode).ToArray();
+            var successes = statuses.Count(s => s == 200);
+            await Assert.That(successes).IsGreaterThanOrEqualTo(1);
+            await Assert.That(statuses.Count(s => s is not (200 or 409))).IsEqualTo(0)
+                .Because("a lost update is a conflict, never a server error; got " + string.Join(",", statuses));
+
+            foreach (var loser in responses.Where(r => (int)r.StatusCode == 409)) {
+                await Assert.That(loser.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+                using var problem = JsonDocument.Parse(await loser.Content.ReadAsStringAsync());
+                await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Conflict");
+                await Assert.That(problem.RootElement.GetProperty("detail").GetString())
+                    .Contains("'Tally'").And.Contains("'t1'");
+            }
+
+            using var snapshot = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/tallies/t1"));
+            await Assert.That(snapshot.RootElement.GetProperty("n").GetInt64()).IsEqualTo(successes)
+                .Because("each 200 applied exactly one increment to the value it read, and no increment is lost");
+        }
+        finally {
+            foreach (var response in responses)
+                response.Dispose();
+        }
+    }
+
     /// <summary>#675 (Q13 ruling, 2026-11-12): a designated <c>initial(Open)</c> is honoured on the HTTP
     /// create leg. <c>Draft</c> is declared first, so a row in <c>Draft</c> is the old implicit rule. The
     /// unique <c>Code</c> gives the POST a Location and the created row its own route, so #589's missing
@@ -1895,6 +1982,8 @@ public class PackOracleTests {
                         Regex.IsMatch(input, $@"^column \w+\.{Regex.Escape(column)} ", RegexOptions.Multiline)
                         || (column == "CurrentStage" && Regex.IsMatch(input, @"^stage \w+\.CurrentStage ", RegexOptions.Multiline))
                         || ((column == "Id" || column == "PolyId") && flat.Contains($"Property<int>(\"{column}\")", StringComparison.Ordinal))
+                        // The optimistic-concurrency token (#626, #653): a long shadow column, named by the printed model.
+                        || flat.Contains($"Property<long>(\"{column}\")", StringComparison.Ordinal)
                         || (foreignKeys.Contains(column) && navigationNames.Contains(column.EndsWith("Id", StringComparison.Ordinal) ? column[..^2] : column));
                     if (!accounted)
                         unaccounted.Add($"{table}.{column}");

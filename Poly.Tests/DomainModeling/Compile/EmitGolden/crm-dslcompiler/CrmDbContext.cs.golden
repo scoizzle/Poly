@@ -70,6 +70,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Sites");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.City).HasColumnName("city").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Region).HasColumnName("region").HasColumnType("TEXT").IsRequired();
 });
@@ -79,6 +80,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Sku).HasColumnName("sku").HasColumnType("TEXT").IsRequired().HasMaxLength(32);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.ListPrice).HasColumnName("listPrice").HasColumnType("TEXT");
@@ -88,6 +90,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Leads");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
     b.Property(x => x.Company).HasColumnName("company").HasColumnType("TEXT").IsRequired();
@@ -97,6 +100,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Accounts");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Industry).HasColumnName("industry").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
     b.Property(x => x.WonCount).HasColumnName("wonCount").HasColumnType("INTEGER");
@@ -110,6 +114,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Contacts");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
     b.HasIndex(x => x.Email).IsUnique();
@@ -120,6 +125,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("TEXT");
     b.Property(x => x.CloseBy).HasColumnName("closeBy").HasColumnType("TEXT");
@@ -132,6 +138,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Activities");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Subject).HasColumnName("subject").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.DueOn).HasColumnName("dueOn").HasColumnType("TEXT");
 });
@@ -139,6 +146,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Quotes");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("TEXT");
     b.Metadata.FindNavigation(nameof(Quote.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
@@ -147,6 +155,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Campaigns");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Metadata.FindNavigation(nameof(Campaign.Members))!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
@@ -154,11 +163,13 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("CampaignMembers");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
 });
         modelBuilder.Entity<Ticket>(b => {
     b.ToTable("Tickets");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Subject).HasColumnName("subject").HasColumnType("TEXT").IsRequired();
 });
         modelBuilder.Entity<Line>(b => {
@@ -168,6 +179,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("INTEGER");
     b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("TEXT");
 });
@@ -178,6 +190,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("INTEGER");
     b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("TEXT");
 });
@@ -196,6 +209,21 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
         modelBuilder.Entity<Line>().HasOne(e => e.Opportunity).WithMany(i => i.Lines).IsRequired().OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QuoteLine>().HasOne(e => e.Product).WithMany().IsRequired().OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<QuoteLine>().HasOne(e => e.Quote).WithMany(i => i.Lines).IsRequired().OnDelete(DeleteBehavior.Restrict);
+    }
+    public void BumpVersions(object entity)
+    {
+        this.ChangeTracker.DetectChanges();
+        foreach (var entry in this.ChangeTracker.Entries())
+        {
+            if (entry.Metadata.FindProperty("Version") == null)
+            {
+                continue;
+            }
+            if (entry.State == EntityState.Modified || entry.Entity == entity && entry.State == EntityState.Unchanged)
+            {
+                entry.Property("Version").CurrentValue = (long)entry.Property("Version").OriginalValue! + 1L;
+            }
+        }
     }
     public bool Exists(string entity, string property, string value)
     {

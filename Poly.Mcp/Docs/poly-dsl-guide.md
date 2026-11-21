@@ -2012,6 +2012,14 @@ A stage failure (an action the current stage does not offer) conflicts with the 
 policy failure (a `require` guard that does not hold) is `422`: the request is well-formed and a rule refused it. It
 is not authorisation, so it is not `403`.
 
+**Concurrent actions.** An action route is a read-modify-write of one aggregate, so the host saves with optimistic
+concurrency: every stored row carries an integer version the host bumps before a modifying save (a shadow column, not
+a JSON member). A save whose row changed after this request read it updates no row, and the request answers `409` with
+title `Conflict` and a detail naming the entity and the route's key. The client retries. The host never retries for
+you, because a retry would re-run the action's guards against the state it just changed, so two concurrent actions on
+one aggregate give one `200` and the rest `409` — the host's `Conflict`, or the module's own `Stage` when the winner
+already left the stage — never a lost update and never a second transition.
+
 ### HTTP route keys (`uses http`)
 
 A `201 Created` response's `Location` is the route plus the row's natural key as one escaped path segment
@@ -2188,8 +2196,9 @@ What an author or a client may rely on in this release, what may still change, a
   `currentStage`.
 - **The HTTP failure shape**: a failure the domain raises is ProblemDetails whose `title` is the failure kind (see
   *HTTP failures*, section 11). The statuses are `400` for `Required`, `Range`, `Length`, `Pattern`, `Enum`,
-  `Arithmetic`, `Argument` and `Constraint`; `409` for `Stage`, `Link`, `Unique` and `Conflict` (nothing raises
-  `Conflict` yet); `422` for `Policy`; `500` for `Cascade`; and `404` with title `Not Found` for an unknown id. A body
+  `Arithmetic`, `Argument` and `Constraint`; `409` for `Stage`, `Link`, `Unique` and `Conflict` (a save that lost a
+  concurrent update is `Conflict`); `422` for `Policy`; `500` for `Cascade`; and `404` with title `Not Found` for an
+  unknown id. A body
   the host's JSON binder refuses (a wrong JSON type, an unknown enum string, a JSON `null` for an action argument) is
   a `400` with an empty body, not ProblemDetails (see *Known wrong*).
 

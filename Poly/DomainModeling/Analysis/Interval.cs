@@ -131,7 +131,8 @@ public sealed record ValueRange(decimal? Min, decimal? Max) {
     private bool IsZero => Min == 0m && Max == 0m;
 
     /// <summary>No range at all: both endpoints open carries no information, so callers see unknown.</summary>
-    private ValueRange? OrNull() => Min is null && Max is null ? null : this;
+    /// <summary>Null when both endpoints are open (the range carries no information), else this range.</summary>
+    internal ValueRange? OrNull() => Min is null && Max is null ? null : this;
 
     /// <summary>One result endpoint of an exact sum or difference: absent when an operand endpoint is
     /// open or the exact result does not fit a decimal.</summary>

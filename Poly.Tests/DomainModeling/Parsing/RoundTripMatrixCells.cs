@@ -215,6 +215,27 @@ internal static class RoundTripMatrixCells {
         Expression("Match", "MatchExpr", DomainExpression.GreaterThan(DomainExpression.Match([new MatchArm(DomainExpression.GreaterThan(Prp("Total"), Num(1)), Num(1))], Num(0)), Num(0)));
         Expression("DateOperation", "DateOperation", DomainExpression.GreaterThan(Prp("Due"), new DateOperation(new Now(), DomainExpression.Literal(14L), DateOperationKind.AddDays)), CellSession.Temporal);
 
+        // built-in numeric functions (#547): each name prints and reparses inside a function body
+        Add("builtin", "numeric-functions", () => Dom(Ent("A")) with {
+            Functions = [
+                new DomainFunction("RoundFn", [Prop("value", "Decimal"), Prop("digits", "Number")], Ref("Decimal"),
+                    new FunctionCall("Round", [DomainExpression.Parameter("value"), DomainExpression.Parameter("digits")])),
+                new DomainFunction("AbsFn", [Prop("value", "Decimal")], Ref("Decimal"),
+                    new FunctionCall("Abs", [DomainExpression.Parameter("value")])),
+                new DomainFunction("MinFn", [Prop("left", "Decimal"), Prop("right", "Decimal")], Ref("Decimal"),
+                    new FunctionCall("Min", [DomainExpression.Parameter("left"), DomainExpression.Parameter("right")])),
+                new DomainFunction("MaxFn", [Prop("left", "Decimal"), Prop("right", "Decimal")], Ref("Decimal"),
+                    new FunctionCall("Max", [DomainExpression.Parameter("left"), DomainExpression.Parameter("right")])),
+                new DomainFunction("FloorFn", [Prop("value", "Decimal")], Ref("Decimal"),
+                    new FunctionCall("Floor", [DomainExpression.Parameter("value")])),
+                new DomainFunction("CeilingFn", [Prop("value", "Decimal")], Ref("Decimal"),
+                    new FunctionCall("Ceiling", [DomainExpression.Parameter("value")])),
+            ],
+        }, covers: [
+            Cov(BuiltinNumericFunction.Round), Cov(BuiltinNumericFunction.Abs), Cov(BuiltinNumericFunction.Min),
+            Cov(BuiltinNumericFunction.Max), Cov(BuiltinNumericFunction.Floor), Cov(BuiltinNumericFunction.Ceiling),
+        ]);
+
         // durations, one per unit (the temporal extension)
         foreach (var unit in Enum.GetValues<DurationUnit>())
             Add("duration", unit.ToString(), () => DomainWithExtensions([ExtensionCatalog.TemporalId], Ent("A", [Prop("Wait", "Duration", new DefaultValueConstraint(new Duration(12, unit)))])), CellSession.Temporal, Cov(unit));

@@ -119,7 +119,8 @@ public sealed partial class DomainToCSharpExporter {
     private static void AddSubscriptionRegistry(
         List<SubscriptionInfo>? targetSubs, string? stageEnumTypeName,
         IReadOnlyDictionary<SubscriptionInfo, string>? handlerNames,
-        List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
+        List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods,
+        bool defersCreationNotifications) {
         // ── Target entity: subscription registry ──────────────────
         // One registry field + register method per (relationship, stage, subscriber)
         // triple; the notify method calls EVERY subscription's handler for that
@@ -187,6 +188,7 @@ public sealed partial class DomainToCSharpExporter {
             // (source, relationship, stage) registry. Two subscribers on the same
             // target stage (Student + Section on Enrollment.Dropped) used to emit
             // duplicate _droppedSubscribers / NotifyDroppedSubscribers members.
+            var replayStages = new List<(string Stage, bool NeedsPrevious)>();
             foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
                 // Nullable: a create-in lands the child in its initial stage with no prior
                 // stage, so the caller passes null. `when all` guards read it as
@@ -197,6 +199,11 @@ public sealed partial class DomainToCSharpExporter {
                     new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
                 var notifyNodes = new List<Node>();
                 var names = new LocalNames();
+                if (defersCreationNotifications) {
+                    // #630: a create-time entry raises this before its creator has linked the child.
+                    notifyNodes.Add(DeferredStageNotificationCheck(stageGroup.Key));
+                    replayStages.Add((stageGroup.Key, needsPrevious));
+                }
                 foreach (var infos in stageGroup) {
                     var fieldName = SubscriberRegistryFieldName(infos[0]);
                     var handlerLocals = new List<Node>();
@@ -245,6 +252,8 @@ public sealed partial class DomainToCSharpExporter {
                     AccessModifier: AccessModifier.Internal
                 ));
             }
+            if (defersCreationNotifications)
+                AddDeferredStageNotifications(replayStages, stageEnumTypeName!, fields, methods);
         }
     }
 

@@ -791,6 +791,14 @@ public class VmCorrectnessTests {
         await Assert.That(exec.Result.Value).IsEqualTo("42");
     }
 
+    [Test, Timeout(10_000)]
+    public async Task New_Invoke_ToStringOnInt_ReturnsString(CancellationToken ct) {
+        var program = Interpreter.Compile(new Invoke(new Member(new Constant(42L), "ToString")));
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.Result.HasValue).IsTrue();
+        await Assert.That(exec.Result.Value).IsEqualTo("42");
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  F. Real-world algorithm tests
     // ═══════════════════════════════════════════════════════════════

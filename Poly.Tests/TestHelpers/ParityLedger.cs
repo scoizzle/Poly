@@ -52,28 +52,14 @@ public static class KnownDomainDivergences {
         Fields.Contains(field, StringComparer.Ordinal)
         || (field.StartsWith("state:", StringComparison.Ordinal) && field.Length > "state:".Length);
 
-    public static IReadOnlyList<KnownDomainDivergence> All { get; } = [
-        new(493, "L-11", "unique-number", ["simulate", "printed"], [
-            new(0, "create Thing", "success", "False", "True"),
-            new(0, "create Thing", "message", "Object reference not set to an instance of an object.", null),
-            new(0, "create Thing", "exceptionType", "NullReferenceException", null),
-            new(0, "create Thing", "state:K", "(absent)", "9"),
-            // A StateOf artifact, not a second bug: a failed create has no state of its own, and
-            // StateOf reports a Stage key for a model with no stages. Known L-11 fixes the create.
-            new(0, "create Thing", "state:Stage", "(absent)", null),
-            new(1, "create Thing", "message", "Object reference not set to an instance of an object.",
-                "Unique constraint violated: 'K' value is already used on another 'Thing'."),
-            new(1, "create Thing", "exceptionType", "NullReferenceException", null),
-            // The printed side returns the typed failure; the simulator's lowered create throws first.
-            new(1, "create Thing", "failureKind", null, "Unique"),
-            new(1, "create Thing", "failurePath", null, "Thing.K"),
-        ]),
-    ];
+    public static IReadOnlyList<KnownDomainDivergence> All { get; } = [];
 }
 
 /// <summary>Seeds that do not diverge through the module, with the owner that has to fix them.</summary>
 public static class DomainParityExclusions {
     public static IReadOnlyList<DomainParityExclusion> All { get; } = [
+        new(493, "L-11", "Both sides create with a unique Number and report the same Unique failure since the VM "
+            + "calls a member on an inline number word (#493), so the module has no divergence to ratchet."),
         new(585, "L-13", "Both sides accept a second owner, so the module has no divergence to ratchet; "
             + "absolute single-owner state is S-12b's done-when."),
         new(599, "L-05", "Both sides throw the same depth-overflow or loop-guard exception and roll the cascade back "
@@ -336,7 +322,7 @@ public static class DomainParityScenarios {
             side => {
                 side.Create("Thing", ("K", 9L));
                 side.Create("Thing", ("K", 9L));
-            }, ["NullReferenceException"]),
+            }, []),
 
         new("create-in-iterated-collection", 607, """
             domain Edge

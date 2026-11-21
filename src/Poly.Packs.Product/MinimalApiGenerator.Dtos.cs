@@ -19,7 +19,7 @@ public sealed partial class MinimalApiGenerator {
         var reserved = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in _entities) {
             if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) continue;
-            if (GetRequiredScalarSlots(entity).Count + GetRequiredLinkSlots(entity).Count == 0) continue;
+            if (!HasCreateDto(entity)) continue;
             reserved.Add($"{entity.Name}Dto");
         }
 
@@ -172,20 +172,22 @@ public sealed partial class MinimalApiGenerator {
 
     /// <summary>Builds Syntax IR for a DTO type definition.</summary>
     private void BuildDtoTypes(List<TypeDefinitionNode> dtoTypes, Entity entity) {
-        // The DTO carries the entity's Required scalar create slots (the POST endpoint
-        // passes them into Entity.Create(...); every other slot is null). The SAME
-        // published slots the endpoint reads, not a re-derived property set.
-        var scalarParams = GetRequiredScalarSlots(entity);
+        // The DTO carries EVERY scalar create slot: a Required one (the caller must supply a value), a
+        // Defaulted one (null takes the authored default) and an Optional one (null is stored). The SAME
+        // published slots the endpoint reads, not a re-derived property set. An entity with no member at
+        // all emits no record, and its POST route takes no body (#588, #641).
+        var scalarParams = GetScalarSlots(entity);
         var linkSlots = GetRequiredLinkSlots(entity);
 
-        if (scalarParams.Count + linkSlots.Count == 0) return;
+        if (!HasCreateDto(entity)) return;
         if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) return;
 
         // Emit as a record with get/init properties so transport validation attributes
         // attach to properties and the contract stays immutable. Every member is
         // nullable: an absent member and a JSON null both bind to null, and the
-        // lowered Create answers Required (400) for it. The attributes below are
-        // transport metadata; presence is the module's to enforce, not the binder's.
+        // lowered Create answers Required for a Required slot or applies the default.
+        // The attributes below are transport metadata; presence is the module's to
+        // enforce, not the binder's.
         // Declared constraints map to validation attributes: range →
         // [Range] (using the analysis-VERIFIED envelope when proven, else declared),
         // length → [MinLength]/[MaxLength], pattern → [RegularExpression], required → [Required].
@@ -207,9 +209,9 @@ public sealed partial class MinimalApiGenerator {
                     or EqualityConstraint));
 
             var attrs = BuildConstraintAttributes(clrType, effective);
-            // Every member of the create DTO is a required ctor slot (optional
-            // properties are absent from the DTO), so every string member is [Required].
-            if (clrType == "string" && attrs.All(a => a.Name != "Required"))
+            // A Required string member is [Required]: its absence is the 400. A Defaulted or
+            // Optional member may be omitted (the default applies, or it stays unset).
+            if (param.Kind == CreateSlotKind.Required && clrType == "string" && attrs.All(a => a.Name != "Required"))
                 attrs = [new AttributeNode("Required", []), .. attrs];
             // Enum-typed members: the CLR enum type enforces membership at binding; the
             // [EnumDataType] attribute additionally declares the allowed-value union on the

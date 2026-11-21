@@ -30,7 +30,7 @@ app.MapGet("/api/orders", async (TDbCtx db) => await db.Orders.ToListAsync());
 
 app.MapGet("/api/orders/{id}", async (int id, TDbCtx db) => (await db.Orders.FindAsync(id) is T.Order order ? Results.Ok(order) : StatusProblem(404, "Not Found")));
 
-app.MapPost("/api/orders", async (OrderDto dto, TDbCtx db) => {
+app.MapPost("/api/orders", async (TDbCtx db) => {
     var orderResult = T.Order.Create(null);
     if (!orderResult.IsSuccess)
     {

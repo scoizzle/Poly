@@ -47,7 +47,8 @@ public sealed partial class MinimalApiGenerator {
 
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
         if (store.IsRoot && CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) {
-            var dtoParam = new Parameter("dto", new TypeReference($"{entity.Name}Dto"));
+            // No member means no body: binding an undeclared record is a compile error (#641).
+            var dtoParam = HasCreateDto(entity) ? new Parameter("dto", new TypeReference($"{entity.Name}Dto")) : null;
             AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, key);
         }
     }
@@ -81,9 +82,10 @@ public sealed partial class MinimalApiGenerator {
     /// link arrives as the target's route key and is looked up exactly as an action's entity argument is (404 when
     /// it does not exist); a missing or null key passes a null link, and the lowered <c>Create</c> answers Required.
     /// What the lowered create reads or writes on each loaded target (<see cref="ReadsOfCreate"/>) is loaded before the call.
+    /// <paramref name="dtoParam"/> is null when the create DTO would have no members: the route then takes no body.
     /// </summary>
     private void AppendCreateCallStatements(List<Node> statements, Entity entity,
-        Parameter dtoParam, Parameter dbParam,
+        Parameter? dtoParam, Parameter dbParam,
         string route, RouteKey key) {
         var resultVarName = $"{ToCamelCase(entity.Name)}Result";
         var locals = new HashSet<string>(["dto", "db", resultVarName], StringComparer.Ordinal);
@@ -126,7 +128,8 @@ public sealed partial class MinimalApiGenerator {
 
         var createArgs = BuildCreateCallArgs(entity,
             prop => new Member(new Variable("dto"), prop.Name),
-            slot => new Variable(linkLocals[slot.Name]));
+            slot => new Variable(linkLocals[slot.Name]),
+            passAllScalars: dtoParam is not null);
 
         // var result = Entity.Create(...)
         bodyNodes.Add(Init(resultVarName,
@@ -172,7 +175,7 @@ public sealed partial class MinimalApiGenerator {
         statements.Add(new Invoke(
             new Member(new TypeReference(AppVar), "MapPost"),
             new Constant(route),
-            new Lambda([dtoParam, dbParam],
+            new Lambda(dtoParam is null ? [dbParam] : [dtoParam, dbParam],
                 Stmts(bodyNodes))));
     }
 

@@ -611,7 +611,7 @@ Filter while iterating slice 1: `/*/*/SliceCProducerLoopCatalogTests/*`, `/*/*/E
 ## Open questions
 
 1. Two units of one pack (two SQLite files, or demo and prod on SQL Server only). This spike says no, because the key is the library id. Confirm that case 3 is always two library ids.
-2. Registering `mysql` in `ProductCatalog` and adding a `UseMySql` provider arm. This spike leaves `uses mysql` unknown to the compiler catalog and leaves the enum at three values. Confirm mysql stays a test library until a host arm is a product decision.
+2. Registering `mysql` in `ProductCatalog` and adding a `UseMySql` provider arm. This spike leaves `uses mysql` unknown to the compiler catalog and leaves the enum at three values. Confirm mysql stays a test library until a host arm is a product decision. **Update (#552):** the product catalog now records `mysql` as unavailable with that reason, so `uses mysql` reports the shipping pack and the missing host provider arm instead of "unknown". Registration itself still waits on this question.
 3. `persistence` plus a vendor fails closed, rather than keeping an in-memory unit beside the vendor units. Confirm. `SwapPersistence` still strips `persistence` on the Db/All path either way.
 4. "Switchable" in slice 1 means both context types exist and `Program.cs` constructs one. Confirm that a generated switch is out of scope.
 5. One-unit file names stay `{Domain}DbContext` so `CrmDbContext.cs.golden` does not move. The parent's illustrative name includes the pack title even for one unit. Confirm the golden wins.

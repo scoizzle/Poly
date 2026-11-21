@@ -387,6 +387,41 @@ public static class PackOracleDomains {
         """,
         "/api/leads");
 
+    /// <summary>#658, the refusal half of the issue's document. The assignee is <c>optional</c> and the task names its
+    /// required <c>project</c> back-navigation, so a task filed without an assignee stays an aggregate child with the
+    /// issue's own route shape (an entity whose to-one navigations are all optional is a root, and has no nested
+    /// route). <c>FileUnassigned</c> files one, so the guard's false branch is reachable over the same child route.
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain DeskUnassigned658 { get; } = new(
+        "DeskUnassigned658",
+        """
+        domain Desk
+        uses http
+        uses sqlite
+
+        User: entity {
+          Email: Text unique
+        }
+
+        Project: entity {
+          Key: Text unique
+          tasks: many Task
+          FileTask: action (who: User) { create in tasks { assignee: who } }
+          FileUnassigned: action { create in tasks { } }
+        }
+
+        Task: entity {
+          project: Project
+          assignee: User optional
+          Assigned: policy { assignee exists }
+          Todo: stage {
+            Triage: action require Assigned { transition to Done }
+          }
+          Done: stage { }
+        }
+        """,
+        "/api/projects");
+
     /// <summary>P-13b (ii) (#912): reads at depth. <c>Order</c> reaches <c>Customer.Region.Zone</c> through three links, a line's
     /// product through a quantifier body and a fan-out, and <c>Both</c> takes two products. Each link is made over HTTP by the
     /// module's own <c>create in</c> actions. It stays out of <see cref="All"/>.</summary>

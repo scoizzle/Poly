@@ -1561,7 +1561,10 @@ diverging:
   create factory and any action that assigns the property take an `IStoragePort db`
   parameter and return `Unique constraint violated` before the write — the guard is the
   module's, not a separate export-only stub. This is the same body a source that writes
-  `uses persistence` prints. A non-empty `uses` list replaces the implicit set
+  `uses persistence` prints. `poly_export csharp` returns the whole module as **one**
+  compilation unit (one banner, one `#nullable enable`, the merged `using` set, one file-scoped
+  `namespace`), so saving it as a single `.cs` file compiles; `fileCount`/`files` name the
+  per-entity files `polyc build` writes instead. A non-empty `uses` list replaces the implicit set
   `[storage, persistence]`, so a `unique` property needs `persistence` or a vendor library in
   that list. A vendor library is persistence for its database: listing `persistence` beside one
   (`uses persistence` with `uses sqlite`) loads the vendor only. Authoring is where the rule bites: a document that lists `uses storage` or
@@ -2344,8 +2347,6 @@ What the id does not cover, and what that costs:
   required link, cascade on owned parts).
 - **An action the generator cannot follow**, such as a `when` handler chain that keeps registering subscribers, is
   refused when the app is generated, not served (#560).
-- **`poly_export csharp`** prints one file-scoped `namespace` line per entity and enum for a domain with more than one,
-  so its single-file output does not compile (CS1529, CS8954); the host files are unaffected (theme E, #685).
 - **Enum members and stage names** are stored as integers by declaration order: inserting, reordering or removing one
   re-labels stored rows with no error (see *Databases*). No check exists in this release, and no row removes it: there
   are no migrations.

@@ -22,23 +22,7 @@ public sealed partial class DomainSession {
         RequireCoreLoaded();
         var ns = CSharpNamespace(domain);
         var files = new List<(string FileName, string Source)>();
-        // The files come from this call's own catalog; the analysis below still covers the
-        // whole module, because the writer resolves types across entities from one analysis.
-        var (_, catalog) = LowerToCatalog(domain, analysis);
-        ArtifactCatalog = catalog;
-        var compiled = Compile(domain, analysis);
-        RegisterVmAnalysisReport(catalog, domain, compiled.VmAnalysis);
-        try {
-            ThrowIfVmHasErrors(compiled.VmAnalysis);
-        }
-        catch {
-            // A refused Emit leaves the new catalog on the session (and the VM report
-            // above) so the failure is inspectable; the reference report is normally
-            // registered after printing.
-            RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
-            throw;
-        }
-        var writer = new CSharpWriter(compiled.VmAnalysis);
+        var (writer, catalog) = LowerAndPrint(domain, analysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.
         var entityTrees = catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType).ToList();
@@ -64,6 +48,53 @@ public sealed partial class DomainSession {
         RegisterContributedArtifacts(domain, analysis, catalog, files);
         RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
         return files;
+    }
+
+    /// <summary>
+    /// The whole module as <b>one</b> compilation unit: one banner, one <c>#nullable enable</c>, the merged
+    /// using set, one file-scoped namespace, then every entity and the scaffolding types in emission order.
+    /// It is the single-file form of <see cref="Emit"/>'s per-entity units, for a consumer that saves the
+    /// C# export as one <c>.cs</c> file (#489): a <c>using</c> after a type, or a second file-scoped
+    /// namespace, is CS1529/CS8954.
+    /// </summary>
+    public string EmitSingleUnit(Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
+        RequireCoreLoaded();
+        var ns = CSharpNamespace(domain);
+        var (writer, catalog) = LowerAndPrint(domain, analysis);
+        var types = catalog.Artifacts
+            .Where(static a => a.Descriptor.Id.Type is EntityType or ScaffoldingType)
+            .SelectMany(TypesOf)
+            .ToList();
+        var source = types.Count == 0 ? writer.Write(types) : writer.Write(Unit(ns, types));
+        RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
+        return source;
+    }
+
+    /// <summary>
+    /// The preamble both printing paths share: lower to this call's own catalog, compile, register the VM
+    /// analysis report, and refuse a module the VM rejects (leaving the reference report registered, as
+    /// before). Returns the writer bound to that analysis and the catalog it printed from.
+    /// </summary>
+    private (CSharpWriter Writer, ArtifactCatalog Catalog) LowerAndPrint(Domain domain, AnalysisResult analysis) {
+        // The files come from this call's own catalog; the analysis below still covers the
+        // whole module, because the writer resolves types across entities from one analysis.
+        var (_, catalog) = LowerToCatalog(domain, analysis);
+        ArtifactCatalog = catalog;
+        var compiled = Compile(domain, analysis);
+        RegisterVmAnalysisReport(catalog, domain, compiled.VmAnalysis);
+        try {
+            ThrowIfVmHasErrors(compiled.VmAnalysis);
+        }
+        catch {
+            // A refused Emit leaves the new catalog on the session (and the VM report
+            // above) so the failure is inspectable; the reference report is normally
+            // registered after printing.
+            RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
+            throw;
+        }
+        return (new CSharpWriter(compiled.VmAnalysis), catalog);
     }
 
     /// <summary>

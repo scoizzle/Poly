@@ -69,7 +69,10 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
                 return new DomainToolResponse(Success: false, Message: $"Domain-to-C# export failed: {(reasons.Count > 0 ? reasons[0] : "the domain was refused")}", SessionId: sessionId, Data: new { error = reasons.FirstOrDefault() }, Diagnostics: reasons.Take(3).ToList() is { Count: > 0 } top ? top : null, Affordances: []);
             }
             var files = produced.Files;
-            var csharp = string.Join("\n\n", files.Select(f => f.Source));
+            // One compilation unit, not the per-entity files joined: `poly_export csharp` returns a single
+            // .cs artifact, and concatenated units put a `using` after a type and a second file-scoped
+            // namespace in it (CS1529/CS8954, #489).
+            var csharp = execution.Value.Session.EmitSingleUnit(state.Domain, execution.Value.Analysis);
             return new DomainToolResponse(Success: true, Message: $"Domain exported to C#: {files.Count} file(s).", SessionId: sessionId, Data: new { csharp, fileCount = files.Count, files = files.Select(f => f.FileName).ToArray() }, Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);
         }
         catch (Exception ex) {

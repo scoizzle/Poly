@@ -85,6 +85,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 a.RewriteInvokeArgumentConversions(c, (Invoke)n);
             },
             [typeof(TypeCast)] = static (a, c, n) => a.CheckTypeCast(c, (TypeCast)n),
+            [typeof(SwitchStatement)] = static (a, c, n) => a.CheckSwitch(c, (SwitchStatement)n),
             [typeof(ForEachLoop)] = static (a, c, n) => a.CheckForEachLoop(c, (ForEachLoop)n),
         }.ToFrozenDictionary();
 
@@ -95,6 +96,39 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (Checks.TryGetValue(node.GetType(), out var check))
             check(this, context, node);
         this.AnalyzeChildren(context, node);
+    }
+
+    /// <summary>#805: a switch's value merges its case bodies and default into one type. The tree
+    /// states the conversion instead of leaving the emitter to store each body's raw word: an arm
+    /// whose type differs from the switch's resolved common type is wrapped in a cast to it. Where
+    /// the arms share no common type nothing is inserted, so a legal statement switch that merely
+    /// discards mixed bodies keeps running.</summary>
+    private void CheckSwitch(AnalysisContext context, SwitchStatement swt) {
+        if (context.GetResolvedType(swt) is not { } target)
+            return;
+
+        // The conversion is stated the way an invoke argument's is (ConvertOperand): a conversion with a method
+        // (long → decimal is decimal.op_Implicit) becomes that call; one with no method is left to the emitter.
+        Node Convert(Node arm) {
+            if (DefinitionOf(context, arm) is not { } armType || TypeDefinitionExtensions.IsSameType(armType, target))
+                return arm;
+            return ConvertOperand(context, arm, target) ?? arm;
+        }
+
+        var changed = false;
+        var cases = new List<SwitchCase>(swt.Cases.Count);
+        foreach (var c in swt.Cases) {
+            var body = Convert(c.Body);
+            changed |= !ReferenceEquals(body, c.Body);
+            cases.Add(ReferenceEquals(body, c.Body) ? c : c with { Body = body });
+        }
+        var fallback = swt.DefaultCase is null ? null : Convert(swt.DefaultCase);
+        changed |= !ReferenceEquals(fallback, swt.DefaultCase);
+        if (!changed)
+            return;
+        var rewritten = swt with { Cases = cases, DefaultCase = fallback };
+        context.SetResolvedType(rewritten, target);
+        Replace(context, swt, rewritten);
     }
 
     /// <summary>A declared <c>foreach (V x in …)</c> loop variable requires a conversion from

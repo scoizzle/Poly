@@ -86,7 +86,10 @@ public sealed partial class DbContextGenerator {
     }
 
     /// <summary>True when this numeric column is stored in a text-affinity column: SQLite maps <c>Decimal</c> to
-    /// <c>TEXT</c>, the one store there that keeps every digit. Its CHECK must compare the value as a number (#559).</summary>
+    /// <c>TEXT</c>, the one store there that keeps every digit. Its CHECK must compare the value as a number (#559).
+    /// This is SQLite's mapping today; a pack that maps a range-checked <c>Decimal</c> to text on a dialect whose
+    /// <c>REAL</c> is not an IEEE double (SQL Server's is single precision) must extend this CHECK for its dialect, not
+    /// inherit it.</summary>
     private static bool StoresNumberAsText(StorageColumn column) =>
         string.Equals(column.DomainType, "Decimal", StringComparison.Ordinal)
         && string.Equals(column.ColumnType, "TEXT", StringComparison.OrdinalIgnoreCase);
@@ -99,7 +102,9 @@ public sealed partial class DbContextGenerator {
     /// reason. Both sides are then the same correctly-rounded double, and rounding is monotone, so a value inside the
     /// declared range is never refused. The CHECK is a floor that never contradicts <c>Create</c>, never a second stricter
     /// guard: a value that differs from a bound beyond REAL's 15–17 significant digits may pass it, and <c>Create</c> still
-    /// refuses that value in the domain. Every numeric store type keeps its plain comparison.
+    /// refuses that value in the domain. It is not a type guard either: text that is not a number casts to <c>0.0</c>, so
+    /// it passes a range that contains 0 (a write outside the module, where <c>Create</c> does not run). Every numeric store
+    /// type keeps its plain comparison.
     /// </remarks>
     private static string CheckSql(StorageColumn column) {
         var verified = column.VerifiedRange!;

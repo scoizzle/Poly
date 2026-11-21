@@ -994,7 +994,8 @@ public class PackOracleTests {
         // The issue's table (9, 99, 2000, 500000, 1000000 and 10, which used to pass by luck), plus both bounds and
         // fractional values, which a numeric comparison must also keep.
         var valid = new[] { ("REF-1", 9m), ("REF-2", 99m), ("REF-3", 2000m), ("REF-4", 500000m), ("REF-5", 1000000m),
-            ("REF-6", 10m), ("REF-7", 0m), ("REF-8", 0.01m), ("REF-9", 999999.99m) };
+            ("REF-6", 10m), ("REF-7", 0m), ("REF-8", 0.01m), ("REF-9", 999999.99m),
+            ("REF-10", 1000000.00m), ("REF-11", 0.00m) };
         foreach (var (reference, declared) in valid) {
             using var created = await oracle.Client.PostAsync(
                 "/api/shipments", Json($$"""{"Reference":"{{reference}}","WeightKg":500,"Declared":{{declared.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}"""));

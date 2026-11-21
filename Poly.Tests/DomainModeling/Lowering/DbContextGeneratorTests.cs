@@ -329,6 +329,7 @@ public class DbContextGeneratorTests {
               Price: Decimal range(0, 1000000)
               Fee: Decimal range(0.00, 100.00)
               High: Decimal range(9007199254740993, 9007199254741000)
+              Band: Decimal range(-100, -1)
               Qty: Number range(1, 10)
             }
             """);
@@ -340,6 +341,8 @@ public class DbContextGeneratorTests {
             .IsEqualTo("CAST(fee AS REAL) >= 0.00 AND CAST(fee AS REAL) <= 100.00");
         await Assert.That(checks.Single(c => c.Contains("high", StringComparison.Ordinal)))
             .IsEqualTo("CAST(high AS REAL) >= 9007199254740993.0 AND CAST(high AS REAL) <= 9007199254741000.0");
+        await Assert.That(checks.Single(c => c.Contains("band", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(band AS REAL) >= -100.0 AND CAST(band AS REAL) <= -1.0");
         await Assert.That(checks.Single(c => c.Contains("qty", StringComparison.Ordinal)))
             .IsEqualTo("qty >= 1 AND qty <= 10");
     }

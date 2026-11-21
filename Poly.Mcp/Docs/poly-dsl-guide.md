@@ -1962,7 +1962,9 @@ casts the value. Both sides are then the same correctly-rounded double, and roun
 inside the declared range is never refused. A whole-number bound above 2^53 is printed with a `.0` for exactly
 that reason: an INTEGER literal is compared exactly, without rounding, and would refuse the value at the bound.
 The CHECK is a floor that never contradicts `Create`, which stays the guard: a value that differs from a bound
-beyond REAL's 15–17 significant digits can pass it, and `Create` still refuses that value in the domain.
+beyond REAL's 15–17 significant digits can pass it, and `Create` still refuses that value in the domain. It is not
+a type check: text that is not a number casts to `0.0` and passes a range that contains 0 (only a write outside the
+module can put it there; `Create` never does).
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport emits them as DTO validation attributes (metadata on the contract;

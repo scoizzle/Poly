@@ -11,17 +11,16 @@ public sealed record KnownPackDivergence(
 
 /// <summary>Every known pack divergence, sorted by <c>(Issue, Provider, Domain, Probe)</c>.</summary>
 public static class KnownPackDivergences {
-    /// <summary>#559 (Decimal range maps to TEXT + CHECK, so a valid write fails <c>SaveChanges</c>; P-05) and #589 (the
-    /// synthetic <c>Id</c> is never serialised, so a create answers 200 with no <c>Location</c> and the row cannot be
-    /// read or invoked; P-12). A <c>status=0</c> row is a request that could not be sent: there was no <c>Location</c>.</summary>
+    /// <summary>#589 (the synthetic <c>Id</c> is never serialised, so a create answers 200 with no <c>Location</c> and the
+    /// row cannot be read or invoked; P-12). A <c>status=0</c> row is a request that could not be sent: there was no
+    /// <c>Location</c>. #559's four rows are gone with its fix: crm <c>Product</c> has a natural key, so its create is a
+    /// 201 with a <c>Location</c> and its read passes; hotel <c>RoomType</c> has no key, so its two probes are #589's.</summary>
     public static IReadOnlyList<KnownPackDivergence> All { get; } = [
-        new(559, "P-05", "sqlite", "crm", "Product.CreateValid", "status=500;location=none"),
-        new(559, "P-05", "sqlite", "crm", "Product.ReadCreated", "status=0;location=none"),
-        new(559, "P-05", "sqlite", "hotel", "RoomType.CreateValid", "status=500;location=none"),
-        new(559, "P-05", "sqlite", "hotel", "RoomType.ReadCreated", "status=0;location=none"),
         new(589, "P-12", "sqlite", "clinic", "Patient.ActionSuccess", "status=0;location=none"),
         new(589, "P-12", "sqlite", "clinic", "Patient.CreateValid", "status=200;location=none"),
         new(589, "P-12", "sqlite", "clinic", "Patient.ReadCreated", "status=0;location=none"),
+        new(589, "P-12", "sqlite", "hotel", "RoomType.CreateValid", "status=200;location=none"),
+        new(589, "P-12", "sqlite", "hotel", "RoomType.ReadCreated", "status=0;location=none"),
         new(589, "P-12", "sqlite", "mcp-library", "Patron.CreateValid", "status=200;location=none"),
         new(589, "P-12", "sqlite", "mcp-library", "Patron.ReadCreated", "status=0;location=none"),
         new(589, "P-12", "sqlite", "simulate-create-create-in", "Patron.ActionSuccess", "status=0;location=none"),

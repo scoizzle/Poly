@@ -444,6 +444,40 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(executor.Link("profile", person, second).Succeeded).IsTrue();
     }
 
+    private const string Folders = """
+        domain Folders
+        Entry: entity {
+          Name: Text
+          children: many owned Entry
+          related: many Entry
+        }
+        """;
+
+    [Test]
+    public async Task Link_AnInstanceToItself_OverAnOwnedRelationship_IsRefused() {
+        // #1001 (owner ruling): an instance cannot own itself.
+        var executor = ExecutorFor(Folders);
+        var docs = executor.Create("Entry", Values(("Name", "docs"))).Instance!;
+
+        var refused = executor.Link("children", docs, docs);
+
+        await Assert.That(refused.Succeeded).IsFalse();
+        await Assert.That(refused.Error).IsEqualTo(Relationship.SelfOwnLinkViolationMessage("children"));
+        await Assert.That(executor.IsLinked("children", docs, docs)).IsFalse();
+    }
+
+    [Test]
+    public async Task Link_ACycle_AndANonOwningSelfLink_AreAccepted() {
+        // #1001 (owner ruling): a cycle is a legitimate data structure; only owning oneself is refused.
+        var executor = ExecutorFor(Folders);
+        var a = executor.Create("Entry", Values(("Name", "a"))).Instance!;
+        var b = executor.Create("Entry", Values(("Name", "b"))).Instance!;
+
+        await Assert.That(executor.Link("children", a, b).Succeeded).IsTrue();
+        await Assert.That(executor.Link("children", b, a).Succeeded).IsTrue();
+        await Assert.That(executor.Link("related", a, a).Succeeded).IsTrue();
+    }
+
     [Test]
     public async Task Unlink_LastOwnerOfOwnedTarget_IsRefused_ButASecondOwnerMayLeave() {
         var executor = ExecutorFor(Passports);

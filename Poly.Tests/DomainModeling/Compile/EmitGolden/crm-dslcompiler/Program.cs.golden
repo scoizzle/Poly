@@ -85,7 +85,7 @@ app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListA
 app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Crm.Account account ? Results.Ok(account) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
-    var accountResult = Crm.Account.Create(dto.Name, dto.Industry, null, null, null, null, null, null, null, null);
+    var accountResult = Crm.Account.Create(dto.Name, dto.Industry, null, dto.WonCount, dto.OpenPipeline, null, null, null, null, dto.ClosedTickets);
     if (!accountResult.IsSuccess)
     {
         return Problem(accountResult.Error!);
@@ -1533,6 +1533,9 @@ internal record AccountDto
     public string? Name { get; init; }
     [EnumDataType(typeof(Crm.Industry))]
     public Crm.Industry? Industry { get; init; }
+    public long? WonCount { get; init; }
+    public decimal? OpenPipeline { get; init; }
+    public long? ClosedTickets { get; init; }
 }
 
 internal record CampaignDto

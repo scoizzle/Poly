@@ -2,6 +2,7 @@
 
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
@@ -70,7 +71,7 @@ app.MapGet("/api/patrons", async (LibraryDbContext db) => await db.Patrons.ToLis
 app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Library.Patron patron ? Results.Ok(patron) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
-    var patronResult = Library.Patron.Create(db, dto.Name, dto.Email, null, null, dto.MaxItems, null, null, null, null);
+    var patronResult = Library.Patron.Create(db, dto.Name, dto.Email, dto.MemberSince, dto.Status, dto.MaxItems, dto.CurrentBorrowCount, dto.OutstandingFines, null, null);
     if (!patronResult.IsSuccess)
     {
         return Problem(patronResult.Error!);
@@ -85,7 +86,7 @@ app.MapGet("/api/premiumpatrons", async (LibraryDbContext db) => await db.Premiu
 app.MapGet("/api/premiumpatrons/{email}", async (string email, LibraryDbContext db) => (await db.PremiumPatrons.FirstOrDefaultAsync(e => e.Email == email) is Library.PremiumPatron premiumPatron ? Results.Ok(premiumPatron) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/premiumpatrons", async (PremiumPatronDto dto, LibraryDbContext db) => {
-    var premiumPatronResult = Library.PremiumPatron.Create(db, dto.Name, dto.Email, dto.RewardPoints, null, dto.PriorityAccess);
+    var premiumPatronResult = Library.PremiumPatron.Create(db, dto.Name, dto.Email, dto.RewardPoints, dto.Tier, dto.PriorityAccess);
     if (!premiumPatronResult.IsSuccess)
     {
         return Problem(premiumPatronResult.Error!);
@@ -488,8 +489,13 @@ internal record PatronDto
     [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
     public string? Email { get; init; }
+    public DateOnly? MemberSince { get; init; }
+    [EnumDataType(typeof(Library.PatronStatus))]
+    public Library.PatronStatus? Status { get; init; }
     [Range(0, 20)]
     public long? MaxItems { get; init; }
+    public long? CurrentBorrowCount { get; init; }
+    public long? OutstandingFines { get; init; }
 }
 
 internal record PremiumPatronDto
@@ -500,6 +506,8 @@ internal record PremiumPatronDto
     [RegularExpression("^[^@]+@[^@]+$")]
     public string? Email { get; init; }
     public long? RewardPoints { get; init; }
+    [EnumDataType(typeof(Library.PremiumTier))]
+    public Library.PremiumTier? Tier { get; init; }
     public bool? PriorityAccess { get; init; }
 }
 

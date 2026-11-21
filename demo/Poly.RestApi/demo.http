@@ -42,7 +42,11 @@ Content-Type: application/json
 {
     "Name": "sample",
     "Email": "example-email",
-    "MaxItems": 0
+    "MemberSince": "2026-07-20",
+    "Status": "Active",
+    "MaxItems": 0,
+    "CurrentBorrowCount": 0,
+    "OutstandingFines": 0
 }
 
 ### Action: CheckOut
@@ -106,6 +110,7 @@ Content-Type: application/json
     "Name": "sample",
     "Email": "example-email",
     "RewardPoints": 0,
+    "Tier": "Silver",
     "PriorityAccess": false
 }
 

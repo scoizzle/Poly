@@ -2270,8 +2270,8 @@ What the id does not cover, and what that costs:
   (#905).
 - **A stored `DateTime` in a `GET`** (generated app) comes back without its `Z`: the clock time is right, the UTC
   marker is lost through SQLite. Removed by #937.
-- **Names**: a property named `Created` (#927) and an action named `Add` on an entity that has a `many` link and a
-  `unique` property (#934) fail to build. A domain named like a C# keyword is refused, and a domain named `DateTime`
+- **Names**: an action named `Add` on an entity that has a `many` link and a `unique` property (#934) fails to
+  build. A domain named like a C# keyword is refused, and a domain named `DateTime`
   that declares a `DateTime` property does not compile (CS0118) (E-10).
 - **Assigning an absent optional Text**: the simulator stores `""`, the generated C# stores `null` (#929).
 - **A stage `require` at create**: it is not checked when an instance is created (#576, L-17).

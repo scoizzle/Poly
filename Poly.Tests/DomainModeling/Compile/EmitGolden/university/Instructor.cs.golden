@@ -133,10 +133,10 @@ internal class Instructor : Poly.Runtime.IActionScoped
         {
             return DomainResult<Instructor>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Instructor'.", "Instructor.Email"));
         }
-        var created = new Instructor(__name, __email);
-        Poly.Runtime.ActionScope.Create(created, "Instructor");
+        var __created = new Instructor(__name, __email);
+        Poly.Runtime.ActionScope.Create(__created, "Instructor");
         db.Record("Instructor", "Email", __email);
-        return DomainResult<Instructor>.Success(created);
+        return DomainResult<Instructor>.Success(__created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)
     {

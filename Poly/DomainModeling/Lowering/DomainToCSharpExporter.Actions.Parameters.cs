@@ -67,7 +67,7 @@ public sealed partial class DomainToCSharpExporter {
                 $"Contract '{contract.Name}' endpoint '{endpoint.Name}' body reads 'request', but action '{action.Name}' binds '{binding.LocalParameterName}'. A bound action with a contributed body must name its payload parameter 'request'.");
         }
 
-        var adapterResult = names?.Next("adapterResult") ?? new Variable("adapterResult");
+        var adapterResult = names?.Next("adapterResult") ?? new Variable("__adapterResult");
         if (action.Parameters.Any(p => string.Equals(p.Name, adapterResult.Name, StringComparison.Ordinal))
             || locals.OfType<Variable>().Any(v => string.Equals(v.Name, adapterResult.Name, StringComparison.Ordinal)))
             throw new InvalidOperationException(

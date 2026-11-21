@@ -90,10 +90,10 @@ internal class Ticket : Poly.Runtime.IActionScoped
         if (this.CurrentStage == TicketStage.New || this.CurrentStage == TicketStage.Working)
         {
             this.CurrentStage = TicketStage.Closed;
-            var notify0 = this.NotifyClosedSubscribers();
-            if (!notify0.IsSuccess)
+            var __notify0 = this.NotifyClosedSubscribers();
+            if (!__notify0.IsSuccess)
             {
-                return DomainResult.Failure(notify0.Error!.At("Ticket.Close"));
+                return DomainResult.Failure(__notify0.Error!.At("Ticket.Close"));
             }
             return DomainResult.Success();
         }
@@ -106,9 +106,9 @@ internal class Ticket : Poly.Runtime.IActionScoped
         {
             this._accountTicketsClosedSubscribers = new List<Account>();
         }
-        foreach (var existing in this._accountTicketsClosedSubscribers)
+        foreach (var __existing in this._accountTicketsClosedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -122,12 +122,12 @@ internal class Ticket : Poly.Runtime.IActionScoped
         {
             if (this._accountTicketsClosedSubscribers != null)
             {
-                foreach (var sub in this._accountTicketsClosedSubscribers)
+                foreach (var __sub in this._accountTicketsClosedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachTicketClosed();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachTicketClosed();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -173,13 +173,13 @@ internal class Ticket : Poly.Runtime.IActionScoped
             return DomainResult<Ticket>.Failure(Poly.Runtime.DomainFailure.Required("'account' is required.", "Ticket.account"));
         }
         var __account = account;
-        var created = new Ticket(__subject, __account);
-        Poly.Runtime.ActionScope.Create(created, "Ticket");
+        var __created = new Ticket(__subject, __account);
+        Poly.Runtime.ActionScope.Create(__created, "Ticket");
         if (account != null)
         {
-            account.AttachTickets(created);
+            account.AttachTickets(__created);
         }
-        return DomainResult<Ticket>.Success(created);
+        return DomainResult<Ticket>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {

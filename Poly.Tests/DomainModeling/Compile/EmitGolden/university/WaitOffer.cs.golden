@@ -60,10 +60,10 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Seat' requires stage 'Queued' on entity 'WaitOffer'.", "WaitOffer.Seat", "Queued"));
         }
         this.CurrentStage = WaitOfferStage.Offered;
-        var notify0 = this.NotifyOfferedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyOfferedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("WaitOffer.Seat"));
+            return DomainResult.Failure(__notify0.Error!.At("WaitOffer.Seat"));
         }
         return DomainResult.Success();
     }
@@ -95,12 +95,12 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
     {
         if (this.CurrentStage == WaitOfferStage.Queued || this.CurrentStage == WaitOfferStage.Offered)
         {
-            var previousStage0 = this.CurrentStage;
+            var __previousStage0 = this.CurrentStage;
             this.CurrentStage = WaitOfferStage.Cancelled;
-            var notify1 = this.NotifyCancelledSubscribers(previousStage0);
-            if (!notify1.IsSuccess)
+            var __notify1 = this.NotifyCancelledSubscribers(__previousStage0);
+            if (!__notify1.IsSuccess)
             {
-                return DomainResult.Failure(notify1.Error!.At("WaitOffer.Cancel"));
+                return DomainResult.Failure(__notify1.Error!.At("WaitOffer.Cancel"));
             }
             return DomainResult.Success();
         }
@@ -113,9 +113,9 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         {
             this._sectionWaitlistOfferedSubscribers = new List<Section>();
         }
-        foreach (var existing in this._sectionWaitlistOfferedSubscribers)
+        foreach (var __existing in this._sectionWaitlistOfferedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -129,9 +129,9 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         {
             this._sectionWaitlistCancelledSubscribers = new List<Section>();
         }
-        foreach (var existing in this._sectionWaitlistCancelledSubscribers)
+        foreach (var __existing in this._sectionWaitlistCancelledSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -145,12 +145,12 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         {
             if (this._sectionWaitlistOfferedSubscribers != null)
             {
-                foreach (var sub in this._sectionWaitlistOfferedSubscribers)
+                foreach (var __sub in this._sectionWaitlistOfferedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenAnyWaitOfferOffered();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenAnyWaitOfferOffered();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -168,12 +168,12 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         {
             if (this._sectionWaitlistCancelledSubscribers != null)
             {
-                foreach (var sub in this._sectionWaitlistCancelledSubscribers)
+                foreach (var __sub in this._sectionWaitlistCancelledSubscribers)
                 {
-                    var handlerResult0 = sub.WhenAllWaitOfferCancelled(__previousStage);
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenAllWaitOfferCancelled(__previousStage);
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -219,13 +219,13 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
             return DomainResult<WaitOffer>.Failure(Poly.Runtime.DomainFailure.Required("'section' is required.", "WaitOffer.section"));
         }
         var __section = section;
-        var created = new WaitOffer(__student, __section);
-        Poly.Runtime.ActionScope.Create(created, "WaitOffer");
+        var __created = new WaitOffer(__student, __section);
+        Poly.Runtime.ActionScope.Create(__created, "WaitOffer");
         if (section != null)
         {
-            section.AttachWaitlist(created);
+            section.AttachWaitlist(__created);
         }
-        return DomainResult<WaitOffer>.Success(created);
+        return DomainResult<WaitOffer>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {

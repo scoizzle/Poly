@@ -401,15 +401,29 @@ public sealed partial class ModuleInstanceExecutor {
     // ── module access ─────────────────────────────────────────────────────────
 
     private Entity RequireEntity(string entityName) =>
-        _domain.Types.OfType<Entity>()
-            .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
-        ?? throw new HostException($"Entity '{entityName}' not found in domain '{_domain.Name}'.");
+        _analysis.TryGetEntity(_domain, entityName, out var entity) && entity is not null
+            ? entity
+            : throw new HostException($"Entity '{entityName}' not found in domain '{_domain.Name}'.");
 
-    private Action? FindAction(string entityName, string actionName) {
-        var entity = RequireEntity(entityName);
-        return entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
-            .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+    /// <summary>
+    /// The copy the module dispatches (#945): the current stage's own action wins, then the
+    /// entity's, as <see cref="DomainAnalysis.FindAction"/> rules and the lowered dispatch
+    /// agrees. A name declared only in another stage still names a method, so the module
+    /// answers with its stage failure; that representative supplies only the parameter list,
+    /// which lowering holds identical across every copy of a name.
+    /// </summary>
+    private Action? FindAction(ModuleInstance target, string actionName) {
+        var entity = RequireEntity(target.EntityName);
+        return DomainAnalysis.FindAction(entity, actionName, CurrentStageOf(entity, target))
+            ?? DomainAnalysis.FindAnyNamedAction(entity, actionName);
     }
+
+    /// <summary>The bag's stage, or the entity's initial stage while the module has not
+    /// written one — the same reading the instance tools present.</summary>
+    private static string? CurrentStageOf(Entity entity, ModuleInstance instance) =>
+        instance.Bag.TryGetValue("CurrentStage", out var stage) && stage is not null
+            ? Convert.ToString(stage, System.Globalization.CultureInfo.InvariantCulture)
+            : entity.InitialStage()?.Name;
 
     private MethodDefinitionNode? FindMethod(string entityName, string methodName, bool isStatic) {
         var module = RuntimeAnalysisCache.GetOrLower(_domain);

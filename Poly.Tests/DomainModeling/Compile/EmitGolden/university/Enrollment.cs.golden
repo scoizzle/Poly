@@ -39,6 +39,16 @@ internal class Enrollment : Poly.Runtime.IActionScoped
     public Section? Section { get; private set; }
     public Student? Student { get; private set; }
     public EnrollmentStage CurrentStage { get; private set; }
+    internal void AttachSection(Section child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Section = child;
+    }
+    internal void AttachStudent(Student child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Student = child;
+    }
     internal DomainResult Confirm()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

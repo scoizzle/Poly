@@ -29,6 +29,16 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
     public Student? Student { get; private set; }
     public Section? Section { get; private set; }
     public WaitOfferStage CurrentStage { get; private set; }
+    internal void AttachStudent(Student child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Student = child;
+    }
+    internal void AttachSection(Section child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Section = child;
+    }
     internal DomainResult Seat()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

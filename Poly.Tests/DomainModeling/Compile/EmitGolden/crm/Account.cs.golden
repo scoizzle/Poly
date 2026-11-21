@@ -54,6 +54,11 @@ internal class Account : Poly.Runtime.IActionScoped
         get => this._tickets;
     }
     public AccountStage CurrentStage { get; private set; }
+    internal void AttachParent(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Parent = child;
+    }
     internal DomainResult<Site> CreateHq(string? city = default, string? region = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -88,6 +93,11 @@ internal class Account : Poly.Runtime.IActionScoped
         var site = siteResult.Value;
         this.Hq = site;
         return DomainResult<Site>.Success(site);
+    }
+    internal void AttachHq(Site child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Hq = child;
     }
     internal DomainResult<Contact> CreateContacts(Poly.Runtime.IStoragePort db, string? name = default, string? email = default)
     {

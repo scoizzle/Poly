@@ -58,6 +58,16 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         get => this._quotes;
     }
     public OpportunityStage CurrentStage { get; private set; }
+    internal void AttachAccount(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Account = child;
+    }
+    internal void AttachContact(Contact child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Contact = child;
+    }
     internal DomainResult<Activity> CreateActivities(string? subject = default, DateOnly? dueOn = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

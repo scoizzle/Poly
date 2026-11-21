@@ -16,6 +16,12 @@
 > (`stageName`, `preconditions`, `properties[].min/max`, `postconditions`) copied from the
 > analyzer's range/precondition facts; absent when the analysis published none. Only an
 > `Entity.Action` select carries a witness; a stage-qualified `Entity.Stage.Action` select does not.
+> `poly_check` with an `expression` proves one DSL fragment against the workspace's own model: the
+> declared `function`s and `enum`s are in scope, and a bound property keeps its declared type, so
+> `Level is Senior` reads the enum member while an undeclared name is typed by its literal. Every
+> property the fragment reads needs a value in `bindings`; a name it reads with no binding fails
+> closed and names it. An expression that reads no property needs no `bindings`
+> (`Within(5, 1, 10)`).
 > Each result's text block is a prose summary (outcome, `workspace:` handle, findings, `next:`
 > calls, flattened data); the full envelope is in `structuredContent`.
 
@@ -1502,7 +1508,7 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 - Cross-entity writes (nav path as assign target) are banned.
 - **Path-prefix / owned / quantifier / Rel exists** require session instances + links when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
 
-  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same session instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against the linked instances. **Fail closed:** missing `instanceId`, instance, or domain metadata. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `oracle_expression` is a fragment probe on a synthetic bag — not named-policy evaluate.
+  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same session instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against the linked instances. **Fail closed:** missing `instanceId`, instance, or domain metadata. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `poly_check` with an `expression` is a fragment probe against the model's declared functions and enums, with each property it reads bound in `bindings` — not named-policy evaluate, and with no linked instances a relationship path still fails closed.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions

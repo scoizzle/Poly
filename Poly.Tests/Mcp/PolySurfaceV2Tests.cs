@@ -495,6 +495,79 @@ public class PolySurfaceV2Tests {
     }
 
     [Test]
+    public async Task Check_ExpressionCallsAFunctionDeclaredInTheModel() {
+        // #496: the probe's model was a synthetic domain with no functions, so any call to a
+        // declared function was DMFUN001, and a pure expression needed a dummy binding.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain Probe
+            F: entity { N: Number default(0) }
+            function Within(x: Number, lo: Number, hi: Number): Boolean = x >= lo and x <= hi
+            """).Ok).IsTrue();
+
+        var proven = surface.Check(workspace, expression: "Within(5, 1, 10)");
+        var violated = surface.Check(workspace, expression: "Within(50, 1, 10)");
+
+        var provenData = JsonSerializer.SerializeToNode(proven.Data)!;
+        await Assert.That(provenData["verdict"]!.GetValue<string>()).IsEqualTo("proven").Because(proven.Summary);
+        await Assert.That(provenData["result"]!.GetValue<bool>()).IsTrue();
+        var violatedData = JsonSerializer.SerializeToNode(violated.Data)!;
+        await Assert.That(violatedData["verdict"]!.GetValue<string>()).IsEqualTo("violated").Because(violated.Summary);
+        await Assert.That(violatedData["result"]!.GetValue<bool>()).IsFalse();
+    }
+
+    [Test]
+    public async Task Check_ExpressionReadsABareEnumMember() {
+        // #497: `Level is Senior` read `Senior` as a missing property, because the probe's
+        // synthetic domain carried none of the model's enums.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain Probe
+            Grade: enum { Junior, Senior }
+            Emp: entity { Level: Grade default(Junior) }
+            """).Ok).IsTrue();
+
+        var proven = surface.Check(workspace, expression: "Level is Senior", bindings: """{"Level":"Senior"}""");
+        var violated = surface.Check(workspace, expression: "Level is Senior", bindings: """{"Level":"Junior"}""");
+
+        var provenData = JsonSerializer.SerializeToNode(proven.Data)!;
+        await Assert.That(provenData["verdict"]!.GetValue<string>()).IsEqualTo("proven").Because(proven.Summary);
+        var violatedData = JsonSerializer.SerializeToNode(violated.Data)!;
+        await Assert.That(violatedData["verdict"]!.GetValue<string>()).IsEqualTo("violated").Because(violated.Summary);
+    }
+
+    [Test]
+    public async Task Check_ExpressionUnknownProperty_NamesTheBindingsArgument() {
+        // #497: the message pointed at a `propertiesJson` parameter the tool does not have.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
+
+        var check = surface.Check(workspace, expression: "NonExistent == 1", bindings: """{"Total":5}""");
+
+        await Assert.That(JsonSerializer.SerializeToNode(check.Data)!["verdict"]!.GetValue<string>())
+            .IsEqualTo("unknown");
+        await Assert.That(check.Summary).Contains("bindings").Because(check.Summary);
+        await Assert.That(check.Summary).DoesNotContain("propertiesJson");
+        await Assert.That(check.Findings.Any(f => f.Message.Contains("bindings", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task Check_ExpressionUnknownFunction_FailsClosed() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
+
+        var check = surface.Check(workspace, expression: "Nope(1)");
+
+        await Assert.That(JsonSerializer.SerializeToNode(check.Data)!["verdict"]!.GetValue<string>())
+            .IsEqualTo("unknown");
+        await Assert.That(check.Summary).Contains("unknown function").Because(check.Summary);
+    }
+
+    [Test]
     public async Task Define_DryRunInvalid_LeavesRevision() {
         var surface = Surface();
         var workspace = Open(surface);

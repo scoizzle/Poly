@@ -61,6 +61,42 @@ public static class PackOracleDomains {
         Boots: false,
         NotBootingReason: "#559: the reproduction has no 'uses http', so no Program.cs is emitted and there is no host to boot");
 
+    /// <summary>#560 Minimal reproduction, with the shipped shape's <c>via</c> back-reference so the child is an aggregate
+    /// member: a stored <c>Shipment</c> watches its holds' <c>Closed</c> stage. The parent handler must run after a reload.</summary>
+    public static PackOracleDomain Shipment560 { get; } = new(
+        "Shipment560",
+        """
+        domain Logistics
+        uses sqlite
+        uses http
+
+        Shipment: entity {
+          Reference: Text unique
+          Note: Text optional
+          holds: many CustomsHold
+          Hold: action (reason: Text) {
+            create in holds { Reason: reason }
+          }
+          when holds Closed {
+            assign Note to "hold cleared"
+          }
+        }
+
+        CustomsHold: entity {
+          Reason: Text
+          Cleared: Boolean default(false)
+          holder: Shipment via holds
+          Open: stage {
+            Clear: action {
+              assign Cleared to true
+              transition to Closed
+            }
+          }
+          Closed: stage { }
+        }
+        """,
+        "/api/shipments");
+
     /// <summary>#620 Minimal reproduction. A failing action whose earlier effect is persisted.</summary>
     public static PackOracleDomain Warehouse620 { get; } = new(
         "Warehouse620",

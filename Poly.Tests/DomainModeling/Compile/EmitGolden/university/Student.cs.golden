@@ -445,7 +445,7 @@ internal class Student : Poly.Runtime.IActionScoped
         db.Record("Student", "Email", __email);
         return DomainResult<Student>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Enrollments)
         {

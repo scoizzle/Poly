@@ -402,7 +402,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         db.Record("Patron", "Email", __email);
         return DomainResult<Patron>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Loans)
         {

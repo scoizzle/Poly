@@ -89,6 +89,20 @@ public sealed partial class MinimalApiGenerator {
         var locals = new HashSet<string>(["dto", "db", resultVarName], StringComparer.Ordinal);
         var bodyNodes = new List<Node>();
 
+        // #592: ASP.NET leaves %2F encoded in a route value, so a natural key containing '/' has no Location that can
+        // read it back. Refuse it with a 400 before the row is saved, never a 201 whose Location reaches nothing.
+        // Only a Required scalar is a create DTO member: an optional or defaulted key never arrives from the body.
+        if (key.Property is { Name: var keyMember } && key.ClrType == "string"
+            && GetRequiredScalarSlots(entity).Any(slot => string.Equals(slot.Name, keyMember, StringComparison.Ordinal))) {
+            var member = new Member(new Variable("dto"), keyMember);
+            bodyNodes.Add(new IfStatement(
+                new Ast.Nodes.And(
+                    new NotEqual(member, new Constant(null!)),
+                    new Invoke(new Member(member, "Contains"), new Constant("/"))),
+                new Block(new Return(ProblemResponse(400, "Bad Request",
+                    $"the natural key '{keyMember}' contains '/', which no route can read back; use a key without '/'")))));
+        }
+
         var reads = _catalog is null ? null : ReadsOfCreate(entity);
         var loadedRoots = new HashSet<string>(StringComparer.Ordinal) { "this" };
         var linkLocals = new Dictionary<string, string>(StringComparer.Ordinal);

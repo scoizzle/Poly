@@ -1528,7 +1528,8 @@ diverging:
   is a residual with no caller: it refuses with "A unique assign needs the storage port." The EF model uses a
   synthetic integer `Id` key. Every `unique` property, including a second one on the
   same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session
-  storage port and at the database.
+  storage port and at the database. An absent `optional` `unique` value is not a key: `Create`
+  neither checks nor records it, so any number of instances may omit it.
 - **`Now`/`Today`/`Guid` are authorable in `default(...)`, assign RHS, and policy bodies**
   (with the temporal library, default in MCP `apply_dsl`). Policy/VM evaluation of `Now`/`Today`
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a
@@ -2264,8 +2265,6 @@ What the id does not cover, and what that costs:
 - **Optional and defaulted properties in a create body** (HTTP): they are ignored, because the create DTO carries the
   required scalars only; the simulator accepts them (P-11). A wrong JSON type, or an unknown enum string for a required
   enum, answers `400` with an empty body (P-14).
-- **An optional unique key** (generated app): a `Text unique optional` property on an entity with a required scalar
-  stops the host at boot, and every create on a `Date unique optional` key answers `409`, the first included (#611).
 - **A `Binary` property**: analysis accepts it and every host then fails with `Type with name 'Binary' not found`
   (#905).
 - **A stored `DateTime` in a `GET`** (generated app) comes back without its `Z`: the clock time is right, the UTC

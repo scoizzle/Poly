@@ -1836,6 +1836,17 @@ Board: entity {
 
 ## 11. Additional Features
 
+### Export outputs and their dependencies
+
+`poly_export` returns one artifact: `dsl`, `json-schema`, `csharp`, `markdown`, `html`,
+`json-ld`, or `shacl`. `csharp` prints the compiled module as one or more source files, and
+the success summary names what the project that compiles them needs: a `Poly.Runtime`
+reference for `DomainResult`, `DomainFailure` and `IStoragePort`, and, when the export
+includes a generated `<Domain>DbContext.cs`, `Microsoft.EntityFrameworkCore`. `polyc build`
+prints the same requirement after its file count in text output. An export over 4 KB is
+written to a temp file and returned as `{path, bytes, sha256}`; `inline: true` returns the
+text.
+
 ### `uses` Contract Contributions
 
 A library may contribute a contract surface from `Register`. `uses <id>` loads the export

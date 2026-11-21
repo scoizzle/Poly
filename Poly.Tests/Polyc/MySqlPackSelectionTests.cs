@@ -38,6 +38,21 @@ public sealed class MySqlPackSelectionTests {
         var product = MySqlDiagnostic(CompilerOver(ProductCatalog.Catalog));
         var model = MySqlDiagnostic(CompilerOver(ProductCatalog.Model));
 
+        await Assert.That(model.Message).Contains("Domain extension 'mysql' is not selectable");
         await Assert.That(model.Message).IsEqualTo(product.Message);
     }
+
+    /// <summary>The MCP define door reports the same refusal, unchanged.</summary>
+    [Test]
+    public async Task Define_UsesMySql_ReportsTheRefusal() {
+        var (sessionId, _) = McpTestTools.Store.Create("My");
+        var applied = McpTestTools.Surface.Define(sessionId, Doc);
+        await Assert.That(applied.Success).IsFalse();
+        await Assert.That(applied.Summary).Contains("Domain extension 'mysql' is not selectable");
+        await Assert.That(applied.Summary).Contains("Use 'sqlite' or 'sqlserver'");
+    }
+
+    [Test]
+    public async Task ExtensionError_CarriedId_IsNull() =>
+        await Assert.That(ProductCatalog.Catalog.ExtensionError("sqlite")).IsNull();
 }

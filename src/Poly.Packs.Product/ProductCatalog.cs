@@ -13,7 +13,7 @@ namespace Poly.Packs.Product;
 /// emits Program.cs and demo.http. polyc and the DslCompiler facade resolve from it. The posix
 /// package is surface-only until the Lower splice door carries a syscall body, and only a caller
 /// that names a host target can load it. <c>mysql</c> is named with its refusal
-/// (<see cref="MySqlRefusal"/>), never silently unknown: the pack ships but has no host provider.
+/// (<c>MySqlRefusal</c>), never silently unknown: the pack ships but has no host provider.
 /// </summary>
 public static class ProductCatalog {
     public static ExtensionCatalog Catalog { get; } = Build(wired: true, hostVendor: null);
@@ -23,7 +23,7 @@ public static class ProductCatalog {
     /// Minimal API host has no MySQL provider arm, so this catalog cannot load it for a host.
     /// Registering the pack is #552's product decision; until then the refusal says so.
     /// </summary>
-    public const string MySqlRefusal =
+    private const string MySqlRefusal =
         "the pack ships as Poly.Packs.MySql, but it has no host provider arm, so this catalog cannot load it. Use 'sqlite' or 'sqlserver'.";
 
     /// <summary>

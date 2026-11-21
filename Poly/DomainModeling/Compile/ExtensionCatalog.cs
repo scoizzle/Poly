@@ -98,20 +98,21 @@ public sealed class ExtensionCatalog {
     }
 
     /// <summary>
-    /// The refusal for <paramref name="id"/>: the recorded reason when this catalog
-    /// knows the id but does not carry it, otherwise "unknown". <see cref="Resolve"/>
-    /// throws this text and the compiler reports it as <c>DSL0002</c>, so the CLI and
-    /// the MCP harness cannot disagree.
+    /// The refusal for <paramref name="id"/>, or <see langword="null"/> when the catalog carries it
+    /// (the <see cref="TargetError"/> shape): the recorded reason when this catalog knows the id but
+    /// does not carry it, otherwise "unknown". <see cref="Resolve"/> throws this text and the compiler
+    /// reports it as <c>DSL0002</c>, so the CLI and the MCP harness cannot disagree.
     /// </summary>
-    public string Error(string id) =>
-        _unavailable.TryGetValue(id, out var reason)
+    public string? ExtensionError(string id) =>
+        Contains(id) ? null
+        : _unavailable.TryGetValue(id, out var reason)
             ? $"Domain extension '{id}' is not selectable: {reason}"
             : $"Unknown domain extension '{id}'. Record only ids this catalog can resolve.";
 
     public IDomainLibrary Resolve(string id) {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (!_libraries.TryGetValue(id, out var library))
-            throw new InvalidOperationException(Error(id));
+            throw new InvalidOperationException(ExtensionError(id));
         return library;
     }
 

@@ -302,9 +302,9 @@ public sealed class PolyCompiler {
                 ok = false;
                 continue;
             }
-            if (!_options.Catalog.Contains(id)) {
+            if (_options.Catalog.ExtensionError(id) is { } refusal) {
                 diags.Add(ExtensionDiagnostic(build, tree, id, occurrence: 1, Severities.Error,
-                    DiagnosticCodes.UnknownExtension, _options.Catalog.Error(id)));
+                    DiagnosticCodes.UnknownExtension, refusal));
                 ok = false;
             }
         }

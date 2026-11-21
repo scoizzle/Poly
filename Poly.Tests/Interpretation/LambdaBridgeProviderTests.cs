@@ -1283,16 +1283,15 @@ public class LambdaBridgeProviderTests {
     private static BridgeCase Cell(string grid, string key) => BridgeGrid.Cases.Single(c => c.Grid == grid && c.Key == key);
 
     /// <summary>
-    /// Issue 832's wrong VM value (owner T-21b): the main emitter reads the UInt64 word of <c>UInt8 | UInt64</c> as a
-    /// signed one. Inside a bridged lambda the same expression is right, on master already; T-21b fixes the main emitter
-    /// and inverts the ledger's pin (<c>Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem</c>).
+    /// Issue 832's wrong VM value, fixed: the main emitter used to read the UInt64 word of <c>UInt8 | UInt64</c> as a
+    /// signed one, while the same expression inside a bridged lambda was already right. Both columns now answer C#'s
+    /// UInt64, and the ledger's pin for the main emitter is inverted with them.
     /// </summary>
     [Test]
-    public async Task Bridge_RightWhereMainIsWrong_UInt8OrUInt64_PinnedForT21() {
+    public async Task Bridge_AndMain_AgreeThatUInt8BitwiseOrUInt64_IsTheUInt64MaxValue() {
         var or = Cell("operator", "UInt8 BitwiseOr UInt64");
         await Assert.That(BridgeGrid.Outcome(or).Observed).IsEqualTo("ran; UInt64; S1=255; S2=18446744073709551615");
-        // T-22a typed it UInt64 (the provider's type; it was Byte); the VM still reads the word as signed.
-        await Assert.That(BridgeGrid.LedgerCell(or).Abi).IsEqualTo("UInt64; S1=255; S2=-1");
+        await Assert.That(BridgeGrid.LedgerCell(or).Abi).IsEqualTo("UInt64; S1=255; S2=18446744073709551615");
     }
 
     private static string FamiliesOf(IEnumerable<BridgeCase> cells, Func<BridgeCase, string> family) =>
@@ -1562,7 +1561,8 @@ public class LambdaBridgeProviderTests {
     /// Lock amendment 2. Set 1, the plain operator cells where the bridge's answer is not the main emitter's (the operator
     /// ledger's ABI column for the same cell), is a subset of the ledger's VM-divergence cells: where the two disagree, the
     /// main emitter is the one the ledger records as wrong (T-21). Set 2, the set-1 cells the bridge already answered like
-    /// the provider on master, is a subset of set 1. Both are pinned; T-21 inverts them.
+    /// the provider on master, is a subset of set 1. Both are pinned. Issue 832's fix made the main emitter answer C#'s
+    /// value in those cells, so both sets are empty; a cell where the two disagree again shows here.
     /// </summary>
     [Test]
     public async Task Bridge_DiffersFromMain_OnlyOnLedgerDivergenceCells() {
@@ -1572,8 +1572,9 @@ public class LambdaBridgeProviderTests {
             .Select(static c => $"{c.Key}: bridge {BridgeGrid.BridgeAnswer(BridgeGrid.Outcome(c).Observed)}, main {BridgeGrid.MainAnswer(c)}").ToArray();
         await Assert.That(outside).IsEmpty();
         await Assert.That(set2.All(c => set1.Contains(c))).IsTrue();
-        await Assert.That(ConstantFoldGrid.Pin([.. set1.Select(static c => c.Line)])).IsEqualTo("127 0d53c15792b886a4");
-        await Assert.That(ConstantFoldGrid.Pin([.. set2.Select(static c => c.Line)])).IsEqualTo("127 0d53c15792b886a4");
+        const string empty = "0 e3b0c44298fc1c14";
+        await Assert.That(ConstantFoldGrid.Pin([.. set1.Select(static c => c.Line)])).IsEqualTo(empty);
+        await Assert.That(ConstantFoldGrid.Pin([.. set2.Select(static c => c.Line)])).IsEqualTo(empty);
     }
 
     private static readonly string[] PredictedDelta = [

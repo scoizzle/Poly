@@ -2050,6 +2050,23 @@ There is no `DELETE` route and no delete effect in the DSL, so delete behaviour 
 uses the generated DbContext directly. A database file created before this change has a different schema
 (nullable keys, no delete action) and must be recreated.
 
+**Why a declared `range` sometimes has no `CHECK`.** The CHECK is built from the
+declared range, so it is emitted only when every writer is proven to stay inside it; the proof is
+an interval, not a guess, and an unproven writer drops the whole CHECK (fail closed: a CHECK the
+domain could legitimately trip is worse than no CHECK). On `Capacity: Number range(0, 100000)`,
+`assign Capacity to 5` is the point `[5, 5]` and `assign Capacity to Capacity * 1` is
+`[0, 100000]` — both inside, so `CK_capacity` is emitted. `assign Capacity to Capacity + 1` is
+`[1, 100001]`, one past the declared maximum; `polyc` warns `DMEFF008: Assigned expression value
+range [1, 100001] can fall outside constraint range(0, 100000) on property 'Capacity'.` and the
+column gets no CHECK at all. Two consequences: the assign is still guarded when it runs
+(`'Capacity' must be <= 100000.` refuses the write), so the domain itself never stores an
+out-of-range value; and a writer that bypasses the domain — direct SQL, another client — is not
+refused by the database. An open bound keeps the CHECK (`range(0)` with the same `+ 1` proves
+`[1, ∞)` inside `[0, ∞)` and emits `capacity >= 0`), and so does any writer whose interval fits;
+a wider declared maximum does not help `X + 1`, because the write interval moves with it and
+still clears the top. `DMCS003` is the same verdict when the write has no computable interval
+at all (`assign Capacity to amount`).
+
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport emits them as DTO validation attributes (metadata on the contract;
 the module enforces the same envelopes the domain declares):

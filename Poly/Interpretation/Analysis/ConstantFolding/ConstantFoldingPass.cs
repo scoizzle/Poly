@@ -488,6 +488,9 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     }
 
     private FoldResult GetConstantValue(AnalysisContext context, Node node, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        // A non-foldable operand is re-walked from each ancestor, so this recursion is the deepest one in the pass:
+        // probe the tail of the stack here, where the abort used to land (#882).
+        ExecutionStack.Ensure();
         if (node is Parameter parameter) {
             return FoldParameter(parameter, parameterValues);
         }

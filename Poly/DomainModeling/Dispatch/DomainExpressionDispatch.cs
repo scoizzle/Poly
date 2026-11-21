@@ -64,7 +64,14 @@ public abstract class DomainExpressionDispatch<TResult> {
     /// <see cref="Library"/>. New core subtypes cause a compile error here
     /// if not added to the switch.
     /// </summary>
-    public TResult Route(DomainExpression expr) => expr switch {
+    public TResult Route(DomainExpression expr) {
+        // Every rewrite and print of an expression tree recurses through here: a tree deeper than the thread's
+        // stack is a typed failure, never an abort (#882).
+        ExecutionStack.Ensure();
+        return RouteCore(expr);
+    }
+
+    private TResult RouteCore(DomainExpression expr) => expr switch {
         PropertyAccess e => PropertyAccess(e),
         ParameterAccess e => ParameterAccess(e),
         Literal e => Literal(e),

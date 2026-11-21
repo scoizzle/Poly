@@ -64,6 +64,7 @@ internal static class PatternRowExamples {
 
         new(Dsl, "expr-primary", "group", "("),
         new(Dsl, "expr-primary", "not", "not"),
+        new(Dsl, "expr-primary", "minus", "-"),
         new(Dsl, "expr-primary", "duration", "3 Days"),
         new(Dsl, "expr-primary", "match", "match { }"),
         new(Dsl, "expr-primary", "call", "f(x)"),

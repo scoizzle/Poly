@@ -537,6 +537,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 StampBinary(context, div, OperatorKind.Divide, div.Left, div.Right, props, parameters, enumTypes);
                 CheckNumericArithmetic(context, div, div.Left, div.Right, props, parameters, enumTypes);
                 return;
+            case Negate negate:
+                CheckNegate(context, negate, props, parameters, enumTypes);
+                WalkExpression(context, negate.Operand, props, parameters, enumTypes, walked);
+                return;
             case Not not:
                 var operand = InferType(context, not.Operand, props, parameters, enumTypes);
                 if (!IsTyped(operand))
@@ -626,6 +630,21 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// <see cref="TypedExpressionMetadata"/> with <see cref="ExprType.Optional"/> set; lowering reads it
     /// (<c>DomainExpressionLoweringPass.RouteCondition</c>), and these are the only positions that set it.
     /// </summary>
+    /// <summary>
+    /// Unary minus (<c>-x</c>): the operand is a Number or a Decimal (one family; a Decimal keeps its own type
+    /// through the platform's operator). Anything else is refused, naming the type it wrote — a duration included,
+    /// because Duration arithmetic is #550's. An operand the analyzer cannot type is DMSEM006's.
+    /// </summary>
+    private void CheckNegate(
+        AnalysisContext context, Negate negate,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        var operand = InferType(context, negate.Operand, props, parameters, enumTypes);
+        if (!IsTyped(operand))
+            RequireTyped(context, negate.Operand, operand, negate, props, parameters, enumTypes);
+        else if (Family(operand) is not TypeFamily.Number)
+            Report(context, negate, $"unary '-' requires a Number or Decimal operand (got '{Describe(operand)}')");
+    }
+
     private static void StampOptionalBoolean(AnalysisContext context, DomainExpression expr, ExprType type) {
         if (!type.Optional || Family(type) is not TypeFamily.Boolean) return;
         var stamped = context.GetMetadata<TypedExpressionMetadata>(expr);

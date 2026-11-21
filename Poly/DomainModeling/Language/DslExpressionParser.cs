@@ -226,6 +226,7 @@ public sealed class DslExpressionParser {
             switch (pattern) {
                 case "group": StartGroup(); break;
                 case "not":
+                case "minus":
                     StartPrefix(
                         _t.TryPrefix(match.Tokens[0].Kind, out var row)
                             ? row

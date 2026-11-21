@@ -105,7 +105,7 @@ internal static class PatternRowAllowList {
         PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "path-hop", 1,
             "ExpressionPrinter prints paths by hand; the row is the reader's path hop until G-34 (#856) gives expression rows their print half.", "G-34"),
         .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "expr-primary",
-            ["group", "not", "duration", "match", "call", "quant-where", "count-bare", "sum-prop", "exists",
+            ["group", "not", "minus", "duration", "match", "call", "quant-where", "count-bare", "sum-prop", "exists",
                 "where-nav", "path-is-not", "path-cmp", "path"],
             "ExpressionPrinter dispatches this head by hand (the FallbackBinding list) until G-34 (#856) gives expression rows their print half.", "G-34"),
     ];

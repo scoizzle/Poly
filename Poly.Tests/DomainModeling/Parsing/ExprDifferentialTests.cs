@@ -573,6 +573,18 @@ public sealed class ExprDifferentialTests {
         ("9.9999999999999999999999999999",
             "ERR Number '9.9999999999999999999999999999' is larger than the maximum 7.9228162514264337593543950335 for 28 digits after the point. @1:1",
             "T-15: master rounded the literal to the integer 10."),
+        ("match { a -> -, else -> 2 }",
+            "ERR Expected expression, got ',' @1:15",
+            "#501: a '-' now starts an expression, so the missing operand is reported one token later."),
+        ("match { a -> -1, else -> 2 }",
+            "OK MatchExpr([Arm(PropertyAccess(\"a\"),Negate(Literal(Int64:1,null,Int32:1,Int32:15)))],Literal(Int64:2,null,Int32:1,Int32:26),Int32:1,Int32:1)",
+            "#501: a negative literal in an arm parses."),
+        ("match { -1 -> 1, else -> 2 }",
+            "OK MatchExpr([Arm(Negate(Literal(Int64:1,null,Int32:1,Int32:10)),Literal(Int64:1,null,Int32:1,Int32:15))],Literal(Int64:2,null,Int32:1,Int32:26),Int32:1,Int32:1)",
+            "#501: a negative literal parses in a condition position; the analyser refuses a non-Boolean condition."),
+        ("match { a == -1 -> 1, else -> 2 }",
+            "OK MatchExpr([Arm(Comparison(PropertyAccess(\"a\"),Negate(Literal(Int64:1,null,Int32:1,Int32:15)),ComparisonKind:Equal),Literal(Int64:1,null,Int32:1,Int32:20))],Literal(Int64:2,null,Int32:1,Int32:31),Int32:1,Int32:1)",
+            "#501: a negative literal parses as a comparison operand."),
     ];
 
     [Test]

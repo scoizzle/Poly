@@ -55,19 +55,20 @@ public class CalleeFrameIsolationTests {
         await Assert.That(outcomes[1].State["Dec"]).IsEqualTo(expected);
     }
 
-    /// <summary>The DSL has no negative literal in an arm position: a unary minus is a positioned grammar error, so
-    /// there is no negative whole-number arm to convert (pinned so a later grammar change revisits this row).</summary>
+    /// <summary>
+    /// The negative whole-number arm the row above could not write: #501 makes unary minus a legal prefix, so
+    /// <c>else -> -1</c> parses and the arm converts like any other whole number. Pinned on both hosts.
+    /// </summary>
     [Test]
-    public async Task DecimalMatch_NegativeLiteralArm_IsAPositionedGrammarError() {
-        string message;
-        try {
-            _ = EvolvedDomain.FromDsl(Stage("match { Qty > 1 -> 1.5, else -> -1 }"));
-            message = "(parsed)";
-        }
-        catch (Exception ex) {
-            message = ex.Message;
-        }
-        await Assert.That(message).Contains("Expected expression, got '-'").And.Contains("line");
+    public async Task DecimalMatch_NegativeLiteralArm_StoresMinusOne_OnBothHosts() {
+        var outcomes = await ParityScenario
+            .FromDsl(Stage("match { Qty > 1 -> 1.5, else -> -1 }"), "DecimalMatchNegativeElse")
+            .AssertAgree(side => {
+                // Qty keeps its default 0, so the else arm is the one stored.
+                side.Create("Inv");
+                side.Invoke("Price");
+            });
+        await Assert.That(outcomes[1].State["Dec"]).IsEqualTo("-1");
     }
 
     /// <summary>The reversed order: the whole-number arm comes first and the Decimal arm is the else.</summary>

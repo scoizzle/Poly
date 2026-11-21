@@ -145,7 +145,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 3. define ───────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_define", Title = "Define the domain", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Validates and applies one .poly document to the workspace, or edits the document last applied. This is the only authoring path: write the domain down, let the constraint-aware analysis gate it, and fix what it reports. Pass poly to replace the model with a complete document, or edit to change the stored document in place. apply=false is a dry run that changes nothing. A rejected document or edit changes nothing, returns structured findings (severity, code, element path, message) and leaves the revision unchanged.")]
+    [McpServerTool(Name = "poly_define", Title = "Define the domain", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Validates and applies one .poly document to the workspace, or edits the document last applied. This is the only authoring path: write the domain down, let the constraint-aware analysis gate it, and fix what it reports. Pass poly to replace the model with a complete document, or edit to change the stored document in place. apply=false is a dry run that changes nothing. A rejected document or edit changes nothing, returns structured findings (severity, code, element path, message) and leaves the revision unchanged. A successful apply replaces the lowered module, so the workspace's simulated instances are cleared: the summary and data.instancesCleared say how many.")]
     public PolyResponse Define(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("The complete .poly document. It replaces the current model; it does not merge. Pass exactly one of poly or edit.")] string? poly = null,
@@ -159,11 +159,14 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 "Pass exactly one of poly (the complete document) or edit (a JSON array of ops).");
 
         logger.LogDebug("poly_define {Workspace} apply={Apply} edit={Edit}", workspace, apply, edit is not null);
+        var instancesBefore = current.ExecutorIfCreated?.Instances.Count() ?? 0;
         if (edit is null) {
             var replaced = apply
                 ? _dsl.ApplyDsl(workspace, poly!)
                 : _dsl.ValidateDsl(workspace, poly!);
-            return DefineResponse(workspace, apply, replaced, ValidationData(replaced));
+            var cleared = apply && replaced.Success ? instancesBefore : 0;
+            return DefineResponse(workspace, apply, replaced, WithInstancesCleared(ValidationData(replaced), cleared),
+                ClearedSummary(replaced.Message, cleared));
         }
 
         if (current.SourceText is null)
@@ -195,8 +198,28 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             if (outcome.Regions.FirstOrDefault(r => line >= r.StartLine && line <= r.EndLine) is { } region)
                 summary = $"{summary} (in edit {region.Index})";
         }
+        var clearedInstances = apply && response.Success ? instancesBefore : 0;
+        if (clearedInstances > 0) {
+            summary = ClearedSummary(summary, clearedInstances)!;
+            data["instancesCleared"] = clearedInstances;
+        }
 
         return DefineResponse(workspace, apply, response, data, summary);
+    }
+
+    /// <summary>The applied summary plus how many simulated instances the apply discarded (#575).</summary>
+    private static string? ClearedSummary(string? summary, int cleared) =>
+        cleared > 0
+            ? $"{summary} {cleared} simulated instance{(cleared == 1 ? "" : "s")} cleared."
+            : summary;
+
+    /// <summary>Adds <c>instancesCleared</c> to the applied result's own payload; nothing was cleared, nothing is added.</summary>
+    private static object? WithInstancesCleared(object? data, int cleared) {
+        if (data is null || cleared == 0)
+            return data;
+        var node = JsonSerializer.SerializeToNode(data)!.AsObject();
+        node["instancesCleared"] = cleared;
+        return node;
     }
 
     private static int? FailedLine(string message) {
@@ -217,13 +240,13 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     private static object? ValidationData(DomainToolResponse response) =>
         response.Data is DslValidationData validation
             ? new {
-                validation.DomainName,
-                validation.Valid,
-                validation.EntityCount,
-                validation.RelationshipCount,
-                validation.ErrorCount,
-                validation.WarningCount,
-                validation.HintCount,
+                domainName = validation.DomainName,
+                valid = validation.Valid,
+                entityCount = validation.EntityCount,
+                relationshipCount = validation.RelationshipCount,
+                errorCount = validation.ErrorCount,
+                warningCount = validation.WarningCount,
+                hintCount = validation.HintCount,
             }
             : response.Data;
 

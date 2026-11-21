@@ -2112,6 +2112,11 @@ re-sending it. Pass exactly one of `poly` or `edit`. The ops splice your own sto
 comments, order and formatting survive; the result runs through the same analysis gate and
 revision bump as a whole-document define. A rejected edit changes nothing.
 
+A successful apply — `poly` or `edit` — replaces the lowered module, so the workspace's simulated
+instances are cleared even when the edit cannot affect them. The result says so: the summary ends
+with `N simulated instance(s) cleared.` and `data.instancesCleared` carries the count (absent when
+none were). `apply:false` and a rejected edit clear nothing and say nothing was cleared.
+
 | Op | Fields | Effect |
 |---|---|---|
 | `add` | `parent`, `dsl` | Inserts `dsl` before the closing `}` of the entity or stage `parent` (`Product`, `Product.Draft`). `parent: ""` adds at top level. |

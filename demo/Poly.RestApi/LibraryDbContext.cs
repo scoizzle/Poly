@@ -37,6 +37,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
         modelBuilder.Entity<Book>(b => {
     b.ToTable("Books", t => {
     t.HasCheckConstraint("CK_pages", "pages >= 1 AND pages <= 10000");
+    t.HasCheckConstraint("CK_isbn_length", "length(CAST(isbn AS BLOB)) >= 10 AND length(isbn) <= 17");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
@@ -56,10 +57,10 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
     b.Property(x => x.MemberSince).HasColumnName("memberSince").HasColumnType("TEXT");
-    b.Property(x => x.Status).HasColumnName("status").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
+    b.Property(x => x.Status).HasColumnName("status").HasColumnType("INTEGER").HasConversion<int>().IsRequired().HasDefaultValue(PatronStatus.Active);
     b.Property(x => x.MaxItems).HasColumnName("maxItems").HasColumnType("INTEGER");
-    b.Property(x => x.CurrentBorrowCount).HasColumnName("currentBorrowCount").HasColumnType("INTEGER");
-    b.Property(x => x.OutstandingFines).HasColumnName("outstandingFines").HasColumnType("INTEGER");
+    b.Property(x => x.CurrentBorrowCount).HasColumnName("currentBorrowCount").HasColumnType("INTEGER").HasDefaultValue(0L);
+    b.Property(x => x.OutstandingFines).HasColumnName("outstandingFines").HasColumnType("INTEGER").HasDefaultValue(0L);
     b.HasIndex(x => x.Email).IsUnique();
     b.Metadata.FindNavigation(nameof(Patron.Loans))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     b.Metadata.FindNavigation(nameof(Patron.Fines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
@@ -90,7 +91,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
     b.Property(x => x.RewardPoints).HasColumnName("rewardPoints").HasColumnType("INTEGER");
-    b.Property(x => x.Tier).HasColumnName("tier").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
+    b.Property(x => x.Tier).HasColumnName("tier").HasColumnType("INTEGER").HasConversion<int>().IsRequired().HasDefaultValue(PremiumTier.Silver);
     b.Property(x => x.PriorityAccess).HasColumnName("priorityAccess").HasColumnType("INTEGER");
     b.HasIndex(x => x.Email).IsUnique();
 });

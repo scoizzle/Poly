@@ -201,6 +201,37 @@ public class PackOracleTests {
         await Assert.That(rows).IsEquivalentTo(new[] { ("paid", "ORD1") });
     }
 
+    /// <summary>#563: the generated schema mirrors the length and default constraints <c>Create</c> enforces, so a
+    /// row written outside the domain is held to the same rule: a too-short value is refused by the length CHECK,
+    /// and a column left out takes the declared default.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task GeneratedSchema_RefusesTooShortText_AndAppliesTheDeclaredDefault_Issue563() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Constraints563);
+        var databasePath = oracle.DatabasePath
+            ?? throw new InvalidOperationException("the host created no database file");
+
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath};Mode=ReadWrite");
+        connection.Open();
+
+        using (var tooShort = connection.CreateCommand()) {
+            tooShort.CommandText = "INSERT INTO Carriers (Name) VALUES ('x')";
+            var failure = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(
+                () => tooShort.ExecuteNonQueryAsync());
+            await Assert.That(failure!.Message).Contains("CHECK constraint failed");
+        }
+
+        using (var accepted = connection.CreateCommand()) {
+            accepted.CommandText = "INSERT INTO Carriers (Name) VALUES ('AB')";
+            await Assert.That(await accepted.ExecuteNonQueryAsync()).IsEqualTo(1);
+        }
+
+        using var readBack = connection.CreateCommand();
+        readBack.CommandText = "SELECT Active FROM Carriers WHERE Name = 'AB'";
+        await Assert.That(Convert.ToInt64(await readBack.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture)).IsEqualTo(1L);
+    }
+
     [Test]
     [Category("OracleFull")]
     public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_Boots_Issue791() {

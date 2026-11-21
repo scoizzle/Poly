@@ -26,10 +26,15 @@ public sealed partial class DbContextGenerator {
         // b.ToTable("TableName") — or with verified-range CHECK constraints via the modern
         // ToTable(tableBuilder => …) API (HasCheckConstraint on EntityTypeBuilder is obsolete).
         // Checks are emitted only when the invariant analysis PROVED no effect can produce an
-        // out-of-range value, so the DB constraints are sound.
+        // out-of-range value, so the DB constraints are sound. A declared length is its own CHECK
+        // (#563): Create and assign guard every write, so the DB can state it too.
         var checks = store.Columns
             .Where(c => c.IsRangeVerified && c.VerifiedRange is { } vr && (vr.Min is not null || vr.Max is not null))
             .Select(c => (Name: $"CK_{c.ColumnName}", Sql: CheckSql(c.ColumnName, c.VerifiedRange!)))
+            .Concat(store.Columns
+                .Select(c => (Name: $"CK_{c.ColumnName}_length", Sql: LengthCheckSql(c)))
+                .Where(c => c.Sql is not null)
+                .Select(c => (c.Name, Sql: c.Sql!)))
             .ToList();
         if (checks.Count == 0) {
             bodyNodes.Add(new Invoke(

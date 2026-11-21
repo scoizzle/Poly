@@ -205,6 +205,54 @@ public class ContributedMethodTests {
         await Assert.That(source.Contains("Widget.Create(db, \"Sample\")", StringComparison.Ordinal)).IsTrue();
     }
 
+    private const string PolyActionNamedAdd = """
+        domain Lab
+        Item: entity { Code: Text unique }
+        Cart: entity {
+          Code: Text unique
+          items: many Item
+          Add: action -> Item { create in items { Code: "i1" } }
+        }
+        """;
+
+    [Test]
+    public async Task Threading_AnActionNamedAdd_BesideACollection_Lowers() {
+        // #934: __Restore calls `this._items.Add(item)` on the List field; the field's declared type is not a module
+        // type, so the list's Add is not the threaded action Add.
+        var (domain, analysis, session) = Compile(PolyActionNamedAdd, new ProbeLibrary());
+        var module = session.Lower(domain, analysis);
+
+        await Assert.That(Names(Method(module, "Cart", "Add"))).Contains("db");
+    }
+
+    [Test]
+    public async Task Threading_AnActionNamedClear_BesideACollection_Lowers() {
+        // #934's sibling: __Restore clears the list as `((IList)this._items).Clear()`; the cast names the receiver's
+        // type, and IList is not a module type.
+        var (domain, analysis, session) = Compile(PolyActionNamedAdd.Replace("Add: action", "Clear: action", StringComparison.Ordinal), new ProbeLibrary());
+        var module = session.Lower(domain, analysis);
+
+        await Assert.That(Names(Method(module, "Cart", "Clear"))).Contains("db");
+    }
+
+    [Test]
+    public async Task Threading_ACallOnAFieldOfThis_WithAnUnknownMember_IsRefused() {
+        // The receiver resolves through the enclosing type's declared member; a member it does not declare has no
+        // type to look up, so a threaded name called on it stays refused.
+        var missing = typeof(ContributedMethods).GetMethod("Missing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var parameters = missing.GetParameters();
+        TypeDefinitionNode[] module = [new("Host")];
+        var call = new Invoke(new Member(new Member(new ThisReference(), "_nowhere"), "Add"));
+        object?[] arguments = [
+            call, 0, "Run", module, new List<List<MethodDefinitionNode>> { new() },
+            Activator.CreateInstance(parameters[5].ParameterType), new HashSet<string>(StringComparer.Ordinal) { "Add" }
+        ];
+
+        var thrown = Assert.Throws<System.Reflection.TargetInvocationException>(() => missing.Invoke(null, arguments));
+
+        await Assert.That(thrown!.InnerException!.Message).Contains("Cannot thread 'Add'");
+    }
+
     [Test]
     public async Task CreateWithOptionalParameters_HostPassesDbBeforeTheFirstDefault() {
         var (domain, analysis, session) = Compile(PolyRootUniqueWithNav, new ProbeLibrary());

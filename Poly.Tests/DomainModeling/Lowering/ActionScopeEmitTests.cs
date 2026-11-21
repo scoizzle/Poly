@@ -262,7 +262,8 @@ public class ActionScopeEmitTests {
         var (_, assembly) = Print(Dsl, "ActionScopeNullable");
         var group = Create(assembly, "Group", ("label", "g"));
         var scoped = (IActionScoped)group;
-        var items = Read(group, "Items");
+        // The property is a copy (#541); restore has to keep the backing list itself.
+        var items = group.GetType().GetField("_items", PrintedMembers.Any)!.GetValue(group);
 
         var nullSnapshot = scoped.__Snapshot();
         Write(group, "Tag", "now-set");
@@ -277,7 +278,7 @@ public class ActionScopeEmitTests {
 
         Call(group, "Add", "x");
         scoped.__Restore(nullSnapshot);
-        await Assert.That(ReferenceEquals(Read(group, "Items"), items)).IsTrue();
+        await Assert.That(ReferenceEquals(group.GetType().GetField("_items", PrintedMembers.Any)!.GetValue(group), items)).IsTrue();
         await Assert.That(Count(group, "Items")).IsEqualTo(0);
     }
 

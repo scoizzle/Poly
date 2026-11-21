@@ -43,15 +43,15 @@ internal class Account : Poly.Runtime.IActionScoped
     public Site? Hq { get; private set; }
     public IReadOnlyList<Contact> Contacts
     {
-        get => this._contacts;
+        get => new List<Contact>(this._contacts);
     }
     public IReadOnlyList<Opportunity> Opportunities
     {
-        get => this._opportunities;
+        get => new List<Opportunity>(this._opportunities);
     }
     public IReadOnlyList<Ticket> Tickets
     {
-        get => this._tickets;
+        get => new List<Ticket>(this._tickets);
     }
     public AccountStage CurrentStage { get; private set; }
     internal DomainResult<Site> CreateHq(string? city = default, string? region = default)

@@ -38,7 +38,7 @@ internal class Hall : Poly.Runtime.IActionScoped
     public Property? Property { get; private set; }
     public IReadOnlyList<Section> Sections
     {
-        get => this._sections;
+        get => new List<Section>(this._sections);
     }
     public HallStage CurrentStage { get; private set; }
     internal void AttachSections(Section child)

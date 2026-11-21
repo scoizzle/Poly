@@ -23,7 +23,7 @@ internal class Customer : Poly.Runtime.IActionScoped
     public string Tier { get; private set; } = default!;
     public IReadOnlyList<Order> Orders
     {
-        get => this._orders;
+        get => new List<Order>(this._orders);
     }
     internal void AttachOrders(Order child)
     {

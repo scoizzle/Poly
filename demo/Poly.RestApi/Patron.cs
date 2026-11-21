@@ -42,11 +42,11 @@ internal class Patron : Poly.Runtime.IActionScoped
     public long OutstandingFines { get; private set; }
     public IReadOnlyList<Loan> Loans
     {
-        get => this._loans;
+        get => new List<Loan>(this._loans);
     }
     public IReadOnlyList<Fine> Fines
     {
-        get => this._fines;
+        get => new List<Fine>(this._fines);
     }
     public PatronStage CurrentStage { get; private set; }
     internal DomainResult<Loan> CreateLoans(string? status = default, DateTime? dueDate = default, DateTime? returnedAt = default, long? timesRenewed = default, Book? book = default)

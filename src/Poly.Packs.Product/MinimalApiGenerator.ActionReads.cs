@@ -549,6 +549,8 @@ internal sealed class ActionReadsWalker {
 
     private static string? BackingField(PropertyDefinitionNode property) => property.Getter?.Body switch {
         Member { Value: ThisReference, MemberName: var name } => name,
+        // A collection navigation prints a copy getter over its backing field (#556, #541).
+        New { Arguments: [Member { Value: ThisReference, MemberName: var name }] } => name,
         Return { Value: Member { Value: ThisReference, MemberName: var name } } => name,
         Block { Nodes: [Return { Value: Member { Value: ThisReference, MemberName: var name } }] } => name,
         _ => null,

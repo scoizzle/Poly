@@ -32,6 +32,7 @@ public static class LibrarySelection {
         var chosen = fromDocument ? documentUses : options.ImplicitIds;
         foreach (var id in chosen)
             catalog.Resolve(id);
+        chosen = WithoutPersistenceBesideAVendor(chosen, catalog);
         foreach (var id in options.HostIds)
             catalog.Resolve(id);
         if (options.HostIds.Count == 0 && options.StorageVendor is null)
@@ -45,6 +46,23 @@ public static class LibrarySelection {
         if (options.StorageVendor is { } vendor)
             ApplyStorageVendor(ids, vendor, fromDocument, catalog);
         return ids;
+    }
+
+    /// <summary>
+    /// A vendor storage library (<c>sqlite</c>, <c>sqlserver</c>, …) is persistence for its database, so a
+    /// <c>persistence</c> listed beside one goes: both register the storage pass, and loading both is refused.
+    /// The same rule <see cref="ApplyStorageVendor"/> applies for a host's vendor.
+    /// </summary>
+    private static IReadOnlyList<string> WithoutPersistenceBesideAVendor(IReadOnlyList<string> ids, ExtensionCatalog catalog) {
+        if (!ids.Contains(PersistenceEmitLibrary.LibraryId, StringComparer.Ordinal))
+            return ids;
+        var providers = catalog.ProvidersOf(new UniqueConstraint());
+        var vendor = ids.Any(id =>
+            !string.Equals(id, PersistenceEmitLibrary.LibraryId, StringComparison.Ordinal)
+            && providers.Contains(id, StringComparer.Ordinal));
+        return vendor
+            ? [.. ids.Where(id => !string.Equals(id, PersistenceEmitLibrary.LibraryId, StringComparison.Ordinal))]
+            : ids;
     }
 
     /// <summary>

@@ -104,7 +104,7 @@ public static partial class AbiEmitter {
                         var declaringType = methodInfo.DeclaringType!;
                         var receiverClr = ctx.ClrTypeOf(member.Value) ?? declaringType;
                         callExpr = Call(
-                            InstanceCallTarget(ctx.RingVar(instanceSlot), receiverClr, declaringType, ctx),
+                            MemberReceiver(member.Value, ctx.RingVar(instanceSlot), receiverClr, declaringType, ctx),
                             methodInfo, methodArgs);
                     }
 
@@ -197,7 +197,8 @@ public static partial class AbiEmitter {
             for (int i = 0; i < invoke.Arguments.Length; i++)
                 astArgSlots[i] = astArgs.AddValue(CompileNode(invoke.Arguments[i], ctx));
 
-            var astInstanceObj = InstanceObject(astInstanceSlot.Read, ctx.ClrTypeOf(member.Value), ctx);
+            var astInstanceObj = MemberReceiver(
+                member.Value, astInstanceSlot.Read, ctx.ClrTypeOf(member.Value), typeof(object), ctx);
             var argObjs = new Expression[invoke.Arguments.Length];
             for (int i = 0; i < invoke.Arguments.Length; i++) {
                 // An argument the emitter cannot place is a compile error, not a handle.
@@ -1360,27 +1361,17 @@ public static partial class AbiEmitter {
             : RingCodec.ToClr(ctx.RingVar(slot), parameterType, argument, ctx.Analysis, ctx.HeapLocal);
     }
 
-    /// <summary>The receiver of a resolved instance call. A temporal word is the
-    /// value (<c>DateTime.AddDays</c> must not treat <c>ToBinary</c> as a heap
-    /// index). Every other receiver is still the heap object.</summary>
-    private static Expression InstanceCallTarget(
-        Expression word, Type? receiverClr, Type declaringType, Context ctx) {
-        var temporal = TemporalWord(receiverClr) ? receiverClr
-            : TemporalWord(declaringType) ? declaringType
-            : null;
-        if (temporal is not null)
-            return LocalType.Decode(word, temporal, declaringType, ctx.HeapLocal);
-        return Convert(
-            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int))),
-            declaringType);
-    }
-
-    /// <summary>A name-dispatched receiver as <c>object</c>. A temporal word is
-    /// decoded; a handle is still the heap object.</summary>
-    private static Expression InstanceObject(Expression word, Type? clr, Context ctx) {
-        if (TemporalWord(clr))
-            return Convert(LocalType.Decode(word, clr, clr!, ctx.HeapLocal), typeof(object));
-        return Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int)));
+    /// <summary>The receiver of a member call as <paramref name="target"/>: the object the call runs
+    /// on. A word the ABI stores inline is the value it denotes — a number, a flag, or a temporal word
+    /// decoded to its date or time — never a heap index; any other word is the object's handle. The
+    /// resolved call reads it as the method's declaring type, a name-dispatched call as <c>object</c>.
+    /// (#493)</summary>
+    private static Expression MemberReceiver(
+        Node receiver, Expression word, Type? clr, Type target, Context ctx) {
+        if (ctx.KindOf(receiver) is not ValueRepresentationKind.StackScalar)
+            return Convert(Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int))), target);
+        var source = TemporalWord(clr) ? clr : TemporalWord(target) ? target : clr ?? target;
+        return LocalType.Decode(word, source, target, ctx.HeapLocal);
     }
 
     /// <summary>A scalar argument of a name-dispatched call: the word read as its own type, then boxed, so a

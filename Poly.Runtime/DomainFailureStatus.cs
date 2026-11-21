@@ -24,8 +24,8 @@ public static class DomainFailureStatus {
         // 409 text. R-04 emits Link for that case and no other.
         DomainFailureKind.Link => 409,
 
-        // Q2: a conflicting save returns 409. P-09 raises Conflict from a failed
-        // DbUpdateConcurrencyException; there is no producer today.
+        // Q2: a conflicting save returns 409. The generated action route raises Conflict from a
+        // failed DbUpdateConcurrencyException, so the client retries against fresh state (#626, #653).
         DomainFailureKind.Conflict => 409,
 
         // A duplicated unique key; the persisted unique index is the final authority.

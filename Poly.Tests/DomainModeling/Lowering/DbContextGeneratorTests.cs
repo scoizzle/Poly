@@ -377,6 +377,39 @@ public class DbContextGeneratorTests {
         await Assert.That(checks[0]).Contains("price <= 18446744073709551615");
     }
 
+    /// <summary>#626/#653: the optimistic-concurrency token is one shadow column per entity, and the save-time bump
+    /// the action routes call is on the context. Both are storage-only: no entity CLR member and no DTO change.</summary>
+    [Test]
+    public async Task ConcurrencyToken_IsAShadowColumnWithABumpOnTheContext() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var unit = GenerationAssertions.DbContextIr(domain);
+        var rendered = new CSharpWriter().Write(unit);
+
+        await Assert.That(rendered).Contains("""b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);""");
+        await Assert.That(rendered).Contains("public void BumpVersions(object entity)");
+        await Assert.That(rendered).Contains("""entry.Property("Version").CurrentValue""");
+        await Assert.That(rendered).Contains("this.ChangeTracker.DetectChanges();");
+    }
+
+    /// <summary>#626/#653: a domain property may already be called <c>Version</c>. It keeps its own value and its own
+    /// column, and the token moves to the first free <c>PolyVersion</c> name rather than silently taking it over.</summary>
+    [Test]
+    public async Task ConcurrencyToken_SkipsANameTheDomainAlreadyUses() {
+        var domain = ParseDomain("""
+            domain Test
+            Document: entity { Version: Text Title: Text }
+            """);
+        var rendered = new CSharpWriter().Write(GenerationAssertions.DbContextIr(domain));
+
+        await Assert.That(rendered).Contains("""b.Property<long>("PolyVersion").IsConcurrencyToken().HasDefaultValue(0L);""");
+        await Assert.That(rendered).Contains("""entry.Property("PolyVersion").CurrentValue""");
+        await Assert.That(rendered).Contains("b.Property(x => x.Version)");
+        await Assert.That(rendered).DoesNotContain("""b.Property<long>("Version")""");
+    }
+
     private static IEnumerable<Node> Descendants(Node node) {
         yield return node;
         foreach (var child in node.Children) {

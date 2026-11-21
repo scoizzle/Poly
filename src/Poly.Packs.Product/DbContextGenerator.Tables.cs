@@ -64,6 +64,18 @@ public sealed partial class DbContextGenerator {
             new Constant(shadowKey)
         ));
 
+        // Optimistic concurrency (#626, #653): every stored entity carries an integer token the host bumps before a
+        // modifying save, so a read-modify-write that lost the race updates no row and answers 409 instead of
+        // overwriting one. A shadow column, never a CLR member: the entity and its DTO keep their shape. The default
+        // lets a row written outside this context (raw SQL, another writer) start at the same token as one inserted here.
+        var versionColumn = new Invoke(
+            new Member(bParam, "Property"),
+            new Constant(VersionPropertyName())) {
+            TypeArguments = [TypeReference.To(typeof(long))]
+        };
+        var concurrencyToken = new Invoke(new Member(versionColumn, "IsConcurrencyToken"));
+        bodyNodes.Add(new Invoke(new Member(concurrencyToken, "HasDefaultValue"), new Constant(0L)));
+
         // Column configurations
         foreach (var col in store.Columns)
             bodyNodes.Add(BuildColumnConfigNode(bParam, col));
@@ -209,5 +221,27 @@ public sealed partial class DbContextGenerator {
         var taken = entity.Properties.Any(p => p.Name == "Id")
             || store.Columns.Any(c => c.Name == "Id");
         return taken ? "PolyId" : "Id";
+    }
+
+    /// <summary>
+    /// The shadow column the optimistic-concurrency token lives in: <c>Version</c>, or the first <c>PolyVersion</c>,
+    /// <c>PolyVersion2</c>, … that neither a property of any entity nor any mapped column already uses. One name for
+    /// the whole context, so the save-time bump can name one property; a domain property that happened to be called
+    /// <c>Version</c> keeps its own value instead of silently becoming the token (#626, #653).
+    /// </summary>
+    private string VersionPropertyName() {
+        var taken = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entity in _entities) {
+            foreach (var property in entity.Properties)
+                taken.Add(property.Name);
+            foreach (var column in GetStorageEntity(entity).Columns)
+                taken.Add(column.Name);
+        }
+        if (!taken.Contains(VersionProperty))
+            return VersionProperty;
+        var name = "Poly" + VersionProperty;
+        for (var n = 2; taken.Contains(name); n++)
+            name = "Poly" + VersionProperty + n;
+        return name;
     }
 }

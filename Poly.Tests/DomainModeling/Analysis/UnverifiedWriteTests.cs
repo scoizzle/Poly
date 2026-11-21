@@ -79,6 +79,32 @@ public class UnverifiedWriteTests {
         await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
     }
 
+    /// <summary>
+    /// #635 from the analysis side, which is where the missing CHECK is decided: <c>Capacity + 1</c> on
+    /// <c>range(0, 100000)</c> is one DMEFF008 warning that names the write and both intervals. That
+    /// warning is the signal a reader follows to see why the column gets no CHECK.
+    /// </summary>
+    [Test]
+    public async Task OffsetAssign_AtTheDeclaredMaximum_WarnsCanFallOutside() {
+        var result = Parse("""
+            domain Test
+            Warehouse: entity {
+              Capacity: Number range(0, 100000)
+              Grow: action { assign Capacity to Capacity + 1 }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Capacity");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(findings[0].Message).Contains("[1, 100001]");
+        await Assert.That(findings[0].Message).Contains("range(0, 100000)");
+        await Assert.That(Facts(result).Unverified.Single().Reason)
+            .IsEqualTo(UnverifiedReason.PossibleViolation);
+    }
+
     [Test]
     public async Task BarePropertyRef_PartialOverlap_Warns() {
         // #650: a bare property ref never entered the range check. The value [5, 20] overlaps the

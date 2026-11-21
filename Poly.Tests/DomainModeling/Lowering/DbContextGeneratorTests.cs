@@ -302,6 +302,68 @@ public class DbContextGeneratorTests {
             .Select(i => i.Arguments[1] is Constant { Value: string sql } ? sql : "")
             .ToList();
 
+    /// <summary>
+    /// #635: a CHECK is built from the declared range, so it is emitted only when every writer is proven
+    /// to stay inside it. On <c>range(0, 100000)</c> the write <c>Capacity + 1</c> is <c>[1, 100001]</c>,
+    /// one past the declared maximum: the analysis warns and the column gets no CHECK. The fail-closed
+    /// side is deliberate — a CHECK the domain could trip is worse than none.
+    /// </summary>
+    [Test]
+    public async Task CheckConstraint_AbsentWhenAWriterCanExceedTheDeclaredRange() {
+        var domain = ParseDomain("""
+            domain Test
+            Warehouse: entity {
+              Capacity: Number range(0, 100000)
+              Grow: action { assign Capacity to Capacity + 1 }
+            }
+            """);
+
+        await Assert.That(CheckConstraints(domain)).IsEmpty()
+            .Because("no CHECK is safe while a writer can reach 100001: the emitter projects only a "
+                     + "range the analysis proved for every writer");
+    }
+
+    /// <summary>
+    /// The other half of #635: writers the analysis does prove inside keep the CHECK. <c>Capacity * 1</c>
+    /// is <c>[0, 100000]</c> on the same declaration and a constant is a point interval.
+    /// </summary>
+    [Test]
+    public async Task CheckConstraint_PresentWhenEveryWriterStaysInsideTheDeclaredRange() {
+        var domain = ParseDomain("""
+            domain Test
+            Warehouse: entity {
+              Capacity: Number range(0, 100000)
+              Hold: action { assign Capacity to Capacity * 1 }
+              Reset: action { assign Capacity to 5 }
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("capacity >= 0");
+        await Assert.That(checks[0]).Contains("capacity <= 100000");
+    }
+
+    /// <summary>
+    /// #635's escape hatch: with no declared maximum, <c>Capacity + 1</c> is <c>[1, ∞)</c> inside
+    /// <c>[0, ∞)</c>, so the one-sided CHECK is emitted instead of nothing.
+    /// </summary>
+    [Test]
+    public async Task CheckConstraint_OpenMaximum_KeepsTheOneSidedCheck() {
+        var domain = ParseDomain("""
+            domain Test
+            Warehouse: entity {
+              Capacity: Number range(0)
+              Grow: action { assign Capacity to Capacity + 1 }
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("capacity >= 0");
+        await Assert.That(checks[0].Contains("capacity <=", StringComparison.Ordinal)).IsFalse();
+    }
+
     /// <summary>V-05b T3: a declared bound above 2^53 reaches the CHECK text exactly, never rounded
     /// through <c>double</c> to <c>…992</c>.</summary>
     [Test]

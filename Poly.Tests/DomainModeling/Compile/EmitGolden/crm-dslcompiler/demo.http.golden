@@ -97,7 +97,7 @@ POST http://localhost:5201/api/accounts/1/convertLead
 Content-Type: application/json
 
 {
-    "LeadId": "example-lead-id"
+    "LeadId": "example-email"
 }
 
 ### Action: OpenDeal
@@ -167,7 +167,7 @@ POST http://localhost:5201/api/accounts/1/opportunities/1/addLine
 Content-Type: application/json
 
 {
-    "SkuId": "example-product-id",
+    "SkuId": "example-sku",
     "Qty": 0
 }
 
@@ -215,7 +215,7 @@ POST http://localhost:5201/api/opportunities/1/quotes/1/addLine
 Content-Type: application/json
 
 {
-    "SkuId": "example-product-id",
+    "SkuId": "example-sku",
     "Qty": 0
 }
 
@@ -249,7 +249,7 @@ POST http://localhost:5201/api/campaigns/1/enroll
 Content-Type: application/json
 
 {
-    "WhoId": "example-contact-id"
+    "WhoId": "example-email"
 }
 
 ### Action: End

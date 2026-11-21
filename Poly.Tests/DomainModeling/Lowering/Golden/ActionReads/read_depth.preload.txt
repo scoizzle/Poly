@@ -121,7 +121,7 @@
     await db.Entry(entity).Reference(e => e.Product).LoadAsync();
     try
     {
-        var product = await db.Products.FirstOrDefaultAsync(e => e.Code == dto.PId);
+        var product = (dto.PId == null ? null : await db.Products.FirstOrDefaultAsync(e => e.Code == dto.PId));
         if (product == null)
         {
             return StatusProblem(404, "Not Found", "Product not found");
@@ -161,12 +161,12 @@
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     try
     {
-        var product = await db.Products.FirstOrDefaultAsync(e => e.Code == dto.AId);
+        var product = (dto.AId == null ? null : await db.Products.FirstOrDefaultAsync(e => e.Code == dto.AId));
         if (product == null)
         {
             return StatusProblem(404, "Not Found", "Product not found");
         }
-        var product2 = await db.Products.FirstOrDefaultAsync(e => e.Code == dto.BId);
+        var product2 = (dto.BId == null ? null : await db.Products.FirstOrDefaultAsync(e => e.Code == dto.BId));
         if (product2 == null)
         {
             return StatusProblem(404, "Not Found", "Product not found");

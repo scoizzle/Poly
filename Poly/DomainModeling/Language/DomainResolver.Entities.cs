@@ -286,11 +286,13 @@ public sealed partial class DomainResolver {
     /// </summary>
     private void ResolvePendingRequires(List<DomainChange> changes) {
         foreach (var pr in _pendingRequires) {
+            // The require token is the anchor for both refusals: the cursor has already passed the
+            // entity's '}', so the current token is the next declaration.
             if (pr.Negated) {
                 // require not PolicyName
                 if (!_entityPolicies.TryGetValue(pr.PolicyName, out var expr)) {
-                    throw Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
-                        $"which is not defined on entity '{_currentEntityName}'.");
+                    throw GrammarError.Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
+                        $"which is not defined on entity '{_currentEntityName}'.", pr.At.Line, pr.At.Col);
                 }
                 var policyName = $"not_{pr.PolicyName}";
                 changes.Add(new AddPolicyToActionChange(_currentEntityName, pr.ActionName,
@@ -299,8 +301,8 @@ public sealed partial class DomainResolver {
             else {
                 // require PolicyName
                 if (!_entityPolicies.TryGetValue(pr.PolicyName, out var expr)) {
-                    throw Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
-                        $"which is not defined on entity '{_currentEntityName}'.");
+                    throw GrammarError.Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
+                        $"which is not defined on entity '{_currentEntityName}'.", pr.At.Line, pr.At.Col);
                 }
                 changes.Add(new AddPolicyToActionChange(_currentEntityName, pr.ActionName,
                     new Policy(pr.PolicyName, expr), StageName: pr.StageName));

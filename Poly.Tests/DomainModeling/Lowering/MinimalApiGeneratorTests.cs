@@ -111,6 +111,84 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(Render(d).Contains("ToListAsync")).IsTrue();
     }
 
+    /// <summary>The text of one route registration, from its line to the line that closes it: the handler body alone, so an
+    /// assertion about what that route does cannot match another route's statement.</summary>
+    private static string HandlerOf(string program, string mapping, string route) {
+        var lines = program.Split('\n');
+        var start = Array.FindIndex(lines, l => l.Contains($"{mapping}(\"{route}\"", StringComparison.Ordinal));
+        if (start < 0)
+            throw new InvalidOperationException($"No {mapping} for route '{route}'.");
+        var end = Array.FindIndex(lines, start, l => l.TrimStart().StartsWith("});", StringComparison.Ordinal));
+        if (end < 0)
+            throw new InvalidOperationException($"The {mapping} for route '{route}' is not closed.");
+        return string.Join("\n", lines[start..(end + 1)]);
+    }
+
+    /// <summary>#594: a GET of an entity returns it with its declared navigations loaded, as the simulator's `get`
+    /// shows them: one level, every collection and every single link, on the detail route and for each row of a list. An
+    /// entity with no navigation keeps its one-expression handler, so the loads appear only where there is something to
+    /// load.</summary>
+    [Test]
+    public async Task Get_LoadsEveryDeclaredNavigation() {
+        var d = ParseDomain("""
+            domain Shop
+            public entity Line {
+              Qty: Number
+            }
+            public entity Note {
+              Body: Text
+            }
+            public entity Order {
+              Code: Text
+              lines: many Line
+              note: Note optional
+            }
+            """);
+        var program = Render(d);
+        var detail = HandlerOf(program, "MapGet", "/api/orders/{id}");
+        var list = HandlerOf(program, "MapGet", "/api/orders");
+
+        await Assert.That(detail).Contains("await db.Entry(order).Collection(e => e.Lines).LoadAsync();");
+        await Assert.That(detail).Contains("await db.Entry(order).Reference(e => e.Note).LoadAsync();");
+        await Assert.That(detail).Contains("return Results.Ok(order);");
+        await Assert.That(detail.Contains("LoadAsync")).IsTrue();
+
+        await Assert.That(list).Contains("foreach (var order in orders)");
+        await Assert.That(list).Contains("await db.Entry(order).Collection(e => e.Lines).LoadAsync();");
+        await Assert.That(list).Contains("await db.Entry(order).Reference(e => e.Note).LoadAsync();");
+        await Assert.That(list).Contains("return orders;");
+
+        // Nothing to load: the handler stays the single expression it was.
+        await Assert.That(program).Contains(
+            "app.MapGet(\"/api/lines\", async (TDbCtx db) => await db.Lines.ToListAsync());");
+    }
+
+    /// <summary>#594, the to-one child route: a single aggregate child is returned as the reference itself, so its own
+    /// navigations load on a local that may be empty — never as an iteration over a value that is not a collection.</summary>
+    [Test]
+    public async Task Get_ChildToOneRoute_LoadsTheChildsNavigations() {
+        var d = ParseDomain("""
+            domain Ship
+            public entity Region {
+              Name: Text
+            }
+            public entity Address {
+              City: Text
+              region: Region optional
+            }
+            public entity Account {
+              Name: Text
+              hq: owned Address optional
+            }
+            """);
+        var route = HandlerOf(Render(d), "MapGet", "/api/accounts/{id}/hq");
+
+        await Assert.That(route).Contains("await db.Entry(parent).Reference(e => e.Hq).LoadAsync();");
+        await Assert.That(route).Contains("var address = parent.Hq;");
+        await Assert.That(route).Contains("await db.Entry(address).Reference(e => e.Region).LoadAsync();");
+        await Assert.That(route.Contains("parent.Hq.ToList()")).IsFalse();
+    }
+
     [Test]
     public async Task List_Route_EnglishPlural() {
         // S19: the route segment pluralizes with English rules, not name + "s".

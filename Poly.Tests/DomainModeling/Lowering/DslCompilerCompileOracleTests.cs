@@ -106,6 +106,7 @@ public class DslCompilerCompileOracleTests {
     [Arguments("docs/probes/fleet-eval/09-transport/orders.poly")]
     [Arguments("docs/probes/fleet-eval/09-transport/clinic.poly")]
     [Arguments("docs/probes/fleet-eval/12-mcp/mcp-library.poly")]
+    [Arguments("docs/missions/evolve-2026-10-13/library.poly")]
     [Arguments("docs/probes/dogfood/university.poly")]
     [Arguments("docs/probes/dogfood/crm.poly")]
     [Arguments("docs/probes/dogfood/hotel.poly")]

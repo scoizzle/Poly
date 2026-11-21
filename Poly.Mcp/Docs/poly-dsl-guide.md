@@ -1956,11 +1956,13 @@ uses the generated DbContext directly. A database file created before this chang
 
 **A `Decimal` range on SQLite.** SQLite has no exact decimal store, so a `Decimal` column is `TEXT`, the
 only form there that keeps every digit. SQLite compares a `TEXT` column to a numeric literal as text
-(`'9' > '1000000'`), so the CHECK compares the value numerically instead: `CAST(column AS REAL) >= … AND
-CAST(column AS REAL) <= …`. Both sides are the same correctly-rounded double and rounding is monotone, so a
-value inside the declared range is never refused. The CHECK is a floor that never contradicts `Create`,
-which stays the guard: a value that differs from a bound beyond REAL's 15–17 significant digits can pass it, and
-`Create` still refuses that value in the domain.
+(`'9' > '1000000'`), so the CHECK compares the value numerically instead: the column and both bounds are REALs
+— `CAST(column AS REAL) >= 0.0 AND CAST(column AS REAL) <= 1000000.0` — and SQLite parses the bound the way it
+casts the value. Both sides are then the same correctly-rounded double, and rounding is monotone, so a value
+inside the declared range is never refused. A whole-number bound above 2^53 is printed with a `.0` for exactly
+that reason: an INTEGER literal is compared exactly, without rounding, and would refuse the value at the bound.
+The CHECK is a floor that never contradicts `Create`, which stays the guard: a value that differs from a bound
+beyond REAL's 15–17 significant digits can pass it, and `Create` still refuses that value in the domain.
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport emits them as DTO validation attributes (metadata on the contract;

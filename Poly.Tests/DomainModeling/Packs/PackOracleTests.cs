@@ -1017,6 +1017,23 @@ public class PackOracleTests {
         using var all = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/shipments"));
         var references = all.RootElement.EnumerateArray().Select(s => s.GetProperty("reference").GetString()).ToArray();
         await Assert.That(references.Count(r => r is "REF-HI" or "REF-LO")).IsEqualTo(0);
+
+        // Whole-number bounds above 2^53 are not doubles: 9007199254740993 is 9007199254740992.0 as a REAL. The CHECK
+        // must round the bound and the stored value the same way, or the value at the bound is refused.
+        foreach (var (code, amount) in new[] { ("VLT-1", 9007199254740993m), ("VLT-2", 9007199254740995m), ("VLT-3", 9007199254741000m) }) {
+            using var created = await oracle.Client.PostAsync(
+                "/api/vaults", Json($$"""{"Code":"{{code}}","Amount":{{amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}"""));
+            await Assert.That((int)created.StatusCode).IsEqualTo(201)
+                .Because($"{amount}: {await created.Content.ReadAsStringAsync()}");
+            using var row = JsonDocument.Parse(await oracle.Client.GetStringAsync($"/api/vaults/{code}"));
+            await Assert.That(row.RootElement.GetProperty("amount").GetDecimal()).IsEqualTo(amount);
+        }
+
+        foreach (var (code, amount) in new[] { ("VLT-LO", "9007199254740992"), ("VLT-HI", "9007199254741001") }) {
+            using var refusedBound = await oracle.Client.PostAsync(
+                "/api/vaults", Json($$"""{"Code":"{{code}}","Amount":{{amount}}}"""));
+            await Assert.That((int)refusedBound.StatusCode).IsEqualTo(400).Because($"{amount}: {await refusedBound.Content.ReadAsStringAsync()}");
+        }
     }
 
     /// <summary>#620 (slice P-03): an action that applies an effect and then fails must persist nothing.

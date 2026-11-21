@@ -231,6 +231,37 @@ public sealed class DslNumberTextTests {
         await Assert.That(ReadLiteral("1." + new string('0', 100_000)).Value).IsEqualTo(1L);
     }
 
+    /// <summary>What an entity property's <c>default(...)</c> writes: the chosen value, or the positioned refusal.</summary>
+    private static string OnDefault(string type, string literal) =>
+        ResolverBaselineTests.Resolve($"domain T\nA: entity {{\n  N: {type} default({literal})\n}}\n");
+
+    [Test]
+    [Arguments("1234567890123456789012345678", "Value=Decimal:1234567890123456789012345678)")]
+    [Arguments("12345678901234567890123456789", "Value=Decimal:12345678901234567890123456789)")]
+    public async Task DefaultLiteral_WithinDecimal_IsTheExactValue(string literal, string expected) {
+        // #801: 29 significant digits still fit Decimal, so the default is that value and not a rounded one.
+        await Assert.That(OnDefault("Decimal", literal)).Contains(expected);
+    }
+
+    [Test]
+    [Arguments("12345678901234567890123456789.5", "ERR Number '12345678901234567890123456789.5' is larger than the maximum 7922816251426433759354395033.5 for 1 digit after the point. @3:22")]
+    [Arguments("1.00000000000000000000000000001", "ERR Number '1.00000000000000000000000000001' has 29 digits after the point; the maximum is 28. @3:22")]
+    [Arguments("12345678901234567890123456789012", "ERR Number '12345678901234567890123456789012' is larger than the maximum 79228162514264337593543950335. @3:22")]
+    public async Task DefaultLiteral_PastWhatDecimalHolds_IsPositionedErrorNamingTheLimit(string literal, string expected) {
+        // #801: exactly the digits or a positioned error naming the limit — never a silent rounding.
+        await Assert.That(OnDefault("Decimal", literal)).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments("Decimal", 22)]
+    [Arguments("Number", 21)]
+    public async Task DefaultLiteral_PastDecimalHolds_IsANumberErrorForEveryNumericType(string type, int column) {
+        // #801: a Number property answers with the numeric limit too, never "default value of type 'Text'".
+        var answer = OnDefault(type, "12345678901234567890123456789012");
+        await Assert.That(answer).IsEqualTo($"ERR Number '12345678901234567890123456789012' is larger than the maximum {MaxDecimal}. @3:{column}");
+        await Assert.That(answer).DoesNotContain("Text");
+    }
+
     private static string InLateTemporalPolicy(string expression) =>
         ResolverBaselineTests.Resolve($"domain A\nuses temporal\nX: entity {{\n  Due: Date\n  Late: policy {{ {expression} > Due }}\n}}\n");
 

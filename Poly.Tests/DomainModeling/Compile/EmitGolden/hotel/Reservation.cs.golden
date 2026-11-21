@@ -194,10 +194,6 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CheckIn' requires stage 'Confirmed' on entity 'Reservation'.", "Reservation.CheckIn", "Confirmed"));
         }
-        if (this.Room == null)
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'CheckIn' requires a linked 'room' on entity 'Reservation'.", "Reservation.room"));
-        }
         if (!this.RoomReady())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckIn' blocked by policy 'RoomReady'.", "Reservation.CheckIn", "RoomReady"));
@@ -336,10 +332,6 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'HasFolio'.", "Reservation.CheckOut", "HasFolio"));
         }
-        if (this.Folio == null)
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'CheckOut' requires a linked 'folio' on entity 'Reservation'.", "Reservation.folio"));
-        }
         if (!this.BillSettled())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'BillSettled'.", "Reservation.CheckOut", "BillSettled"));
@@ -354,7 +346,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
     }
     public bool DatesValid() => this.CheckOutDate > this.CheckInDate;
     public bool PartyFits() => this.PartySize <= this.MaxOccupancy;
-    public bool RoomReady() => this.Room != null && (!this.Room!.Occupied && !this.Room!.Dirty && !this.Room!.Offline);
+    public bool RoomReady() => this.Room != null && !this.Room!.Occupied && (this.Room != null && !this.Room!.Dirty) && (this.Room != null && !this.Room!.Offline);
     public bool BillSettled() => this.Folio != null && this.Folio!.Balance == 0L;
     public bool HasFolio() => this.Folio != null;
     internal void RegisterRoomStaysInHouseSubscriber(Room subscriber)

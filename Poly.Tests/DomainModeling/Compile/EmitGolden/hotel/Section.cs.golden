@@ -52,10 +52,6 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Occupy' blocked by policy 'CanBook'.", "Section.Occupy", "CanBook"));
         }
-        if (this.Hall == null)
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Occupy' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
-        }
         if (!this.ParentFree())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Occupy' blocked by policy 'ParentFree'.", "Section.Occupy", "ParentFree"));
@@ -116,7 +112,7 @@ internal class Section : Poly.Runtime.IActionScoped
     }
     public bool IsVacant() => !this.Occupied;
     public bool IsOccupied() => this.Occupied;
-    public bool ParentFree() => this.Hall != null && (!this.Hall!.Occupied && !this.Hall!.Offline);
+    public bool ParentFree() => this.Hall != null && !this.Hall!.Occupied && (this.Hall != null && !this.Hall!.Offline);
     public bool CanBook() => !this.Occupied;
     internal static DomainResult<Section> Create(string? name = default, long? capacity = default, decimal? dayRate = default, bool? occupied = default, Hall? hall = default)
     {

@@ -487,7 +487,7 @@ public class FailureTypingTests {
     [Arguments(StageRequireDsl, "Policy(\"'Go' blocked by policy 'IsOk'.\", \"Item.Go\", \"IsOk\")")]
     [Arguments(LinkDsl, "Link(\"Cannot add a second link on 'kid': the source already has a target.\", \"Parent.kid\")")]
     [Arguments(InvokeUnlinkedDsl, "Required(\"'Go' requires a linked 'kid' on entity 'Parent'.\", \"Parent.kid\")")]
-    [Arguments(PathPrefixDsl, "Required(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\", \"Reservation.room\")")]
+    [Arguments(PathPrefixDsl, "Policy(\"'CheckIn' blocked by policy 'RoomFree'.\", \"Reservation.CheckIn\", \"RoomFree\")")]
     [Arguments(EnsureUniqueDsl, "Constraint(\"A unique assign needs the storage port.\", \"Widget\")")]
     public async Task ActionKinds_PrintTheirKindPathAndGuard(string dsl, string call) {
         var cs = Print(dsl);
@@ -661,7 +661,7 @@ public class FailureTypingTests {
     [Arguments(StageRequireDsl, "Item", "Go", 1, DomainFailureKind.Policy, "'Go' blocked by policy 'IsOk'.", "Item.Go", "IsOk")]
     [Arguments(LinkDsl, "Parent", "AddKid", 2, DomainFailureKind.Link, "Cannot add a second link on 'kid': the source already has a target.", "Parent.kid", null)]
     [Arguments(InvokeUnlinkedDsl, "Parent", "Go", 1, DomainFailureKind.Required, "'Go' requires a linked 'kid' on entity 'Parent'.", "Parent.kid", null)]
-    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", 1, DomainFailureKind.Required, "'CheckIn' requires a linked 'room' on entity 'Reservation'.", "Reservation.room", null)]
+    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", 1, DomainFailureKind.Policy, "'CheckIn' blocked by policy 'RoomFree'.", "Reservation.CheckIn", "RoomFree")]
     [Arguments(EnsureUniqueDsl, "Widget", null, 1, DomainFailureKind.Constraint, "A unique assign needs the storage port.", "Widget", null)]
     public async Task ActionKinds_PrintedAssembly_CarryKindPathGuardAndLegacyText(
         string dsl, string entity, string? action, int times,
@@ -681,7 +681,7 @@ public class FailureTypingTests {
     [Arguments(StageRequireDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.", DomainFailureKind.Policy, "Item.Go", "IsOk")]
     [Arguments(LinkDsl, "Parent", "AddKid", "Cannot add a second link on 'kid': the source already has a target.", DomainFailureKind.Link, "Parent.kid", null)]
     [Arguments(InvokeUnlinkedDsl, "Parent", "Go", "'Go' requires a linked 'kid' on entity 'Parent'.", DomainFailureKind.Required, "Parent.kid", null)]
-    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", "'CheckIn' requires a linked 'room' on entity 'Reservation'.", DomainFailureKind.Required, "Reservation.room", null)]
+    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", "'CheckIn' blocked by policy 'RoomFree'.", DomainFailureKind.Policy, "Reservation.CheckIn", "RoomFree")]
     public async Task ActionKinds_OnBothSides_CarryKindPathGuardAndLegacyText(
         string dsl, string entity, string action, string expected,
         DomainFailureKind kind, string path, string? guard) {

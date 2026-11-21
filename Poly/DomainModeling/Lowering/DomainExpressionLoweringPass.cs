@@ -180,7 +180,8 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     /// local-name generator. A quantifier body is a <paramref name="condition"/>.
     /// </summary>
     private LoweredExpression LowerAgainstEntity(
-        string? entityName, DomainExpression expression, Node subject, bool condition = false) {
+        string? entityName, DomainExpression expression, Node subject, bool condition = false,
+        Node? subjectPresence = null) {
         IReadOnlyDictionary<string, string>? enums = _context.EnumPropertyNames;
         if (entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
@@ -192,7 +193,7 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
         var nested = new DomainExpressionLoweringPass(_context with {
             EnumPropertyNames = enums,
             SourceEntityName = entityName ?? _context.SourceEntityName
-        });
+        }) { _subjectPresence = subjectPresence };
         return condition ? nested.LowerCondition(expression, subject) : nested.LowerExpression(expression, subject);
     }
 

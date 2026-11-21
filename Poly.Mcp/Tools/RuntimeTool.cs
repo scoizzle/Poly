@@ -67,11 +67,19 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     /// a collection nav is <c>#linked</c> (its ids stay in navigationLinks). No
     /// runtime type ever reaches the answer.
     /// </summary>
+    /// <remarks>
+    /// A temporal value renders as culture-invariant ISO 8601 with the stored precision
+    /// (#656): the host's short format is ambiguous across locales, drops the fraction and
+    /// the zone, and cannot be fed back into <c>create</c>.
+    /// </remarks>
     private static string RenderPropertyValue(object? value, ModuleInstanceExecutor executor) =>
         value switch {
             IDictionary<string, object?> navigation =>
                 executor.TryFind(navigation, out var peer) && peer is not null ? $"#{peer.Id}" : LinkedMarker,
             string text => text,
+            DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            DateTime dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
+            TimeOnly time => time.ToString("HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture),
             System.Collections.IEnumerable => LinkedMarker,
             _ => value?.ToString() ?? "(null)"
         };

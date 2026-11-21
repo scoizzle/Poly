@@ -162,6 +162,34 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(executor.Instances.Count).IsEqualTo(0);
     }
 
+    /// <summary>A declared property the initial stage's entry assigns has no Create slot, so the message
+    /// names that stage instead of calling the property unknown (#636).</summary>
+    [Test]
+    public async Task Create_EntryAssignedProperty_NamesWhyItCannotBeSupplied() {
+        var executor = ExecutorFor("""
+            domain T
+            Issue: entity {
+              Title: Text length(1, 200)
+              Points: Number range(0, 100) default(0)
+              Backlog: stage {
+                entry { assign Points to 0 }
+                Go: action { transition to Todo }
+              }
+              Todo: stage { }
+            }
+            """);
+
+        var outcome = executor.Create("Issue", Values(("Title", "T"), ("Points", 7L)));
+
+        await Assert.That(outcome.Succeeded).IsFalse();
+        await Assert.That(outcome.Error).IsNotNull();
+        await Assert.That(outcome.Error!).Contains("Property 'Points' for entity 'Issue'");
+        await Assert.That(outcome.Error!).Contains("initial stage 'Backlog'");
+        await Assert.That(outcome.Error!).Contains("cannot be supplied at create");
+        await Assert.That(outcome.Error!).DoesNotContain("Unknown property");
+        await Assert.That(executor.Instances.Count).IsEqualTo(0);
+    }
+
     [Test]
     public async Task Invoke_CoercesActionArguments() {
         var executor = ExecutorFor(Typed);

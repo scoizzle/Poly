@@ -1,3 +1,5 @@
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
 using Poly.Runtime;
 
 namespace Poly.DomainModeling.Runtime;
@@ -46,8 +48,19 @@ public sealed partial class ModuleInstanceExecutor {
                     args[i] = CoerceValue(slotType, property?.Type.TypeName, raw, label, namedTypeFailure: supplied);
                 }
                 foreach (var key in values.Keys) {
-                    if (!known.Contains(key))
-                        throw new HostException($"Unknown property '{key}' for entity '{entityName}'.");
+                    if (known.Contains(key))
+                        continue;
+                    // A property the initial stage's entry assigns has no Create slot (the constructor's
+                    // entry effects own it), so naming it "unknown" is false: it is declared (#636).
+                    var declared = entity.Properties.FirstOrDefault(p =>
+                        string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase));
+                    var initialStage = entity.InitialStage();
+                    if (declared is not null && initialStage is not null
+                        && EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity).Contains(declared.Name))
+                        throw new HostException(
+                            $"Property '{declared.Name}' for entity '{entityName}' is set by the entry effect of "
+                            + $"initial stage '{initialStage.Name}', so it cannot be supplied at create; omit it.");
+                    throw new HostException($"Unknown property '{key}' for entity '{entityName}'.");
                 }
 
                 if (Run(entityName, create, self: null, args) is not IDomainResult result)

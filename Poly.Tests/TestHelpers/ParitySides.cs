@@ -41,10 +41,13 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
         }
         // The factory only takes parameters it declares. A scenario may still pass a
         // property the entry effects own; the printed constructor accepts it, the
-        // module factory does not. Drop those keys and create again.
+        // module factory does not. Drop those keys and create again: the message names the
+        // property either way (`Unknown property 'X'`, or the entry-assigned 'X').
         while (!outcome.Succeeded && outcome.Error is { } err) {
-            var unknown = System.Text.RegularExpressions.Regex.Match(
-                err, "Unknown property '([^']+)'");
+            var unknown = System.Text.RegularExpressions.Regex.Match(err, "Unknown property '([^']+)'");
+            if (!unknown.Success)
+                unknown = System.Text.RegularExpressions.Regex.Match(
+                    err, "Property '([^']+)' for entity '[^']+' is set by the entry effect");
             if (!unknown.Success || !properties.Remove(unknown.Groups[1].Value))
                 break;
             outcome = _exec.Create(model.Name, properties);

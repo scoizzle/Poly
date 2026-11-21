@@ -27,6 +27,11 @@ internal class Activity : Poly.Runtime.IActionScoped
     public DateOnly DueOn { get; private set; }
     public Opportunity? Opportunity { get; private set; }
     public ActivityStage CurrentStage { get; private set; }
+    internal void AttachOpportunity(Opportunity child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Opportunity = child;
+    }
     internal DomainResult Snooze()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

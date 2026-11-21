@@ -17,6 +17,11 @@ internal class Fine : Poly.Runtime.IActionScoped
     public long Amount { get; private set; }
     public string Reason { get; private set; } = default!;
     public Patron? Patron { get; private set; }
+    internal void AttachPatron(Patron child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Patron = child;
+    }
     internal static DomainResult<Fine> Create(long? amount = default, string? reason = default, Patron? patron = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

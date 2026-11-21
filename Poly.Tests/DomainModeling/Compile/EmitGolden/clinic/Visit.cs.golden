@@ -31,6 +31,16 @@ internal class Visit : Poly.Runtime.IActionScoped
     public Patient? Patient { get; private set; }
     public Doctor? PrimaryDoctor { get; private set; }
     public VisitStage CurrentStage { get; private set; }
+    internal void AttachPatient(Patient child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Patient = child;
+    }
+    internal void AttachPrimaryDoctor(Doctor child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.PrimaryDoctor = child;
+    }
     internal DomainResult AssignDoctor(Doctor doctor)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

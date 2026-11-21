@@ -20,6 +20,11 @@ internal class Delivery : Poly.Runtime.IActionScoped
     public long Weight { get; private set; }
     public string Notes { get; private set; } = default!;
     public Truck? Truck { get; private set; }
+    internal void AttachTruck(Truck child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Truck = child;
+    }
     internal DomainResult Confirm(string notes)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

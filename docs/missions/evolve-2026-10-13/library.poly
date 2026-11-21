@@ -1,8 +1,10 @@
 domain Library
+uses storage
+uses persistence
 uses temporal
 uses http
 
-Mailer: contract external mailer v1 {
+Mailer: contract internal mailer v1 {
   Message: value {
     To: Text
     Subject: Text
@@ -64,7 +66,7 @@ Loan: entity {
   book: Book
   patron: Patron via loans
   DueDate: Date
-  ReturnedOn: Date
+  ReturnedOn: Date optional
   Status: Text default("active")
   Active: stage {
     entry { assign Status to "active" }

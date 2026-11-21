@@ -128,32 +128,32 @@ P	docs/missions/evolve-2026-10-13/disputes.poly|action|Customer.OpenDispute|add	
 P	docs/missions/evolve-2026-10-13/disputes.poly|stage|Dispute.Open|replace	ok identical=Y delta=0 sha=A8B25C8BCDAA
 P	docs/missions/evolve-2026-10-13/disputes.poly|stage|Dispute.Open|remove	ok identical=- delta=-199 sha=9D05ED9ABF2B
 P	docs/missions/evolve-2026-10-13/disputes.poly|stage|Dispute.Open|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|uses|uses:temporal|remove	ok identical=- delta=-14 sha=5194376CA072
-P	docs/missions/evolve-2026-10-13/library.poly|uses|uses:temporal|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|contract|Mailer|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|contract|Mailer|remove	ok identical=- delta=-145 sha=BB15D880E4B9
+P	docs/missions/evolve-2026-10-13/library.poly|uses|uses:storage|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|uses|uses:storage|remove	ok identical=- delta=-13 sha=4866E31ADDB3
+P	docs/missions/evolve-2026-10-13/library.poly|uses|uses:storage|add	err EDIT_NAME_COLLISION
+P	docs/missions/evolve-2026-10-13/library.poly|contract|Mailer|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|contract|Mailer|remove	ok identical=- delta=-145 sha=7D7C4A437AFF
 P	docs/missions/evolve-2026-10-13/library.poly|contract|Mailer|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|entity|Book|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|entity|Book|remove	ok identical=- delta=-52 sha=1E901A29FB78
+P	docs/missions/evolve-2026-10-13/library.poly|entity|Book|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|entity|Book|remove	ok identical=- delta=-52 sha=726F792C0105
 P	docs/missions/evolve-2026-10-13/library.poly|entity|Book|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|property|Book.Title|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|property|Book.Title|remove	ok identical=- delta=-14 sha=E90C641DD76B
+P	docs/missions/evolve-2026-10-13/library.poly|property|Book.Title|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|property|Book.Title|remove	ok identical=- delta=-14 sha=0D2EAFB92DFF
 P	docs/missions/evolve-2026-10-13/library.poly|property|Book.Title|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|navigation|Patron.loans|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|navigation|Patron.loans|remove	ok identical=- delta=-19 sha=830E422EC40F
+P	docs/missions/evolve-2026-10-13/library.poly|navigation|Patron.loans|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|navigation|Patron.loans|remove	ok identical=- delta=-19 sha=603B6289EC9B
 P	docs/missions/evolve-2026-10-13/library.poly|navigation|Patron.loans|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|policy|Patron.AtLimit|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|policy|Patron.AtLimit|remove	ok identical=- delta=-39 sha=2C7613806B48
+P	docs/missions/evolve-2026-10-13/library.poly|policy|Patron.AtLimit|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|policy|Patron.AtLimit|remove	ok identical=- delta=-39 sha=BD8C8AFF924B
 P	docs/missions/evolve-2026-10-13/library.poly|policy|Patron.AtLimit|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|remove	ok identical=- delta=-125 sha=3249F258ACB6
+P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|remove	ok identical=- delta=-125 sha=FC556C16E819
 P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|remove	ok identical=- delta=-258 sha=EFDB5D47477F
+P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|remove	ok identical=- delta=-258 sha=2D5E907388C0
 P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|bind|SendNotice|replace	ok identical=Y delta=0 sha=A37F590872D8
-P	docs/missions/evolve-2026-10-13/library.poly|bind|SendNotice|remove	ok identical=- delta=-53 sha=65AE1B166158
+P	docs/missions/evolve-2026-10-13/library.poly|bind|SendNotice|replace	ok identical=Y delta=0 sha=EE4FA544BB17
+P	docs/missions/evolve-2026-10-13/library.poly|bind|SendNotice|remove	ok identical=- delta=-53 sha=0EE764E7106D
 P	docs/missions/evolve-2026-10-13/library.poly|bind|SendNotice|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/saas.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=4F48474B68F1
 P	docs/missions/evolve-2026-10-13/saas.poly|uses|uses:temporal|remove	err EDIT_NOT_ADDRESSABLE

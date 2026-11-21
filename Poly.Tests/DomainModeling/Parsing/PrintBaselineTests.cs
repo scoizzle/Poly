@@ -29,7 +29,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// the document is parsed, applied and analysed (<c>ApplyAndAnalyze</c>), and the committed root is printed
 /// through <c>new DomainDslPrinter(session)</c>. A key whose document does not analyse is recorded as
 /// <c>analysis-failed</c> (or <c>parse-failed</c>) with the exception or diagnostic type: it is not skipped
-/// (<c>docs/missions/evolve-2026-10-13/library.poly</c> is one, #857). A <c>built</c> key is printed
+/// (<c>docs/missions/evolve-2026-10-13/billing.poly</c> is one). A <c>built</c> key is printed
 /// straight from a code-built <see cref="Domain"/> through a printer whose session the header names; there is
 /// no parse and no analysis.</para>
 ///
@@ -56,7 +56,7 @@ public sealed class PrintBaselineTests {
     /// <summary>
     /// The documents that do not print today, by key, with the exact recorded status (the failure under each catalog tried).
     /// None has an owner row: they are mission and probe documents that fail analysis, one by design
-    /// (<c>nested-invoke-type-mismatch</c>), one known (<c>library.poly</c>, #857). Stale-checked both ways: a document that
+    /// (<c>nested-invoke-type-mismatch</c>). Stale-checked both ways: a document that
     /// starts to print fails until its entry is deleted and its key re-recorded; a status that changes fails until re-recorded.
     /// </summary>
     internal static readonly (string Key, string Status)[] KnownUnprintable = [
@@ -64,7 +64,6 @@ public sealed class PrintBaselineTests {
         ("poly/docs/missions/evolve-2026-10-13/billing.poly", "Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-13/claims.poly", "Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-13/disputes.poly", "Core:analysis-failed:DMSTR006 | Product:analysis-failed:DMSTR006"),
-        ("poly/docs/missions/evolve-2026-10-13/library.poly", "Core:session-failed:InvalidOperationException | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-13/university-http.poly", "Core:session-failed:InvalidOperationException | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-13/university.poly", "Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001"),
         ("poly/docs/missions/evolve-2026-10-14/ratelimit.poly", "Core:analysis-failed:DMLIB001 | Product:analysis-failed:DMLIB001"),

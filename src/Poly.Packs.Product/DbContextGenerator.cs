@@ -96,6 +96,10 @@ public sealed partial class DbContextGenerator {
         List<FieldDefinitionNode>? fields = null;
         List<Node>? interfaces = null;
         var usings = new List<string> { "Microsoft.EntityFrameworkCore" };
+        // A DateTime column's UTC converter names DateTimeKind, which no other emitted member needs (#937).
+        if (_entities.Any(e => _storageLookup.TryGetValue(e.Name, out var store)
+                && store.Columns.Any(c => string.Equals(c.ClrTypeName, "DateTime", StringComparison.Ordinal))))
+            usings.Add("System");
         if (_implementsStoragePort) {
             usings.Add("System.Collections.Generic");
             usings.Add("System.Linq");

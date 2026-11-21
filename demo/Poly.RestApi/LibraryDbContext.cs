@@ -2,6 +2,7 @@
 
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
@@ -69,9 +70,9 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Status).HasColumnName("status").HasColumnType("TEXT");
-    b.Property(x => x.CheckedOutAt).HasColumnName("checkedOutAt").HasColumnType("TEXT");
-    b.Property(x => x.DueDate).HasColumnName("dueDate").HasColumnType("TEXT");
-    b.Property(x => x.ReturnedAt).HasColumnName("returnedAt").HasColumnType("TEXT");
+    b.Property(x => x.CheckedOutAt).HasColumnName("checkedOutAt").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+    b.Property(x => x.DueDate).HasColumnName("dueDate").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+    b.Property(x => x.ReturnedAt).HasColumnName("returnedAt").HasColumnType("TEXT").HasConversion(v => (v == null ? (DateTime?)null : (v.Value.Kind == DateTimeKind.Local ? v.Value.ToUniversalTime() : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc))), v => (v == null ? (DateTime?)null : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc)));
     b.Property(x => x.TimesRenewed).HasColumnName("timesRenewed").HasColumnType("INTEGER");
 });
         modelBuilder.Entity<Fine>(b => {
@@ -80,7 +81,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.HasKey("Id");
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("INTEGER");
     b.Property(x => x.Reason).HasColumnName("reason").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.DateIssued).HasColumnName("dateIssued").HasColumnType("TEXT");
+    b.Property(x => x.DateIssued).HasColumnName("dateIssued").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
     b.Property(x => x.Paid).HasColumnName("paid").HasColumnType("INTEGER");
 });
         modelBuilder.Entity<PremiumPatron>(b => {

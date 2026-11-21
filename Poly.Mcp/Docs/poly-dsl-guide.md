@@ -1524,11 +1524,14 @@ diverging:
   `uses http` and nothing else is `DMLIB001` at define time, in `polyc` and in every MCP
   authoring call, instead of silently losing the constraint. The MCP execution overlay
   (`McpSessionStore.EnsureExecution`) still adds `persistence`; with the rule in place it adds
-  no `unique` guard the document did not ask for, and its removal is C-08's. The printed `EnsureUnique` member
-  is a residual with no caller: it refuses with "A unique assign needs the storage port." The EF model uses a
-  synthetic integer `Id` key. Every `unique` property, including a second one on the
-  same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session
-  storage port and at the database.
+  no `unique` guard the document did not ask for, and its removal is C-08's. The module declares
+  no public uniqueness member: `Create` carries the port guard and an assign carries the same
+  guard inline. A private `EnsureUnique` remains because the lowered assign shape names it before
+  the storage library rewrites that call; it is unreachable from any printed module (a `unique`
+  with no storage library is DMLIB001, and the rewrite replaces every call) and it fails closed
+  rather than accepting a duplicate. The EF model uses a synthetic integer `Id` key. Every
+  `unique` property, including a second one on the same entity, is `HasIndex(...).IsUnique()`.
+  Duplicate values fail loud at the session storage port and at the database.
 - **`Now`/`Today`/`Guid` are authorable in `default(...)`, assign RHS, and policy bodies**
   (with the temporal library, default in MCP `apply_dsl`). Policy/VM evaluation of `Now`/`Today`
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a

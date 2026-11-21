@@ -116,7 +116,7 @@ internal class Doctor : Poly.Runtime.IActionScoped
         db.Record("Doctor", "LicenseNo", __licenseNo);
         return DomainResult<Doctor>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

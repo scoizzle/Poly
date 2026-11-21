@@ -278,7 +278,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         db.Record("Warehouse", "Code", __code);
         return DomainResult<Warehouse>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

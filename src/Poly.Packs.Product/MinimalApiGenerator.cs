@@ -264,7 +264,15 @@ public sealed partial class MinimalApiGenerator {
             scopeBody.AddRange(BuildSqliteSchemaCheck(dbVar, createdVar, schemaId));
             scopeVariables.Add(createdVar);
         }
-        scopeBody.Add(new Await(new Invoke(new Variable("SeedAsync"), new Variable("db"))));
+        // #595: seeding writes placeholder rows into whatever database the host points at,
+        // so it runs only when the operator asks for it ("SeedDemoData": true).
+        scopeBody.Add(new IfStatement(
+            new Invoke(
+                new Member(new Member(new TypeReference(BuilderVar), "Configuration"), "GetValue"),
+                new Constant("SeedDemoData")) {
+                TypeArguments = [TypeReference.To(typeof(bool))]
+            },
+            new Block(new Await(new Invoke(new Variable("SeedAsync"), new Variable("db"))))));
         topLevelStatements.Add(new UsingStatement(
             Init("scope",
                 new Invoke(new Member(

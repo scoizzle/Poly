@@ -2333,7 +2333,7 @@ step, or the `as` alias an earlier `create` gave that instance:
 ```
 
 A create's `properties` may name a singular navigation whose value is an instance id or an alias
-(`{"account":"acme"}`), the same rule an `invoke`'s entity-typed `args` value follows. Wrong-typed
+(`{"account":"acme"}`). Wrong-typed
 values fail the step: the property coercions (`Date`, `DateTime`, `Time`, `Duration`, `Guid`,
 `Decimal`) and the declared `range`/`length`/`pattern` constraints are the create's own.
 

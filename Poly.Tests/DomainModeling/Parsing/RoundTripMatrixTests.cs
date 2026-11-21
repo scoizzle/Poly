@@ -123,20 +123,17 @@ public sealed class RoundTripMatrixTests {
 
     /// <summary>
     /// The known-wrong results, by rule over cell ids. Every cell a rule matches is one expected-failure entry, stale-checked on its own.
-    /// All are owned by G-30 (navigations, #850 and #799): a code-built <c>ManyToOne</c> prints bare and reads back as one-to-one; a code-built
-    /// <c>ManyToMany</c> prints <c>many T</c> and reads back as one-to-many; a navigation to an entity named like an unsupported keyword
-    /// (<c>Schedule</c>) prints text the parser refuses. No shipped surface can create the first two: only the code API.
+    /// All are owned by G-30 (navigations, #850): a code-built <c>ManyToOne</c> prints bare and reads back as one-to-one; a code-built
+    /// <c>ManyToMany</c> prints <c>many T</c> and reads back as one-to-many. A target named like an unsupported keyword (<c>Schedule</c>)
+    /// reads back like any other since #799. No shipped surface can create the first two: only the code API.
     /// </summary>
     internal static readonly IReadOnlyList<(string Name, Func<string, bool> Matches, string Owner, string Issue, string Class, string? ExceptionType)> Rules = [
         ("a bare many-to-one reads back as one-to-one, so the second print differs",
-            id => id.StartsWith("nav/ManyToOne/", StringComparison.Ordinal) || IsKeywordTarget(id, "ManyToOne", unsupported: false),
+            id => id.StartsWith("nav/ManyToOne/", StringComparison.Ordinal) || IsKeywordTarget(id, "ManyToOne", unsupported: null),
             "G-30", "#850", "reprint", null),
         ("many-to-many prints `many T` and reads back as one-to-many, so the model differs",
             id => id.StartsWith("nav/ManyToMany/", StringComparison.Ordinal) || IsKeywordTarget(id, "ManyToMany", unsupported: null),
             "G-30", "#850", "compare", null),
-        ("a bare many-to-one to a target named like an unsupported keyword prints text the reader refuses",
-            id => IsKeywordTarget(id, "ManyToOne", unsupported: true),
-            "G-30", "#799", "parse", nameof(FormatException)),
         ("a Duration default prints (T-10a added its print binder) and reads back without the `temporal` extension: the printer elides the implicit `uses temporal` (the cause the date offset cell below shares)",
             id => id.StartsWith("duration/", StringComparison.Ordinal),
             "G-34", "none", "compare", null),

@@ -356,8 +356,15 @@ internal static class ContributedMethods {
                 TypeDefinitionReference primitive when Poly.Introspection.CommonLanguageRuntime.ClrBuiltInRules.IsPrimitive(primitive.TypeDefinition) => null,
                 NamedTypeReference named => named.TypeName,
                 TypeReference type => type.TypeName,
+                // A field or property of `this` (`this._items.Add(item)` in __Restore, #934) has the type the
+                // enclosing type declares for it; a call through it threads only when that type is a module type.
+                Member { Value: ThisReference } own => ReceiverTypeName(DeclaredType(module[enclosing], own.MemberName)),
+                // A cast names its receiver's type (`((IList)this._items).Clear()` in __Restore).
+                TypeCast cast => ReceiverTypeName(cast.TargetTypeReference),
                 _ => null
             };
+            if (resolved is "")
+                return [];
             if (resolved is null) {
                 if (threadedMethods.Contains(member.MemberName))
                     throw new InvalidOperationException(
@@ -402,6 +409,28 @@ internal static class ContributedMethods {
             missing.Add((index, slot));
         }
         return missing.OrderBy(m => m.Index).ToList();
+    }
+
+    /// <summary>The type <paramref name="type"/> declares for its field or property <paramref name="memberName"/>; null when it declares none.</summary>
+    private static Node? DeclaredType(TypeDefinitionNode type, string memberName) =>
+        type.Fields?.FirstOrDefault(f => string.Equals(f.Name, memberName, StringComparison.Ordinal))?.MemberType
+        ?? type.Properties?.FirstOrDefault(p => string.Equals(p.Name, memberName, StringComparison.Ordinal))?.MemberType;
+
+    /// <summary>
+    /// The name to look a receiver of type <paramref name="typeNode"/> up by among the module types; <c>""</c> for a
+    /// constructed generic (<c>List&lt;Item&gt;</c>), which no module type is; null, which refuses a threaded name, when
+    /// there is no type to name or it is a CLR primitive (as for a primitive receiver above).
+    /// </summary>
+    private static string? ReceiverTypeName(Node? typeNode) {
+        if (typeNode is OptionalTypeReference optional)
+            typeNode = optional.InnerType;
+        return typeNode switch {
+            TypeDefinitionReference primitive when Poly.Introspection.CommonLanguageRuntime.ClrBuiltInRules.IsPrimitive(primitive.TypeDefinition) => null,
+            NamedTypeReference { TypeArguments.Count: > 0 } => "",
+            NamedTypeReference named => named.TypeName,
+            TypeReference typeReference => typeReference.TypeName,
+            _ => null
+        };
     }
 
     private static bool IsSameBinding(Node argument, string name) => argument switch {

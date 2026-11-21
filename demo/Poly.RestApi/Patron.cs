@@ -81,6 +81,11 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Loan>.Failure(loanResult.Error!);
         }
         var loan = loanResult.Value;
+        var __notify = loan.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Loan>.Failure(__notify.Error!);
+        }
         return DomainResult<Loan>.Success(loan);
     }
     internal void AttachLoans(Loan child)
@@ -122,6 +127,11 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Fine>.Failure(fineResult.Error!);
         }
         var fine = fineResult.Value;
+        var __notify = fine.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Fine>.Failure(__notify.Error!);
+        }
         return DomainResult<Fine>.Success(fine);
     }
     internal void AttachFines(Fine child)

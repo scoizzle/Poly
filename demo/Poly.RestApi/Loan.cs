@@ -19,6 +19,8 @@ internal class Loan : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronLoansOverdueSubscribers;
     private List<Patron>? _patronLoansReturnedSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private Loan() { }
     private Loan(string? status, DateTime dueDate, DateTime? returnedAt, long? timesRenewed, Book? book, Patron? borrower)
@@ -149,6 +151,11 @@ internal class Loan : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Overdue");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Overdue");
+                return DomainResult.Success();
+            }
             if (this._patronLoansOverdueSubscribers != null)
             {
                 foreach (var sub in this._patronLoansOverdueSubscribers)
@@ -172,6 +179,11 @@ internal class Loan : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Returned");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Returned");
+                return DomainResult.Success();
+            }
             if (this._patronLoansReturnedSubscribers != null)
             {
                 foreach (var sub in this._patronLoansReturnedSubscribers)
@@ -190,10 +202,57 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "Overdue")
+            {
+                var __notified0 = this.NotifyOverdueSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
+            if (__stage == "Returned")
+            {
+                var __notified1 = this.NotifyReturnedSubscribers();
+                if (!__notified1.IsSuccess)
+                {
+                    return __notified1;
+                }
+            }
+        }
+        return DomainResult.Success();
+    }
     private DomainResult __EnterInitialStage()
     {
         Poly.Runtime.ActionScope.Touch(this);
-        this.CheckedOutAt = DateTime.UtcNow;
+        this.__deferringStageNotifications = true;
+        try
+        {
+            this.CheckedOutAt = DateTime.UtcNow;
+        }
+        finally
+        {
+            this.__deferringStageNotifications = false;
+        }
         return DomainResult.Success();
     }
     internal static DomainResult<Loan> Create(string? status = default, DateTime? dueDate = default, DateTime? returnedAt = default, long? timesRenewed = default, Book? book = default, Patron? borrower = default)
@@ -260,7 +319,7 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[11];
+        var __state = new object?[13];
         __state[0] = this.Status;
         __state[1] = this.CheckedOutAt;
         __state[2] = this.DueDate;
@@ -271,7 +330,9 @@ internal class Loan : Poly.Runtime.IActionScoped
         __state[7] = this.CurrentStage;
         __state[8] = (this._patronLoansOverdueSubscribers == null ? null : new List<Patron>(this._patronLoansOverdueSubscribers));
         __state[9] = (this._patronLoansReturnedSubscribers == null ? null : new List<Patron>(this._patronLoansReturnedSubscribers));
-        __state[10] = this._notifyDepth;
+        __state[10] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[11] = this.__deferringStageNotifications;
+        __state[12] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -317,6 +378,23 @@ internal class Loan : Poly.Runtime.IActionScoped
                 this._patronLoansReturnedSubscribers.Add(__item9);
             }
         }
-        this._notifyDepth = (int)__saved[10]!;
+        if (__saved[10] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item10 in(List<string>)__saved[10]!)
+            {
+                this.__pendingStageNotifications.Add(__item10);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[11]!;
+        this._notifyDepth = (int)__saved[12]!;
     }
 }

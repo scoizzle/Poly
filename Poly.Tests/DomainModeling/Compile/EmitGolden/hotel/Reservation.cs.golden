@@ -25,6 +25,8 @@ internal class Reservation : Poly.Runtime.IActionScoped
     private List<Room>? _roomStaysCancelledSubscribers;
     private List<Room>? _roomStaysNoShowSubscribers;
     private List<Guest>? _guestReservationsDepartedSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private Reservation() { }
     private Reservation(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio, Guest? guest, Room? room)
@@ -442,6 +444,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("InHouse");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("InHouse");
+                return DomainResult.Success();
+            }
             if (this._roomStaysInHouseSubscribers != null)
             {
                 foreach (var sub in this._roomStaysInHouseSubscribers)
@@ -465,6 +472,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Departed");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Departed");
+                return DomainResult.Success();
+            }
             if (this._roomStaysDepartedSubscribers != null)
             {
                 foreach (var sub in this._roomStaysDepartedSubscribers)
@@ -504,6 +516,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Cancelled");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Cancelled");
+                return DomainResult.Success();
+            }
             if (this._roomStaysCancelledSubscribers != null)
             {
                 foreach (var sub in this._roomStaysCancelledSubscribers)
@@ -527,6 +544,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("NoShow");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("NoShow");
+                return DomainResult.Success();
+            }
             if (this._roomStaysNoShowSubscribers != null)
             {
                 foreach (var sub in this._roomStaysNoShowSubscribers)
@@ -542,6 +564,61 @@ internal class Reservation : Poly.Runtime.IActionScoped
         finally
         {
             this.ExitNotifyCascade(__depth);
+        }
+        return DomainResult.Success();
+    }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "InHouse")
+            {
+                var __notified0 = this.NotifyInHouseSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
+            if (__stage == "Departed")
+            {
+                var __notified1 = this.NotifyDepartedSubscribers();
+                if (!__notified1.IsSuccess)
+                {
+                    return __notified1;
+                }
+            }
+            if (__stage == "Cancelled")
+            {
+                var __notified2 = this.NotifyCancelledSubscribers();
+                if (!__notified2.IsSuccess)
+                {
+                    return __notified2;
+                }
+            }
+            if (__stage == "NoShow")
+            {
+                var __notified3 = this.NotifyNoShowSubscribers();
+                if (!__notified3.IsSuccess)
+                {
+                    return __notified3;
+                }
+            }
         }
         return DomainResult.Success();
     }
@@ -669,7 +746,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[16];
+        var __state = new object?[18];
         __state[0] = this.PartySize;
         __state[1] = this.Nights;
         __state[2] = this.NightlyRate;
@@ -685,7 +762,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         __state[12] = (this._roomStaysCancelledSubscribers == null ? null : new List<Room>(this._roomStaysCancelledSubscribers));
         __state[13] = (this._roomStaysNoShowSubscribers == null ? null : new List<Room>(this._roomStaysNoShowSubscribers));
         __state[14] = (this._guestReservationsDepartedSubscribers == null ? null : new List<Guest>(this._guestReservationsDepartedSubscribers));
-        __state[15] = this._notifyDepth;
+        __state[15] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[16] = this.__deferringStageNotifications;
+        __state[17] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -781,6 +860,23 @@ internal class Reservation : Poly.Runtime.IActionScoped
                 this._guestReservationsDepartedSubscribers.Add(__item14);
             }
         }
-        this._notifyDepth = (int)__saved[15]!;
+        if (__saved[15] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item15 in(List<string>)__saved[15]!)
+            {
+                this.__pendingStageNotifications.Add(__item15);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[16]!;
+        this._notifyDepth = (int)__saved[17]!;
     }
 }

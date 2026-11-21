@@ -1071,7 +1071,11 @@ for items as item where item in Active
     invoke item.Mark()                       # fan-out, stage-filtered
 ```
 
-Nested invoke depth is limited (max 16); recursive cycles fail loud.
+Nested invoke depth is limited (max 16); recursive cycles fail loud at run time, and an
+**unconditional** invoke cycle on one entity (`Ping: invoke Pong` + `Pong: invoke Ping`, or a
+self-invoke) is a `DMEFF021` analysis error, because every invocation of either action would hit
+that guard. A cycle behind a real guard is accepted (the guard may end it), and the depth guard
+remains the backstop.
 
 ### Require Gates
 

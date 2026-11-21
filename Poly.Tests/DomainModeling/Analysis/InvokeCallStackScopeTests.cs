@@ -42,9 +42,23 @@ public class InvokeCallStackScopeTests {
         await Assert.That(callChain).IsEqualTo(2);
     }
 
+    /// <summary>
+    /// #535: an unconditional invoke cycle is now a DMEFF021 error, so the gated result carries the
+    /// original (empty) root. The proposal still has to be analyzable — the point of these two tests
+    /// is that a recursive body terminates the analyzer and still publishes its invariants — so they
+    /// analyze the ungated proposal and assert the gate's error beside it.
+    /// </summary>
+    private static (Domain Root, AnalysisResult Analysis, EvolutionResult Gated) ParseRecursive(string dsl) {
+        var changes = new PolyDslParser(dsl).Parse();
+        var evolution = new DomainEvolution(DomainTestFactory.Create("_", [], []));
+        var gated = evolution.ApplyAndAnalyze(changes);
+        var root = evolution.Apply(changes).Root;
+        return (root, DomainModelAnalyzer.Analyze(root), gated);
+    }
+
     [Test]
     public async Task SelfInvoke_StillTerminates() {
-        var result = Parse("""
+        var (root, analysis, gated) = ParseRecursive("""
             domain Test
             Item: entity {
               Qty: Number range(0, 90)
@@ -54,14 +68,16 @@ public class InvokeCallStackScopeTests {
               }
             }
             """);
-        var entity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Item");
+        await Assert.That(gated.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.UnconditionalInvokeCycle)).IsTrue();
+        var entity = root.Types.OfType<Entity>().Single(e => e.Name == "Item");
         var loop = entity.Actions.Single(x => x.Name == "Loop");
-        await Assert.That(result.Analysis.GetActionInvariants(loop)).IsNotNull();
+        await Assert.That(analysis.GetActionInvariants(loop)).IsNotNull();
     }
 
     [Test]
     public async Task MutualInvoke_StillTerminates() {
-        var result = Parse("""
+        var (root, analysis, gated) = ParseRecursive("""
             domain Test
             Item: entity {
               Qty: Number range(0, 90)
@@ -75,8 +91,10 @@ public class InvokeCallStackScopeTests {
               }
             }
             """);
-        var entity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Item");
-        await Assert.That(result.Analysis.GetActionInvariants(entity.Actions.Single(x => x.Name == "P"))).IsNotNull();
-        await Assert.That(result.Analysis.GetActionInvariants(entity.Actions.Single(x => x.Name == "Q"))).IsNotNull();
+        await Assert.That(gated.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.UnconditionalInvokeCycle)).IsTrue();
+        var entity = root.Types.OfType<Entity>().Single(e => e.Name == "Item");
+        await Assert.That(analysis.GetActionInvariants(entity.Actions.Single(x => x.Name == "P"))).IsNotNull();
+        await Assert.That(analysis.GetActionInvariants(entity.Actions.Single(x => x.Name == "Q"))).IsNotNull();
     }
 }

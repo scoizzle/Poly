@@ -62,7 +62,18 @@ app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
         return Problem(bookResult.Error!);
     }
     db.Books.Add(bookResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.Books.AnyAsync(row => row.ISBN == bookResult.Value.ISBN))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'ISBN' value is already used on another 'Book'.", "Book.ISBN"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/books/", System.Uri.EscapeDataString(bookResult.Value.ISBN)), bookResult.Value);
 });
 
@@ -77,7 +88,18 @@ app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
         return Problem(patronResult.Error!);
     }
     db.Patrons.Add(patronResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.Patrons.AnyAsync(row => row.Email == patronResult.Value.Email))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Patron'.", "Patron.Email"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/patrons/", System.Uri.EscapeDataString(patronResult.Value.Email)), patronResult.Value);
 });
 
@@ -92,7 +114,18 @@ app.MapPost("/api/premiumpatrons", async (PremiumPatronDto dto, LibraryDbContext
         return Problem(premiumPatronResult.Error!);
     }
     db.PremiumPatrons.Add(premiumPatronResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.PremiumPatrons.AnyAsync(row => row.Email == premiumPatronResult.Value.Email))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'PremiumPatron'.", "PremiumPatron.Email"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/premiumpatrons/", System.Uri.EscapeDataString(premiumPatronResult.Value.Email)), premiumPatronResult.Value);
 });
 

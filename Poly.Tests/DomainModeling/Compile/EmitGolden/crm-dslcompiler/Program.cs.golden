@@ -61,7 +61,18 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
         return Problem(productResult.Error!);
     }
     db.Products.Add(productResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.Products.AnyAsync(row => row.Sku == productResult.Value.Sku))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Sku' value is already used on another 'Product'.", "Product.Sku"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/products/", System.Uri.EscapeDataString(productResult.Value.Sku)), productResult.Value);
 });
 
@@ -76,7 +87,18 @@ app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
         return Problem(leadResult.Error!);
     }
     db.Leads.Add(leadResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.Leads.AnyAsync(row => row.Email == leadResult.Value.Email))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Lead'.", "Lead.Email"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/leads/", System.Uri.EscapeDataString(leadResult.Value.Email)), leadResult.Value);
 });
 

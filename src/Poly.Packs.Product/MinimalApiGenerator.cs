@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Libraries.Storage;
 using Poly.Interpretation.CSharp;
 using Poly.Runtime;
 
@@ -29,6 +30,10 @@ public sealed partial class MinimalApiGenerator {
 
     private readonly IStorageSyntaxEmitter? _emitter;
     private readonly string? _vendor;
+
+    /// <summary>The providers whose database enforces the unique index the model declares. The InMemory
+    /// fallback enforces no index, so it has no refusal to map.</summary>
+    private bool EnforcesUniqueIndex => _vendor is "sqlite" or "sqlserver";
 
     /// <param name="catalog">
     /// The lowered module the host reads. Without one (shape-only generation, a few tests) there is nothing to read, so an action

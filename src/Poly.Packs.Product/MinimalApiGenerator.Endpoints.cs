@@ -1,6 +1,7 @@
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Libraries.Storage;
 
 namespace Poly.Packs.Product;
 
@@ -147,9 +148,9 @@ public sealed partial class MinimalApiGenerator {
                 "Add"),
             new Member(new Variable(resultVarName), "Value")));
 
-        // await db.SaveChangesAsync()
-        bodyNodes.Add(new Await(
-            new Invoke(new Member(new TypeReference("db"), "SaveChangesAsync"))));
+        // await db.SaveChangesAsync(), and on a host with a unique index, that index's refusal mapped to
+        // the same 409 the pre-check gives (#562).
+        bodyNodes.Add(SaveChangesWithUniqueConflict(entity, resultVarName, locals));
 
         // return Results.Ok(result.Value) or Results.Created(uri, result.Value)
         if (key.Property is not null) {
@@ -193,6 +194,58 @@ public sealed partial class MinimalApiGenerator {
             new Constant(route),
             new Lambda(dtoParam is null ? [dbParam] : [dtoParam, dbParam],
                 Stmts(bodyNodes))));
+    }
+
+    /// <summary>
+    /// <c>await db.SaveChangesAsync()</c>, and on a host whose provider enforces the unique index, the
+    /// mapping of that index's refusal to the same 409 body the create's own pre-check gives (#562). The
+    /// pre-check is check-then-act: two concurrent creates of one key both pass it, so the index is the
+    /// authority. The catch re-reads the entity's unique columns against the value the create settled on
+    /// (never the DTO's, which an applied default can differ from): the winning row is committed by the
+    /// time the loser's save returns, so a property that now holds the value is the one that collided. A
+    /// save failure no unique property accounts for keeps the 500 — the provider is never named, because
+    /// naming its exception type forces its assembly into the host's reference closure (CS1701).
+    /// </summary>
+    private Node SaveChangesWithUniqueConflict(Entity entity, string resultVarName, ISet<string> locals) {
+        var save = new Await(new Invoke(new Member(new TypeReference("db"), "SaveChangesAsync")));
+        var uniqueColumns = GetStorageEntity(entity).Columns.Where(static column => column.IsUnique).ToList();
+        if (!EnforcesUniqueIndex || uniqueColumns.Count == 0)
+            return save;
+
+        var created = new Member(new Variable(resultVarName), "Value");
+        var row = new Parameter(FreshLocal(locals, "row"));
+        var conflictBody = new List<Node>();
+        foreach (var column in uniqueColumns) {
+            var current = new Member(created, column.Name);
+            // The port's own key encoding (DbContextGenerator.Keys): a string compares directly, any other
+            // column through its ToString, so a numeric or temporal key is named as the guard names it.
+            Node comparison = string.Equals(column.ClrTypeName, "string", StringComparison.Ordinal)
+                ? new Equal(new Member(row, column.Name), current)
+                : new Equal(
+                    new Invoke(new Member(new Member(row, column.Name), "ToString")),
+                    new Invoke(new Member(current, "ToString")));
+            conflictBody.Add(new IfStatement(
+                new Await(new Invoke(
+                    new Member(new Member(new TypeReference("db"), Pluralize(entity.Name)), "AnyAsync"),
+                    new Lambda([row], comparison))),
+                new Block(DomainFailureProblem(
+                    "Unique",
+                    UniqueConstraintCompiler.Violation(entity.Name, column.Name),
+                    $"{entity.Name}.{column.Name}"))));
+        }
+
+        return new TryCatchFinally(
+            Stmts([save]),
+            CatchClauses: [new CatchClause(new NamedTypeReference("DbUpdateException"), null, new Block([
+                .. conflictBody,
+                new Return(ProblemResponse(500, "Internal Server Error"))]))]);
+    }
+
+    /// <summary><c>return Problem(Poly.Runtime.DomainFailure.&lt;kind&gt;(…));</c> for a failure with no module behind it.</summary>
+    private static Node DomainFailureProblem(string kind, string message, string? elementPath) {
+        var failure = new Invoke(new Member(new NamedTypeReference("Poly.Runtime.DomainFailure"), kind),
+            [new Constant(message), .. elementPath is null ? Array.Empty<Node>() : [new Constant(elementPath)]]);
+        return new Return(new Invoke(new Variable("Problem"), failure));
     }
 
     /// <summary>Builds Syntax IR for child entity list/detail endpoints (matching string oracle).</summary>

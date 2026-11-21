@@ -82,16 +82,14 @@ public class RangeAttributeArgumentsTests {
     }
 
     [Test]
-    public async Task OpenMaximumOnLong_UsesLongMaxNotDoubleMax() {
-        // Deliberately the double constructor: long.MaxValue is beyond int, and RangeAttribute
-        // has no (long, long). The bound is still the CLR type's real max — never double.MaxValue,
-        // which would claim a reachable range the member does not have.
-        var (minimum, maximum) = Bounds("long", 0.0, null);
-        await Assert.That(minimum.Value).IsTypeOf<double>();
-        await Assert.That((double)minimum.Value!).IsEqualTo(0.0);
-        await Assert.That(maximum.Value).IsTypeOf<double>();
-        await Assert.That((double)maximum.Value!).IsEqualTo((double)long.MaxValue);
-        await Assert.That((double)maximum.Value!).IsNotEqualTo(double.MaxValue);
+    public async Task OpenMaximumOnLong_UsesTypedConstructorAtLongMax() {
+        // Issue #800: long.MaxValue is beyond int, so the typed constructor carries it exactly.
+        // The value is the CLR type's real max — never double.MaxValue, which would claim a
+        // reachable range the member does not have.
+        var args = Poly.Packs.Product.RangeAttributeArguments.Build("long", 0L, null);
+        await Assert.That(args.Count).IsEqualTo(3);
+        await Assert.That(((Constant)args[1]).Value).IsEqualTo("0");
+        await Assert.That(((Constant)args[2]).Value).IsEqualTo("9223372036854775807");
     }
 
     [Test]
@@ -103,15 +101,30 @@ public class RangeAttributeArgumentsTests {
     }
 
     [Test]
-    public async Task RangeBeyondInt_OnLong_EmitsDoubleConstructorDeliberately() {
-        // Deliberately double: RangeAttribute has no (long, long), so an integral but beyond-int
-        // bound can only be carried by the double constructor. Truncating the constraint to int
-        // would falsely reject valid values, which is worse than the double's sub-2^53 precision.
-        var (minimum, maximum) = Bounds("long", 0.0, 5_000_000_000.0);
-        await Assert.That(minimum.Value).IsTypeOf<double>();
-        await Assert.That((double)minimum.Value!).IsEqualTo(0.0);
-        await Assert.That(maximum.Value).IsTypeOf<double>();
-        await Assert.That((double)maximum.Value!).IsEqualTo(5_000_000_000.0);
+    public async Task RangeBeyondInt_OnLong_UsesTypedConstructorExact() {
+        // Issue #800: RangeAttribute has no (long, long), so an integral bound beyond int goes
+        // through (Type, string, string). The double constructor rounded 2^53 + 1 down to 2^53
+        // and long.MaxValue up to 2^63, which overflows when the attribute casts it back.
+        var args = Poly.Packs.Product.RangeAttributeArguments.Build("long", 0.0, 5_000_000_000.0);
+        await Assert.That(args.Count).IsEqualTo(3);
+        await Assert.That(((Constant)args[1]).Value).IsEqualTo("0");
+        await Assert.That(((Constant)args[2]).Value).IsEqualTo("5000000000");
+        var printed = string.Concat(args.Select(a => new CSharpWriter().Write(a)));
+        await Assert.That(printed).Contains("typeof(long)");
+    }
+
+    [Test]
+    public async Task BoundAboveDoublePrecision_OnLong_IsExact() {
+        // 2^53 + 1 is the first long a double cannot carry; long.MaxValue - 1 rounds up to 2^63.
+        var abovePrecision = Poly.Packs.Product.RangeAttributeArguments.Build("long", 0L, 9_007_199_254_740_993L);
+        await Assert.That(((Constant)abovePrecision[2]).Value).IsEqualTo("9007199254740993");
+
+        var nearMax = Poly.Packs.Product.RangeAttributeArguments.Build("long", 0L, long.MaxValue - 1);
+        await Assert.That(((Constant)nearMax[2]).Value).IsEqualTo("9223372036854775806");
+
+        var max = Poly.Packs.Product.RangeAttributeArguments.Build("long", null, null);
+        await Assert.That(((Constant)max[1]).Value).IsEqualTo("-9223372036854775808");
+        await Assert.That(((Constant)max[2]).Value).IsEqualTo("9223372036854775807");
     }
 
     [Test]
@@ -186,14 +199,15 @@ public class RangeAttributeArgumentsTests {
     }
 
     [Test]
-    public async Task NumberOpenRange_CapsAtLongMaxAsDouble() {
+    public async Task NumberOpenRange_CapsAtLongMaxAsTypedString() {
         var prog = await ProgramFor("""
             domain Demo
             Item: entity { Qty: Number range(0, ) }
             """);
 
-        await Assert.That(prog).Contains("[Range(0.0, 9.223372036854776E+18)]");
+        await Assert.That(prog).Contains("[Range(typeof(long), \"0\", \"9223372036854775807\")]");
         await Assert.That(prog).DoesNotContain("E+308");
+        await Assert.That(prog).DoesNotContain("9.223372036854776E+18");
     }
 
     [Test]
@@ -208,14 +222,15 @@ public class RangeAttributeArgumentsTests {
     }
 
     [Test]
-    public async Task NumberRangeBeyondInt_EmitsDoubleRangeAttributeDeliberately() {
-        // Deliberately double: a long bound beyond int has no integral attribute constructor.
+    public async Task NumberRangeBeyondInt_EmitsTypedLongRangeAttribute() {
+        // Issue #800: a long bound beyond int has no integral attribute constructor, so the typed
+        // constructor carries the exact text instead of the double's rounded value.
         var prog = await ProgramFor("""
             domain Demo
             Item: entity { Big: Number range(0, 5000000000) }
             """);
 
-        await Assert.That(prog).Contains("[Range(0.0, 5000000000.0)]\n    public long? Big { get; init; }");
+        await Assert.That(prog).Contains("[Range(typeof(long), \"0\", \"5000000000\")]\n    public long? Big { get; init; }");
     }
 
     [Test]

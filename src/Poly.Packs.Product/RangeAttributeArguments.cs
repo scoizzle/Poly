@@ -11,11 +11,11 @@ namespace Poly.Packs.Product;
 /// constructor choice is made. <see cref="System.ComponentModel.DataAnnotations.RangeAttribute"/>
 /// offers <c>(int, int)</c>, <c>(double, double)</c>, and <c>(Type, string, string)</c>.
 /// An integral target whose bounds are both integral and within <see cref="int"/> range takes
-/// the exact integral constructor. A <c>decimal</c> target takes <c>(Type, string, string)</c>
-/// so the bound is not a double. Everything else — a fractional bound, a bound beyond
-/// <see cref="int"/>, or a floating-point target — takes the double constructor deliberately.
-/// Open bounds cap at the CLR type's own limits, so an open range on a small integral type
-/// can still be integral.
+/// the exact integral constructor. <c>decimal</c> and <c>long</c> targets take
+/// <c>(Type, string, string)</c> so the bound is exact — the double constructor rounds beyond
+/// 2^53, and <c>long.MaxValue</c> rounds up to 2^63, which overflows when cast back (#800).
+/// A fractional bound or a floating-point target keeps the double constructor. Open bounds cap
+/// at the CLR type's own limits, so an open range on a small integral type can still be integral.
 /// </summary>
 internal static class RangeAttributeArguments {
     /// <summary>The <c>[Range]</c> arguments, in order, for <paramref name="clrType"/>.</summary>
@@ -33,11 +33,20 @@ internal static class RangeAttributeArguments {
         }
         if (IsIntegralClrType(clrType) && TryInt32(min, out var low) && TryInt32(max, out var high))
             return [new Constant(low), new Constant(high)];
+        if (clrType == "long" && TryInt64(min, out var longLow) && TryInt64(max, out var longHigh))
+            return [
+                new TypeOf(TypeReference.To(typeof(long))),
+                new Constant(Int64BoundText(longLow)),
+                new Constant(Int64BoundText(longHigh)),
+            ];
         return [new Constant(ToDouble(min)), new Constant(ToDouble(max))];
     }
 
     private static string DecimalBoundText(object value) =>
         Convert.ToDecimal(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+
+    private static string Int64BoundText(long value) =>
+        value.ToString(CultureInfo.InvariantCulture);
 
     private static bool IsIntegralClrType(string clrType) =>
         clrType is "byte" or "short" or "int" or "long";
@@ -61,6 +70,32 @@ internal static class RangeAttributeArguments {
                 return true;
             case decimal m when decimal.Truncate(m) == m && m is >= int.MinValue and <= int.MaxValue:
                 result = (int)m;
+                return true;
+            default: return false;
+        }
+    }
+
+    /// <summary>The bound as a <see cref="long"/>, when it is integral and fits — the shape the
+    /// typed <c>RangeAttribute</c> constructor parses back exactly.</summary>
+    private static bool TryInt64(object value, out long result) {
+        result = 0;
+        switch (value) {
+            case sbyte sb: result = sb; return true;
+            case byte b: result = b; return true;
+            case short s: result = s; return true;
+            case ushort us: result = us; return true;
+            case int i: result = i; return true;
+            case uint ui: result = ui; return true;
+            case long l: result = l; return true;
+            case ulong ul when ul <= long.MaxValue: result = (long)ul; return true;
+            case float f: return TryInt64((double)f, out result);
+            // (double)long.MaxValue is 2^63, which is outside long: the upper bound must be strict,
+            // or the cast below is undefined for exactly the value #800 reports.
+            case double d when d == Math.Floor(d) && d is >= -9223372036854775808.0 and < 9223372036854775808.0:
+                result = (long)d;
+                return true;
+            case decimal m when decimal.Truncate(m) == m && m is >= long.MinValue and <= long.MaxValue:
+                result = (long)m;
                 return true;
             default: return false;
         }

@@ -437,7 +437,8 @@ public class AnalysisGateParityTests {
     [Arguments("Date + a calendar literal (unchanged)", "Go: action { assign OutD to Due + 2 Months }", null, "")]
     [Arguments("Time + a literal (unchanged)", "Go: action { assign OutM to Opens + 2 Hours }", null, "")]
     [Arguments("Time - a literal (unchanged)", "Go: action { assign OutM to Opens - 30 Minutes }", null, "")]
-    [Arguments("a negative duration literal does not parse", "Go: action { assign Len to -5 Minutes }", null, "Parse error")]
+    // #501 moved the refusal from the parser to the analysis: unary minus parses, and a duration operand is refused.
+    [Arguments("a negated duration literal is refused", "Go: action { assign Len to -5 Minutes }", null, "unary '-' requires a Number or Decimal operand")]
     [Arguments("DateTime - DateTime", "Go: action { assign Gap to Stamp - Stamp2 }", null, "")]
     [Arguments("Date - Date (R6)", "Go: action { assign Gap to Due2 - Due }", null, "")]
     [Arguments("Date - Date in a policy (R6)", "Go: policy { (Due - Due2) == (Due - Due2) }", null, "")]

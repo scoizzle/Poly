@@ -4,6 +4,7 @@ using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
@@ -501,6 +502,9 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             case Multiply mul:
                 return EvalArithmetic(mul, mul.Left, mul.Right,
                     operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
+            case Negate negate:
+                return EvalUnary(negate, negate.Operand,
+                    operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
             default:
                 return AbstractValue.Unknown;
         }
@@ -544,6 +548,17 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             ? AbstractValue.From([range])
             : AbstractValue.Unknown;
     }
+
+    /// <summary>
+    /// The one unary-arithmetic evaluator: the operand's interval goes through <see cref="IntervalTransfers"/>
+    /// (a negated range is the swapped, sign-flipped range); an operand with no range, or a node with no
+    /// row, is Unknown — never a guess.
+    /// </summary>
+    private static AbstractValue EvalUnary(
+        DomainExpression node, DomainExpression operand, Func<DomainExpression, AbstractValue> evalOperand) =>
+        IntervalTransfers.Transfer(node, [evalOperand(operand).NumericRange])?.ToRangeConstraint() is { } range
+            ? AbstractValue.From([range])
+            : AbstractValue.Unknown;
 
     /// <summary>A literal's numeric value exactly, or null when it is not a number or has no exact form.</summary>
     private static decimal? DeclaredBound(object? value) => ExactNumber.TryFrom(value)?.ToDecimal();
@@ -868,6 +883,9 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
             case Multiply mul:
                 return EvalArithmetic(mul, mul.Left, mul.Right,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
+            case Negate negate:
+                return EvalUnary(negate, negate.Operand,
                     operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
         }
         return Eval(expr, caller, action, env, paramEnv, domain: domain);

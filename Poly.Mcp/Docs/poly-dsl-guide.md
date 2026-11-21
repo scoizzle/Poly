@@ -1312,6 +1312,7 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 | Level | Operators | Example |
 |-------|-----------|---------|
 | Primary | `Number`, `"string"`, `true`, `false`, `null`, `(expr)`, property name | `42`, `"hello"`, `true`, `Name` |
+| `-` | Prefix unary, binds tighter than `*` and `/` | `-3`, `-Balance`, `-(Total + 1)` |
 | Comparison | `==`, `!=`, `>`, `>=`, `<`, `<=`, `is`, `is not` | `Age >= 18`, `Status is "active"` |
 | `not` | Prefix unary | `not Suspended` |
 | `and` | Binary, left-assoc | `Age >= 18 and Status is "active"` |
@@ -1334,6 +1335,11 @@ not Suspended
 (Total > 0) or Rush is true
 Status is "active"
 ```
+
+Unary minus negates a `Number` or a `Decimal` expression: `-3`, `-Balance`, `-(Total + 1)`, `-2 * 3` (which is
+`(-2) * 3`, because the prefix binds tighter than `*`). A `Decimal` operand keeps `Decimal` as its type, so
+`-0.25` is a `Decimal`. Negating anything else is DMSEM003 naming the operand's type: `-Label` on a `Text`
+property, or a `Duration`, whose arithmetic is not supported yet.
 
 Ordering (`<`, `>`, `<=`, `>=`) is defined for `Number`, `Decimal`, `Date`, `Time`, `DateTime`, `Duration` and `Uuid`
 (an optional operand and a `match` result of those types included; an absent optional operand orders false). Ordering `Text`, `Boolean`, an enum, an entity,

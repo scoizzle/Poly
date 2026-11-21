@@ -23,7 +23,9 @@ public sealed class DslOperatorTableTests {
                  })
             await Assert.That(binary.Contains((op, null))).IsTrue();
         await Assert.That(binary.Contains((DslTokenKind.Is, DslTokenKind.Not))).IsTrue();
-        await Assert.That(table.PrefixRows.Select(r => r.Op).Single()).IsEqualTo(DslTokenKind.Not);
+        // Two prefix rows and no others: `not` (operand = the add level) and unary minus (#501, operand = a primary).
+        await Assert.That(table.PrefixRows.Select(r => r.Op).OrderBy(op => op))
+            .IsEquivalentTo(new[] { DslTokenKind.Minus, DslTokenKind.Not });
     }
 
     [Test]
@@ -60,10 +62,26 @@ public sealed class DslOperatorTableTests {
     [Test]
     public async Task Core_NotOperandIsTheAddLevel_AndItAppliesAtTheCompareHead() {
         var table = DslOperatorTable.Core();
-        var not = table.PrefixRows.Single();
+        var not = table.PrefixRows.Single(r => r.Op == DslTokenKind.Not);
 
         await Assert.That(not.OperandPrecedence).IsEqualTo(Binary(table, DslTokenKind.Plus).Precedence);
         await Assert.That(table.HeadLevel(not)).IsEqualTo(table.LevelOf(DslTokenKind.Gt));
+    }
+
+    /// <summary>
+    /// Unary minus (#501): its operand is a primary (a precedence above every binary level) and it applies at no
+    /// level head, so it starts only where a primary starts and <c>-x * y</c> is <c>(-x) * y</c>.
+    /// </summary>
+    [Test]
+    public async Task Core_MinusPrefixTakesAPrimaryOperand_AndHasNoHeadLevel() {
+        var table = DslOperatorTable.Core();
+        var minus = table.PrefixRows.Single(r => r.Op == DslTokenKind.Minus);
+        var add = Binary(table, DslTokenKind.Plus).Precedence;
+        var mul = Binary(table, DslTokenKind.Star).Precedence;
+
+        await Assert.That(minus.OperandPrecedence).IsGreaterThan(mul);
+        await Assert.That(minus.OperandPrecedence).IsGreaterThan(add);
+        await Assert.That(table.HeadLevel(minus)).IsEqualTo(-1);
     }
 
     [Test]
@@ -174,7 +192,7 @@ public sealed class DslOperatorTableTests {
     public async Task CoreWithRow_StillClaims() {
         var table = DslOperatorTable.Core(TemporalClaims())
             .With(new BinaryRow(DslTokenKind.In, 55, Assoc.Left, DomainExpression.Equal))
-            .With(new PrefixRow(DslTokenKind.Minus, 50, DomainExpression.Not));
+            .With(new PrefixRow(DslTokenKind.Plus, 50, DomainExpression.Not));
 
         await Assert.That(table.Claim(DslTokenKind.Plus, new Now(), TwoHours)).IsTypeOf<DateOperation>();
         await Assert.That(Binary(table, DslTokenKind.Plus).Fold(new Now(), TwoHours)).IsTypeOf<DateOperation>();

@@ -1586,10 +1586,14 @@ diverging:
   `invoke`, a `create` or a `create in` on its path: that assign is judged by the action's
   other `require` gates and every policy of its stage, as before `require not` narrowed.
 - **Silence means verified (Q4)** — with one exception: a call-chain postcondition whose
-  value range is not known (below). A write analysis cannot
-  decide — a bare property or parameter with no bound, an operator the
-  interval flow does not model (`/`, a call, `match`), or a constraint kind with no flow
-  decision — is a **`DMCS003` warning** naming the write, the property and the constraint.
+  value range is not known (below). An interval comes from a literal, a ranged property or
+  parameter (narrowed by a `require` gate, an `if`, or a stage policy), `+`, `-`, `*` and
+  `/` (a quotient only when the divisor's whole range excludes 0; #502 owns the zero case),
+  a `match` (the hull of its arms and its required `else`, only when every one has an
+  interval), and a Text's length (below). A write analysis cannot
+  decide — a bare property or parameter with no bound, a call, a `%`, a relationship leaf,
+  a division by a range that includes 0, a `match` with an unbounded arm, or a constraint
+  kind with no flow decision — is a **`DMCS003` warning** naming the write, the property and the constraint.
   So with
   `A: Number range(0, 10)` and `B: Number range(5, 20)`, `assign A to B` warns
   (`DMEFF008`, "can fall outside"), and `assign A to U + 1` with an unbounded `U` warns
@@ -1610,10 +1614,15 @@ diverging:
   against the declared ranges, as is a create outside an action body.
   `range(...)`, `length(...)`, `pattern(...)` and `equals(...)` are the kinds the runtime enforces
   on a write, and the kinds decided against a computed value on an `assign` or an initializer.
-  A `length` is proven only when the value's own `length(...)` lies inside the target's
-  (a copy of a shorter-bounded Text property); a `pattern` or `equals` only when the value carries
-  the identical declared one. Anything else is unverified: `S + "xx"`, a Text with no
-  such bound, a different pattern. A literal assigned directly is still checked outright and is an
+  A `length` is decided against the value's **length interval**: a Text's own `length(...)`
+  (a Text with none is `[0, +∞)`), `+` with a literal or another bounded Text (the two lengths
+  added), or a `match` over such values. A copy or a concatenation that lies inside the target's
+  length is verified; one that does not is a `DMEFF008` warning naming the interval
+  (`[3, 5] can fall outside length(1, 3)`) — never an error yet, because row V-08 owns the error
+  side of a length. A `pattern` or `equals` is proven only when the value carries
+  the identical declared one. Anything else is unverified: a Text whose length the walk cannot
+  name (a relationship leaf, a call), a different pattern. A literal assigned directly is still
+  checked outright and is an
   error when it fails. Excluded: `unique` (it depends on stored state, not the written value, so a
   proof about one write cannot cover it), `required` (`DMEFF014` owns it) and enum membership
   (the type check owns it). The **call chain** decides

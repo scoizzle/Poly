@@ -449,11 +449,15 @@ public class ExactIntervalTests {
     /// <summary>T12: a node with no transfer row is unknown, and a registered row still transfers.</summary>
     [Test]
     public async Task IntervalTransfers_UnregisteredNode_IsUnknown() {
-        var divide = DomainExpression.Divide(DomainExpression.Literal(4m), DomainExpression.Literal(2m));
-        await Assert.That(IntervalTransfers.Transfer(divide, [Range(4m, 4m), Range(2m, 2m)])).IsNull();
+        // A call has no row; `/` got one in #1040, so it is no longer the example.
+        var call = DomainExpression.Call("f", []);
+        await Assert.That(IntervalTransfers.Transfer(call, [Range(4m, 4m), Range(2m, 2m)])).IsNull();
 
         var add = DomainExpression.Add(DomainExpression.Literal(1m), DomainExpression.Literal(2m));
         await Assert.That(IntervalTransfers.Transfer(add, [Range(1m, 1m), Range(2m, 2m)])!.Min).IsEqualTo(3m);
+
+        var divide = DomainExpression.Divide(DomainExpression.Literal(4m), DomainExpression.Literal(2m));
+        await Assert.That(IntervalTransfers.Transfer(divide, [Range(4m, 4m), Range(2m, 2m)])!.Max).IsEqualTo(2m);
     }
 
     // ── V-05b fix round 1 ─────────────────────────────────────────────────
@@ -587,4 +591,119 @@ public class ExactIntervalTests {
     [Test]
     public async Task CallChain_ViolatedStageBeforeUndecidedStage_IsReportedAsError() =>
         await AssertViolatedWins(TwoStageChainDomain(violatedStageFirst: true));
+
+    // ── Divide (#1040): the corner-quotient hull ─────────────────────────
+    //
+    // The transfer does not know whether the operands are Number (C# integer division, truncating
+    // toward zero) or Decimal (exact), so the row covers BOTH: the hull of the four exact corner
+    // quotients, with a positive lower and a negative upper endpoint moved onto the integral lattice
+    // (`trunc` is monotone, so that is the only place truncation can leave the exact hull). Truncating
+    // every corner instead would be narrower and wrong: `5 / 2` into `Decimal range(0, 2)` would read
+    // `[2, 2]` and prove a 2.5. A corner quotient decimal rounds is widened by one unit in its last
+    // place, so a rounded endpoint is never the one a `proven` rests on.
+
+    private static ValueRange? Divide(decimal? min, decimal? max, decimal? divisorMin, decimal? divisorMax) =>
+        IntervalTransfers.Transfer(
+            DomainExpression.Divide(DomainExpression.Property("A"), DomainExpression.Property("B")),
+            [Range(min, max), Range(divisorMin, divisorMax)]);
+
+    /// <summary>The issue's own example: <c>X / 2</c> with <c>X range(0, 10)</c> is <c>[0, 5]</c>.</summary>
+    [Test]
+    public async Task Divide_BoundedByPositiveLiteral_IsTheQuotientHull() {
+        var quotient = Divide(0m, 10m, 2m, 2m);
+
+        await Assert.That(quotient).IsNotNull();
+        await Assert.That(quotient!.Min).IsEqualTo(0m);
+        await Assert.That(quotient.Max).IsEqualTo(5m);
+    }
+
+    /// <summary>A negative divisor keeps the four-corner rule: the interval frame flips.</summary>
+    [Test]
+    public async Task Divide_NegativeDivisor_FlipsTheQuotientHull() {
+        var quotient = Divide(0m, 10m, -2m, -2m);
+
+        await Assert.That(quotient).IsNotNull();
+        await Assert.That(quotient!.Min).IsEqualTo(-5m);
+        await Assert.That(quotient.Max).IsEqualTo(0m);
+    }
+
+    /// <summary>Two negative operands: the quotient is positive, and every corner is whole.</summary>
+    [Test]
+    public async Task Divide_TwoNegativeOperands_IsPositiveAndWhole() {
+        var quotient = Divide(-10m, -6m, -2m, -1m);
+
+        await Assert.That(quotient).IsNotNull();
+        await Assert.That(quotient!.Min).IsEqualTo(3m);
+        await Assert.That(quotient.Max).IsEqualTo(10m);
+    }
+
+    /// <summary>A positive lower endpoint moves down to the integer division it can produce:
+    /// <c>[3, 4] / [2, 3]</c> is <c>[1, 2]</c> (3 / 2 = 1).</summary>
+    [Test]
+    public async Task Divide_IntegerDivision_PutsThePositiveLowerBoundOnTheLattice() {
+        var quotient = Divide(3m, 4m, 2m, 3m);
+
+        await Assert.That(quotient).IsNotNull();
+        await Assert.That(quotient!.Min).IsEqualTo(1m);
+        await Assert.That(quotient.Max).IsEqualTo(2m);
+    }
+
+    /// <summary>A negative upper endpoint moves up to the integer division it can produce.</summary>
+    [Test]
+    public async Task Divide_IntegerDivision_PutsTheNegativeUpperBoundOnTheLattice() {
+        var quotient = Divide(-5m, -4m, 2m, 3m);
+
+        await Assert.That(quotient).IsNotNull();
+        await Assert.That(quotient!.Min).IsEqualTo(-2.5m);
+        await Assert.That(quotient.Max).IsEqualTo(-1m);
+    }
+
+    /// <summary>
+    /// The soundness pin for the Decimal half: <c>5 / 2</c> is 2 for a Number operand and 2.5 for a
+    /// Decimal one, so the row must span both. Truncating every corner would answer <c>[2, 2]</c>.
+    /// </summary>
+    [Test]
+    public async Task Divide_DecimalQuotient_KeepsTheFractionUntruncated() {
+        var quotient = Divide(5m, 5m, 2m, 2m);
+
+        await Assert.That(quotient).IsNotNull();
+        await Assert.That(quotient!.Min).IsEqualTo(2m);
+        await Assert.That(quotient.Max).IsEqualTo(2.5m);
+    }
+
+    /// <summary>A corner quotient decimal rounds must not be the endpoint: <c>1 / 3</c>'s upper bound is
+    /// one unit in the last place ABOVE the rounded quotient, so a target whose maximum is that rounded
+    /// decimal is never proved from a quotient that is not exact.</summary>
+    [Test]
+    public async Task Divide_InexactQuotient_WidensTheUpperBoundPastTheRoundedDecimal() {
+        var rounded = 1m / 3m;
+        var quotient = Divide(1m, 1m, 3m, 3m);
+
+        await Assert.That(quotient).IsNotNull();
+        var min = quotient!.Min!.Value;
+        var max = quotient.Max!.Value;
+        // Integer division of 1 / 3 is 0, so the lower bound lands on the lattice.
+        await Assert.That(min).IsEqualTo(0m);
+        await Assert.That(max).IsGreaterThan(rounded);
+        // One unit in the last place, not a whole unit: the widening stays tight.
+        await Assert.That(max - rounded).IsLessThan(0.000001m);
+    }
+
+    /// <summary>A divisor whose interval includes 0 has no quotient range: division by zero is #502's,
+    /// and a hull cannot exclude it. A connected interval spanning both signs includes 0 by definition.</summary>
+    [Test]
+    public async Task Divide_DivisorIncludingZero_IsUnknown() {
+        await Assert.That(Divide(1m, 5m, -1m, 1m)).IsNull();
+        await Assert.That(Divide(1m, 5m, 0m, 0m)).IsNull();
+        await Assert.That(Divide(1m, 5m, 0m, 10m)).IsNull();
+        await Assert.That(Divide(1m, 5m, -10m, 0m)).IsNull();
+    }
+
+    /// <summary>An open endpoint on either side leaves a corner uncomputable, so the row answers unknown.</summary>
+    [Test]
+    public async Task Divide_OpenOperand_IsUnknown() {
+        await Assert.That(Divide(0m, null, 2m, 2m)).IsNull();
+        await Assert.That(Divide(0m, 10m, null, -2m)).IsNull();
+        await Assert.That(Divide(null, 10m, 2m, 2m)).IsNull();
+    }
 }

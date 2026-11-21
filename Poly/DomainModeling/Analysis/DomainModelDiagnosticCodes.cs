@@ -409,6 +409,15 @@ internal static class DomainModelDiagnosticCodes {
     public const string EffectLinkNotLowerable = "DMEFF020";
 
     /// <summary>
+    /// A <c>create in Rel</c> sits inside <c>for x in Rel { … }</c> (#607): the create adds to the
+    /// collection the loop is enumerating, so the simulator and the printed C# both fail part-way
+    /// through with "Collection was modified" (the C# action throws instead of returning a
+    /// <c>DomainResult</c>). Positioned on the create-in, naming the collection. An error that no
+    /// <see cref="DiagnosticAllowance"/> acknowledges: the loop body cannot add to what it iterates.
+    /// </summary>
+    public const string CreateInIteratedRelationship = "DMEFF021";
+
+    /// <summary>
     /// A <c>match</c> arm condition (#409) is not Boolean. An error.
     /// </summary>
     public const string MatchConditionNotBoolean = "DMMAT001";

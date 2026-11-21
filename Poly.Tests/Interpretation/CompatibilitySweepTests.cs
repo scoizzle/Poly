@@ -146,8 +146,9 @@ public class CompatibilitySweepTests {
         await Assert.That(documents.Count).IsEqualTo(SweepDocumentCount);
     }
 
-    // Pinned on 0f79ba45 (70), +1 for V-14's DMDEP002 guide fence: the golden catalog and the guide's poly fences.
-    private const int SweepDocumentCount = 72;
+    // Pinned on 0f79ba45 (70), +1 for V-14's DMDEP002 guide fence, +1 for #607's DMEFF021 guide fence:
+    // the golden catalog and the guide's poly fences.
+    private const int SweepDocumentCount = 73;
 
     /// <summary>
     /// Two prints of one document are equal, so a before/after difference is a change. The guide documents keep it

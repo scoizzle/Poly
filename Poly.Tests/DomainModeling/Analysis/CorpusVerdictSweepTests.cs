@@ -163,6 +163,7 @@ guide fence HasNote: policy { Note is not null } = ok
 guide fence Active: stage { = ok
 guide fence domain Shipping = DMEFF017
 guide fence domain Tokens = DMEFF019
+guide fence domain Edge = DMEFF021
 guide fence domain Orders = ok
 guide fence Tag: action (value: Text) { = ok
 guide fence PlaceOrder: action -> Order { = ok

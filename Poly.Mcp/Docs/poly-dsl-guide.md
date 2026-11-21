@@ -815,6 +815,26 @@ Parser: entity {
 }
 ```
 
+**Create into the collection a `for` is iterating (DMEFF021):** a `create in Rel` inside
+`for x in Rel { … }` adds to the collection the loop is enumerating, so the enumeration is
+invalidated part-way through the action — "Collection was modified" — in both the simulator and
+the generated C#. Analysis rejects it, positioned on the create-in and naming the collection.
+Iterate a different relationship, or create into a relationship the loop does not read.
+
+<!-- poly-verify: invalid:DMEFF021 -->
+```poly
+domain Edge
+
+Inv: entity {
+  Qty: Number default(0)
+  lines: many Ln
+  Open: stage {
+    Grow: action { for l in lines { create in lines { Qty: 1 } } }   // error: adds to 'lines'
+  }
+}
+Ln: entity { Qty: Number default(0) }
+```
+
 ### Explicit Initial Stage
 
 `initial(Stage)` belongs to the entity header, not to a stage: it names the stage a new instance
@@ -1046,8 +1066,12 @@ once per record whose `where` holds.
   fails) fails the whole `for` and no later record is visited. Both hosts roll the failed
   action back, so nothing earlier records did survives it.
 - **Legal body effects:** an `assign` to the owning entity's own state, `invoke name.Action`
-  on the loop record. An `assign` through the binder or a relationship is another
+  on the loop record, and `create in OtherRel { … }` into a relationship the loop does not
+  read. An `assign` through the binder or a relationship is another
   entity's state and is rejected with `DMEFF012`; mutate that entity with `invoke name.Action`.
+  A `create in Rel` that adds to the collection this `for` is iterating is rejected with
+  `DMEFF021`: it invalidates the enumeration part-way through ("Collection was modified") in
+  both the simulator and the generated C#, so iterate a different relationship instead.
 
 - `name` binds each record; `Rel` is a relationship name (a `many` relationship once
   analysis ships); `where expr` is an **inline** expression (e.g. `where line Qty > 1`) —
@@ -1058,7 +1082,7 @@ once per record whose `where` holds.
   the collection or condition; a malformed `where` expression; a `for` nested inside a
   `for` body; and a missing `}`, which is reported at the end of the input rather than
   at the `for`.
-- Still missing: `first` / `filter`; `create in` inside the body is not exercised yet.
+- Still missing: `first` / `filter`.
 
 <!-- poly-verify: skip:drift:DSL0001 owner:M-02 -->
 ```poly

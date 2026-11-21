@@ -75,11 +75,28 @@ public sealed partial class DbContextGenerator {
     private static string FormatBound(decimal d) =>
         d.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>True when this numeric column is stored in a text-affinity column: SQLite maps <c>Decimal</c> to
+    /// <c>TEXT</c>, the one store there that keeps every digit. Its CHECK must compare the value as a number (#559).</summary>
+    private static bool StoresNumberAsText(StorageColumn column) =>
+        string.Equals(column.DomainType, "Decimal", StringComparison.Ordinal)
+        && string.Equals(column.ColumnType, "TEXT", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Builds the SQL predicate for a verified column's CHECK constraint.</summary>
-    private static string CheckSql(string columnName, ValueRange verified) {
+    /// <remarks>
+    /// A TEXT-affinity value compares to a numeric literal as text, so <c>declared &lt;= 1000000</c> was false for every
+    /// value above <c>'1'</c> and SQLite refused valid decimals at <c>SaveChanges</c> (#559). The stored decimal is still a
+    /// number, so its CHECK compares it as one: <c>CAST(column AS REAL)</c>. Both sides are then the same correctly-rounded
+    /// double, and rounding is monotone, so a value inside the declared range is never refused. The CHECK is a floor that
+    /// never contradicts <c>Create</c>, never a second stricter guard: a value that differs from a bound beyond REAL's
+    /// 15–17 significant digits may pass it, and <c>Create</c> still refuses that value in the domain. Every numeric store
+    /// type keeps its plain comparison.
+    /// </remarks>
+    private static string CheckSql(StorageColumn column) {
+        var verified = column.VerifiedRange!;
+        var value = StoresNumberAsText(column) ? $"CAST({column.ColumnName} AS REAL)" : column.ColumnName;
         var parts = new List<string>();
-        if (verified.Min is not null) parts.Add($"{columnName} >= {FormatBound(verified.Min.Value)}");
-        if (verified.Max is not null) parts.Add($"{columnName} <= {FormatBound(verified.Max.Value)}");
+        if (verified.Min is not null) parts.Add($"{value} >= {FormatBound(verified.Min.Value)}");
+        if (verified.Max is not null) parts.Add($"{value} <= {FormatBound(verified.Max.Value)}");
         return string.Join(" AND ", parts);
     }
 }

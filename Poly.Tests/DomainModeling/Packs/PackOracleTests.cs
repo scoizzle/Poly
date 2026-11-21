@@ -979,6 +979,46 @@ public class PackOracleTests {
         }
     }
 
+    /// <summary>#559: a <c>Decimal</c> with a <c>range</c> is stored as TEXT on SQLite, so a CHECK that compares it as
+    /// text refuses valid values (<c>"9" &gt; "1000000"</c>) and the create answers 500. Every value inside the
+    /// declared range must save and read back exactly; an out-of-range value is refused by <c>Create</c> as
+    /// <c>400 Range</c>, not by the database.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task DecimalRange_EveryValidValueSaves_AndOutOfRangeIsCreateRange_Issue559(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Shipment559);
+        static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+        // The issue's table (9, 99, 2000, 500000, 1000000 and 10, which used to pass by luck), plus both bounds and
+        // fractional values, which a numeric comparison must also keep.
+        var valid = new[] { ("REF-1", 9m), ("REF-2", 99m), ("REF-3", 2000m), ("REF-4", 500000m), ("REF-5", 1000000m),
+            ("REF-6", 10m), ("REF-7", 0m), ("REF-8", 0.01m), ("REF-9", 999999.99m) };
+        foreach (var (reference, declared) in valid) {
+            using var created = await oracle.Client.PostAsync(
+                "/api/shipments", Json($$"""{"Reference":"{{reference}}","WeightKg":500,"Declared":{{declared.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}"""));
+            await Assert.That((int)created.StatusCode).IsEqualTo(201)
+                .Because($"{declared}: {await created.Content.ReadAsStringAsync()}");
+
+            using var row = JsonDocument.Parse(await oracle.Client.GetStringAsync($"/api/shipments/{reference}"));
+            await Assert.That(row.RootElement.GetProperty("declared").GetDecimal()).IsEqualTo(declared);
+        }
+
+        foreach (var (reference, declared) in new[] { ("REF-HI", "1000001"), ("REF-LO", "-1") }) {
+            using var refused = await oracle.Client.PostAsync(
+                "/api/shipments", Json($$"""{"Reference":"{{reference}}","WeightKg":500,"Declared":{{declared}}}"""));
+            var body = await refused.Content.ReadAsStringAsync();
+            await Assert.That((int)refused.StatusCode).IsEqualTo(400).Because($"{declared}: {body}");
+            using var problem = JsonDocument.Parse(body);
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Range").Because(declared);
+        }
+
+        using var all = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/shipments"));
+        var references = all.RootElement.EnumerateArray().Select(s => s.GetProperty("reference").GetString()).ToArray();
+        await Assert.That(references.Count(r => r is "REF-HI" or "REF-LO")).IsEqualTo(0);
+    }
+
     /// <summary>#620 (slice P-03): an action that applies an effect and then fails must persist nothing.
     /// The rejected request has already bumped Capacity in memory; a save on the failure branch commits it.
     /// The second call is A3's pin on D2: a failed request must leave no pending change for the next

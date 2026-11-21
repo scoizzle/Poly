@@ -29,7 +29,7 @@ public sealed partial class DbContextGenerator {
         // out-of-range value, so the DB constraints are sound.
         var checks = store.Columns
             .Where(c => c.IsRangeVerified && c.VerifiedRange is { } vr && (vr.Min is not null || vr.Max is not null))
-            .Select(c => (Name: $"CK_{c.ColumnName}", Sql: CheckSql(c.ColumnName, c.VerifiedRange!)))
+            .Select(c => (Name: $"CK_{c.ColumnName}", Sql: CheckSql(c)))
             .ToList();
         if (checks.Count == 0) {
             bodyNodes.Add(new Invoke(

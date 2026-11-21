@@ -612,6 +612,9 @@ endpoints.
 inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
 owned target must keep its owner." Non-owned links stay minimum zero, and removing
 the owner instance entirely is not an unlink, so it is exempt from the minimum.
+An instance cannot own itself: linking an instance to itself over an `owned` navigation is
+refused ("Cannot link '<rel>': an instance cannot own itself."). A cycle through other
+instances (`a` owns `b`, `b` owns `a`) is not refused, and a non-owning self-link is legal.
 
 **An owned entity has exactly one owner navigation** (`DMSTR010`). Two `owned`
 navigations to one entity type are an analysis error, whether they sit on different

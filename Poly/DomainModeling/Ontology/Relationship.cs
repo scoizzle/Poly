@@ -58,6 +58,12 @@ public sealed record Relationship(
         $"Cannot add a second link on '{relationshipName}': the source already has a target.";
 
     /// <summary>
+    /// Message when Link would make an instance its own owner (#1001).
+    /// </summary>
+    public static string SelfOwnLinkViolationMessage(string relationshipName) =>
+        $"Cannot link '{relationshipName}': an instance cannot own itself.";
+
+    /// <summary>
     /// Message when Unlink would drop the last owner of an owned target.
     /// </summary>
     public static string UnlinkViolationMessage(string relationshipName) =>

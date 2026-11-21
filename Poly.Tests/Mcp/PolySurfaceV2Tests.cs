@@ -335,7 +335,11 @@ public class PolySurfaceV2Tests {
         await Assert.That(selectedData["verdict"]!.GetValue<string>()).IsEqualTo("violated");
         await Assert.That(entityData["verdict"]!.GetValue<string>()).IsEqualTo("violated")
             .Because("selecting an entity must include its members' findings");
-        await Assert.That(missingData["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
+        // #534 moved this assertion: a select that names no element is an error, so the old
+        // pinned "unknown" verdict can no longer stand — the answer is ELEMENT_NOT_FOUND.
+        await Assert.That(missing.Ok).IsFalse();
+        await Assert.That(missing.ErrorCode).IsEqualTo("ELEMENT_NOT_FOUND");
+        await Assert.That(missingData["reason"]!.GetValue<string>()).IsEqualTo("unknown");
     }
 
     [Test]

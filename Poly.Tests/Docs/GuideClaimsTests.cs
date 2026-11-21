@@ -126,11 +126,11 @@ public class GuideClaimsTests {
     /// </summary>
     private static readonly ClaimProbe[] Probes = [
         new("c600", "#600",
-            "Store notify runs stage-scoped handlers first, then entity-level.",
-            ["entity-first", "stage-first"], "stage-first", "M-02", NotifyOrder),
+            "Store notify runs entity-level handlers first, then stage-scoped ones.",
+            ["entity-first", "stage-first"], "entity-first", "M-02", NotifyOrder),
         new("c601", "#601",
-            "Fires **once** when **at least one** linked related entity is in a matching stage",
-            ["once", "each-transition"], "once", "M-02", AnyFiresOnce),
+            "Fires on **each** matching transition while **at least one** linked related entity is in a matching stage",
+            ["once", "each-transition"], "each-transition", "M-02", AnyFiresOnce),
         new("c637", "#637",
             "removing the owner instance entirely is not an unlink, so it is exempt from the minimum.",
             ["present", "absent"], "present", "M-02", OwnedRemoval),
@@ -160,10 +160,6 @@ public class GuideClaimsTests {
     /// </para>
     /// </summary>
     private static readonly DriftRow[] KnownGuideDrift = [
-        new("c600", "M-02", "entity-first: Trace=12",
-            "M-02 reword: the guide says stage-scoped first; it must say entity-level first."),
-        new("c601", "M-02", "each-transition: AnyN=2, EachN=2",
-            "M-02 reword: 'once' becomes 'each matching transition'."),
         new("c637", "M-02", "absent: 3/3 effect verbs are parse errors; last-owner unlink refused",
             "M-02 reword: the removal exemption goes, or a removal operation lands."),
         new("c492", "G-05", "accepted: 0 errors",

@@ -1129,12 +1129,15 @@ target enters a matching stage. Omit it for the default **`Each`**:
 | Keyword | Semantics |
 |---------|-----------|
 | *(omitted)* = **`Each`** | Fires effects for **every** matching transition (per-element; the default and the pre-p4 behavior) |
-| `any` | Fires **once** when **at least one** linked related entity is in a matching stage |
+| `any` | Fires on **each** matching transition while **at least one** linked related entity is in a matching stage |
 | `all` | Fires **once** when **every** linked related entity is in a matching stage |
 
 - `any`/`all` (and `Each`) all evaluate the **set state after the transition** —
   they do not fire "every peer bag at once". `all` only fires once the whole linked
   set is in a matching stage; until then transitions into the stage are ignored.
+- The triggering transition is itself in a watched stage, so `any` over one stage fires
+  on every transition into it, like `Each`; over several stages it fires while any linked
+  entity is in any of them. `all` is the only quantifier that waits for the whole set.
 - `any`/`all` on a **singular** relationship (OneToOne / ManyToOne) are
   **rejected at analysis time** (error `DMSS003` — `SubscriptionContractMismatch`).
   The quantifier is meaningless there; omit it (`Each`) or change cardinality.
@@ -1179,8 +1182,9 @@ runtime failure, is the signal.
 | **Stage-scoped** (`when` inside a stage body) | Only while the subscriber is **in that stage** | Yes — same peer rules |
 | **Entity-level** (`when` on the entity, outside stages) | **Always-active** (any subscriber stage) | Yes — same peer rules |
 
-Store notify runs stage-scoped handlers first, then entity-level. Both placements use the
-same effect-binding fail-closed checks.
+Store notify runs entity-level handlers first, then stage-scoped ones. A stage-scoped handler
+checks the subscriber's stage when it runs, so an entity-level handler that moves the subscriber
+out of that stage suppresses it. Both placements use the same effect-binding fail-closed checks.
 
 Two `when`s in the same scope (entity level, or one stage) with the same relationship,
 quantifier, peer binder and stage set warn **`DMSS006`**. Nothing is removed: both run, in

@@ -356,7 +356,7 @@ internal static class ContributedMethods {
                 TypeDefinitionReference primitive when Poly.Introspection.CommonLanguageRuntime.ClrBuiltInRules.IsPrimitive(primitive.TypeDefinition) => null,
                 NamedTypeReference named => named.TypeName,
                 TypeReference type => type.TypeName,
-                _ => null
+                _ => LoopVariableElementType(member.Value, enclosing, enclosingMethod, module, methods)
             };
             if (resolved is null) {
                 if (threadedMethods.Contains(member.MemberName))
@@ -408,6 +408,48 @@ internal static class ContributedMethods {
         Parameter parameter => string.Equals(parameter.Name, name, StringComparison.Ordinal),
         Variable variable => string.Equals(variable.Name, name, StringComparison.Ordinal),
         _ => false
+    };
+
+    /// <summary>
+    /// The element type of a loop variable the enclosing method declares over a field on this type. A subscription
+    /// dispatcher calls every handler on its registry list's loop variable (<c>sub.Handler(…)</c>), so a handler that
+    /// needs a contributed parameter must resolve the loop's element type (#830). Every other receiver — a local, a
+    /// parameter, a call result — stays unresolved, and the call is refused rather than guessed.
+    /// </summary>
+    private static string? LoopVariableElementType(
+        Node receiver,
+        int enclosing,
+        string enclosingMethod,
+        IReadOnlyList<TypeDefinitionNode> module,
+        List<List<MethodDefinitionNode>> methods) {
+        if (receiver is not Variable variable)
+            return null;
+        var body = methods[enclosing]
+            .FirstOrDefault(m => string.Equals(m.Name, enclosingMethod, StringComparison.Ordinal))?.Body;
+        var loop = body is null ? null : FindLoop(body, variable.Name);
+        if (loop?.Collection is not Member { Value: ThisReference } collection)
+            return null;
+        var field = module[enclosing].Fields?
+            .FirstOrDefault(f => string.Equals(f.Name, collection.MemberName, StringComparison.Ordinal));
+        return field is null ? null : CollectionElementType(field.FieldType);
+    }
+
+    private static ForEachLoop? FindLoop(Node node, string variableName) {
+        if (node is ForEachLoop loop
+            && string.Equals(loop.LoopVariable.Name, variableName, StringComparison.Ordinal))
+            return loop;
+        foreach (var child in node.Children) {
+            if (child is not null && FindLoop(child, variableName) is { } found)
+                return found;
+        }
+        return null;
+    }
+
+    /// <summary>The element type name of a field declared as <c>List&lt;T&gt;</c>, else null.</summary>
+    private static string? CollectionElementType(Node type) => type switch {
+        OptionalTypeReference optional => CollectionElementType(optional.InnerType),
+        NamedTypeReference { TypeName: "List", TypeArguments: [NamedTypeReference element] } => element.TypeName,
+        _ => null
     };
 
     private static void RejectConstructorCalls(

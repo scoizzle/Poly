@@ -1195,8 +1195,12 @@ entity-level `when`.
 - **Reserved binder names:** the binder becomes the generated handler's parameter, and the
   handler body calls `Poly.Runtime…`, `System.…` and `DomainResult.Success()`, so a binder
   named `Poly`, `System` or `DomainResult`, or one starting with `__`, is rejected with
-  `DMSTR009`, the rule action parameters follow. `for Rel as name` and `for name in Rel`
-  binders are not affected: they lower to a generated local.
+  `DMSTR009`, the rule action parameters follow. A binder — and equally an entity member —
+  named exactly like any **generated stage enum** of the domain (`OrderStage`, including
+  another entity's) is rejected with the same code: the handler and the constructor read
+  `<Entity>Stage.<Stage>` from expression position, where such a name binds the parameter or
+  member instead of the type. `for Rel as name` and `for name in Rel` binders are not
+  affected: they lower to a generated local.
 - **C# export:** the export consumes the analysis-published subscription dispatch plan
   (the same metadata the runtime uses) and emits a handler per subscription, named by
   quantifier: `WhenAny`/`WhenAll`/`WhenEach{Target}{Stage}`. Peer-dependent

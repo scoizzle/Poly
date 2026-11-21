@@ -1425,7 +1425,8 @@ and a property of the related entity binds to the **parameter**.
 numeric property (`Number` or `Decimal`) on the related entity, over the related set, in `Prop`'s own type:
 a `Decimal` sum is an exact decimal (`sum accounts Balance == 3.0`). A non-numeric `Prop` is `DMSEM005`
 wherever the `sum` appears: a policy, an assign, a comparison, a create initializer. `sum Rel where …` and `sum Rel (expression)` are **not** forms — only a bare property name
-follows the relationship.
+follows the relationship. `first` and `filter` are not forms either: `first Rel where …`, `count filter Rel where …`, and an expression after a quantifier
+(`sum Rel (expr)`) are positioned parse errors at the word that name the supported spelling (`'first' is not supported; use 'any', 'all', 'none', or 'count' with 'where'`).
 `any`/`all`/`none` produce booleans. A body after `where` is checked against the related entity: its names
 are that entity's properties (and the action's parameters), and it must be Boolean, so
 `any lines where Qty == "x"` is `DMSEM003`.

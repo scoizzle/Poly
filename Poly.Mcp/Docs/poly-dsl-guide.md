@@ -1934,7 +1934,9 @@ function Square(a: Number): Number = a * a
   recursion (direct or through other functions), `DMFUN005` impure body, `DMFUN006` body vs
   return type, `DMFUN007` duplicate name, `DMFUN008` call in a position lowering cannot place
   (the `default(…)` of a property — assign the call in an action or entry effect instead). A
-  call result of the wrong type for its use is the ordinary `DMSEM003`.
+  call result of the wrong type for its use is the ordinary `DMSEM003`. A finding about the
+  declaration itself (`DMFUN004`-`DMFUN007`, and the `DMSEM006` of a return type that names no
+  type) is positioned on the `function` keyword; a finding about a call is positioned on the call.
 - **Recursion is rejected**, not supported: a body is one expression with no base case, so a
   recursive function never terminates, and lowering would expand it without end.
 

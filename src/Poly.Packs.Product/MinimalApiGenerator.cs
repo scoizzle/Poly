@@ -264,6 +264,13 @@ public sealed partial class MinimalApiGenerator {
             scopeBody.AddRange(BuildSqliteSchemaCheck(dbVar, createdVar, schemaId));
             scopeVariables.Add(createdVar);
         }
+        else {
+            // #591: every other provider creates its schema before the seed reads a table. The generated
+            // program emits no migration, so EnsureCreated is the only schema creation it has; seeding
+            // first made a fresh database fail on the missing table instead of creating it.
+            scopeBody.Add(new Await(new Invoke(
+                new Member(new Member(dbVar, "Database"), "EnsureCreatedAsync"))));
+        }
         scopeBody.Add(new Await(new Invoke(new Variable("SeedAsync"), new Variable("db"))));
         topLevelStatements.Add(new UsingStatement(
             Init("scope",

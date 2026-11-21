@@ -1096,6 +1096,21 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(program).DoesNotContain("schemaId");
     }
 
+    /// <summary>#591: every host creates the schema before the seed reads a table. The sqlserver host seeded
+    /// against a database with no tables — it emits no migration and used to emit no EnsureCreated — so a
+    /// fresh database failed at startup. The sqlite host's own EnsureCreated (with its schema id) is the
+    /// same guarantee.</summary>
+    [Test]
+    [Arguments("uses sqlserver")]
+    [Arguments("uses persistence")]
+    public async Task Seed_RunsAfterEnsureCreated_OnEveryProvider(string store) {
+        var program = HostProgram("domain Counter\nuses http\n" + store + "\n" + CounterBody);
+
+        await Assert.That(program).Contains("await db.Database.EnsureCreatedAsync();");
+        await Assert.That(program.IndexOf("EnsureCreatedAsync", StringComparison.Ordinal))
+            .IsLessThan(program.IndexOf("SeedAsync(db)", StringComparison.Ordinal));
+    }
+
     internal static MinimalApiGenerator GeneratorFor(string poly) {
         var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
             .Compile(poly, "Counter.poly", CancellationToken.None);

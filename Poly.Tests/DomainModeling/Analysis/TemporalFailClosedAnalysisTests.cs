@@ -526,6 +526,58 @@ public class TemporalFailClosedAnalysisTests {
     }
 
     [Test]
+    public async Task DateOffset_YearsCountBeyondInt_ReportsOutOfRange() {
+        // #652: Years/Months lower to AddYears/AddMonths(int), so a count beyond int was cast
+        // to a wrapped int in the simulator and emitted uncaught in C# (CS0221).
+        var result = Evolve("""
+            domain T
+            uses temporal
+            Item: entity {
+              Dt: Date
+              Go: action { assign Dt to Dt + 4294967297 Years }
+            }
+            """, ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result).Any(e =>
+            e.Contains("out of range", StringComparison.OrdinalIgnoreCase)
+            && e.Contains("4294967297 Years", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task DateOffset_DaysCountBeyondInt_ReportsOutOfRange() {
+        // A Date lowers AddDays to AddDays(int); 3000000000 wrapped in the simulator and
+        // produced '(int)3000000000L' in C# (CS0221).
+        var result = Evolve("""
+            domain T
+            uses temporal
+            Item: entity {
+              Dt: Date
+              Go: action { assign Dt to Dt + 3000000000 Days }
+            }
+            """, ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result).Any(e =>
+            e.Contains("out of range", StringComparison.OrdinalIgnoreCase)
+            && e.Contains("3000000000 Days", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task DateOffset_YearsCountWithinInt_StaysAccepted() {
+        var result = Evolve("""
+            domain T
+            uses temporal
+            Item: entity {
+              Dt: Date
+              Go: action { assign Dt to Dt + 30 Years }
+            }
+            """, ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
     public async Task Default_TodayOnDate_WithTemporalPack_Succeeds() {
         var result = Evolve("""
             domain T

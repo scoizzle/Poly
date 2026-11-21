@@ -121,14 +121,17 @@ public class ConstraintAssignLoweringTests {
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Tag");
         var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Code"] = "OK" }).Instance!;
 
-        // Lowered tree must null-guard IsMatch (export: bare IsMatch(null) throws).
+        // Null is refused before the pattern runs: the Required guard returns first, so the
+        // pattern condition is bare IsMatch on a value already known non-null (#546: no dead
+        // `!= null` conjunct that leaves the value maybe-null).
         var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity));
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Code"),
             DomainExpression.Property("code")));
         var cs = new CSharpGenerator().Generate(lowered!);
-        await Assert.That(cs.Contains("!= null") || cs.Contains("is not null")).IsTrue();
-        await Assert.That(cs).Contains("IsMatch");
+        await Assert.That(cs).Contains("if (assignValue0 == null)");
+        await Assert.That(cs.IndexOf("if (assignValue0 == null)", StringComparison.Ordinal))
+            .IsLessThan(cs.IndexOf("IsMatch", StringComparison.Ordinal));
 
         // A bare Text property is required, so null fails that check before
         // the pattern guard. The prior value stays.
@@ -137,6 +140,29 @@ public class ConstraintAssignLoweringTests {
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.Error).Contains("'Code' is required.");
         await Assert.That((string)instance.Bag["Code"]!).IsEqualTo("OK");
+    }
+
+    [Test]
+    public async Task PatternAssign_OptionalNull_IsGuardedBeforeIsMatch() {
+        // An optional value CAN be null at the pattern guard: there the `!= null` conjunct is the
+        // protection, and the guard must keep it.
+        var (domain, _) = Evolve("""
+            domain Lab
+            Tag: entity {
+              Code: Text pattern("^[A-Z]+$") optional
+              Relabel: action (code: Text) {
+                assign Code to code
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Tag");
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity));
+        var lowered = pass.TryLowerVmNode(new AssignEffect(
+            DomainExpression.Property("Code"),
+            DomainExpression.Property("code")));
+        var cs = new CSharpGenerator().Generate(lowered!);
+
+        await Assert.That(cs).Contains("if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0");
     }
 
     [Test]

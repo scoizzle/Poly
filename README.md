@@ -41,7 +41,7 @@ src/                       Extension packs
   Poly.Packs.Product/      Product door set (packs + HTTP), the MCP catalog
   Poly.Packs.Sqlite/       SQLite persistence pack
   Poly.Packs.SqlServer/    SQL Server persistence pack
-  Poly.Packs.MySql/        MySQL persistence pack
+  Poly.Packs.MySql/        MySQL persistence pack (model only; no host provider arm, so not in the product catalog)
 
 demo/                      Demo applications
   Poly.RestApi/            REST API demo

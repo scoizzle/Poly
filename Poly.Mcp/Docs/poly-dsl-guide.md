@@ -1943,8 +1943,9 @@ attributes below. What reaches the database:
 |------------|---------------------|
 | `unique` | `HasIndex(x => x.Prop).IsUnique()` on every unique property. The primary key is a synthetic `int` `Id`, not the unique column. |
 | `range` | `HasCheckConstraint` only when invariant analysis verified every writer stays inside the range. An unverified range is not a CHECK. |
-| `length(min, max)` | `HasMaxLength(max)` only. The minimum is not a CHECK. |
-| `pattern` | No SQL projection. The pattern is still enforced when the VM writes the value. |
+| `length(min, max)` | `HasMaxLength(max)` plus a `CK_<column>_length` CHECK. The minimum is checked on the value's UTF-8 byte length and the maximum on SQLite's character count, so the database never refuses a value `Create` accepts (it may accept a few that `Create` refuses). |
+| `pattern` | No SQL projection: SQLite has no regular expressions. The pattern is still enforced when the VM writes the value. |
+| `default(...)` | `HasDefaultValue(...)` for a literal or an enum member. A runtime default (`Now`, `Today`, `Guid`) has no database default. |
 | no `optional` | `IsRequired()` for reference-typed columns. |
 | a required link (a to-one not declared `optional`) | A `NOT NULL` foreign key (`IsRequired()` on the relationship). An `optional` link keeps a nullable key (`IsRequired(false)`). |
 | delete behaviour | Deleting an owner cascades to its `owned` parts (`OnDelete(Cascade)`); any other required link restricts (`OnDelete(Restrict)`: the principal cannot be deleted while a dependent references it); an optional link is unchanged (`ClientSetNull`). An owned single part with no back-navigation keeps its key on the owner and is unchanged. A shape the analysis cannot decide (a many-to-many) keeps EF's convention. |

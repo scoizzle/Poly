@@ -132,19 +132,24 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
         }
 
         return new CompilationUnitNode(
-            Usings: ["System.Threading.Tasks", DomainSession.CSharpNamespace(domain)],
+            Usings: [DomainSession.CSharpNamespace(domain)],
             Namespace: null,
             Types: [new TypeDefinitionNode($"{entity.Name}Tests", Methods: methods)],
             TopLevelStatements: null);
     }
 
+    // Fully qualified: a suite is a global-scope file that imports the domain namespace, so a domain type named
+    // `Task` or `Assert` would otherwise win the simple name (CS0104 with `System.Threading.Tasks.Task`, #826).
+    private const string TestResultType = "System.Threading.Tasks.Task";
+    private const string AssertType = "TUnit.Assertions.Assert";
+
     private static MethodDefinitionNode Test(string name, params Node[] statements) =>
-        new(name, new TypeReference("Task"), Body: new Block(statements), IsAsync: true) {
+        new(name, new TypeReference(TestResultType), Body: new Block(statements), IsAsync: true) {
             Attributes = [new AttributeNode("Test", [])],
         };
 
     private static Node Check(Node actual, string assertion, params Node[] arguments) =>
         new Await(new Invoke(
-            new Member(new Invoke(new Member(new TypeReference("Assert"), "That"), actual), assertion),
+            new Member(new Invoke(new Member(new TypeReference(AssertType), "That"), actual), assertion),
             arguments));
 }

@@ -324,7 +324,7 @@ internal class Room : Poly.Runtime.IActionScoped
             target.RegisterRoomStaysNoShowSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

@@ -163,7 +163,7 @@ internal class Customer : Poly.Runtime.IActionScoped
         db.Record("Customer", "Email", __email);
         return DomainResult<Customer>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

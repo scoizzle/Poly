@@ -154,7 +154,7 @@ internal class Contact : Poly.Runtime.IActionScoped
         db.Record("Contact", "Email", __email);
         return DomainResult<Contact>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

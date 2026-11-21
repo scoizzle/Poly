@@ -427,7 +427,7 @@ internal class Patron : Poly.Runtime.IActionScoped
             target.RegisterPatronFinesResolvedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

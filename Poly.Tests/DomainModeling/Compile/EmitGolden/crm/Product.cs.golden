@@ -83,7 +83,7 @@ internal class Product : Poly.Runtime.IActionScoped
         db.Record("Product", "Sku", __sku);
         return DomainResult<Product>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

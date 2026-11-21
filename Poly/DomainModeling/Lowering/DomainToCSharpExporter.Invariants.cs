@@ -12,9 +12,11 @@ public sealed partial class DomainToCSharpExporter {
     /// <summary>
     /// Assign of a unique property calls <c>this.EnsureUnique</c>. The same value
     /// already on this instance is Success. A different value fails closed: this method holds
-    /// no storage port. The storage library rewrites every EnsureUnique-then-assign into
-    /// <c>db.Exists</c>/<c>Release</c>/<c>Record</c> on the <c>IStoragePort</c> the action receives,
-    /// so a module compiled with storage never reaches this failure.
+    /// no storage port. It is private because no printed module calls it: the storage library
+    /// rewrites every EnsureUnique-then-assign into <c>db.Exists</c>/<c>Release</c>/<c>Record</c>
+    /// on the <c>IStoragePort</c> the action receives, and a document whose <c>uses</c> names no
+    /// library that compiles <c>unique</c> is DMLIB001. It stays as the fail-closed body the
+    /// lowering shape names, never as API a caller could reach (#524).
     /// </summary>
     private static MethodDefinitionNode EnsureUniqueAssignMethod(Entity entity) {
         var propertyName = new Parameter("propertyName", TypeReference.To(typeof(string)));
@@ -43,7 +45,7 @@ public sealed partial class DomainToCSharpExporter {
             new NamedTypeReference("DomainResult"),
             Parameters: [propertyName, value],
             Body: new Block(nodes),
-            AccessModifier: AccessModifier.Public);
+            AccessModifier: AccessModifier.Private);
     }
 
     private static Return DomainResultSuccess() =>

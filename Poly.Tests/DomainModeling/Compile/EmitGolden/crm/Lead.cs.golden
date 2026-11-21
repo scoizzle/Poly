@@ -158,7 +158,7 @@ internal class Lead : Poly.Runtime.IActionScoped
         db.Record("Lead", "Email", __email);
         return DomainResult<Lead>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

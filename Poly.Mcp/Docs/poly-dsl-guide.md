@@ -1403,7 +1403,10 @@ OrderTotal: policy { sum lines Price == 150 }
 ```
 
 **Analysis rules:** relationship must be OneToMany from the source; body properties validated
-against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejected (DMEFF007).
+against the target entity; reverse-side / ManyToMany / OneToOne rejected (`DMSEM005`). A
+self-relationship (`reports: many Employee`) is read like any other collection: the quantifier
+walks the instance's own collection, one level, and does not descend into the children's
+collections unless the document writes a nested quantifier.
 
 #### Temporal Clock Dates (`Now`, `Today`, durations)
 

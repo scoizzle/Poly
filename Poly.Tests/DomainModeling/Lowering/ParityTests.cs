@@ -599,6 +599,53 @@ public class ParityTests {
         await Assert.That(outcomes[2].State["children"]).IsEqualTo("1");
     }
 
+    /// <summary>
+    /// #482: a quantifier over a self-referential collection reads the instance's own collection, one level, exactly
+    /// like a quantifier over any other collection — on the simulator and the printed C# alike. A child that has no
+    /// reports of its own answers from an empty collection even though its parent has two, so nothing recurses into
+    /// the children's children unless the document writes it.
+    /// </summary>
+    [Test]
+    public async Task Policy_QuantifiersOverASelfRelationship_ReadOneLevelOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Org
+            Employee: entity {
+              Name: Text
+              Salary: Number
+              reports: many Employee
+              HasReports: policy { count reports > 0 }
+              HasMoreThanTwo: policy { count reports > 2 }
+              NoneNamedZ: policy { none reports where Name == "z" }
+              AnyNamedA: policy { any reports where Name == "a" }
+              Payroll: policy { sum reports Salary > 25 }
+            }
+            """, "ParitySelfReferentialQuantifiers")
+            .AssertAgree(side => {
+                var root = side.Create("Employee", ("Name", "root"), ("Salary", 1L));
+                var first = side.Create("Employee", ("Name", "a"), ("Salary", 10L));
+                var second = side.Create("Employee", ("Name", "b"), ("Salary", 20L));
+                side.Use(root);
+                side.Link("reports", first, second);
+                side.EvaluatePolicy("HasReports");
+                side.EvaluatePolicy("HasMoreThanTwo");
+                side.EvaluatePolicy("NoneNamedZ");
+                side.EvaluatePolicy("AnyNamedA");
+                side.EvaluatePolicy("Payroll");
+                // The child's own collection is empty: the quantifier does not see the parent's two.
+                side.Use(first);
+                side.EvaluatePolicy("HasReports");
+                side.EvaluatePolicy("Payroll");
+            });
+        await Assert.That(outcomes[4].State["reports"]).IsEqualTo("2");
+        await Assert.That(outcomes[5].State["HasReports"]).IsEqualTo("True");
+        await Assert.That(outcomes[6].State["HasMoreThanTwo"]).IsEqualTo("False");
+        await Assert.That(outcomes[7].State["NoneNamedZ"]).IsEqualTo("True");
+        await Assert.That(outcomes[8].State["AnyNamedA"]).IsEqualTo("True");
+        await Assert.That(outcomes[9].State["Payroll"]).IsEqualTo("True");
+        await Assert.That(outcomes[11].State["HasReports"]).IsEqualTo("False");
+        await Assert.That(outcomes[12].State["Payroll"]).IsEqualTo("False");
+    }
+
     [Test]
     public async Task Create_WhenFirstStageEntryTransitions_UpdatesLifecycleEnumOnBothSides() {
         var outcomes = await ParityScenario.FromDsl("""

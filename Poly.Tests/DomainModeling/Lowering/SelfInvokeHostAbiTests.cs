@@ -70,18 +70,29 @@ public class SelfInvokeHostAbiTests {
 
     [Test]
     public async Task SelfInvoke_StageAction_Recursive_ExceedsDepth() {
+        // #535: an UNCONDITIONAL self-invoke is a DMEFF021 analysis error, so the depth guard's
+        // job is the cycle analysis still admits — one behind a guard that never fails at run time.
         var bounce = new Poly.DomainModeling.Ontology.Action("Bounce", InvocationResult.Void, [],
-            Effects: [new InvokeActionEffect("Bounce", [])],
+            Effects: [
+                new ConditionalEffect(
+                    DomainExpression.GreaterThanOrEqual(
+                        DomainExpression.Property("N"), DomainExpression.Literal(0L)),
+                    [new InvokeActionEffect("Bounce", [])],
+                    null)
+            ],
             Policies: []);
         var draft = new Stage("Draft", [bounce], [], [], []);
         var entity = new Entity("Loop",
-            Properties: [new Property("Status", new DomainTypeReference("Text"), [])],
+            Properties: [
+                new Property("Status", new DomainTypeReference("Text"), []),
+                new Property("N", new DomainTypeReference("Number"), []),
+            ],
             Actions: [],
             Policies: [],
             Stages: [draft]);
         var domain = ValidDomain.Create("Loops", [entity]);
         var exec = ModuleExec.For(domain);
-        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "x" }).Instance!;
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "x", ["N"] = 0L }).Instance!;
 
         var bounceResult = exec.Invoke(instance, "Bounce");
         await Assert.That(bounceResult.Succeeded).IsFalse();

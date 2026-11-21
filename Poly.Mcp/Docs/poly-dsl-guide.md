@@ -610,8 +610,11 @@ endpoints.
 
 **Owned targets keep their owner.** `unlink_instances` refuses to drop the last
 inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
-owned target must keep its owner." Non-owned links stay minimum zero, and removing
-the owner instance entirely is not an unlink, so it is exempt from the minimum.
+owned target must keep its owner." Non-owned links stay minimum zero. No shipped
+surface removes an instance: the effects are `transition`, `assign`, `create`,
+`create in`, `invoke`, `for` and `if`, and the generated HTTP host maps only GET
+and POST. The minimum is therefore checked when unlinking, and an owned target
+cannot be released from its owner.
 
 **An owned entity has exactly one owner navigation** (`DMSTR010`). Two `owned`
 navigations to one entity type are an analysis error, whether they sit on different

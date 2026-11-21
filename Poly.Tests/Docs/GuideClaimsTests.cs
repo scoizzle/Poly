@@ -90,17 +90,6 @@ public class GuideClaimsTests {
         }
         """;
 
-    private const string OwnedDomain = """
-        domain Owned
-        A: entity {
-          N: Number
-          kid: owned B optional
-        }
-        B: entity {
-          M: Number
-        }
-        """;
-
     /// <summary>#492's reproduction: <c>action when S</c> where <c>S</c> is a real stage.</summary>
     private const string ActionWhenDomain = """
         domain T
@@ -131,9 +120,6 @@ public class GuideClaimsTests {
         new("c601", "#601",
             "Fires **once** when **at least one** linked related entity is in a matching stage",
             ["once", "each-transition"], "once", "M-02", AnyFiresOnce),
-        new("c637", "#637",
-            "removing the owner instance entirely is not an unlink, so it is exempt from the minimum.",
-            ["present", "absent"], "present", "M-02", OwnedRemoval),
         new("c492", "#492",
             "Action `when Stage` | Not a runtime or emit gate",
             ["accepted", "rejected"], "rejected", "G-05",
@@ -163,8 +149,6 @@ public class GuideClaimsTests {
             "M-02 reword: the guide says stage-scoped first; it must say entity-level first."),
         new("c601", "M-02", "each-transition: AnyN=2, EachN=2",
             "M-02 reword: 'once' becomes 'each matching transition'."),
-        new("c637", "M-02", "absent: 3/3 effect verbs are parse errors; last-owner unlink refused",
-            "M-02 reword: the removal exemption goes, or a removal operation lands."),
         new("c492", "G-05", "accepted: 0 errors",
             "G-05 refuses `action when S` in analysis, at the action's own line; the section 10 row is then true."),
         new("c576", "L-17", "accepted: created in Open with Cleared=true",
@@ -396,33 +380,6 @@ public class GuideClaimsTests {
             _ => "AnyN=" + any,
         };
         return new ProbeAnswer(verdict, $"{verdict}: AnyN={any}, EachN={each}");
-    }
-
-    /// <summary>
-    /// #637: the guide says removing an owner is exempt from the owned-target minimum. The probe asks
-    /// whether any removal exists at all, and whether the minimum still refuses a last-owner unlink.
-    /// </summary>
-    private static ProbeAnswer OwnedRemoval() {
-        var verbs = new[] { "delete", "remove", "destroy" };
-        var refused = verbs.Count(verb => {
-            var result = GuideBlocks.Analyze(
-                "domain Verbed\n\nA: entity {\n  N: Number\n  Zap: action { " + verb + " this }\n}\n");
-            return result.Diagnostics.Any(d => d.IsError && d.Code == "DSL0001");
-        });
-
-        var domain = Compile(OwnedDomain);
-        var exec = ModuleExec.For(domain);
-        var a = exec.Create("A", Values(("N", 1L))).Instance;
-        var b = exec.Create("B", Values(("M", 1L))).Instance;
-        if (a is null || b is null)
-            return new ProbeAnswer("create-refused", "create refused");
-        if (!exec.Link("kid", a, b).Succeeded)
-            return new ProbeAnswer("link-refused", "link refused");
-        var unlink = exec.Unlink("kid", a, b);
-        var verdict = refused == verbs.Length ? "absent" : "present";
-        return new ProbeAnswer(verdict,
-            $"{verdict}: {refused}/3 effect verbs are parse errors; last-owner unlink "
-            + (unlink.Succeeded ? "allowed" : "refused"));
     }
 
     /// <summary>#518/#577: an action inside the stage can falsify the stage's <c>require</c>.</summary>

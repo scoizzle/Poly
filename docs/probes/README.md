@@ -15,6 +15,7 @@ Historical discovery rounds: [`docs/plans/archive/probes-2026-08/`](https://gith
 | `fleet-eval/12-mcp/mcp-library.poly` | compile oracle |
 | `smoke/smoke.poly` | smoke |
 | `grep-2026-10-17/grep.poly` | grep probe — `VmAnalyzerReportTests` canary + `ParityTests` `PrintedCSharpCompiles` (findings: [`findings/grep-2026-10-17.md`](findings/grep-2026-10-17.md)) |
+| `dogfood-2026-11-20/*.poly` | real-system dogfood round — models of a compiler pipeline, CI runner, ledger, TTL cache, IAM directory, filesystem and escalation ladder (findings: [`findings/dogfood-2026-11-20.md`](findings/dogfood-2026-11-20.md)) |
 
 Author a new probe: `scripts/new-probe.sh <name>` → `docs/probes/<name>/<name>.poly`.  
 Compile-check: `scripts/run-probe.sh docs/probes/<name>/<name>.poly`.

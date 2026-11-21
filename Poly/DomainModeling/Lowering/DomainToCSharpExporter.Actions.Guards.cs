@@ -234,7 +234,7 @@ public sealed partial class DomainToCSharpExporter {
                              or Syntactic.Member or Syntactic.Constant
                              or Syntactic.New or Syntactic.UnaryMinus
                              or Syntactic.Not or Syntactic.Add or Syntactic.Subtract
-                             or Syntactic.Multiply or Syntactic.Divide) {
+                             or Syntactic.Multiply or Syntactic.Divide or Syntactic.Modulo) {
                         nodes[lastIdx] = new Return(
                             new Invoke(
                                 new Member(actionResultType, "Success"),

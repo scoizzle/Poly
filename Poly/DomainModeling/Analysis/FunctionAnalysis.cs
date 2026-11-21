@@ -3,6 +3,7 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
@@ -47,7 +48,7 @@ internal static class FunctionAnalysis {
         switch (expression) {
             case ParameterAccess or Literal:
                 return;
-            case Add or Subtract or Multiply or Divide or Comparison or And or Or or Not:
+            case Add or Subtract or Multiply or Divide or Modulo or Comparison or And or Or or Not:
                 break;
             case FunctionCall call when IsEndpointCall(context, call):
                 context.ReportError(function,

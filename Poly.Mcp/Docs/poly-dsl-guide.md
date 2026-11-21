@@ -1283,10 +1283,17 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 | Level | Operators | Example |
 |-------|-----------|---------|
 | Primary | `Number`, `"string"`, `true`, `false`, `null`, `(expr)`, property name | `42`, `"hello"`, `true`, `Name` |
+| Arithmetic (multiply) | `*`, `/`, `%`, left-assoc | `Net / Count`, `N % 7` |
+| Arithmetic (add) | `+`, `-`, left-assoc | `Net + Fee`, `Net - Fee` |
 | Comparison | `==`, `!=`, `>`, `>=`, `<`, `<=`, `is`, `is not` | `Age >= 18`, `Status is "active"` |
 | `not` | Prefix unary | `not Suspended` |
 | `and` | Binary, left-assoc | `Age >= 18 and Status is "active"` |
 | `or` | Binary, left-assoc | `Total > 0 or Rush is true` |
+
+`%` is the remainder operator, with C#'s rule: it takes the sign of the dividend (`-10 % 7` is `-3`), and it
+is defined for `Number` and `Decimal`. `Number` `/` is integer division, so `%` is how a rule gets a
+remainder (a cents split, an every-Nth check). A remainder by a zero divisor is the division rule's, not a
+separate one.
 
 An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
 comparison operand, `where` body or call/match argument adds 1, while a chain of N operands

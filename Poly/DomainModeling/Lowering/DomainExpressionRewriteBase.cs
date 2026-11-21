@@ -4,6 +4,7 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
@@ -53,6 +54,8 @@ public abstract class DomainExpressionRewriteBase : DomainExpressionDispatch<Dom
     protected override DomainExpression Multiply(Multiply e) =>
         e with { Left = Route(e.Left), Right = Route(e.Right) };
     protected override DomainExpression Divide(Divide e) =>
+        e with { Left = Route(e.Left), Right = Route(e.Right) };
+    protected override DomainExpression Modulo(Modulo e) =>
         e with { Left = Route(e.Left), Right = Route(e.Right) };
     protected override DomainExpression OwnedAccess(OwnedAccess e) =>
         e with { Inner = Route(e.Inner) };

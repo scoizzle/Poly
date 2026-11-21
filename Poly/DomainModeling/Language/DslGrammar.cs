@@ -92,6 +92,7 @@ public static class DslGrammar {
         DslTokenKind.Minus => "-",
         DslTokenKind.Star => "*",
         DslTokenKind.Slash => "/",
+        DslTokenKind.Percent => "%",
         DslTokenKind.Is => "is",
         DslTokenKind.Not => "not",
         DslTokenKind.And => "and",

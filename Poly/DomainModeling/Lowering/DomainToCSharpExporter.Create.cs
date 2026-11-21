@@ -148,9 +148,9 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), pascalName),
                     local));
 
-                // A singular create-in links `this` into the target's unique inverse
-                // collection (e.g. local.AttachItems(this)); ambiguous/no inverse is a no-op.
-                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name).Unique;
+                // A singular create-in links `this` into the target's paired collection
+                // (e.g. local.AttachItems(this)); ambiguous/no pair is a no-op.
+                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name, rel).Unique;
                 if (inverse is not null) {
                     bodyNodes.Add(new Invoke(
                         new Member(local, $"Attach{ToPascalCase(inverse.Name)}"),
@@ -566,12 +566,13 @@ public sealed partial class DomainToCSharpExporter {
                 peerEntity = domain.Types.OfType<Entity>()
                     .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
 
-            // Unique collection inverse on the peer (FindInverseCollectionInfo).
-            // count == 0: OneToOne / no
-            // collection — ctor already set the to-one. count > 1: skip Attach
-            // (named create-in CreateNav fallback Add). count == 1: Attach*.
+            // The collection on the peer that pairs with this navigation (FindInverseCollectionInfo).
+            // No collection pairs: the ctor already set the to-one. An ambiguous pairing also emits
+            // nothing, so `Create{Nav}`'s fallback Add is the only route.
+            var argumentNav = entity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, navParam.Name, StringComparison.Ordinal));
             var inverse = peerEntity is not null
-                ? FindInverseCollectionInfo(peerEntity, entity.Name).Unique
+                ? FindInverseCollectionInfo(peerEntity, entity.Name, argumentNav).Unique
                 : null;
 
             if (inverse is null)

@@ -23,6 +23,7 @@ public class RemainderParityTests {
           Go: action { assign Rest to N % Divisor }
           Split: action { assign Part to {{splitExpression}} }
           Signed: action { assign Rest to (Offset - 10) % 7 }
+          DivisorSign: action { assign Rest to N % (Offset - 10) }
         }
         """;
 
@@ -68,10 +69,20 @@ public class RemainderParityTests {
     }
 
     [Test]
-    public async Task Signed_WhenAFactorIsPositive_TheRemainderSignStillFollowsTheDividend() {
-        // (4 - 10) % 7 is -6, and 10 % -7 is 3: the divisor's sign never decides.
+    public async Task Signed_WhenTheDividendIsPositive_TheResultIsNot() {
+        // (4 - 10) % 7 is -6.
         var outcomes = await ParityScenario.FromDsl(Dsl("Amount"), "ParityRemainderSignTwo")
             .AssertAgree(side => { Create(side, 0, 7, 4); side.Invoke("Signed"); });
+        await Assert.That(outcomes[^1].Success).IsTrue();
         await Assert.That(outcomes[^1].State["Rest"]).IsEqualTo("-6");
+    }
+
+    [Test]
+    public async Task DivisorSign_WhenTheDivisorIsNegative_TheResultStillFollowsTheDividend() {
+        // 7 % -10 is 7: the divisor's sign never decides.
+        var outcomes = await ParityScenario.FromDsl(Dsl("Amount"), "ParityRemainderDivisorSign")
+            .AssertAgree(side => { Create(side, 7, 7, 0); side.Invoke("DivisorSign"); });
+        await Assert.That(outcomes[^1].Success).IsTrue();
+        await Assert.That(outcomes[^1].State["Rest"]).IsEqualTo("7");
     }
 }

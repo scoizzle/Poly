@@ -205,7 +205,7 @@ public sealed record Divide(
 
 /// <summary>
 /// The remainder of <see cref="Left"/> divided by <see cref="Right"/>: C#'s <c>%</c>. It takes the
-/// dividend's sign (<c>-10 % 7</c> is <c>-3</c>), and a zero divisor is the division rule's problem (#502).
+/// dividend's sign (<c>-10 % 7</c> is <c>-3</c>), and a zero divisor is not diagnosed yet (#502).
 /// </summary>
 public sealed record Modulo(
     DomainExpression Left,

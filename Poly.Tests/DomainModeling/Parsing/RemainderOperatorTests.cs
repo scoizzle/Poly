@@ -2,6 +2,10 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 
+using Add = Poly.DomainModeling.Ontology.Add;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>
@@ -40,11 +44,19 @@ public sealed class RemainderOperatorTests {
 
     [Test]
     public async Task Parse_SamePrecedenceAsMultiplyAndDivide() {
-        // '*' and '%' share the level, and the level is left-assoc: N * M % 7 is (N * M) % 7.
-        await Assert.That(ResolverBaselineTests.Resolve(Dsl("N * M % 7"))).StartsWith("OK ");
-        await Assert.That(ResolverBaselineTests.Resolve(Dsl("N % M * 7"))).StartsWith("OK ");
-        // The add level is looser than the multiply level: N + M % 7 is N + (M % 7).
-        await Assert.That(ResolverBaselineTests.Resolve(Dsl("N + M % 7"))).StartsWith("OK ");
+        // '%' shares the multiply level and the level is left-assoc, so the tree is the proof, not a parse.
+        var productFirst = (Modulo)DslExpressionFragment.ParseExpressionFragment("N * M % 7");
+        await Assert.That(productFirst.Left).IsTypeOf<Multiply>();
+        await Assert.That(productFirst.Right).IsTypeOf<Literal>();
+
+        var remainderFirst = (Multiply)DslExpressionFragment.ParseExpressionFragment("N % M * 7");
+        await Assert.That(remainderFirst.Left).IsTypeOf<Modulo>();
+        await Assert.That(remainderFirst.Right).IsTypeOf<Literal>();
+
+        // The add level is looser, so a remainder binds before an addition: N + M % 7 is N + (M % 7).
+        var sum = (Add)DslExpressionFragment.ParseExpressionFragment("N + M % 7");
+        await Assert.That(sum.Left).IsTypeOf<PropertyAccess>();
+        await Assert.That(sum.Right).IsTypeOf<Modulo>();
     }
 
     [Test]

@@ -1290,10 +1290,10 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 | `and` | Binary, left-assoc | `Age >= 18 and Status is "active"` |
 | `or` | Binary, left-assoc | `Total > 0 or Rush is true` |
 
-`%` is the remainder operator, with C#'s rule: it takes the sign of the dividend (`-10 % 7` is `-3`), and it
-is defined for `Number` and `Decimal`. `Number` `/` is integer division, so `%` is how a rule gets a
-remainder (a cents split, an every-Nth check). A remainder by a zero divisor is the division rule's, not a
-separate one.
+`%` is the remainder operator, with C#'s rule: the result takes the sign of the dividend, so a dividend of
+`0 - 10` with a divisor of 7 gives `-3`. It is defined for `Number` and `Decimal`. `Number` `/` is integer
+division, so `%` is how a rule gets a remainder (a cents split, an every-Nth check). A zero divisor is not
+diagnosed for `%` or for `/` yet (#502).
 
 An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
 comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
@@ -1501,7 +1501,7 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
   **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same session instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against the linked instances. **Fail closed:** missing `instanceId`, instance, or domain metadata. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `oracle_expression` is a fragment probe on a synthetic bag — not named-policy evaluate.
 
 **Shipped in the current product surface:**
-- Arithmetic (`+`, `-`, `*`, `/`) in expressions
+- Arithmetic (`+`, `-`, `*`, `/`, `%`) in expressions
 - Conditional effects (`if (expr) { effects } else { effects }`) — exists / path-prefix / quantifiers in the condition lower the same way as in policies
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; fan-out via the `for` form — one mode, no `any`/`all`/`each` quantifier)
 - Action parameters (`actionName: action (param: Type, ...)`)
@@ -1694,7 +1694,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires instances + link** at `evaluate_policy` |
 | Nested multi-hop path-prefix | ✅ | ✅ **shipped** (to-one hops) | `loan book Title is "Classic"`; many-middle requires `any`/`all` quantifiers |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; foreach over the collection in simulate and export. |
-| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 2 > 10` |
+| Arithmetic (`+`, `-`, `*`, `/`, `%`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total % 7 is 0` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 | `match { cond -> value, …, else -> value }` | ✅ | ✅ **shipped** (#409) | Expression-level branching; see below. |
 

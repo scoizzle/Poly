@@ -322,6 +322,32 @@ public sealed class ModuleInstanceExecutorTests {
     }
 
     [Test]
+    public async Task Invoke_RequiredFailure_ListsTheCurrentStageCopysPolicies() {
+        // #945: the module dispatches the stage copy; the action the executor looks up
+        // must be that copy, so its policy list is the one the failure reports.
+        var executor = ExecutorFor("""
+            domain EnrollSlice
+            Section: entity { SeatsTaken: Number default(0) }
+            Enrollment: entity {
+              section: Section optional
+              SectionFull: policy { section SeatsTaken >= 1 }
+              Pending: stage {
+                Confirm: action require not SectionFull { transition to Confirmed }
+              }
+              Confirmed: stage { }
+              Confirm: action { }
+            }
+            """);
+        var enrollment = executor.Create("Enrollment", Values()).Instance!;
+
+        var blocked = executor.Invoke(enrollment, "Confirm");
+
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Enrollment.section");
+        await Assert.That(string.Join(",", blocked.FailedGuards)).IsEqualTo("not_SectionFull");
+    }
+
+    [Test]
     public async Task Invoke_FailureMidAction_RollsBackAssignsChildrenAndPort() {
         var executor = ExecutorFor(Parking);
         var lot = executor.Create("Lot", Values()).Instance!;

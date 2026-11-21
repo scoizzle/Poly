@@ -1,3 +1,6 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+
 namespace Poly.Tests.Mcp;
 
 /// <summary>
@@ -247,5 +250,49 @@ public class OracleToolTests {
     public async Task GetDomainSuggestions_UnknownSession_Fails() {
         var response = McpTestTools.Query.GetDomainSuggestions("nonexistent");
         await Assert.That(response.Success).IsFalse();
+    }
+
+    /// <summary>#489: `poly_export csharp` returns ONE .cs artifact, so its `using` directives and its
+    /// file-scoped namespace may appear once, before every type — not once per entity (CS1529, CS8954).</summary>
+    [Test]
+    public async Task ExportCSharp_IsOneCompilableCompilationUnit() {
+        var (sessionId, _) = McpTestTools.Store.Create("ExportUnit");
+        var applied = McpTestTools.Surface.Define(sessionId, """
+            domain M
+            Leg: entity { N: Number }
+            Trip: entity {
+              Name: Text
+              legs: many Leg
+            }
+            """);
+        await Assert.That(applied.Success).IsTrue().Because(applied.Summary);
+
+        var export = McpTestTools.Surface.Export(sessionId, "csharp", inline: true);
+        await Assert.That(export.Success).IsTrue().Because(export.Summary);
+        var cs = export.Data!["content"]!.GetValue<string>();
+
+        await Assert.That(Occurrences(cs, "#nullable enable")).IsEqualTo(1);
+        await Assert.That(Occurrences(cs, "namespace M;")).IsEqualTo(1);
+        var firstType = cs.IndexOf("class Leg", StringComparison.Ordinal);
+        await Assert.That(cs.IndexOf("using ", firstType < 0 ? 0 : firstType, StringComparison.Ordinal)).IsEqualTo(-1)
+            .Because("a using clause after a type declaration is CS1529");
+
+        var compile = CSharpCompilation.Create(
+            "ExportUnit_" + Guid.NewGuid().ToString("N"),
+            [CSharpSyntaxTree.ParseText(cs, path: "export.cs")],
+            RoslynReferences.PlatformAndTestOutput,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var errors = compile.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => d.ToString()).ToArray();
+        await Assert.That(string.Join("\n", errors)).IsEqualTo("");
+    }
+
+    private static int Occurrences(string text, string part) {
+        var count = 0;
+        for (var at = text.IndexOf(part, StringComparison.Ordinal); at >= 0;
+             at = text.IndexOf(part, at + part.Length, StringComparison.Ordinal))
+            count++;
+        return count;
     }
 }

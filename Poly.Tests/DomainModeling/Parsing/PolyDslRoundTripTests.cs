@@ -714,14 +714,14 @@ public class PolyDslRoundTripTests {
 
     [Test]
     public async Task C2_NoWhenPolicies_Emitted() {
-        // Verify that "when Draft" on an action does NOT produce any policies
+        // An action's stage is its placement: `Activate: action when Draft` is refused at parse (#492,
+        // ActionWhenStageTests). This pins the shape that replaces it: no policies, and no `when` printed.
         var poly = """
             domain Test
 
             Item: entity {
               Draft: stage {
                 Activate: action
-                  when Draft
                 {
                   transition to Active
                 }
@@ -739,7 +739,7 @@ public class PolyDslRoundTripTests {
         var entity3 = result.Root!.Types.OfType<Entity>().Single();
         var activate3 = entity3.Stages.SelectMany(s => s.Actions)
             .Single(a => a.Name == "Activate");
-        // No policies should be attached (when gates are not runtime-enforced in Phase 1a)
+        // No policies are attached to a stage-placed action
         await Assert.That(activate3.Policies.Count).IsEqualTo(0);
 
         // Round-trip: printer should not output when either

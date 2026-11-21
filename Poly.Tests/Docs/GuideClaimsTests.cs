@@ -165,8 +165,6 @@ public class GuideClaimsTests {
             "M-02 reword: 'once' becomes 'each matching transition'."),
         new("c637", "M-02", "absent: 3/3 effect verbs are parse errors; last-owner unlink refused",
             "M-02 reword: the removal exemption goes, or a removal operation lands."),
-        new("c492", "G-05", "accepted: 0 errors",
-            "G-05 refuses `action when S` in analysis, at the action's own line; the section 10 row is then true."),
         new("c576", "L-17", "accepted: created in Open with Cleared=true",
             "L-17 refuses create in a stage whose require the initial values falsify. Shares c577's claim "
             + "sentence, so one M-02 reword retires both rows."),

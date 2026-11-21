@@ -624,7 +624,22 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         path.Equals(normalized, StringComparison.Ordinal)
         || path.EndsWith("/" + normalized, StringComparison.Ordinal)
         || path.StartsWith(normalized + "/", StringComparison.Ordinal)
-        || path.Contains("/" + normalized + "/", StringComparison.Ordinal);
+        || path.Contains("/" + normalized + "/", StringComparison.Ordinal)
+        || StageActionPathMatches(path, normalized);
+
+    /// <summary>
+    /// #481: "Entity.Action" selects that action wherever it runs, so it also matches the action's
+    /// own findings inside a stage ("Domain/Entity/Stage/Action"). Findings carry the stage segment;
+    /// the unqualified select does not.
+    /// </summary>
+    private static bool StageActionPathMatches(string path, string normalized) {
+        var selectParts = normalized.Split('/');
+        var pathParts = path.Split('/');
+        return selectParts.Length == 2
+            && pathParts.Length == 4
+            && string.Equals(pathParts[1], selectParts[0], StringComparison.Ordinal)
+            && string.Equals(pathParts[3], selectParts[1], StringComparison.Ordinal);
+    }
 
     private static bool ElementExists(Domain domain, string normalized) {
         var parts = normalized.Split('/');

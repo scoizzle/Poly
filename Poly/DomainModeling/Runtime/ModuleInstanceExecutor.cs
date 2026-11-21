@@ -36,6 +36,16 @@ public sealed partial class ModuleInstanceExecutor {
     private readonly Dictionary<object, ModuleInstance> _byBag = new(System.Collections.Generic.ReferenceEqualityComparer.Instance);
     private readonly List<ModuleInstance> _order = [];
     private readonly Dictionary<(string Entity, string Name), CompiledBody> _compiled = new();
+    private int _compiles;
+
+    /// <summary>
+    /// The tree a parameterised method's body binds to, per lowered method node. Binding builds a
+    /// fresh tree, and <see cref="Compile"/> hits its cache on the body reference: binding per call
+    /// made every parameterised invoke re-analyze and re-compile (#793). A re-lowered module hands
+    /// out new method nodes, so this drops with the compile cache.
+    /// </summary>
+    private readonly Dictionary<MethodDefinitionNode, MethodDefinitionNode> _bound =
+        new(System.Collections.Generic.ReferenceEqualityComparer.Instance);
     private readonly List<IDictionary<string, object?>> _born = [];
 
     private sealed record CompiledBody(Node Body, VmProgram Program, IReadOnlyList<Parameter> Parameters);
@@ -98,6 +108,14 @@ public sealed partial class ModuleInstanceExecutor {
     internal Node? CompiledBodyFor(string entityName, string methodName) {
         lock (_gate)
             return _compiled.TryGetValue((entityName, methodName), out var compiled) ? compiled.Body : null;
+    }
+
+    /// <summary>
+    /// How many method bodies this executor has analyzed and compiled. Lets a test hold the
+    /// per-(entity, action) cache to one compile without timing the invoke.
+    /// </summary>
+    internal int CompileCount {
+        get { lock (_gate) return _compiles; }
     }
 
     /// <summary>The session's storage port: the one every module call receives.</summary>
@@ -345,6 +363,7 @@ public sealed partial class ModuleInstanceExecutor {
         _module = [.. module.Select(BindParameterBodies)];
         (_types, _declarations) = BuildTypes(_module);
         _compiled.Clear();
+        _bound.Clear();
     }
 
     private List<KeyValuePair<DomainToCSharpExporter.SubscriptionInfo, string>> HandlerNames() {
@@ -440,15 +459,18 @@ public sealed partial class ModuleInstanceExecutor {
         return null;
     }
 
-    private static MethodDefinitionNode BindOne(string entityName, MethodDefinitionNode method) {
+    private MethodDefinitionNode BindOne(string entityName, MethodDefinitionNode method) {
         if (method.Body is null || (method.Parameters?.Count ?? 0) == 0)
             return method;
+        if (_bound.TryGetValue(method, out var bound))
+            return bound;
         try {
-            return method with { Body = ModuleMethodBinding.BindTypedParameters(entityName, method).Tree };
+            bound = method with { Body = ModuleMethodBinding.BindTypedParameters(entityName, method).Tree };
         }
         catch (InvalidOperationException) {
-            return method;
+            bound = method;
         }
+        return _bound[method] = bound;
     }
 
     private object? Run(string entityName, MethodDefinitionNode method, object? self, object?[] args) {
@@ -479,6 +501,7 @@ public sealed partial class ModuleInstanceExecutor {
         var program = parameters.Count == 0
             ? Interpreter.Compile(body, analysis)
             : Interpreter.Compile(body, analysis, parameters);
+        _compiles++;
         return _compiled[(entityName, name)] = new CompiledBody(body, program, parameters);
     }
 

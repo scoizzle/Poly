@@ -127,11 +127,6 @@ public static class CSharpReader {
         private static bool HasCapture(MatchResult<CSharpToken, CSharpTokenKind> match, string name) =>
             match.Captures.TryGetValue(name, out var tokens) && tokens.Count > 0;
 
-        /// <summary>Source text of a match's token span (types and other tight
-        /// text where token concatenation is the spelling).</summary>
-        private static string SourceText(MatchResult<CSharpToken, CSharpTokenKind> match) =>
-            string.Concat(match.Tokens.Select(t => t.Text));
-
         // ── names / attributes / modifiers ───────────────────────────────────
 
         private static string FoldName(MatchResult<CSharpToken, CSharpTokenKind> match) => match.PatternName switch {
@@ -1053,7 +1048,9 @@ public static class CSharpReader {
                 case "cast":
                     return new TypeCast(FoldExpr(match.Children[1]), FoldType(match.Children[0]));
                 case "typeof":
-                    return new TypeOf(new TypeReference(SourceText(match.Children[0])));
+                    // The operand is a type, so it folds as one: a bare spelling would lose the keyword and the
+                    // writer would escape `decimal` as an identifier. The tree states the platform's definition.
+                    return new TypeOf(FoldType(match.Children[0]));
                 case "default-typed":
                     return new Default(FoldType(match.Children[0]));
                 case "default-bare":

@@ -63,21 +63,23 @@ public sealed class TestsArtifactContributorTests {
         }
         """;
 
-    // Smallest TUnit surface the generated suite uses.
+    // Smallest TUnit surface the generated suite uses, under the namespaces the real package declares.
     private const string TUnitStub = """
         using System;
         using System.Threading.Tasks;
         public sealed class TestAttribute : Attribute { }
-        public static class Assert {
-            public static Check<T> That<T>(T actual) => new Check<T>(actual);
-        }
-        public sealed class Check<T> {
-            private readonly T _actual;
-            public Check(T actual) { _actual = actual; }
-            public Task IsTrue() { if (!(_actual is bool b && b)) throw new Exception("expected true"); return Task.CompletedTask; }
-            public Task IsFalse() { if (!(_actual is bool b && !b)) throw new Exception("expected false"); return Task.CompletedTask; }
-            public Task IsEqualTo(T expected) { if (!Equals(_actual, expected)) throw new Exception($"expected {expected} got {_actual}"); return Task.CompletedTask; }
-            public Task Contains(string part) { if (!(_actual is string s && s.Contains(part))) throw new Exception($"expected '{_actual}' to contain '{part}'"); return Task.CompletedTask; }
+        namespace TUnit.Assertions {
+            public static class Assert {
+                public static Check<T> That<T>(T actual) => new Check<T>(actual);
+            }
+            public sealed class Check<T> {
+                private readonly T _actual;
+                public Check(T actual) { _actual = actual; }
+                public Task IsTrue() { if (!(_actual is bool b && b)) throw new Exception("expected true"); return Task.CompletedTask; }
+                public Task IsFalse() { if (!(_actual is bool b && !b)) throw new Exception("expected false"); return Task.CompletedTask; }
+                public Task IsEqualTo(T expected) { if (!Equals(_actual, expected)) throw new Exception($"expected {expected} got {_actual}"); return Task.CompletedTask; }
+                public Task Contains(string part) { if (!(_actual is string s && s.Contains(part))) throw new Exception($"expected '{_actual}' to contain '{part}'"); return Task.CompletedTask; }
+            }
         }
         """;
 
@@ -163,6 +165,30 @@ public sealed class TestsArtifactContributorTests {
             domain Library
             uses tests
             Library: entity {
+              Reference: Text
+              Draft: stage {
+                Submit: action { transition to Submitted }
+              }
+              Submitted: stage {
+                Ship: action { transition to Shipped }
+              }
+              Shipped: stage { }
+            }
+            """, mutate: null);
+
+        await Assert.That(ran).IsEqualTo(2);
+        await Assert.That(failures).IsEmpty();
+    }
+
+    /// <summary>#826: the suite is a global-scope file that imports the domain namespace and names TUnit's
+    /// <c>Task</c>. An entity named <c>Task</c> made the return type ambiguous (CS0104) — one is the domain's,
+    /// one <c>System.Threading.Tasks</c>.</summary>
+    [Test]
+    public async Task GeneratedSuite_EntityNamedTask_DoesNotCollideWithSystemThreadingTasksTask() {
+        var (ran, failures) = RunGeneratedSuite("""
+            domain Desk
+            uses tests
+            Task: entity {
               Reference: Text
               Draft: stage {
                 Submit: action { transition to Submitted }

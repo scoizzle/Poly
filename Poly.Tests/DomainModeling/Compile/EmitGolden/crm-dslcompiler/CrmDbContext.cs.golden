@@ -79,7 +79,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
     b.Property<int>("Id");
     b.HasKey("Id");
-    b.Property(x => x.Sku).HasColumnName("sku").HasColumnType("TEXT").IsRequired().HasMaxLength(32);
+    b.Property(x => x.Sku).HasColumnName("sku").IsRequired().HasMaxLength(32);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.ListPrice).HasColumnName("listPrice").HasColumnType("TEXT");
     b.HasIndex(x => x.Sku).IsUnique();
@@ -89,7 +89,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
+    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Company).HasColumnName("company").HasColumnType("TEXT").IsRequired();
     b.HasIndex(x => x.Email).IsUnique();
 });
@@ -111,7 +111,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
+    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired();
     b.HasIndex(x => x.Email).IsUnique();
 });
         modelBuilder.Entity<Opportunity>(b => {

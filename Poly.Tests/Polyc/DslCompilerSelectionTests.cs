@@ -15,7 +15,9 @@ namespace Poly.Tests.Polyc;
 /// <see cref="LibrarySelection"/> path. The facade owns no selection rule of its own.
 /// </summary>
 public sealed class DslCompilerSelectionTests {
-    private const string Entity = "A: entity {\n  X: Text unique\n}\n";
+    // A unique Text must carry a length on a provider that cannot index an unbounded text column, so the
+    // fixture declares one; `Note` stays unbounded and keeps the vendor's type on the column (#627).
+    private const string Entity = "A: entity {\n  X: Text unique length(1, 20)\n  Note: Text\n}\n";
 
     private static string Doc(params string[] uses) =>
         "domain D\n" + string.Concat(uses.Select(id => $"uses {id}\n")) + Entity;

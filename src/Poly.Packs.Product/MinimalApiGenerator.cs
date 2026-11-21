@@ -356,6 +356,12 @@ public sealed partial class MinimalApiGenerator {
         return _catalog.Method(entity.Name, methodName);
     }
 
+    /// <summary>
+    /// The module registers a subscriber on create/link through <c>InitializeSubscriptions</c>, and that method is the one
+    /// path the host calls after a load (#560). Shape-only generation (no catalog) emits no call.
+    /// </summary>
+    private bool HasSubscriptionInitializer(Entity entity) => ModuleMethod(entity, "InitializeSubscriptions") is not null;
+
     /// <summary>The failure's typed kind picks the status; the body is ProblemDetails.</summary>
     private static Return DomainFailureReturn(Node result) =>
         new(new Invoke(new Variable("Problem"), new NullForgiving(new Member(result, "Error"))));

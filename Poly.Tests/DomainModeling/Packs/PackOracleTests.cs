@@ -210,6 +210,52 @@ public class PackOracleTests {
         await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
+    /// <summary>
+    /// #560: a subscription is a function of persisted state. A restart (new process, new DbContext scope, the same SQLite
+    /// file) must restore the parent's subscription registry, so clearing a stored hold runs the parent's <c>when</c>
+    /// handler. Before the fix the registry was populated only by <c>Create</c>, so the handler never ran.
+    /// </summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task StoredSubscription_IsRestoredAfterReload_SoTheParentHandlerRuns_Issue560(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var options = new PackOracleBootOptions { RunDirectory = directory };
+            string database;
+            await using (var first = await PackOracle.BootAsync(PackOracleDomains.Shipment560, options: options)) {
+                using var created = await first.Client.PostAsync(
+                    "/api/shipments", new StringContent("""{"Reference":"S1"}""", Encoding.UTF8, "application/json"));
+                await Assert.That((int)created.StatusCode).IsEqualTo(201);
+                using var held = await first.Client.PostAsync(
+                    "/api/shipments/S1/hold", new StringContent("""{"Reason":"docs"}""", Encoding.UTF8, "application/json"));
+                await Assert.That((int)held.StatusCode).IsEqualTo(200);
+                database = first.DatabasePath!;
+            }
+
+            int holdId;
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False")) {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "SELECT Id FROM CustomsHolds";
+                holdId = Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            // A restart: a new child process, a new DbContext scope, the same database file.
+            await using var second = await PackOracle.BootAsync(PackOracleDomains.Shipment560, options: options);
+            using var cleared = await second.Client.PostAsync(
+                $"/api/shipments/S1/holds/{holdId}/clear",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            await Assert.That((int)cleared.StatusCode).IsEqualTo(200);
+
+            using var holds = JsonDocument.Parse(await second.Client.GetStringAsync("/api/shipments/S1/holds"));
+            await Assert.That(holds.RootElement[0].GetProperty("cleared").GetBoolean()).IsTrue();
+
+            using var shipment = JsonDocument.Parse(await second.Client.GetStringAsync("/api/shipments/S1"));
+            await Assert.That(shipment.RootElement.GetProperty("note").GetString()).IsEqualTo("hold cleared");
+        });
+    }
+
     [Test]
     public async Task GeneratedPublicEntityWithPublicNav_BootsAndServesOrderList() {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderPublicLine604);

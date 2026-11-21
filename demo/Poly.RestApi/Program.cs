@@ -153,6 +153,7 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var book = await db.Books.FirstOrDefaultAsync(e => e.ISBN == dto.BookId);
@@ -186,6 +187,7 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.Suspend();
@@ -214,6 +216,7 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.CloseAccount();
@@ -242,6 +245,7 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.Reinstate();
@@ -280,6 +284,7 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
     }
     await db.Entry(entity).Reference(e => e.Book).LoadAsync();
     await db.Entry(entity).Reference(e => e.Borrower).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Renew();
@@ -318,6 +323,7 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
     }
     await db.Entry(entity).Reference(e => e.Book).LoadAsync();
     await db.Entry(entity).Reference(e => e.Borrower).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Return();
@@ -355,6 +361,7 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
         return StatusProblem(404, "Not Found", "Fine not found for this Patron");
     }
     await db.Entry(entity).Reference(e => e.Patron).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Pay();
@@ -392,6 +399,7 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
         return StatusProblem(404, "Not Found", "Fine not found for this Patron");
     }
     await db.Entry(entity).Reference(e => e.Patron).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Waive();

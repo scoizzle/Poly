@@ -249,8 +249,9 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// <c>InitializeSubscriptions</c> — for post-load subscription wiring. Called as
-    /// by <c>Create</c> after the initial entry, so all state is set and a failed entry registers nothing.
+    /// <c>InitializeSubscriptions</c> — the one registration path: <c>Create</c> calls it after the initial entry, so all
+    /// state is set and a failed entry registers nothing, and the host calls it after a load (#560) so persisted
+    /// subscriptions are restored. Internal, not private: the generated host is another type in the same assembly.
     /// </summary>
     private static void AddSubscriptionInitializer(
         List<SubscriptionInfo>? subscriberSubs, List<MethodDefinitionNode> methods) {
@@ -263,7 +264,7 @@ public sealed partial class DomainToCSharpExporter {
                     "InitializeSubscriptions",
                     new TypeReference("void"),
                     Body: new Block(initBody),
-                    AccessModifier: AccessModifier.Private
+                    AccessModifier: AccessModifier.Internal
                 ));
             }
         }

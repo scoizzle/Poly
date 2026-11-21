@@ -386,7 +386,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         db.Record("Guest", "Email", __email);
         return DomainResult<Guest>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Reservations)
         {

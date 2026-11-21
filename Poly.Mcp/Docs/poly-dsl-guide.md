@@ -2016,9 +2016,10 @@ is not authorisation, so it is not `403`.
 
 A `201 Created` response's `Location` is the route plus the row's natural key as one escaped path segment
 (`Uri.EscapeDataString`; non-text keys are formatted culture-invariantly, a Date key as `2026-01-05`), so a key
-with a space, `?`, `#` or a non-ASCII letter reads back at that `Location`. **Known gap:** a key containing `/`
-gets the escaped `Location` but the route cannot read it back, because ASP.NET does not turn `%2F` into `/` in a
-route value.
+with a space, `?`, `#` or a non-ASCII letter reads back at that `Location`. A key containing `/` is refused at a
+root create with `400` and a message, because ASP.NET does not turn `%2F` into `/` in a route value, so no
+`Location` could read it back. An entity created inside a parent action (`create in`) still stores its key, and
+that detail route cannot read a `/` key back (F-13).
 
 ### HTTP actions: what the host loads (`uses http`)
 
@@ -2259,8 +2260,11 @@ What the id does not cover, and what that costs:
   `false`. Over HTTP an explicit JSON `null` is a `400` with an empty body. Removed by X-05.
 - **Overloads, `M(decimal?)` declared before `M(long?)`** (C# surface only): an `int` argument binds `decimal?` where C#
   binds `long?`. Removed by #847.
-- **A natural key containing `/`** (HTTP): the create succeeds, but no route reaches the row, and the `Location` of key
-  `a/b` reaches a different row whose key is literally `a%2Fb`. Removed by P-12 and F-13.
+- **A natural key containing `/`** (HTTP): a root create answers `400` with a message instead of storing a row whose
+  `Location` no route can read back, because ASP.NET leaves `%2F` encoded in a route value. That 400 is the permanent
+  shape for a root create. Every other key is `Uri.EscapeDataString`-escaped in its `Location` and reads back. An entity
+  created inside a parent action, or a key set by an action `assign`, still takes the module's own semantics: the row is
+  stored and its detail route cannot read a `/` key back (removed by F-13).
 - **Optional and defaulted properties in a create body** (HTTP): they are ignored, because the create DTO carries the
   required scalars only; the simulator accepts them (P-11). A wrong JSON type, or an unknown enum string for a required
   enum, answers `400` with an empty body (P-14).

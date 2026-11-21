@@ -1698,9 +1698,8 @@ public class PackOracleTests {
 
     /// <summary>P-12a (#687 row P-12): a created row's <c>Location</c> carries its natural key as one escaped path
     /// segment, so a key with a space, a non-ASCII letter, <c>?</c>, <c>#</c>, <c>%</c> or a newline answers 201 and its
-    /// Location reads the same row back. A key with a <c>/</c> gets the escaped Location too; ASP.NET does not turn
-    /// <c>%2F</c> back into <c>/</c> in a route value, so that route cannot be read back (recorded in the PR, no fix
-    /// here: the escaped text is still the right Location).</summary>
+    /// Location reads the same row back. A key containing <c>/</c> is refused at create instead (#592): ASP.NET does
+    /// not turn <c>%2F</c> back into <c>/</c> in a route value, so no escaped Location could read it back.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
@@ -1708,18 +1707,43 @@ public class PackOracleTests {
         _ = cancellationToken;
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
 
-        foreach (var key in new[] { "a b", "a b@d", "ä", "a?b#c", "a%2Fb", "a\nb", "a/b", "a b/c@d" }) {
+        foreach (var key in new[] { "a b", "a b@d", "ä", "a?b#c", "a%2Fb", "a\nb" }) {
             using var created = await PostJsonAsync(oracle, "/api/customers", "Email", key);
             await Assert.That((int)created.StatusCode).IsEqualTo(201).Because($"POST {JsonSerializer.Serialize(key)}");
             var location = created.Headers.Location?.OriginalString;
             await Assert.That(location).IsEqualTo("/api/customers/" + Uri.EscapeDataString(key)).Because(JsonSerializer.Serialize(key));
-            if (key.Contains('/'))
-                continue;
             using var read = await oracle.Client.GetAsync(new Uri(location!, UriKind.Relative));
             await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK).Because($"GET {location}");
             using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
             await Assert.That(row.RootElement.GetProperty("email").GetString()).IsEqualTo(key);
         }
+    }
+
+    /// <summary>#592: a natural key containing <c>/</c> cannot be one route segment (ASP.NET leaves <c>%2F</c> encoded in
+    /// the route value), so the create answers 400 with a message BEFORE the row is saved, never a 201 whose Location
+    /// reaches nothing. Every other key still gets its escaped Location and reads back.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task NaturalKeyContainingSlash_Is400BeforeTheRowIsSaved(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+
+        foreach (var key in new[] { "a/b", "a b/c@d" }) {
+            using var created = await PostJsonAsync(oracle, "/api/customers", "Email", key);
+            await Assert.That((int)created.StatusCode).IsEqualTo(400).Because(JsonSerializer.Serialize(key));
+            await Assert.That(created.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+            using var problem = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Bad Request");
+            await Assert.That(problem.RootElement.GetProperty("detail").GetString())
+                .Contains("the natural key 'Email' contains '/', which no route can read back");
+        }
+
+        using var list = await oracle.Client.GetAsync("/api/customers");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var listed = await list.Content.ReadAsStringAsync();
+        await Assert.That(listed).DoesNotContain("\"a/b\"");
+        await Assert.That(listed).DoesNotContain("a b/c@d");
     }
 
     /// <summary>P-12a regression guard: a key that needs no escaping gets the same <c>Location</c> as before, a Number

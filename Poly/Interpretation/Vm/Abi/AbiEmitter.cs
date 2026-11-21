@@ -1129,7 +1129,10 @@ public static partial class AbiEmitter {
             var rightArm = DecodeIeeeWordArm(rightRead, n.RightHandValue, ctx);
             Expression right = rightArm.Type == underlying || rightArm.Type == tmp.Type
                 ? rightArm
-                : Convert(rightArm, underlying);
+                // A Boolean or a CLR enum is not a number: the word's own representation decodes it (#907).
+                : rightArm.Type == typeof(long) && IsWordDecoded(underlying)
+                    ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
+                    : Convert(rightArm, underlying);
             return Block(
                 leftCompiled.Code,
                 Assign(tmp, stored),
@@ -1165,6 +1168,10 @@ public static partial class AbiEmitter {
             // A temporal arm is its word, not a number: decode it, do not convert it.
             Expression right = rightArm.Type == underlying || rightArm.Type == leftVal.Type
                 ? rightArm
+                // A Boolean or a CLR enum is not a number: Convert(long, …) has no coercion for a
+                // Boolean and re-types an enum (#907), so the word's own representation decodes it.
+                : rightArm.Type == typeof(long) && IsWordDecoded(underlying)
+                    ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
                 : rightArm.Type == typeof(long)
                     && LocalType.Of(underlying) is LocalType.TemporalLocal { IsWord: true }
                     ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
@@ -1195,6 +1202,12 @@ public static partial class AbiEmitter {
                 whenLeft,
                 rightVal));
     }
+
+    /// <summary>A coalesce arm whose frame is a word and whose CLR type is not a number: a
+    /// <c>bool</c> or a CLR enum. Its word is decoded by its own representation, never converted
+    /// numerically (#907).</summary>
+    private static bool IsWordDecoded(Type underlying) =>
+        underlying == typeof(bool) || underlying.IsEnum;
 
     private static Expression UnboxIfHeapNullable(Context ctx, Node node, Expression handle) {
         var clr = ctx.ClrTypeOf(node);

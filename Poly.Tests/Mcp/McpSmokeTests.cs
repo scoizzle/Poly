@@ -2981,13 +2981,18 @@ E: entity {{
     [Test]
     public async Task ApplyDsl_RecursiveInvoke_ExceedsDepth_FailsLoud() {
         var (sessionId, _) = McpTestTools.Store.Create("Test");
+        // #535: an unconditional self-invoke is refused at analysis (DMEFF021), so the depth guard
+        // covers the cycle analysis admits — one behind a guard that never fails at run time.
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Loop: entity {
               Status: Text
+              N: Number default(0)
               Draft: stage {
                 Bounce: action {
-                  invoke Bounce
+                  if (N >= 0) {
+                    invoke Bounce
+                  }
                 }
               }
             }
@@ -2995,7 +3000,7 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
 
         var create = McpTestTools.Runtime.CreateInstance(sessionId, "Loop",
-            """{"Status":"x"}""");
+            """{"Status":"x","N":0}""");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));

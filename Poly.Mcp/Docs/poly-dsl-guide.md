@@ -737,6 +737,12 @@ inside the stage. A `require` that proves a property present (`Note is not null`
 copies of that optional property into a required one (DMEFF014) in the stage's actions; an action
 that can assign null to it is DMEFF015.
 
+The invariant is enforced on the state after an action as well as before it: the lowered action
+re-checks its stage's `require` before returning success, so an action that would falsify the
+requirement fails with a `Policy` failure and its writes roll back. A write inside its
+declared range is invisible to Analyze, so this check — not a diagnostic — is what catches it. An
+action that transitions away is judged by the stage it lands in.
+
 <!-- poly-verify: fragment:entity wrapper:entity-stage-require -->
 ```poly
 HasNote: policy { Note is not null }

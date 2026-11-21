@@ -264,6 +264,34 @@ public class DbContextGeneratorTests {
         await Assert.That(typeArg.States(typeof(int))).IsTrue();
     }
 
+    /// <summary>#937: a DateTime column reads back as the instant it was written, so the generator configures a
+    /// two-expression converter on the required column and one with a null arm on the optional column. Neither a
+    /// Text column nor anything but a DateTime gets one, and the file names <c>DateTimeKind</c>'s namespace.</summary>
+    [Test]
+    public async Task DateTimeColumn_ConvertsToAndFromUtc() {
+        var domain = ParseDomain("""
+            domain T
+            uses temporal
+            Item: entity {
+              Name: Text
+              Stamp: DateTime
+              Maybe: DateTime optional
+            }
+            """);
+        var omc = OnModelCreating(domain);
+        var conversions = omc.FindInvocations("HasConversion");
+
+        await Assert.That(conversions.Count).IsEqualTo(2).Because("one per DateTime column, and none for the Text one");
+        await Assert.That(conversions.All(c => c.Arguments.Length == 2 && c.Arguments.All(a => a is Lambda))).IsTrue();
+        await Assert.That(conversions[0].Arguments[1]).IsTypeOf<Lambda>()
+            .Because("the required column reads back through SpecifyKind");
+        await Assert.That(((Lambda)conversions[0].Arguments[1]).Body is Conditional).IsFalse();
+        await Assert.That(((Lambda)conversions[1].Arguments[1]).Body is Conditional).IsTrue()
+            .Because("the optional column is DateTime?, so both expressions carry a null arm");
+        await Assert.That(GenerationAssertions.DbContextIr(domain).Usings).Contains("System")
+            .Because("the converter names DateTimeKind");
+    }
+
     [Test]
     public async Task DbContext_StoragePort_EmitsTryReserveAndKeyCodecKeys() {
         var domain = ParseDomain("""

@@ -430,8 +430,8 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(db).DoesNotContain("qty <= 0");
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        // Open max caps at the CLR type bound (long.MaxValue as double), never 0.
-        await Assert.That(prog).Contains("[Range(0.0, 9.223372036854776E+18)]");
+        // Open max caps at the CLR type bound (long.MaxValue, exactly), never 0.
+        await Assert.That(prog).Contains("[Range(typeof(long), \"0\", \"9223372036854775807\")]");
         await Assert.That(prog).DoesNotContain("[Range(0, 0)]");
     }
 

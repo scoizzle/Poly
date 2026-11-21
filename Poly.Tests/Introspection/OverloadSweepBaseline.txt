@@ -940,6 +940,7 @@
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
   Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
 ## poly guide Active: stage { #0
   errors: 0

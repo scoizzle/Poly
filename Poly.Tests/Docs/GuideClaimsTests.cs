@@ -154,8 +154,9 @@ public class GuideClaimsTests {
     /// The rows this slice knows about: the id, the one slice that deletes the row, the measured detail,
     /// and which resolution retires it. Each entry is a recorded contradiction, never a pass.
     /// <para>
-    /// c576 and c577 share one claim sentence — the guide's only statement about a stage <c>require</c>
-    /// being an invariant — so one M-02 reword retires both rows, and neither can outlive the sentence.
+    /// c577 is the remaining row for the guide's one stage-<c>require</c> invariant sentence: an action
+    /// that falsifies the requirement is still accepted. Its sibling c576 (the same requirement at create)
+    /// was retired by L-17's create check (#576) and its row deleted, as R6a requires.
     /// </para>
     /// </summary>
     private static readonly DriftRow[] KnownGuideDrift = [
@@ -167,12 +168,9 @@ public class GuideClaimsTests {
             "M-02 reword: the removal exemption goes, or a removal operation lands."),
         new("c492", "G-05", "accepted: 0 errors",
             "G-05 refuses `action when S` in analysis, at the action's own line; the section 10 row is then true."),
-        new("c576", "L-17", "accepted: created in Open with Cleared=true",
-            "L-17 refuses create in a stage whose require the initial values falsify. Shares c577's claim "
-            + "sentence, so one M-02 reword retires both rows."),
         new("c577", "V-10", "accepted: 0 errors; the clearing action succeeds; the following action is blocked",
             "V-10 refuses or post-checks an action that falsifies the stage require. Shares c576's claim "
-            + "sentence, so one M-02 reword retires both rows."),
+            + "sentence; c576's row is gone and this one outlives it."),
     ];
 
     /// <summary>The audit's answer: contradictions with no row, and rows with no contradiction.</summary>

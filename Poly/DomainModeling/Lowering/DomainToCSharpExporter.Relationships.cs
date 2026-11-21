@@ -10,11 +10,13 @@ public sealed partial class DomainToCSharpExporter {
     /// <summary>
     /// Inverse of a create-in to-one initializer: add an already-constructed child
     /// to this collection and register this entity's subscriptions on it. It touches <c>this</c> first (L-03c): the
-    /// peer it runs on may be an entity the action never touched otherwise.
+    /// peer it runs on may be an entity the action never touched otherwise. The child's paired to-one is set too
+    /// (#572): the collection holding the child and the child's own navigation are the two sides of one pair.
     /// </summary>
     private static void AddAttachNavMethod(
         Entity entity,
         Relationship rel,
+        Domain domain,
         List<SubscriptionInfo>? subscriberSubs,
         string fieldName,
         List<MethodDefinitionNode> methods) {
@@ -25,6 +27,52 @@ public sealed partial class DomainToCSharpExporter {
             new Invoke(
                 new Member(new Member(new ThisReference(), fieldName), "Add"),
                 [child])
+        };
+        var targetEntity = domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, rel.Target.TypeName, StringComparison.Ordinal));
+        var paired = targetEntity is null ? null : CreateInWiring.Inverse(entity, rel, targetEntity);
+        if (paired is not null && !CreateInWiring.IsCollection(paired)) {
+            // Through the child's own attach: the to-one's setter is private to the child's class,
+            // and Attach also registers the child's subscriptions (L-03c).
+            body.Add(new Invoke(
+                new Member(child, $"Attach{ToPascalCase(paired.Name)}"),
+                [new ThisReference()]));
+        }
+        if (subscriberSubs is { Count: > 0 }) {
+            foreach (var info in subscriberSubs
+                .Where(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))
+                .GroupBy(s => s.StageName)
+                .Select(g => g.First())) {
+                body.Add(new Invoke(
+                    new Member(child, SubscriberRegisterMethodName(info)),
+                    [new ThisReference()]));
+            }
+        }
+        methods.Add(new MethodDefinitionNode(
+            $"Attach{ToPascalCase(rel.Name)}",
+            new TypeReference("void"),
+            Parameters: [child],
+            Body: new Block(body),
+            AccessModifier: AccessModifier.Internal
+        ));
+    }
+
+    /// <summary>
+    /// The singular inverse of a collection navigation: <c>Attach{Nav}(child)</c> assigns the peer's
+    /// to-one navigation and registers this entity's subscriptions on the child. The collection form
+    /// above adds to the field; both are the wiring a factory calls for a supplied create argument
+    /// (#572, #587).
+    /// </summary>
+    private static void AddAttachSingularNavMethod(
+        Entity entity,
+        Relationship rel,
+        List<SubscriptionInfo>? subscriberSubs,
+        List<MethodDefinitionNode> methods) {
+        var targetType = new NamedTypeReference(rel.Target.TypeName);
+        var child = new Parameter("child", targetType);
+        var body = new List<Node> {
+            TouchThis(),
+            new Assignment(new Member(new ThisReference(), ToPascalCase(rel.Name)), child)
         };
         if (subscriberSubs is { Count: > 0 }) {
             foreach (var info in subscriberSubs
@@ -126,7 +174,7 @@ public sealed partial class DomainToCSharpExporter {
                 // on this entity does not get a factory (Order.CreateCustomer).
                 if (EffectHelpers.CreatesIn(entity, rel.Name))
                     AddCreateNavMethod(entity, rel, domain, subscriberSubs, fieldName, methods, metadata);
-                AddAttachNavMethod(entity, rel, subscriberSubs, fieldName, methods);
+                AddAttachNavMethod(entity, rel, domain, subscriberSubs, fieldName, methods);
             }
             else {
                 // Singular nav: property with private setter (constructor param).
@@ -135,6 +183,7 @@ public sealed partial class DomainToCSharpExporter {
                 // no non-nullable-uninitialized warnings (CS8618).
                 if (EffectHelpers.CreatesIn(entity, rel.Name))
                     AddCreateSingularNavMethod(entity, rel, domain, subscriberSubs, methods, metadata);
+                AddAttachSingularNavMethod(entity, rel, subscriberSubs, methods);
                 props.Add(new PropertyDefinitionNode(
                     pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),

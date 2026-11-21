@@ -24,6 +24,11 @@ internal class Folio : Poly.Runtime.IActionScoped
     public decimal Balance { get; private set; }
     public Reservation? Reservation { get; private set; }
     public FolioStage CurrentStage { get; private set; }
+    internal void AttachReservation(Reservation child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Reservation = child;
+    }
     internal DomainResult PostRoomNight(decimal amount)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

@@ -84,6 +84,7 @@ internal class Guest : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._events.Add(child);
+        child.AttachGuest(this);
         child.RegisterGuestEventsReleasedSubscriber(this);
     }
     internal DomainResult<Reservation> CreateReservations(long? partySize = default, long? nights = default, decimal? nightlyRate = default, long? maxOccupancy = default, DateOnly? checkInDate = default, DateOnly? checkOutDate = default, Folio? folio = default, Room? room = default)
@@ -124,6 +125,7 @@ internal class Guest : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._reservations.Add(child);
+        child.AttachGuest(this);
         child.RegisterGuestReservationsDepartedSubscriber(this);
     }
     internal DomainResult<Reservation> BookStay(Room room, long party, long nights, DateOnly arrive, DateOnly depart)
@@ -383,6 +385,28 @@ internal class Guest : Poly.Runtime.IActionScoped
         var created = new Guest(__name, __email, __phone, __stayCount, __nightCount, __eventCount, events, reservations);
         Poly.Runtime.ActionScope.Create(created, "Guest");
         created.InitializeSubscriptions();
+        if (events != null)
+        {
+            foreach (var __child in events)
+            {
+                if (__child.Guest != null && __child.Guest != created)
+                {
+                    return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'events': the child's 'guest' is already set to another owner.", "Guest.events"));
+                }
+                __child.AttachGuest(created);
+            }
+        }
+        if (reservations != null)
+        {
+            foreach (var __child in reservations)
+            {
+                if (__child.Guest != null && __child.Guest != created)
+                {
+                    return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'reservations': the child's 'guest' is already set to another owner.", "Guest.reservations"));
+                }
+                __child.AttachGuest(created);
+            }
+        }
         db.Record("Guest", "Email", __email);
         return DomainResult<Guest>.Success(created);
     }

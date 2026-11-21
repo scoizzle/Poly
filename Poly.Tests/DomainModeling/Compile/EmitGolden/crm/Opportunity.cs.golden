@@ -58,6 +58,16 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         get => this._quotes;
     }
     public OpportunityStage CurrentStage { get; private set; }
+    internal void AttachAccount(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Account = child;
+    }
+    internal void AttachContact(Contact child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Contact = child;
+    }
     internal DomainResult<Activity> CreateActivities(string? subject = default, DateOnly? dueOn = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -96,6 +106,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._activities.Add(child);
+        child.AttachOpportunity(this);
     }
     internal DomainResult<Line> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
@@ -135,6 +146,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
+        child.AttachOpportunity(this);
     }
     internal DomainResult<Quote> CreateQuotes(string? title = default, decimal? amount = default)
     {
@@ -174,6 +186,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._quotes.Add(child);
+        child.AttachOpportunity(this);
     }
     internal DomainResult CompleteOpenWork()
     {
@@ -724,6 +737,39 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         if (account != null)
         {
             account.AttachOpportunities(created);
+        }
+        if (activities != null)
+        {
+            foreach (var __child in activities)
+            {
+                if (__child.Opportunity != null && __child.Opportunity != created)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'activities': the child's 'opportunity' is already set to another owner.", "Opportunity.activities"));
+                }
+                __child.AttachOpportunity(created);
+            }
+        }
+        if (lines != null)
+        {
+            foreach (var __child in lines)
+            {
+                if (__child.Opportunity != null && __child.Opportunity != created)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'lines': the child's 'opportunity' is already set to another owner.", "Opportunity.lines"));
+                }
+                __child.AttachOpportunity(created);
+            }
+        }
+        if (quotes != null)
+        {
+            foreach (var __child in quotes)
+            {
+                if (__child.Opportunity != null && __child.Opportunity != created)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'quotes': the child's 'opportunity' is already set to another owner.", "Opportunity.quotes"));
+                }
+                __child.AttachOpportunity(created);
+            }
         }
         return DomainResult<Opportunity>.Success(created);
     }

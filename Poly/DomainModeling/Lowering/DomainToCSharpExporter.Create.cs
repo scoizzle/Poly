@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Syntactic = Poly.Ast.Nodes;
@@ -583,6 +584,60 @@ public sealed partial class DomainToCSharpExporter {
                     new Invoke(
                         new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
                         [createdLocal])
+                ])));
+        }
+
+        // A supplied collection argument wires the other side of the pair too (#572): the
+        // factory's collection field holding the children is only half of it. Each child's
+        // paired to-one (CreateInWiring.Inverse) is set through its own Attach; a child already
+        // bound to another owner is refused, never silently re-pointed, so the previous owner's
+        // collection cannot keep a child it no longer owns.
+        foreach (var collectionSlot in esm.CreateSlots.Where(s => s.Shape == CreateSlotShape.Collection)) {
+            var paramName = ToCamelCase(collectionSlot.Name);
+            // The signature parameter, not a same-named copy (the reference loop's reason).
+            var paramRef = createParams.FirstOrDefault(p =>
+                string.Equals(p.Name, paramName, StringComparison.Ordinal));
+            if (paramRef is null)
+                continue;
+            Entity? elementEntity = null;
+            if (lookup is not null
+                && lookup.Types.TryGetValue(collectionSlot.Type.TypeName, out var resolvedElement)
+                && resolvedElement is Entity re)
+                elementEntity = re;
+            else
+                elementEntity = domain.Types.OfType<Entity>()
+                    .FirstOrDefault(e => string.Equals(e.Name, collectionSlot.Type.TypeName, StringComparison.Ordinal));
+            var collectionNav = entity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, collectionSlot.Name, StringComparison.Ordinal));
+            if (elementEntity is null || collectionNav is null)
+                continue;
+
+            // Only a singular inverse is the factory's to set: a collection inverse is the other
+            // collection of a many-to-many, and each side is linked where the caller links it.
+            var childInverse = CreateInWiring.Inverse(entity, collectionNav, elementEntity);
+            if (childInverse is null || CreateInWiring.IsCollection(childInverse))
+                continue;
+
+            var child = new Variable("__child");
+            createSuccessNodes.Add(new IfStatement(
+                new NotEqual(paramRef, new Constant(null)),
+                new Block([
+                    new ForEachLoop(child, paramRef, new Block([
+                        new IfStatement(
+                            new Syntactic.And(
+                                new NotEqual(new Member(child, ToPascalCase(childInverse.Name)), new Constant(null)),
+                                new NotEqual(new Member(child, ToPascalCase(childInverse.Name)), createdLocal)),
+                            new Block([
+                                FailureLowering.Return(createResultType, new FailureLowering.Spec(
+                                    DomainFailureKind.Link,
+                                    new Constant(Relationship.InverseOwnerViolationMessage(
+                                        collectionNav.Name, childInverse.Name)),
+                                    $"{entity.Name}.{collectionNav.Name}"))
+                            ])),
+                        new Invoke(
+                            new Member(child, $"Attach{ToPascalCase(childInverse.Name)}"),
+                            [createdLocal])
+                    ]))
                 ])));
         }
 

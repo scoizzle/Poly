@@ -18,6 +18,11 @@ internal class OrderItem : Poly.Runtime.IActionScoped
     public string Sku { get; private set; } = default!;
     public long Qty { get; private set; }
     public Order? Order { get; private set; }
+    internal void AttachOrder(Order child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Order = child;
+    }
     internal static DomainResult<OrderItem> Create(string? sku = default, long? qty = default, Order? order = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

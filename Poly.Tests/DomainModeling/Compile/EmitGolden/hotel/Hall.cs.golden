@@ -41,10 +41,16 @@ internal class Hall : Poly.Runtime.IActionScoped
         get => this._sections;
     }
     public HallStage CurrentStage { get; private set; }
+    internal void AttachProperty(Property child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Property = child;
+    }
     internal void AttachSections(Section child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._sections.Add(child);
+        child.AttachHall(this);
     }
     internal DomainResult Occupy()
     {
@@ -343,6 +349,17 @@ internal class Hall : Poly.Runtime.IActionScoped
         if (property != null)
         {
             property.AttachHalls(created);
+        }
+        if (sections != null)
+        {
+            foreach (var __child in sections)
+            {
+                if (__child.Hall != null && __child.Hall != created)
+                {
+                    return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'sections': the child's 'hall' is already set to another owner.", "Hall.sections"));
+                }
+                __child.AttachHall(created);
+            }
         }
         return DomainResult<Hall>.Success(created);
     }

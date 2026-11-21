@@ -85,6 +85,21 @@ internal class Reservation : Poly.Runtime.IActionScoped
         this.Folio = folio;
         return DomainResult<Folio>.Success(folio);
     }
+    internal void AttachFolio(Folio child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Folio = child;
+    }
+    internal void AttachGuest(Guest child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Guest = child;
+    }
+    internal void AttachRoom(Room child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Room = child;
+    }
     internal DomainResult Confirm()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

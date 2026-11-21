@@ -58,6 +58,14 @@ public sealed record Relationship(
         $"Cannot add a second link on '{relationshipName}': the source already has a target.";
 
     /// <summary>
+    /// Message when a link would put a child into a collection whose paired to-one on the child is
+    /// already bound to a different owner. The link is refused instead of re-pointing the child,
+    /// which would leave the previous owner's collection holding a child it no longer owns (#572).
+    /// </summary>
+    public static string InverseOwnerViolationMessage(string relationshipName, string inverseName) =>
+        $"Cannot add a link on '{relationshipName}': the child's '{inverseName}' is already set to another owner.";
+
+    /// <summary>
     /// Message when Unlink would drop the last owner of an owned target.
     /// </summary>
     public static string UnlinkViolationMessage(string relationshipName) =>

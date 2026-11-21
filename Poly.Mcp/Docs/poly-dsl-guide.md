@@ -1074,7 +1074,8 @@ for items as item where item in Active
     invoke item.Mark()                       # fan-out, stage-filtered
 ```
 
-Nested invoke depth is limited (max 16); recursive cycles fail loud.
+Nested invoke depth is limited (max 16); recursive cycles fail loud on the simulator. The printed C#
+has no depth backstop, so a recursive `invoke` overflows the stack: do not write one.
 
 ### Require Gates
 

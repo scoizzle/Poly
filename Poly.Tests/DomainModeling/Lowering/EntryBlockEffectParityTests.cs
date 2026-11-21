@@ -36,6 +36,30 @@ public class EntryBlockEffectParityTests {
         await Assert.That(printed[0].GraphParity).Contains("#1 {Count=1}");
     }
 
+    // An entry `invoke` whose callee transitions runs the exit and the target entry after the landing,
+    // once, and both hosts end on the new stage (the shape the exit rule is protecting).
+    [Test]
+    public async Task EntryInvokeThatTransitions_GeneratedCSharp_AgreesWithTheSimulator() {
+        var scenario = ParityScenario.FromDsl("""
+            domain P3
+            Z: entity {
+              Hits: Number default(0)
+              A: stage { entry { assign Hits to Hits + 1  invoke Go } }
+              B: stage { }
+              Go: action { transition to B }
+            }
+            """, "EntryInvokeTransitionParity", recordGraph: true);
+
+        var (simulate, printed) = scenario.Run(side => side.Create("Z"));
+
+        await Assert.That(ParityScenario.Differences(simulate, printed)).IsEmpty();
+        await Assert.That(simulate[0].Success).IsTrue();
+        await Assert.That(simulate[0].GraphParity).Contains("CurrentStage=\"B\"");
+        await Assert.That(simulate[0].GraphParity).Contains("Hits=1");
+        await Assert.That(printed[0].GraphParity).Contains("CurrentStage=\"B\"");
+        await Assert.That(printed[0].GraphParity).Contains("Hits=1");
+    }
+
     // A landing stage's entry `for … invoke` runs the fan-out on both hosts, so the child is touched once.
     [Test]
     public async Task EntryForInvoke_GeneratedCSharp_AgreesWithTheSimulator() {

@@ -69,10 +69,6 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Confirm' requires stage 'Pending' on entity 'Enrollment'.", "Enrollment.Confirm", "Pending"));
         }
-        if (this.Section == null)
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Confirm' requires a linked 'section' on entity 'Enrollment'.", "Enrollment.section"));
-        }
         if (this.SectionFull())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'SectionFull'.", "Enrollment.Confirm", "SectionFull"));

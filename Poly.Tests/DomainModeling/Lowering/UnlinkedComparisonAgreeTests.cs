@@ -22,7 +22,7 @@ public class UnlinkedComparisonAgreeTests {
         """;
 
     [Test]
-    public async Task UnlinkedAdvisorComparisons_AreFalse_OnSimulateAndPrintedCsharp() {
+    public async Task UnlinkedAdvisorComparisons_AnswerTheAbsentRule_OnSimulateAndPrintedCsharp() {
         var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Shop
             Advisor: entity {
@@ -53,22 +53,26 @@ public class UnlinkedComparisonAgreeTests {
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Customer", ("name", "Pat"), ("age", 20L));
 
-        // Every value-hop operator guards the unlinked advisor, so the comparison
-        // is false; `not` over it is true.
-        foreach (var policyName in new[] {
-            "YoungerThanAdvisor", "AtMostAdvisor", "OlderThanAdvisor", "AtLeastAdvisor",
-            "AdvisorUnderThirty", "NamedPat", "NotPat", "SameName", "ArithmeticYounger"
-        }) {
+        // #936: a read through the unlinked advisor is absent, and the guide's optional-value rule decides
+        // every operator. An ordering and `==` are false, `!=` is true, and `not` of a false comparison is true.
+        var expected = new Dictionary<string, bool> {
+            ["YoungerThanAdvisor"] = false,
+            ["AtMostAdvisor"] = false,
+            ["OlderThanAdvisor"] = false,
+            ["AtLeastAdvisor"] = false,
+            ["AdvisorUnderThirty"] = false,
+            ["NamedPat"] = false,
+            ["NotPat"] = true,
+            ["SameName"] = false,
+            ["ArithmeticYounger"] = false,
+            ["NotYounger"] = true,
+        };
+        foreach (var (policyName, answer) in expected) {
             var sim = exec.EvaluatePolicy(customer, (customerE.Policies.First(p => p.Name == policyName)).Name);
             var print = (bool)printed.GetType().GetMethod(policyName, PrintedMembers.Any)!.Invoke(printed, null)!;
-            await Assert.That(sim).IsFalse().Because($"simulate {policyName}");
-            await Assert.That(print).IsEqualTo(sim).Because($"print {policyName}");
+            await Assert.That(sim).IsEqualTo(answer).Because($"simulate {policyName}");
+            await Assert.That(print).IsEqualTo(answer).Because($"print {policyName}");
         }
-
-        var notSim = exec.EvaluatePolicy(customer, (customerE.Policies.First(p => p.Name == "NotYounger")).Name);
-        var notPrint = (bool)printed.GetType().GetMethod("NotYounger", PrintedMembers.Any)!.Invoke(printed, null)!;
-        await Assert.That(notSim).IsTrue();
-        await Assert.That(notPrint).IsTrue();
     }
 
     [Test]
@@ -186,7 +190,7 @@ public class UnlinkedComparisonAgreeTests {
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
         var source = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var policyLine = source.Split('\n').First(l => l.Contains("bool YoungerThanBoth()"));
-        await Assert.That(policyLine.Split("this.Advisor != null").Length - 1).IsEqualTo(1);
+        await Assert.That(policyLine.Split("this.Advisor != null").Length - 1).IsEqualTo(1).Because(policyLine);
 
         var advisor = exec.Create("Advisor", new Dictionary<string, object?> { ["Age"] = 25L }).Instance!;
         var customer = exec.Create("Customer", new Dictionary<string, object?> { ["Age"] = 20L }).Instance!;
@@ -204,10 +208,11 @@ public class UnlinkedComparisonAgreeTests {
     }
 
     [Test]
-    [Arguments("Ready is (not advisor Active)")]
-    [Arguments("Ready is (advisor Active and Ready)")]
-    [Arguments("Ready is (advisor Active or Ready)")]
-    public async Task HopInsideLogicalOperand_UnlinkedIsFalse_OnSimulateAndPrintedCsharp(string condition) {
+    [Arguments("Ready is (not advisor Active)", true)]
+    [Arguments("Ready is (advisor Active and Ready)", false)]
+    [Arguments("Ready is (advisor Active or Ready)", true)]
+    public async Task HopInsideLogicalOperand_AnswersTheAbsentRule_OnSimulateAndPrintedCsharp(
+        string condition, bool expected) {
         var (domain, analysis) = EvolvedDomain.FromDsl($$"""
             domain Shop
             Advisor: entity {
@@ -229,8 +234,10 @@ public class UnlinkedComparisonAgreeTests {
         var printed = ExportedCSharp.CreateEntity(asm, "Customer");
         var print = (bool)printed.GetType().GetMethod("P", PrintedMembers.Any)!.Invoke(printed, null)!;
 
-        await Assert.That(sim).IsFalse();
-        await Assert.That(print).IsFalse();
+        // A read through the unlinked advisor is absent, and an absent optional Boolean in a condition is
+        // not true (#936), so `not` over it is true and an `or` falls through to its other operand.
+        await Assert.That(sim).IsEqualTo(expected).Because($"simulate {condition}");
+        await Assert.That(print).IsEqualTo(expected).Because($"print {condition}");
     }
 
     // Advisor Age 25, Mentor Age 30, Customer Age 20. With both linked the value is

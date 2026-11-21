@@ -138,7 +138,7 @@ internal class Instructor : Poly.Runtime.IActionScoped
         db.Record("Instructor", "Email", __email);
         return DomainResult<Instructor>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

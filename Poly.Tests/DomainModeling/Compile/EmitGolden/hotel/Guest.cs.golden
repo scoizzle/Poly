@@ -397,7 +397,7 @@ internal class Guest : Poly.Runtime.IActionScoped
             target.RegisterGuestEventsReleasedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

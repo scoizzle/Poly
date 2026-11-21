@@ -76,6 +76,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
         modelBuilder.Entity<Product>(b => {
     b.ToTable("Products", t => {
     t.HasCheckConstraint("CK_listPrice", "listPrice >= 0 AND listPrice <= 100000000");
+    t.HasCheckConstraint("CK_sku_length", "length(CAST(sku AS BLOB)) >= 3 AND length(sku) <= 32");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
@@ -99,9 +100,9 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.HasKey("Id");
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Industry).HasColumnName("industry").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
-    b.Property(x => x.WonCount).HasColumnName("wonCount").HasColumnType("INTEGER");
-    b.Property(x => x.OpenPipeline).HasColumnName("openPipeline").HasColumnType("TEXT");
-    b.Property(x => x.ClosedTickets).HasColumnName("closedTickets").HasColumnType("INTEGER");
+    b.Property(x => x.WonCount).HasColumnName("wonCount").HasColumnType("INTEGER").HasDefaultValue(0L);
+    b.Property(x => x.OpenPipeline).HasColumnName("openPipeline").HasColumnType("TEXT").HasDefaultValue(0m);
+    b.Property(x => x.ClosedTickets).HasColumnName("closedTickets").HasColumnType("INTEGER").HasDefaultValue(0L);
     b.Metadata.FindNavigation(nameof(Account.Contacts))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     b.Metadata.FindNavigation(nameof(Account.Opportunities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     b.Metadata.FindNavigation(nameof(Account.Tickets))!.SetPropertyAccessMode(PropertyAccessMode.Field);
@@ -123,7 +124,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("TEXT");
     b.Property(x => x.CloseBy).HasColumnName("closeBy").HasColumnType("TEXT");
-    b.Property(x => x.Probability).HasColumnName("probability").HasColumnType("INTEGER");
+    b.Property(x => x.Probability).HasColumnName("probability").HasColumnType("INTEGER").HasDefaultValue(10L);
     b.Metadata.FindNavigation(nameof(Opportunity.Activities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     b.Metadata.FindNavigation(nameof(Opportunity.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     b.Metadata.FindNavigation(nameof(Opportunity.Quotes))!.SetPropertyAccessMode(PropertyAccessMode.Field);

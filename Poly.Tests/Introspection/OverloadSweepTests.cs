@@ -56,6 +56,14 @@ public class OverloadSweepTests {
         ("csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #5", "  errors: 2\n",
          "  errors: 1\n  System.Math.Abs(System.Int32)\n", ReceiverBindingWhy),
         ("poly guide // ✅ Correct — create is the final statement #0", "  errors: 1\n", "  errors: 0\n", S2bWhy),
+    ("poly guide domain Shop #0",
+     "  errors: 0\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)\n  System.Collections.IList.Clear()\n",
+     "  errors: 0\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n  System.Collections.IList.Clear()\n",
+     NullCollectionElementWhy),
+    ("poly guide Department: entity { #0",
+     "  errors: 0\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)\n  System.Collections.IList.Clear()\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n",
+     "  errors: 0\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)\n  System.Collections.IList.Clear()\n",
+     NullCollectionElementWhy),
         ("poly guide // ✅ Correct — create is the final statement #0",
          "  Poly.Runtime.DomainFailure.At(System.String)\n",
          "  Poly.Runtime.DomainFailure.At(System.String)\n  System.NotSupportedException.ctor(System.String)\n",
@@ -163,6 +171,15 @@ public class OverloadSweepTests {
     /// first occurrence can move. Each affected unit's identity set changes by exactly those lines; no call site rebinds
     /// to another overload of the same method.
     /// </summary>
+    /// <summary>
+    /// #564: a <c>many</c> create slot gains a null-element guard, <c>DomainResult&lt;T&gt;.Failure(DomainFailure.Required(...))</c>,
+    /// before the constructor. A document that already had a create guard now records the same identity earlier (its first
+    /// occurrence moves ahead of <c>Success</c>), and one that had none gains the pair. Nothing rebinds: the identities are
+    /// the single-overload <c>DomainFailure.Required(String,String,String)</c> and <c>DomainResult&lt;T&gt;.Failure</c>.
+    /// </summary>
+    private const string NullCollectionElementWhy = "#564: a `many` create slot's null-element guard adds (or moves earlier) the "
+        + "first DomainFailure.Required(...) and DomainResult<T>.Failure(...) sites of that document's create, no overload winner changes";
+
     private const string L04aWhy = "L-04a: a failure that was thrown is returned (ConstraintFailureException.ctor and ErrorMessage out; "
         + "DomainResult.Failure, Error, IsSuccess and Success in), no overload winner changes";
 

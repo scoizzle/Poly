@@ -269,6 +269,16 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __status, "' is not a valid member of TruckStatus for property 'Status'."), "Warehouse.Status"));
         }
+        if (trucks != null)
+        {
+            foreach (var __trucksElement in trucks)
+            {
+                if (__trucksElement == null)
+                {
+                    return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Required("'trucks' contains a null element.", "Warehouse.trucks"));
+                }
+            }
+        }
         if (Warehouse.ExistsWithCode(db, __code))
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Code' value is already used on another 'Warehouse'.", "Warehouse.Code"));

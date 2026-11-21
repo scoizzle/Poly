@@ -144,7 +144,11 @@ internal class Contact : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Contact");
         if (account != null)
         {
-            account.AttachContacts(created);
+            var __attach = account.AttachContacts(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Contact>.Failure(__attach.Error!);
+            }
         }
         db.Record("Contact", "Email", __email);
         return DomainResult<Contact>.Success(created);

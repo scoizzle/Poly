@@ -45,7 +45,7 @@ internal class Room : Poly.Runtime.IActionScoped
         get => this._stays;
     }
     public RoomStage CurrentStage { get; private set; }
-    internal void AttachStays(Reservation child)
+    internal DomainResult AttachStays(Reservation child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._stays.Add(child);
@@ -53,6 +53,7 @@ internal class Room : Poly.Runtime.IActionScoped
         child.RegisterRoomStaysDepartedSubscriber(this);
         child.RegisterRoomStaysCancelledSubscriber(this);
         child.RegisterRoomStaysNoShowSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult TakeOutOfService()
     {
@@ -290,7 +291,11 @@ internal class Room : Poly.Runtime.IActionScoped
         created.InitializeSubscriptions();
         if (property != null)
         {
-            property.AttachRooms(created);
+            var __attach = property.AttachRooms(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Room>.Failure(__attach.Error!);
+            }
         }
         db.Record("Room", "Number", __number);
         return DomainResult<Room>.Success(created);

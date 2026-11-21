@@ -119,7 +119,11 @@ internal class Delivery : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Delivery");
         if (truck != null)
         {
-            truck.AttachDeliveries(created);
+            var __attach = truck.AttachDeliveries(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Delivery>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Delivery>.Success(created);
     }

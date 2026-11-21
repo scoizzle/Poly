@@ -25,10 +25,11 @@ internal class Customer : Poly.Runtime.IActionScoped
     {
         get => this._orders;
     }
-    internal void AttachOrders(Order child)
+    internal DomainResult AttachOrders(Order child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._orders.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult ShipAll()
     {

@@ -41,10 +41,11 @@ internal class Hall : Poly.Runtime.IActionScoped
         get => this._sections;
     }
     public HallStage CurrentStage { get; private set; }
-    internal void AttachSections(Section child)
+    internal DomainResult AttachSections(Section child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._sections.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult Occupy()
     {
@@ -342,7 +343,11 @@ internal class Hall : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Hall");
         if (property != null)
         {
-            property.AttachHalls(created);
+            var __attach = property.AttachHalls(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Hall>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Hall>.Success(created);
     }

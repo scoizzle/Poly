@@ -192,7 +192,11 @@ internal class Section : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Section");
         if (hall != null)
         {
-            hall.AttachSections(created);
+            var __attach = hall.AttachSections(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Section>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Section>.Success(created);
     }

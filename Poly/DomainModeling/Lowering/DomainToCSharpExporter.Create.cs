@@ -111,6 +111,7 @@ public sealed partial class DomainToCSharpExporter {
         var bodyNodes = new List<Node>();
         var localResult = new Variable($"{ToCamelCase(targetTypeName)}Result");
         var local = new Variable(ToCamelCase(targetTypeName));
+        var locals = new List<Node> { localResult, local };
 
         bodyNodes.Add(new Assignment(localResult,
             new Invoke(
@@ -150,11 +151,18 @@ public sealed partial class DomainToCSharpExporter {
 
                 // A singular create-in links `this` into the target's unique inverse
                 // collection (e.g. local.AttachItems(this)); ambiguous/no inverse is a no-op.
+                // The attach returns a result (an owned part may name another owner, #585), so a
+                // refusal fails the create-in.
                 var inverse = FindInverseCollectionInfo(targetEntity, entity.Name).Unique;
                 if (inverse is not null) {
-                    bodyNodes.Add(new Invoke(
+                    var attach = new Variable("__attach");
+                    locals.Add(attach);
+                    bodyNodes.Add(new Assignment(attach, new Invoke(
                         new Member(local, $"Attach{ToPascalCase(inverse.Name)}"),
-                        [new ThisReference()]));
+                        [new ThisReference()])));
+                    bodyNodes.Add(new IfStatement(
+                        new Syntactic.Not(new Member(attach, "IsSuccess")),
+                        new Block([FailureLowering.Propagate(createResultType, attach)])));
                 }
             }
 
@@ -188,6 +196,7 @@ public sealed partial class DomainToCSharpExporter {
                 // as its own result with no caller prefix (the child's failure above is passed the same way).
                 // `__notify` is reserved, so a target property named Notify cannot collide with it.
                 notifyResult = new Variable("__notify");
+                locals.Add(notifyResult);
                 bodyNodes.Add(new Assignment(notifyResult, new Invoke(
                     new Member(local, $"Notify{initialStage}Subscribers"),
                     needsPrevious ? [new Constant(null)] : [])));
@@ -209,7 +218,7 @@ public sealed partial class DomainToCSharpExporter {
         AddScopedActionMethods(methods, methodName,
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             methodParams,
-            new Block(bodyNodes, notifyResult is null ? [localResult, local] : [localResult, local, notifyResult]),
+            new Block(bodyNodes, locals),
             AccessModifier.Internal);
     }
 
@@ -577,13 +586,20 @@ public sealed partial class DomainToCSharpExporter {
             if (inverse is null)
                 continue;
 
+            // The attach returns a result: an owned part that already names another owner is
+            // refused there (#585), so the factory returns that failure instead of a half-wired
+            // aggregate. The local lives in the guard's block: its first assignment types it.
+            var attach = new Variable("__attach");
             createSuccessNodes.Add(new IfStatement(
                 new NotEqual(paramRef, new Constant(null)),
                 new Block([
-                    new Invoke(
+                    new Assignment(attach, new Invoke(
                         new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
-                        [createdLocal])
-                ])));
+                        [createdLocal])),
+                    new IfStatement(
+                        new Syntactic.Not(new Member(attach, "IsSuccess")),
+                        new Block([FailureLowering.Propagate(createResultType, attach)]))
+                ], [attach])));
         }
 
         createSuccessNodes.Add(new Return(

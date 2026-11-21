@@ -223,7 +223,11 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "WaitOffer");
         if (section != null)
         {
-            section.AttachWaitlist(created);
+            var __attach = section.AttachWaitlist(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<WaitOffer>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<WaitOffer>.Success(created);
     }

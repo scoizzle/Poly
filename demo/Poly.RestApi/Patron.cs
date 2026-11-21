@@ -83,12 +83,13 @@ internal class Patron : Poly.Runtime.IActionScoped
         var loan = loanResult.Value;
         return DomainResult<Loan>.Success(loan);
     }
-    internal void AttachLoans(Loan child)
+    internal DomainResult AttachLoans(Loan child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._loans.Add(child);
         child.RegisterPatronLoansOverdueSubscriber(this);
         child.RegisterPatronLoansReturnedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Fine> CreateFines(long? amount = default, string? reason = default, DateTime? dateIssued = default, bool? paid = default)
     {
@@ -124,11 +125,12 @@ internal class Patron : Poly.Runtime.IActionScoped
         var fine = fineResult.Value;
         return DomainResult<Fine>.Success(fine);
     }
-    internal void AttachFines(Fine child)
+    internal DomainResult AttachFines(Fine child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
         child.RegisterPatronFinesResolvedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Loan> CheckOut(Book book)
     {

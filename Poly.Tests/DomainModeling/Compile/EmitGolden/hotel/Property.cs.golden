@@ -71,15 +71,17 @@ internal class Property : Poly.Runtime.IActionScoped
         var hall = hallResult.Value;
         return DomainResult<Hall>.Success(hall);
     }
-    internal void AttachHalls(Hall child)
+    internal DomainResult AttachHalls(Hall child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._halls.Add(child);
+        return DomainResult.Success();
     }
-    internal void AttachRooms(Room child)
+    internal DomainResult AttachRooms(Room child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._rooms.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult<Hall> AddHall(string name, long seats, long rate)
     {

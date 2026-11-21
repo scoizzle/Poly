@@ -674,7 +674,10 @@ public class PolicyGuardFactsTests {
             var guards = PolicyGuardFacts.Guards(action, open).Where(g => open.Policies.Contains(g.Policy)).Select(g => g.Policy.Name);
             var start = cs.IndexOf($"private DomainResult __BodyOf{name}()", StringComparison.Ordinal);
             var body = cs[start..cs.IndexOf("return DomainResult.Success();", start, StringComparison.Ordinal)];
-            var emitted = System.Text.RegularExpressions.Regex.Matches(body, @"if \(!this\.(\w+)\(\)\)").Select(m => m.Groups[1].Value);
+            // Distinct: the same policy is now checked before AND after the body (the stage-require
+            // post-check, #577/#518), and this row asserts the SET the three consumers agree on.
+            var emitted = System.Text.RegularExpressions.Regex.Matches(body, @"if \(!this\.(\w+)\(\)\)")
+                .Select(m => m.Groups[1].Value).Distinct(StringComparer.Ordinal);
             var presence = ProvableGuards.StagePresence(action, open).Order(StringComparer.Ordinal);
             rows.Add($"{name}: rule=[{string.Join(",", rule)}] guards=[{string.Join(",", guards)}] " +
                      $"csharp=[{string.Join(",", emitted)}] presence=[{string.Join(",", presence)}]");

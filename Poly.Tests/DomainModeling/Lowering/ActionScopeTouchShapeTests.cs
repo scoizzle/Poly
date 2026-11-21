@@ -417,7 +417,10 @@ public class ActionScopeTouchShapeTests {
         await Assert.That(string.Join("\n", problems)).IsEqualTo("");
         await Assert.That((goldens, demo)).IsEqualTo((48, 5));
         await Assert.That(string.Join(",", counts.Select(c => $"{c.Key}={c.Value}")))
-            .IsEqualTo("H1=193,H2=23,H3=29,H4=20,H5=18,H6=53"); // L-15a: the demo's `create in fines` adds Patron.CreateFines (#677 ruling B)
+            // L-15a: the demo's `create in fines` adds Patron.CreateFines (#677 ruling B).
+            // #572: every singular navigation now prints Attach{Nav} too, so a create argument
+            // can set the child's side of the pair (H3 29 → 76).
+            .IsEqualTo("H1=193,H2=23,H3=76,H4=20,H5=18,H6=53");
     }
 
     private static Node Strip(Node body) => body switch {

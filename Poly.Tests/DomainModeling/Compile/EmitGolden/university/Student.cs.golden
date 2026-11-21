@@ -80,6 +80,7 @@ internal class Student : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._enrollments.Add(child);
+        child.AttachStudent(this);
         child.RegisterStudentEnrollmentsDroppedSubscriber(this);
         child.RegisterStudentEnrollmentsCompletedSubscriber(this);
     }
@@ -442,6 +443,17 @@ internal class Student : Poly.Runtime.IActionScoped
         var created = new Student(__name, __email, __maxCredits, __openCredits, __holds, __completions, __lastGrade, enrollments);
         Poly.Runtime.ActionScope.Create(created, "Student");
         created.InitializeSubscriptions();
+        if (enrollments != null)
+        {
+            foreach (var __child in enrollments)
+            {
+                if (__child.Student != null && __child.Student != created)
+                {
+                    return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'enrollments': the child's 'student' is already set to another owner.", "Student.enrollments"));
+                }
+                __child.AttachStudent(created);
+            }
+        }
         db.Record("Student", "Email", __email);
         return DomainResult<Student>.Success(created);
     }

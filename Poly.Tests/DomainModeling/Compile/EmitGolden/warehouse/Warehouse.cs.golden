@@ -69,6 +69,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._trucks.Add(child);
+        child.AttachWarehouse(this);
     }
     internal DomainResult AdjustCapacity(long delta)
     {
@@ -275,6 +276,17 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         }
         var created = new Warehouse(__code, __name, __zip, __capacity, __safetyStock, __status, trucks);
         Poly.Runtime.ActionScope.Create(created, "Warehouse");
+        if (trucks != null)
+        {
+            foreach (var __child in trucks)
+            {
+                if (__child.Warehouse != null && __child.Warehouse != created)
+                {
+                    return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'trucks': the child's 'warehouse' is already set to another owner.", "Warehouse.trucks"));
+                }
+                __child.AttachWarehouse(created);
+            }
+        }
         db.Record("Warehouse", "Code", __code);
         return DomainResult<Warehouse>.Success(created);
     }

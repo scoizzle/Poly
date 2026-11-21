@@ -47,10 +47,21 @@ internal class Section : Poly.Runtime.IActionScoped
         get => this._waitlist;
     }
     public SectionStage CurrentStage { get; private set; }
+    internal void AttachCourse(Course child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Course = child;
+    }
+    internal void AttachInstructor(Instructor child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Instructor = child;
+    }
     internal void AttachEnrollments(Enrollment child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._enrollments.Add(child);
+        child.AttachSection(this);
         child.RegisterSectionEnrollmentsRegisteredSubscriber(this);
         child.RegisterSectionEnrollmentsDroppedSubscriber(this);
     }
@@ -92,6 +103,7 @@ internal class Section : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._waitlist.Add(child);
+        child.AttachSection(this);
         child.RegisterSectionWaitlistOfferedSubscriber(this);
         child.RegisterSectionWaitlistCancelledSubscriber(this);
     }
@@ -362,6 +374,28 @@ internal class Section : Poly.Runtime.IActionScoped
         var created = new Section(__cap, __seatsTaken, __offeringTerm, __course, instructor, enrollments, waitlist, __offeredSeats, __waitCleared);
         Poly.Runtime.ActionScope.Create(created, "Section");
         created.InitializeSubscriptions();
+        if (enrollments != null)
+        {
+            foreach (var __child in enrollments)
+            {
+                if (__child.Section != null && __child.Section != created)
+                {
+                    return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'enrollments': the child's 'section' is already set to another owner.", "Section.enrollments"));
+                }
+                __child.AttachSection(created);
+            }
+        }
+        if (waitlist != null)
+        {
+            foreach (var __child in waitlist)
+            {
+                if (__child.Section != null && __child.Section != created)
+                {
+                    return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'waitlist': the child's 'section' is already set to another owner.", "Section.waitlist"));
+                }
+                __child.AttachSection(created);
+            }
+        }
         return DomainResult<Section>.Success(created);
     }
     private void InitializeSubscriptions()

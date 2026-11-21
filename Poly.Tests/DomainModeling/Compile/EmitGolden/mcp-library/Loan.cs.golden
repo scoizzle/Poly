@@ -30,6 +30,16 @@ internal class Loan : Poly.Runtime.IActionScoped
     public Book? Book { get; private set; }
     public Patron? Patron { get; private set; }
     public LoanStage CurrentStage { get; private set; }
+    internal void AttachBook(Book child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Book = child;
+    }
+    internal void AttachPatron(Patron child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Patron = child;
+    }
     internal DomainResult MarkOverdue()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

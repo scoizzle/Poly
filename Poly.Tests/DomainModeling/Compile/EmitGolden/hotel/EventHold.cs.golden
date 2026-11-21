@@ -43,6 +43,21 @@ internal class EventHold : Poly.Runtime.IActionScoped
     public Hall? Hall { get; private set; }
     public Section? Section { get; private set; }
     public EventHoldStage CurrentStage { get; private set; }
+    internal void AttachGuest(Guest child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Guest = child;
+    }
+    internal void AttachHall(Hall child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Hall = child;
+    }
+    internal void AttachSection(Section child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Section = child;
+    }
     internal DomainResult Confirm()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

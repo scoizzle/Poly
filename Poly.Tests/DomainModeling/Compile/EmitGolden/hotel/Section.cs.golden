@@ -22,6 +22,11 @@ internal class Section : Poly.Runtime.IActionScoped
     public decimal DayRate { get; private set; }
     public bool Occupied { get; private set; }
     public Hall? Hall { get; private set; }
+    internal void AttachHall(Hall child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Hall = child;
+    }
     internal DomainResult Occupy()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

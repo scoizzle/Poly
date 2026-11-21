@@ -35,6 +35,11 @@ internal class Quote : Poly.Runtime.IActionScoped
         get => this._lines;
     }
     public QuoteStage CurrentStage { get; private set; }
+    internal void AttachOpportunity(Opportunity child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Opportunity = child;
+    }
     internal DomainResult<QuoteLine> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -73,6 +78,7 @@ internal class Quote : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
+        child.AttachQuote(this);
     }
     internal DomainResult<QuoteLine> AddLine(Product sku, long qty)
     {
@@ -274,6 +280,17 @@ internal class Quote : Poly.Runtime.IActionScoped
         if (opportunity != null)
         {
             opportunity.AttachQuotes(created);
+        }
+        if (lines != null)
+        {
+            foreach (var __child in lines)
+            {
+                if (__child.Quote != null && __child.Quote != created)
+                {
+                    return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'lines': the child's 'quote' is already set to another owner.", "Quote.lines"));
+                }
+                __child.AttachQuote(created);
+            }
         }
         return DomainResult<Quote>.Success(created);
     }

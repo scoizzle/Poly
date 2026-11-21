@@ -87,6 +87,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._loans.Add(child);
+        child.AttachBorrower(this);
         child.RegisterPatronLoansOverdueSubscriber(this);
         child.RegisterPatronLoansReturnedSubscriber(this);
     }
@@ -128,6 +129,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
+        child.AttachPatron(this);
         child.RegisterPatronFinesResolvedSubscriber(this);
     }
     internal DomainResult<Loan> CheckOut(Book book)
@@ -399,6 +401,28 @@ internal class Patron : Poly.Runtime.IActionScoped
         var created = new Patron(__name, __email, __memberSince, __status, __maxItems, __currentBorrowCount, __outstandingFines, loans, fines);
         Poly.Runtime.ActionScope.Create(created, "Patron");
         created.InitializeSubscriptions();
+        if (loans != null)
+        {
+            foreach (var __child in loans)
+            {
+                if (__child.Borrower != null && __child.Borrower != created)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'loans': the child's 'borrower' is already set to another owner.", "Patron.loans"));
+                }
+                __child.AttachBorrower(created);
+            }
+        }
+        if (fines != null)
+        {
+            foreach (var __child in fines)
+            {
+                if (__child.Patron != null && __child.Patron != created)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'fines': the child's 'patron' is already set to another owner.", "Patron.fines"));
+                }
+                __child.AttachPatron(created);
+            }
+        }
         db.Record("Patron", "Email", __email);
         return DomainResult<Patron>.Success(created);
     }

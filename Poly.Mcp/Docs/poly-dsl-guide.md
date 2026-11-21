@@ -737,6 +737,13 @@ inside the stage. A `require` that proves a property present (`Note is not null`
 copies of that optional property into a required one (DMEFF014) in the stage's actions; an action
 that can assign null to it is DMEFF015.
 
+The requirement holds at creation too: the factory sets the initial values, runs the initial stage's
+`entry`, then checks that stage's `require` policies. Values that falsify one are refused with a
+`Policy` failure — `'Create' blocked by policy 'NotCleared'. It would leave stage 'Open' invalid.`,
+on the element path `Entity.Create`, guarded by the policy — and nothing is created or registered.
+So an instance never starts in a stage its own values falsify (#576); a requirement the `entry`
+establishes is satisfied, and a stage the instance is not in is not the one `Create` is judged by.
+
 <!-- poly-verify: fragment:entity wrapper:entity-stage-require -->
 ```poly
 HasNote: policy { Note is not null }
@@ -1454,7 +1461,7 @@ is not a date property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n
 `default(Now + 7 Days)` (a date operation has no default lowering: use `default(Now)` or `default(Today)`); and a bare
 duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration one too long for a `TimeSpan` is rejected. An `optional` Date, DateTime, Time or Duration compared with a required value of the same type (`OptDue < Today`, `OptLen > 1 Hours`) is C#'s lifted comparison on every door: an absent operand makes `<`, `<=`, `>`, `>=` and `==` false and `!=` true.
 
-So a policy such as `OptDue >= Opened` used as an action's `require` is false while `OptDue` is absent, and the action is refused; `not (OptDue < Today)` is true while it is absent; and two optional values that are both absent are `==` but neither `<=` nor `>=`. To accept an absent value write `OptDue is null or OptDue >= Opened`; to demand a present one write `OptDue is not null and OptDue >= Opened`. (There is no entity-level constraint expression: a policy is the form that carries one, and a stage `require` is not checked when an instance is created, #576.)
+So a policy such as `OptDue >= Opened` used as an action's `require` is false while `OptDue` is absent, and the action is refused; `not (OptDue < Today)` is true while it is absent; and two optional values that are both absent are `==` but neither `<=` nor `>=`. To accept an absent value write `OptDue is null or OptDue >= Opened`; to demand a present one write `OptDue is not null and OptDue >= Opened`. (There is no entity-level constraint expression: a policy is the form that carries one, and a stage `require` is checked when the instance is created as well as by the actions that run in the stage.)
 
 <!-- poly-verify: valid -->
 ```poly
@@ -2274,7 +2281,6 @@ What the id does not cover, and what that costs:
   `unique` property (#934) fail to build. A domain named like a C# keyword is refused, and a domain named `DateTime`
   that declares a `DateTime` property does not compile (CS0118) (E-10).
 - **Assigning an absent optional Text**: the simulator stores `""`, the generated C# stores `null` (#929).
-- **A stage `require` at create**: it is not checked when an instance is created (#576, L-17).
 - **`assign Qty to Dec * 2`** (a Number target, a Decimal operand): analysis accepts it and the generated C# does not
   compile (T-07).
 - **A `Decimal` with a `range`** (SQLite host): it is stored as TEXT with a CHECK, so a valid create can fail: a `POST`

@@ -569,7 +569,7 @@ internal class Account : Poly.Runtime.IActionScoped
         created.InitializeSubscriptions();
         return DomainResult<Account>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Opportunities)
         {

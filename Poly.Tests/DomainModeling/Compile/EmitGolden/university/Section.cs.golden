@@ -379,7 +379,7 @@ internal class Section : Poly.Runtime.IActionScoped
         created.InitializeSubscriptions();
         return DomainResult<Section>.Success(created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Enrollments)
         {

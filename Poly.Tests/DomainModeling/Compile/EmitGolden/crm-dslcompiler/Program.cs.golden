@@ -387,6 +387,7 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.PlaceHq(dto.City, dto.Region);
@@ -418,6 +419,7 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.AddContact(dto.Name, dto.Email, db);
@@ -449,6 +451,7 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.LeadId);
@@ -485,6 +488,7 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.OpenDeal(dto.Title, dto.Amount);
@@ -516,6 +520,7 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.Archive();
@@ -547,6 +552,7 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.OpenTicket(dto.Subject);
@@ -578,6 +584,7 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.Restore();
@@ -617,6 +624,7 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
         return StatusProblem(404, "Not Found", "Contact not found for this Account");
     }
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Retire();
@@ -656,6 +664,7 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
         return StatusProblem(404, "Not Found", "Contact not found for this Account");
     }
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Reactivate();
@@ -699,6 +708,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.CompleteOpenWork();
@@ -742,6 +752,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Propose();
@@ -785,6 +796,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Lose();
@@ -828,6 +840,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Log(dto.Subject);
@@ -871,6 +884,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
@@ -919,6 +933,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.QuoteDeal();
@@ -962,6 +977,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Commit();
@@ -1005,6 +1021,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Win();
@@ -1048,6 +1065,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Capture(dto.Request);
@@ -1389,6 +1407,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
         return StatusProblem(404, "Not Found", "Ticket not found for this Account");
     }
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Work();
@@ -1428,6 +1447,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
         return StatusProblem(404, "Not Found", "Ticket not found for this Account");
     }
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Close();

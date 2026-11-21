@@ -199,6 +199,16 @@ public class CSharpWriterDefectTests {
         await Assert.That(Convert.ToInt64(Evaluate(program))).IsEqualTo(long.MinValue);
     }
 
+    /// <summary>#853: a <c>char</c> is an integral constant too, so <c>int.MaxValue + 'b'</c> overflows int
+    /// at compile time (CS0220) unless the printed sum is unchecked.</summary>
+    [Test]
+    public async Task ConstantIntegralArithmetic_WithACharOperand_PrintsInAnUncheckedContext() {
+        var program = new Add(new Constant(int.MaxValue), new Constant('b'));
+
+        await Assert.That(AstParity.Print(program)).Contains("unchecked(");
+        await Assert.That(Convert.ToInt64(Evaluate(program))).IsEqualTo(unchecked(int.MaxValue + 'b'));
+    }
+
     [Test]
     public async Task ConstantDivisionByZero_ThrowsAtRuntime() {
         var program = new Divide(new Constant(2), new Constant(0));

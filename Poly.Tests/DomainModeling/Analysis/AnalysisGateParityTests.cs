@@ -379,6 +379,7 @@ public class AnalysisGateParityTests {
         Part: entity {
           Due: Date
           Stamp: DateTime
+          Len: Duration
         }
         Item: entity {
           A: Number
@@ -452,15 +453,19 @@ public class AnalysisGateParityTests {
     [Arguments("optional DateTime - DateTime", "Go: action { assign Gap to OptStamp - Stamp }", null, "optional")]
     [Arguments("DateTime - optional DateTime", "Go: action { assign Gap to Stamp - OptStamp }", null, "optional")]
     [Arguments("optional Date + literal in a policy", "Go: policy { OptDue + 1 Days > Today }", null, "optional")]
-    // R5 (OQ-7): a Duration value is F-11's
-    [Arguments("DateTime + Duration value", "Go: action { assign OutT to Stamp + Len }", null, "F-11")]
-    [Arguments("DateTime - Duration value", "Go: action { assign OutT to Stamp - Len }", null, "F-11")]
-    [Arguments("Date + Duration value", "Go: action { assign OutD to Due + Len }", null, "F-11")]
-    [Arguments("Date - Duration value", "Go: action { assign OutD to Due - Len }", null, "F-11")]
-    [Arguments("DateTime + a difference", "Go: action { assign OutT to Stamp + (Stamp2 - Stamp) }", null, "F-11")]
-    [Arguments("DateTime parameter + Duration parameter", "Go: action (s: DateTime, l: Duration) { assign OutT to s + l }", """{"s":"2026-01-01T00:00:00Z","l":"01:00:00"}""", "F-11")]
-    [Arguments("Now + Duration value", "Go: action { assign OutT to Now + Len }", null, "F-11")]
-    [Arguments("Today + Duration value", "Go: action { assign OutD to Today + Len }", null, "F-11")]
+    // R5 (OQ-7): a Duration value runs on a DateTime left (#654: the Duration is a TimeSpan on the C# surface);
+    // a Date left has no TimeSpan addition, so it still fails closed naming the operand.
+    [Arguments("DateTime + Duration value", "Go: action { assign OutT to Stamp + Len }", null, "")]
+    [Arguments("DateTime - Duration value", "Go: action { assign OutT to Stamp - Len }", null, "")]
+    [Arguments("Date + Duration value", "Go: action { assign OutD to Due + Len }", null, "a Date plus or minus a Duration")]
+    [Arguments("Date - Duration value", "Go: action { assign OutD to Due - Len }", null, "a Date plus or minus a Duration")]
+    [Arguments("DateTime + a difference", "Go: action { assign OutT to Stamp + (Stamp2 - Stamp) }", null, "")]
+    [Arguments("DateTime parameter + Duration parameter", "Go: action (s: DateTime, l: Duration) { assign OutT to s + l }", """{"s":"2026-01-01T00:00:00Z","l":"01:00:00"}""", "")]
+    [Arguments("Now + Duration value", "Go: action { assign OutT to Now + Len }", null, "")]
+    [Arguments("Today + Duration value", "Go: action { assign OutD to Today + Len }", null, "a Date plus or minus a Duration")]
+    [Arguments("optional DateTime + Duration value", "Go: action { assign OutT to OptStamp + Len }", null, "optional")]
+    [Arguments("optional DateTime - Duration value", "Go: action { assign OutT to OptStamp - Len }", null, "optional")]
+    [Arguments("a Duration value read through a link", "Go: action { assign OutT to Stamp + part Len }", null, "Duration offset operand must be")]
     // R4 (owner ruling 2026-11-13): every Decimal day count is refused. Date + Decimal ran and silently dropped the
     // fraction; DateTime + Decimal and the non-property lefts failed on a host.
     [Arguments("Date + Decimal property", "Go: action { assign OutD to Due + D }", null, "Decimal day count")]
@@ -537,7 +542,7 @@ public class AnalysisGateParityTests {
     [Arguments("a required Duration through a to-one link", "Go: policy { advisor Len > 1 Hours }", "", false)]
     [Arguments("an optional Duration through a to-one link", "Go: policy { advisor Gap > 1 Hours }", "", true)]
     [Arguments("the duration on the left", "Go: policy { 1 Hours < advisor Gap }", "", true)]
-    [Arguments("a Date offset read through a link", "Go: action { assign OutD to advisor Due + 3 Days }", "F-11", false)]
+    [Arguments("a Date offset read through a link", "Go: action { assign OutD to advisor Due + 3 Days }", "a date offset by a Duration value is supported only on a date property", false)]
     public async Task OptionalDurationThroughALink_RunsLifted_OffsetStaysRefused(string row, string members, string refusal, bool expected) {
         var dsl = $$"""
             domain T

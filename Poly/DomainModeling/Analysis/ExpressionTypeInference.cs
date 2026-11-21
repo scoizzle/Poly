@@ -211,6 +211,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
         if (expr is Add or Subtract && IsDate(left) && IsNumeric(right))
             return left with { DomainName = null, Optional = absent };
+        // #654: DateTime ± a Duration value keeps the DateTime (the Duration is a TimeSpan on the C# surface).
+        if (expr is Add or Subtract && IsDate(left) && Family(right) is TypeFamily.Duration)
+            return left with { DomainName = null, Optional = absent };
         // A date difference of one granularity is a duration (the shape rule stays in WalkExpression: T-10b).
         if (expr is Subtract && IsDate(left) && IsDate(right) && !MixedDateGranularity(left, right))
             return Typeless(typeof(TimeSpan)).AsOptional(absent);

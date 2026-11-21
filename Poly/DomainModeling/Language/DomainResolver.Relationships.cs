@@ -34,9 +34,10 @@ public sealed partial class DomainResolver {
         // Bare identifier that isn't a primitive type, keyword, or reserved construct
         if (Current.Kind == TokenKind.Identifier && !IsPrimitiveType(Current.Kind)) {
             var text = Current.Name();
-            // Exclude known keywords that aren't primitives but shouldn't be nav targets
-            return !_unsupportedKeywords.Contains(text)
-                && text != "entity" && text != "stage" && text != "action"
+            // Exclude known keywords that aren't primitives but shouldn't be nav targets. An unsupported
+            // keyword (`Schedule`) is a target here: it may name a declared entity (#799), and the target check
+            // below keeps the keyword's own message when it does not.
+            return text != "entity" && text != "stage" && text != "action"
                 && text != "policy" && text != "relationship" && text != "when"
                 && text != "require" && text != "transition" && text != "assign"
                 && text != "from" && text != "to"
@@ -153,6 +154,7 @@ public sealed partial class DomainResolver {
                     nav.At.Line, nav.At.Col);
             }
             if (!_entityNames.Contains(nav.TargetTypeName)) {
+                CheckUnsupportedKeyword(nav.PropertyName, nav.TargetTypeName);
                 // A bare type name here is a nav target, but the author may have meant a
                 // value type or a value keyword (`Ref: Guid`). Name both possibilities.
                 var known = string.Join(", ", _primitiveTypeNames.OrderBy(n => n, StringComparer.Ordinal));

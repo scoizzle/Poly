@@ -145,6 +145,42 @@ public sealed class NavigationPrintCardinalityTests {
     }
 
     /// <summary>
+    /// #799: a bare navigation to a declared entity named like an unsupported keyword reads as a
+    /// navigation, so the bare text a code-built many-to-one prints reads back instead of being refused.
+    /// </summary>
+    [Test]
+    public async Task Read_BareNavigationToDeclaredReservedWordEntity_IsANavigation() {
+        const string dsl = """
+            domain BareReservedNav
+            Doctor: entity {
+              Name: Text
+              schedule: Schedule
+            }
+            Schedule: entity {
+              Day: Text
+            }
+            """;
+
+        var (result, _) = Generate(dsl);
+        await Assert.That(result.Succeeded).IsTrue().Because($"{result.FailureSummary}");
+        await Assert.That(Navigation(result.Root, "Doctor", "schedule").Target.TypeName).IsEqualTo("Schedule");
+    }
+
+    /// <summary>#799's other half: with no entity of that name, the unsupported keyword keeps its own message.</summary>
+    [Test]
+    public async Task Read_BareUnsupportedKeywordWithNoSuchEntity_KeepsTheKeywordMessage() {
+        const string dsl = """
+            domain BareKeyword
+            Doctor: entity {
+              Who: actor
+            }
+            """;
+
+        var thrown = Assert.Throws<FormatException>(() => new PolyDslParser(dsl).Parse());
+        await Assert.That(thrown.Message).Contains("'actor' is not supported in Phase 1a (used as type for 'Who')");
+    }
+
+    /// <summary>
     /// One pin: the first print carries the expected navigation line, the second print is
     /// the same text, and the navigation's cardinality is unchanged on both domains.
     /// </summary>

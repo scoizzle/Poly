@@ -793,7 +793,9 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
                 var guard = action.Policies.Select(p => p.Name).FirstOrDefault(n =>
                     string.Equals(n, leaf, StringComparison.Ordinal)
                     || string.Equals(n, "not_" + leaf, StringComparison.Ordinal)) ?? leaf;
-                return ([guard], null);
+                // The module's own failure text, not a second wording composed here: the generated C#
+                // says `'X' blocked by policy 'P'.`, so both hosts must (#622).
+                return ([guard], message);
             }
         }
         if (message.Contains("requires a linked", StringComparison.Ordinal))

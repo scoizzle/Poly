@@ -159,6 +159,18 @@ public static class TemporalMeaning {
                 return;
             }
 
+            // #652: a calendar count lowers to an int day/month/year count. Beyond int it was cast
+            // to a wrapped count in the simulator ('+ 4294967297 Years' added one year) and emitted
+            // as '(int)4294967297L' in C# (CS0221). No date holds that many days, months or years.
+            if (DurationForm.IsCalendarResolution(dateOp.Kind) && CalendarCountOverflow(dateOp) is { } spilled) {
+                context.ReportError(dateOp,
+                    $"date offset '{spilled} {DurationForm.Spell(dateOp.Kind)}' is out of range: a calendar " +
+                    $"offset lowers to an int day/month/year count, so it must fit in an int (at most {int.MaxValue}); " +
+                    "no date holds that many",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+                return;
+            }
+
             var clockTyped = dateOp.Date is Now
                 || dateName is "DateTime" or "Timestamp" or "Time" or "TimeOnly";
             if (DurationForm.IsClockResolution(dateOp.Kind) && !clockTyped) {
@@ -173,6 +185,24 @@ public static class TemporalMeaning {
                     $"(got '{Describe(dateName)}'); Time has no calendar date",
                     DomainModelDiagnosticCodes.SemanticTypeCompatibility);
             }
+        }
+
+        /// <summary>
+        /// #652: the literal count of a calendar offset whose LOWERED count exceeds int, else null.
+        /// A week lowers to <c>AddDays(count * 7)</c>, so the scaled count is the one that must fit.
+        /// </summary>
+        private static long? CalendarCountOverflow(DateOperation operation) {
+            var written = operation.Offset switch {
+                Literal { Value: long l } => l,
+                Literal { Value: int i } => i,
+                _ => (long?)null,
+            };
+            if (written is not { } count)
+                return null;
+            var lowered = operation.Kind is DateOperationKind.AddWeeks
+                ? (count > long.MaxValue / 7 || count < long.MinValue / 7 ? long.MaxValue : count * 7)
+                : count;
+            return lowered > int.MaxValue || lowered < int.MinValue ? count : null;
         }
     }
 

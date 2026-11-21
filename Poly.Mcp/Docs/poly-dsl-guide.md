@@ -1434,7 +1434,7 @@ Replenished: policy { DueDate + 14 Days > ExpiryDate }
 | `DateProp - DateProp` | The difference, a Duration (`Finished - Started`) | two Date or two DateTime properties or parameters; assign it to a Duration property or compare it with a Duration |
 | `assign Len to 30 Minutes`, `Len > 1 Hours` | A bare duration as a Duration value | assigned to a `Duration` property or compared with one, as a `default(...)` is; Months and Years have no fixed length and are rejected |
 
-Clock-resolution units (`Milliseconds`/`ms`, `Seconds`, `Minutes`, `Hours`) apply to `Now`, `DateTime`, and `Time`. Calendar units (`Days`, `Weeks`, `Months`, `Years`) apply to `Now`, `Today`, `Date`, and `DateTime`. `Date`/`Today` + hours (or finer) is rejected at analysis; `Time` + days (or coarser) is rejected.
+Clock-resolution units (`Milliseconds`/`ms`, `Seconds`, `Minutes`, `Hours`) apply to `Now`, `DateTime`, and `Time`. Calendar units (`Days`, `Weeks`, `Months`, `Years`) apply to `Now`, `Today`, `Date`, and `DateTime`. `Date`/`Today` + hours (or finer) is rejected at analysis; `Time` + days (or coarser) is rejected. A calendar count must fit in a 32-bit int (`Dt + 30 Years` is fine, `Dt + 4294967297 Years` is a `DMSEM003` error): the offset lowers to an int day/month/year count, and no date holds more.
 
 **Fail-closed (parse):** unknown units (`12 fortnights`) are a **parse error** — never a
 vacuous `DateOperation` and never a dropped unit. A bare `Number + Days` with no temporal left

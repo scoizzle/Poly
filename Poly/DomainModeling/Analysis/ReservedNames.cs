@@ -338,6 +338,19 @@ internal static class ReservedNames {
                 $"{entity.Name}Stage", ReservedKind.GeneratedReference,
                 "the stage enum generated for this entity");
 
+        // #890: a subscription handler for a peer reads that peer's enum from expression position
+        // (`BookStage.Out`), so a member named like ANY generated stage enum of the domain shadows it
+        // (CS1061). The action-parameter and peer-binder rules already cover the domain-wide set
+        // (StageEnumOwner); this closes the member scope over the same names, from the same function.
+        if (domain is not null)
+            foreach (var other in domain.Types.OfType<Entity>()) {
+                if (ReferenceEquals(other, entity) || !HasStages(other, domain))
+                    continue;
+                yield return new ReservedName(
+                    $"{other.Name}Stage", ReservedKind.GeneratedReference,
+                    $"the generated stage enum of entity '{other.Name}'");
+            }
+
         foreach (var nav in entity.Navigations) {
             // Relationships.cs:143,164,184.
             var pascalName = DomainTypeMapping.ToPascalCase(nav.Name);

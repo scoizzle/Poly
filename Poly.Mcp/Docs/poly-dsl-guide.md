@@ -805,8 +805,11 @@ rule, and that transition is redundant: the hop owns the landing, so the target'
 subscriber notify run once, and the effects after the transition in the exit block still run before
 the landing.
 
-`invoke`, `create`, `create in` and `for … invoke` are action-only (§9): each one in an exit block is
-rejected with `DMEFF018`, positioned on the effect. Move it into an action.
+An entry block admits `invoke`, `create`, `create in` and `for … invoke` (§9): the entry effects run
+where the instance is created or lands, and both hosts execute them. An exit block rejects the same
+effects with `DMEFF018`, positioned on the effect: the exit block inlines into every hop that leaves
+the stage, so a callee or a create could transition the instance behind the exit-block target check.
+Move exit-block work into an action.
 
 <!-- poly-verify: invalid:DMEFF017 -->
 ```poly
@@ -1106,7 +1109,8 @@ Nested invoke depth is limited (max 16); recursive cycles fail loud at run time,
 **unconditional** invoke cycle on one entity (`Ping: invoke Pong` + `Pong: invoke Ping`, or a
 self-invoke) is a `DMEFF021` analysis error, because every invocation of either action would hit
 that guard. A cycle behind a real guard is accepted (the guard may end it), and the depth guard
-remains the backstop.
+remains the backstop on the simulator. The printed C# has no depth backstop, so a guarded cycle that
+recurses deep overflows the stack (#1101).
 
 ### Require Gates
 
@@ -1819,13 +1823,13 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 |--------|---------------|
 | `transition to Stage` | action, entry, exit |
 | `assign Prop to expr` | action, entry, exit |
-| `create Type { ... }` | action |
-| `create in Rel { ... }` | action |
-| `invoke Action` / `invoke Rel.Action` | action (self; OneToOne source-only; fail-closed DMEFF007; depth-limited) |
-| `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
+| `create Type { ... }` | action, entry |
+| `create in Rel { ... }` | action, entry |
+| `invoke Action` / `invoke Rel.Action` | action, entry (self; OneToOne source-only; fail-closed DMEFF007; depth-limited) |
+| `for Rel as name [where policy \| where in stage] invoke name.Action` | action, entry (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). The action-only effects above are rejected in an exit block (`DMEFF018`). A `create` or `create in` initializer may not supply a property the new instance's entry chain may assign (`DMEFF019`; see Entry/Exit Effects).
+A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). An entry block admits the effects above; an exit block rejects `create`, `create in`, `invoke` and `for … invoke` (`DMEFF018`). A `create` or `create in` initializer may not supply a property the new instance's entry chain may assign (`DMEFF019`; see Entry/Exit Effects).
 
 **Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4).
 

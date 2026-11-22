@@ -86,7 +86,9 @@ internal sealed partial class EffectAnalyzer {
 
     /// <summary>
     /// DMEFF018: the guide's effect table makes <c>invoke</c>, <c>create</c>, <c>create in</c> and
-    /// <c>for … invoke</c> action-only, so each one anywhere in an exit block is rejected.
+    /// <c>for … invoke</c> action-only, so each one anywhere in an exit block is rejected. An entry
+    /// block admits them (#798): the effects run where the instance is created or lands, not in an
+    /// inlined hop that a callee could transition behind.
     /// </summary>
     private static void ValidateExitBlockEffects(AnalysisContext context, Entity entity) {
         foreach (var stage in entity.Stages)

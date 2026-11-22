@@ -94,25 +94,43 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Collection inverses on <paramref name="peerEntity"/> targeting
-    /// <paramref name="childEntityName"/> — same rule as runtime
-    /// <c>TryLinkInverseCollection</c>. <c>Unique</c> is set only when
-    /// <c>Count == 1</c>; otherwise null (skip Attach / no fail-closed).
+    /// The collection on <paramref name="peerEntity"/> that pairs with <paramref name="argument"/>: the one
+    /// its <c>via</c> names, or the one that declares <c>via</c> back. With neither declaration the pairing is
+    /// the only collection of the child's type, and on a self-relationship — where every navigation targets
+    /// the child's type — only when nothing else points back: two candidates are ambiguous and nothing pairs.
+    /// A target type is not a declaration, so the fallback never guesses past a second candidate (#584).
+    /// <c>Unique</c> is set only for a determined answer, and the lowered module this emits is the one body
+    /// both hosts run, so the interpreter and the printed C# pair a create argument the same way.
     /// </summary>
     internal static (Relationship? Unique, int Count) FindInverseCollectionInfo(
-        Entity peerEntity, string childEntityName) {
-        Relationship? found = null;
-        var count = 0;
-        foreach (var nav in peerEntity.Navigations) {
-            if (nav.Cardinality is not (RelationshipCardinality.OneToMany
-                or RelationshipCardinality.ManyToMany))
-                continue;
-            if (string.Equals(nav.Target.TypeName, childEntityName, StringComparison.Ordinal)) {
-                found = nav;
-                count++;
+        Entity peerEntity, string childEntityName, Relationship? argument = null) {
+        static bool IsCollection(Relationship nav) =>
+            nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
+
+        var pointingBack = peerEntity.Navigations
+            .Where(nav => string.Equals(nav.Target.TypeName, childEntityName, StringComparison.Ordinal))
+            .ToList();
+        var candidates = pointingBack
+            .Where(IsCollection)
+            .Where(nav => argument is null || !ReferenceEquals(nav, argument))
+            .ToList();
+
+        if (argument is not null) {
+            if (argument.Inverse is { Length: > 0 } declared) {
+                var named = candidates.FirstOrDefault(nav => string.Equals(nav.Name, declared, StringComparison.Ordinal));
+                return named is null ? (null, candidates.Count) : (named, 1);
             }
+            var declaring = candidates
+                .Where(nav => string.Equals(nav.Inverse, argument.Name, StringComparison.Ordinal))
+                .ToList();
+            if (declaring.Count == 1)
+                return (declaring[0], 1);
         }
-        return count == 1 ? (found, count) : (null, count);
+
+        var self = string.Equals(peerEntity.Name, childEntityName, StringComparison.Ordinal);
+        if (self && pointingBack.Count > 1)
+            return (null, candidates.Count);
+        return candidates.Count == 1 ? (candidates[0], 1) : (null, candidates.Count);
     }
 
     /// <summary>

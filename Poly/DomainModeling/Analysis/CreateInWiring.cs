@@ -56,10 +56,16 @@ internal static class CreateInWiring {
     public static Relationship? Inverse(Entity owner, Relationship nav, Entity peer) {
         Relationship? found = null;
         var count = 0;
+        // #584: on a self-relationship a type match is no evidence of a pair (`parent` and `children` both point
+        // back), so only a declared `via` on either side pairs; anything else leaves the argument unwired.
+        var self = string.Equals(owner.Name, peer.Name, StringComparison.Ordinal);
         foreach (var candidate in peer.Navigations) {
             if (ReferenceEquals(candidate, nav))
                 continue;
             if (!string.Equals(candidate.Target.TypeName, owner.Name, StringComparison.Ordinal))
+                continue;
+            if (self && !string.Equals(nav.Inverse, candidate.Name, StringComparison.Ordinal)
+                && !string.Equals(candidate.Inverse, nav.Name, StringComparison.Ordinal))
                 continue;
             var pairs = IsCollection(candidate)
                 ? FilledNavigation(peer, candidate, owner) is { } filled

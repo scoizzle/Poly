@@ -579,7 +579,7 @@ public class ParityTests {
             Account: entity {
               Name: Text
               parent: Account optional
-              children: many Account
+              children: many Account via parent
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
               }
@@ -593,8 +593,8 @@ public class ParityTests {
         await Assert.That(outcomes[0].State["parent"]).IsEqualTo("0");
         await Assert.That(outcomes[1].State["parent"]).IsEqualTo("1");
         await Assert.That(outcomes[1].State["children"]).IsEqualTo("0");
-        // The new parent must not point back at the root (a cycle); its inverse
-        // collection holds the root instead.
+        // The new parent must not point back at the root (a cycle); the declared
+        // pair puts the root in its collection instead.
         await Assert.That(outcomes[2].State["parent"]).IsEqualTo("0");
         await Assert.That(outcomes[2].State["children"]).IsEqualTo("1");
     }
@@ -644,6 +644,33 @@ public class ParityTests {
         await Assert.That(outcomes[9].State["Payroll"]).IsEqualTo("True");
         await Assert.That(outcomes[11].State["HasReports"]).IsEqualTo("False");
         await Assert.That(outcomes[12].State["Payroll"]).IsEqualTo("False");
+    }
+
+    /// <summary>
+    /// #584: the same shape with no declaration. `parent` and `children` are two candidate
+    /// navigations of one target type, so the pairing is ambiguous and nothing is wired —
+    /// the new parent is not silently handed a collection the caller never named.
+    /// </summary>
+    [Test]
+    public async Task Invoke_SelfRelCreateInParent_UndeclaredPairing_WiresNothing() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain SelfRel
+            Account: entity {
+              Name: Text
+              parent: Account optional
+              children: many Account
+              Active: stage {
+                AddParent: action { create in parent { Name: "x" } }
+              }
+            }
+            """, "ParitySelfRelCreateInParentUndeclared")
+            .AssertAgree(side => {
+                side.Create("Account", ("Name", "root"));
+                side.Invoke("AddParent");
+                side.UseLinked("parent");
+            });
+        await Assert.That(outcomes[1].State["parent"]).IsEqualTo("1");
+        await Assert.That(outcomes[2].State["children"]).IsEqualTo("0");
     }
 
     [Test]

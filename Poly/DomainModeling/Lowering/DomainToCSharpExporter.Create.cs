@@ -156,9 +156,9 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), pascalName),
                     local));
 
-                // A singular create-in links `this` into the target's unique inverse
-                // collection (e.g. local.AttachItems(this)); ambiguous/no inverse is a no-op.
-                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name).Unique;
+                // A singular create-in links `this` into the target's paired collection
+                // (e.g. local.AttachItems(this)); ambiguous/no pair is a no-op.
+                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name, rel).Unique;
                 if (inverse is not null) {
                     bodyNodes.Add(new Invoke(
                         new Member(local, $"Attach{ToPascalCase(inverse.Name)}"),

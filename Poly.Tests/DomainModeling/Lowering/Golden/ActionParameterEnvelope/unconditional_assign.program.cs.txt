@@ -54,6 +54,7 @@ app.MapPost("/api/books/{id}/restock", async (int id, RestockDto dto, TDbCtx db)
         var result = entity.Restock(dto.Amount);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -61,6 +62,10 @@ app.MapPost("/api/books/{id}/restock", async (int id, RestockDto dto, TDbCtx db)
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Book' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -80,6 +85,7 @@ app.MapPost("/api/books/{id}/rename", async (int id, RenameDto dto, TDbCtx db) =
         var result = entity.Rename(dto.Value);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -87,6 +93,10 @@ app.MapPost("/api/books/{id}/rename", async (int id, RenameDto dto, TDbCtx db) =
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Book' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -106,6 +116,7 @@ app.MapPost("/api/books/{id}/setcode", async (int id, SetCodeDto dto, TDbCtx db)
         var result = entity.SetCode(dto.Value);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -113,6 +124,10 @@ app.MapPost("/api/books/{id}/setcode", async (int id, SetCodeDto dto, TDbCtx db)
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Book' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {

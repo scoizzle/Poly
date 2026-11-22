@@ -54,6 +54,7 @@ app.MapPost("/api/books/{id}/shift", async (int id, ShiftDto dto, TDbCtx db) => 
         var result = entity.Shift(dto.P);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -61,6 +62,10 @@ app.MapPost("/api/books/{id}/shift", async (int id, ShiftDto dto, TDbCtx db) => 
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Book' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {

@@ -100,6 +100,7 @@ app.MapPost("/api/orders/{id}/addline", async (int id, AddLineDto dto, TDbCtx db
         var result = entity.AddLine(dto.Q);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -107,6 +108,10 @@ app.MapPost("/api/orders/{id}/addline", async (int id, AddLineDto dto, TDbCtx db
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Order' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {

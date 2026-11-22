@@ -22,6 +22,10 @@ namespace Poly.Packs.Product;
 /// for key structure, column metadata, and navigation classification.
 /// </summary>
 public sealed partial class DbContextGenerator {
+    /// <summary>The shadow column every stored entity's optimistic-concurrency token lives in. A storage concern, so
+    /// it is never a CLR member: the entity and its DTO's shape do not change (#626, #653).</summary>
+    internal const string VersionProperty = "Version";
+
     private readonly Domain _domain;
     private readonly List<Entity> _entities;
     private readonly string _contextName;
@@ -29,6 +33,7 @@ public sealed partial class DbContextGenerator {
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly IStorageSyntaxEmitter? _emitter;
     private readonly bool _implementsStoragePort;
+    private readonly string _versionProperty;
 
     public DbContextGenerator(Domain domain, StorageModel storageModel,
         IStorageSyntaxEmitter? emitter = null, bool implementsStoragePort = false) {
@@ -39,6 +44,7 @@ public sealed partial class DbContextGenerator {
         _contextName = $"{domain.Name}DbContext";
         _storageModel = storageModel ?? throw new ArgumentNullException(nameof(storageModel));
         _storageLookup = _storageModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _versionProperty = VersionPropertyName();
     }
 
     /// <summary>Generates the complete DbContext C# source via IR.</summary>
@@ -92,7 +98,7 @@ public sealed partial class DbContextGenerator {
             AccessModifier: AccessModifier.Protected
         );
 
-        var methods = new List<MethodDefinitionNode> { onModelCreatingMethod };
+        var methods = new List<MethodDefinitionNode> { onModelCreatingMethod, BumpVersionsMethod() };
         List<FieldDefinitionNode>? fields = null;
         List<Node>? interfaces = null;
         var usings = new List<string> { "Microsoft.EntityFrameworkCore" };
@@ -146,6 +152,61 @@ public sealed partial class DbContextGenerator {
     }
 
     // ── Helpers ────────────────────────────────────────────────
+
+    /// <summary>
+    /// <c>BumpVersions(entity)</c>: the optimistic-concurrency step before a modifying save (#626, #653). It detects the
+    /// changes first, because a snapshot-tracked property the action wrote is still reported <c>Unchanged</c> until
+    /// then; it bumps every modified row's token so its <c>UPDATE</c> carries the original token in <c>WHERE</c>; and it
+    /// bumps the route's own entity even when the action changed none of its columns, so two actions on one aggregate
+    /// serialise on that row instead of each reading the other's state. A row that lost the race updates nothing and EF
+    /// raises <c>DbUpdateConcurrencyException</c>, which the action route answers as 409. Never a retry here: a retry
+    /// would re-run the action's guards against the state it just changed.
+    /// </summary>
+    private MethodDefinitionNode BumpVersionsMethod() {
+        var entryParam = new Parameter("entry");
+        var entityParam = new Parameter("entity", TypeReference.To(typeof(object)));
+
+        // entry.Property("Version") is the non-generic PropertyEntry (ChangeTracker.Entries() hands out the
+        // non-generic EntityEntry), and its value is boxed: a read is an unboxing cast back to long. Built per use,
+        // so the writer never sees one node in two positions.
+        var bump = new Assignment(
+            new Member(
+                new Invoke(new Member(new Variable("entry"), "Property"), new Constant(_versionProperty)),
+                "CurrentValue"),
+            new Ast.Nodes.Add(
+                new TypeCast(
+                    new NullForgiving(new Member(
+                        new Invoke(new Member(new Variable("entry"), "Property"), new Constant(_versionProperty)),
+                        "OriginalValue")),
+                    TypeReference.To(typeof(long))),
+                new Constant(1L)));
+
+        var noToken = new Equal(
+            new Invoke(new Member(new Member(entryParam, "Metadata"), "FindProperty"), new Constant(_versionProperty)),
+            new Constant(null!));
+        var routeEntityUnchanged = new Ast.Nodes.And(
+            new Equal(new Member(entryParam, "Entity"), new Variable("entity")),
+            new Equal(new Member(entryParam, "State"), new Member(new TypeReference("EntityState"), "Unchanged")));
+        var bumpThisRow = new Ast.Nodes.Or(
+            new Equal(new Member(entryParam, "State"), new Member(new TypeReference("EntityState"), "Modified")),
+            routeEntityUnchanged);
+
+        return new MethodDefinitionNode(
+            "BumpVersions",
+            new TypeReference("void"),
+            Parameters: [entityParam],
+            Body: new Block([
+                new Invoke(new Member(new Member(new ThisReference(), "ChangeTracker"), "DetectChanges")),
+                new ForEachLoop(
+                    new Variable("entry"),
+                    new Invoke(new Member(new Member(new ThisReference(), "ChangeTracker"), "Entries")),
+                    new Block([
+                        new IfStatement(noToken, new Block(new ContinueStatement())),
+                        new IfStatement(bumpThisRow, new Block(bump)),
+                    ])),
+            ]),
+            AccessModifier: AccessModifier.Public);
+    }
 
     private static string Pluralize(string name) => Pluralizer.Pluralize(name);
 }

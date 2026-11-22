@@ -42,6 +42,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
 });
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Author).HasColumnName("author").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.ISBN).HasColumnName("isbn").IsRequired().HasMaxLength(17);
@@ -55,6 +56,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
 });
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.MemberSince).HasColumnName("memberSince").HasColumnType("TEXT");
@@ -70,6 +72,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Loans");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Status).HasColumnName("status").HasColumnType("TEXT");
     b.Property(x => x.CheckedOutAt).HasColumnName("checkedOutAt").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
     b.Property(x => x.DueDate).HasColumnName("dueDate").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
@@ -80,6 +83,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("Fines");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("INTEGER");
     b.Property(x => x.Reason).HasColumnName("reason").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.DateIssued).HasColumnName("dateIssued").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
@@ -89,6 +93,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.ToTable("PremiumPatrons");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.RewardPoints).HasColumnName("rewardPoints").HasColumnType("INTEGER");
@@ -99,6 +104,21 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
         modelBuilder.Entity<Loan>().HasOne(e => e.Book).WithMany().IsRequired().OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Loan>().HasOne(e => e.Borrower).WithMany(i => i.Loans).IsRequired().OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Fine>().HasOne(e => e.Patron).WithMany(i => i.Fines).IsRequired().OnDelete(DeleteBehavior.Restrict);
+    }
+    public void BumpVersions(object entity)
+    {
+        this.ChangeTracker.DetectChanges();
+        foreach (var entry in this.ChangeTracker.Entries())
+        {
+            if (entry.Metadata.FindProperty("Version") == null)
+            {
+                continue;
+            }
+            if (entry.State == EntityState.Modified || entry.Entity == entity && entry.State == EntityState.Unchanged)
+            {
+                entry.Property("Version").CurrentValue = (long)entry.Property("Version").OriginalValue! + 1L;
+            }
+        }
     }
     public bool Exists(string entity, string property, string value)
     {

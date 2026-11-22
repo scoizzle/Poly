@@ -67,8 +67,6 @@ public static class DomainParityExclusions {
             + "returned failure in place of the throw is L-05's done-when."),
         new(607, "L-25", "Both sides read a copy of the collection they iterate (#541), so growing it mid-loop is "
             + "legal on both and the module has no divergence to ratchet; whether it should be is L-25's done-when."),
-        new(611, "L-11", "Both sides throw NullReferenceException on the unset optional unique Text, so the "
-            + "module has no divergence to ratchet."),
         new(617, "L-05", "The sides agree and both roll the transition back since L-03c (AtomicityParityTests "
             + "proves the absolute state); the handler returns its range failure since L-04a (it threw before), "
             + "and L-05 owns the single Transition method."),
@@ -279,29 +277,6 @@ public static class DomainParityScenarios {
                 side.Create("Cart");
                 side.Invoke("Checkout");
             }, []),
-
-        new("optional-unique-text", 611, """
-            domain M
-            uses persistence
-
-            Thing: entity {
-              Name: Text length(2, 10)
-              Tag: Text unique optional
-            }
-            """, """
-            domain M
-            uses persistence
-
-            Thing: entity {
-              Name: Text length(2, 10)
-              Tag: Text unique optional
-            }
-            """,
-            side => {
-                side.Create("Thing", ("Name", "aa"));
-                side.Create("Thing", ("Name", "cc"), ("Tag", "t"));
-                side.Create("Thing", ("Name", "dd"), ("Tag", "t"));
-            }, ["NullReferenceException"]),
 
         new("unique-number", 493, """
             domain M

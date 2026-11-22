@@ -57,7 +57,7 @@ POST http://localhost:5201/api/patrons/user@test.com/checkOut
 Content-Type: application/json
 
 {
-    "BookId": "example-book-id"
+    "BookId": "example-isbn"
 }
 
 ### Action: Suspend

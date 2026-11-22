@@ -2558,8 +2558,6 @@ What the id does not cover, and what that costs:
   cannot be created over HTTP: saas `Account`, whose required `subscription` targets an entity with a shadow `id`, is
   one. The same holds when a required scalar of the entity is named `<Link>Id`, which clashes with the link's body
   member (P-11, P-12).
-- **An action whose entity argument has a numeric (shadow) key** answers `500` over HTTP: university `Student.Enroll`,
-  hotel `Guest.BookHall` and `Guest.BookSection`, logistics `Courier.Assign` (#940).
 - **An owned single part with no back-navigation** (`hq: owned Address optional`) is orphaned when its owner is deleted;
   owned parts reached by a collection or a back-navigation cascade. The behaviour is unchanged in this release (L-15).
 - **An owned part whose type declares no navigation back** (`orders: many owned Order` with no `Order.customer` on the

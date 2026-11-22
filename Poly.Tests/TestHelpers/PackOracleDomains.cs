@@ -992,6 +992,60 @@ public static class PackOracleDomains {
         """,
         "/api/slots");
 
+    /// <summary>P-11 (#940): an action's entity argument whose target has a Number (<c>long</c>), a Date
+    /// (<c>DateOnly</c>) or a Text key — every key kind a <c>string</c> member cannot carry as itself (for the two
+    /// value kinds, the member does not even compile against the column, CS0019). <c>Student</c> is the route subject (a
+    /// Text natural key) so the actions are reachable, and one assign reads the target through the argument. Stays out
+    /// of <see cref="All"/>.</summary>
+    public static PackOracleDomain ActionKeyArgument940 { get; } = new(
+        "ActionKeyArgument940",
+        """
+        domain Enroll
+        uses temporal
+        uses sqlite
+        uses http
+
+        Course: entity {
+          Seq: Number unique
+          Name: Text
+        }
+
+        Day: entity {
+          On: Date unique
+          Label: Text
+        }
+
+        Student: entity {
+          Email: Text unique
+          Joined: Text optional
+          Join: action (course: Course) { assign Joined to course Name }
+          Attend: action (day: Day) { }
+        }
+        """,
+        "/api/students");
+
+    /// <summary>P-11 (#940): an action's entity argument whose target has a shadow (<c>int</c>) key. A <c>string</c>
+    /// member reaches <c>FindAsync</c> with the wrong type, and every call answers 500. The route subject is a Text key
+    /// so the action is reachable; the shadow id is not (P-12), so only the 404 is pinned. Stays out of
+    /// <see cref="All"/>.</summary>
+    public static PackOracleDomain ActionShadowKeyArgument940 { get; } = new(
+        "ActionShadowKeyArgument940",
+        """
+        domain Enroll
+        uses sqlite
+        uses http
+
+        Member: entity {
+          Label: Text
+        }
+
+        Student: entity {
+          Email: Text unique
+          Pass: action (member: Member) { }
+        }
+        """,
+        "/api/students");
+
     /// <summary>E-10a (#924): an enum and an entity named like C# keywords. Stays out of <see cref="All"/>.</summary>
     public static PackOracleDomain KeywordNames924 { get; } = new(
         "KeywordNames924",

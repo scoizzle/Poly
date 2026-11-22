@@ -234,7 +234,7 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
     entity.InitializeSubscriptions();
     try
     {
-        var book = await db.Books.FirstOrDefaultAsync(e => e.ISBN == dto.BookId);
+        var book = (dto.BookId == null ? null : await db.Books.FirstOrDefaultAsync(e => e.ISBN == dto.BookId));
         if (book == null)
         {
             return StatusProblem(404, "Not Found", "Book not found");
@@ -638,5 +638,5 @@ internal record PremiumPatronDto
 
 internal record CheckOutDto
 {
-    public string BookId { get; init; } = default!;
+    public string? BookId { get; init; } = default!;
 }

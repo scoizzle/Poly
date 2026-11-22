@@ -616,7 +616,7 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
     entity.InitializeSubscriptions();
     try
     {
-        var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.LeadId);
+        var lead = (dto.LeadId == null ? null : await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.LeadId));
         if (lead == null)
         {
             return StatusProblem(404, "Not Found", "Lead not found");
@@ -1104,7 +1104,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     parentEntity.InitializeSubscriptions();
     try
     {
-        var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
+        var product = (dto.SkuId == null ? null : await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId));
         if (product == null)
         {
             return StatusProblem(404, "Not Found", "Product not found");
@@ -1438,7 +1438,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
     await db.Entry(entity).Reference(e => e.Opportunity).LoadAsync();
     try
     {
-        var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
+        var product = (dto.SkuId == null ? null : await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId));
         if (product == null)
         {
             return StatusProblem(404, "Not Found", "Product not found");
@@ -1610,7 +1610,7 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
     await db.Entry(entity).Collection(e => e.Members).LoadAsync();
     try
     {
-        var contact = await db.Contacts.FirstOrDefaultAsync(e => e.Email == dto.WhoId);
+        var contact = (dto.WhoId == null ? null : await db.Contacts.FirstOrDefaultAsync(e => e.Email == dto.WhoId));
         if (contact == null)
         {
             return StatusProblem(404, "Not Found", "Contact not found");
@@ -1872,7 +1872,7 @@ internal record AddContactDto
 
 internal record ConvertLeadDto
 {
-    public string LeadId { get; init; } = default!;
+    public string? LeadId { get; init; } = default!;
 }
 
 internal record OpenDealDto
@@ -1893,7 +1893,7 @@ internal record OpportunityLogDto
 
 internal record OpportunityAddLineDto
 {
-    public string SkuId { get; init; } = default!;
+    public string? SkuId { get; init; } = default!;
     public long Qty { get; init; }
 }
 
@@ -1904,11 +1904,11 @@ internal record CaptureDto
 
 internal record QuoteAddLineDto
 {
-    public string SkuId { get; init; } = default!;
+    public string? SkuId { get; init; } = default!;
     public long Qty { get; init; }
 }
 
 internal record EnrollDto
 {
-    public string WhoId { get; init; } = default!;
+    public string? WhoId { get; init; } = default!;
 }

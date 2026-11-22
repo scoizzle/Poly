@@ -1101,11 +1101,35 @@ public partial class MinimalApiGeneratorTests {
             """));
         await Assert.That(rendered).Contains("public string City");
         await Assert.That(rendered).Contains("public string Region");
-        await Assert.That(rendered).Contains("public string LeadId");
+        // An entity argument is the target's key and nullable since #940 (`Lead.Email` is the key): an absent key is
+        // null — 404 — and not the key type's default, which a row could carry.
+        await Assert.That(rendered).Contains("public string? LeadId");
         await Assert.That(rendered).Contains("dto.City");
         await Assert.That(rendered).Contains("dto.LeadId");
         await Assert.That(rendered.Contains("public string city")).IsFalse();
         await Assert.That(rendered.Contains("dto.leadId")).IsFalse();
+    }
+
+    /// <summary>#940: an action's entity argument is typed as the target's route key, not a string. A shadow key is
+    /// <c>int?</c> and a Number key <c>long?</c>, so the lookup compares and binds against the column; and an absent
+    /// key short-circuits to null (the host's 404) instead of reaching <c>FindAsync(null)</c>.</summary>
+    [Test]
+    public async Task ActionDto_EntityArgumentIsTheTargetsRouteKey() {
+        var rendered = Render(ParseDomain("""
+            domain T
+            Ticket: entity { Seq: Number unique }
+            Member: entity { Label: Text }
+            Student: entity {
+              Email: Text unique
+              Join: action (ticket: Ticket) { }
+              Pass: action (member: Member) { }
+            }
+            """));
+        await Assert.That(rendered).Contains("public long? TicketId");
+        await Assert.That(rendered).Contains("public int? MemberId");
+        await Assert.That(rendered.Contains("public string TicketId")).IsFalse();
+        await Assert.That(rendered).Contains("dto.TicketId == null ? null : await db.Tickets.FirstOrDefaultAsync");
+        await Assert.That(rendered).Contains("dto.MemberId == null ? null : await db.Members.FindAsync");
     }
 
     [Test]

@@ -40,7 +40,7 @@ public sealed partial class DomainExpressionLoweringPass {
         DomainExpression expr, Node subject, Node? pending, string? entityName) => expr switch {
             PropertyAccess property => PropertyPresence(property, subject, pending, entityName),
             RelationshipNavigation navigation => NavigationPresence(navigation, subject, pending, entityName),
-            Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide =>
+            Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide or Ontology.Modulo =>
                 OperandPresence(expr, subject, pending, entityName),
             _ => ValuePresence.Present,
         };

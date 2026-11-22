@@ -315,6 +315,35 @@ public class UnlinkedOptionalReadTests {
     static string Dump(IReadOnlyList<ParityOutcome> outcomes) => string.Join(" | ", outcomes.Select(o =>
         o.Step + "[" + string.Join(",", o.State.Select(kv => $"{kv.Key}={kv.Value}")) + "]" + (o.ExceptionType is null ? "" : "!" + o.ExceptionType + ":" + o.Message)));
 
+    /// <summary>A remainder (#548) read through an unlinked hop is absent like every other arithmetic: the comparison
+    /// answers the absent rule instead of dereferencing the missing advisor, on both hosts.</summary>
+    [Test]
+    public async Task Policy_RemainderThroughUnlinkedHop_AnswersTheAbsentRule_OnBothHosts() {
+        const string dsl = """
+            domain Rem
+            Advisor: entity { Score: Number }
+            Customer: entity {
+              Name: Text
+              advisor: Advisor optional
+              ScoreOdd: policy { advisor Score % 2 == 1 }
+            }
+            """;
+        var scenario = ParityScenario.FromDsl(dsl, "RemainderThroughHop");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Name", "Ada"));
+            side.EvaluatePolicy("ScoreOdd");
+        });
+        await AssertAnswers(unlinked, new() { ["ScoreOdd"] = false });
+
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 3L));
+            side.Create("Customer", ("Name", "Ada"), ("advisor", advisor));
+            side.EvaluatePolicy("ScoreOdd");
+        });
+        await AssertAnswers(linked, new() { ["ScoreOdd"] = true });
+    }
+
     static async Task AssertAnswers(IReadOnlyList<ParityOutcome> outcomes, Dictionary<string, bool> expected) {
         foreach (var (policy, answer) in expected) {
             var actual = outcomes.First(o => o.Step == $"policy {policy}");

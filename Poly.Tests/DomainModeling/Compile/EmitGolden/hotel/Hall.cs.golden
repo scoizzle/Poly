@@ -343,13 +343,13 @@ internal class Hall : Poly.Runtime.IActionScoped
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'property' is required.", "Hall.property"));
         }
         var __property = property;
-        var created = new Hall(__name, __capacity, __dayRate, __occupied, __offline, __busySections, __property, sections);
-        Poly.Runtime.ActionScope.Create(created, "Hall");
+        var __created = new Hall(__name, __capacity, __dayRate, __occupied, __offline, __busySections, __property, sections);
+        Poly.Runtime.ActionScope.Create(__created, "Hall");
         if (property != null)
         {
-            property.AttachHalls(created);
+            property.AttachHalls(__created);
         }
-        return DomainResult<Hall>.Success(created);
+        return DomainResult<Hall>.Success(__created);
     }
     public object __Snapshot()
     {

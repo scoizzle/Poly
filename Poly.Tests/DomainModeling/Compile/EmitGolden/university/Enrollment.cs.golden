@@ -87,10 +87,10 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         }
         this.DueDate = this.EnrolledOn.AddDays((int)14L);
         this.CurrentStage = EnrollmentStage.Registered;
-        var notify0 = this.NotifyRegisteredSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyRegisteredSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Enrollment.Confirm"));
+            return DomainResult.Failure(__notify0.Error!.At("Enrollment.Confirm"));
         }
         return DomainResult.Success();
     }
@@ -125,10 +125,10 @@ internal class Enrollment : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Withdraw' requires stage 'Pending' on entity 'Enrollment'.", "Enrollment.Withdraw", "Pending"));
         }
         this.CurrentStage = EnrollmentStage.Dropped;
-        var notify0 = this.NotifyDroppedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyDroppedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Enrollment.Withdraw"));
+            return DomainResult.Failure(__notify0.Error!.At("Enrollment.Withdraw"));
         }
         return DomainResult.Success();
     }
@@ -164,16 +164,16 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         }
         if (score >= 70L)
         {
-            var assignValue0 = score;
-            if (assignValue0 < 0L)
+            var __assignValue0 = score;
+            if (__assignValue0 < 0L)
             {
                 return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be >= 0.", "Enrollment.Grade"));
             }
-            if (assignValue0 > 100L)
+            if (__assignValue0 > 100L)
             {
                 return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be <= 100.", "Enrollment.Grade"));
             }
-            this.Grade = assignValue0;
+            this.Grade = __assignValue0;
         }
         else
         {
@@ -212,10 +212,10 @@ internal class Enrollment : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Complete' requires stage 'Registered' on entity 'Enrollment'.", "Enrollment.Complete", "Registered"));
         }
         this.CurrentStage = EnrollmentStage.Completed;
-        var notify0 = this.NotifyCompletedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyCompletedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Enrollment.Complete"));
+            return DomainResult.Failure(__notify0.Error!.At("Enrollment.Complete"));
         }
         return DomainResult.Success();
     }
@@ -250,10 +250,10 @@ internal class Enrollment : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Drop' requires stage 'Registered' on entity 'Enrollment'.", "Enrollment.Drop", "Registered"));
         }
         this.CurrentStage = EnrollmentStage.Dropped;
-        var notify0 = this.NotifyDroppedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyDroppedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Enrollment.Drop"));
+            return DomainResult.Failure(__notify0.Error!.At("Enrollment.Drop"));
         }
         return DomainResult.Success();
     }
@@ -266,9 +266,9 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         {
             this._studentEnrollmentsDroppedSubscribers = new List<Student>();
         }
-        foreach (var existing in this._studentEnrollmentsDroppedSubscribers)
+        foreach (var __existing in this._studentEnrollmentsDroppedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -282,9 +282,9 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         {
             this._studentEnrollmentsCompletedSubscribers = new List<Student>();
         }
-        foreach (var existing in this._studentEnrollmentsCompletedSubscribers)
+        foreach (var __existing in this._studentEnrollmentsCompletedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -298,9 +298,9 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         {
             this._sectionEnrollmentsRegisteredSubscribers = new List<Section>();
         }
-        foreach (var existing in this._sectionEnrollmentsRegisteredSubscribers)
+        foreach (var __existing in this._sectionEnrollmentsRegisteredSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -314,9 +314,9 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         {
             this._sectionEnrollmentsDroppedSubscribers = new List<Section>();
         }
-        foreach (var existing in this._sectionEnrollmentsDroppedSubscribers)
+        foreach (var __existing in this._sectionEnrollmentsDroppedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -335,23 +335,23 @@ internal class Enrollment : Poly.Runtime.IActionScoped
             }
             if (this._studentEnrollmentsDroppedSubscribers != null)
             {
-                foreach (var sub in this._studentEnrollmentsDroppedSubscribers)
+                foreach (var __sub in this._studentEnrollmentsDroppedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachEnrollmentDropped();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachEnrollmentDropped();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
             if (this._sectionEnrollmentsDroppedSubscribers != null)
             {
-                foreach (var sub in this._sectionEnrollmentsDroppedSubscribers)
+                foreach (var __sub in this._sectionEnrollmentsDroppedSubscribers)
                 {
-                    var handlerResult1 = sub.WhenEachEnrollmentDropped();
-                    if (!handlerResult1.IsSuccess)
+                    var __handlerResult1 = __sub.WhenEachEnrollmentDropped();
+                    if (!__handlerResult1.IsSuccess)
                     {
-                        return handlerResult1;
+                        return __handlerResult1;
                     }
                 }
             }
@@ -374,17 +374,17 @@ internal class Enrollment : Poly.Runtime.IActionScoped
             }
             if (this._studentEnrollmentsCompletedSubscribers != null)
             {
-                foreach (var sub in this._studentEnrollmentsCompletedSubscribers)
+                foreach (var __sub in this._studentEnrollmentsCompletedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachEnrollmentCompleted();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachEnrollmentCompleted();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
-                    var handlerResult1 = sub.WhenEachEnrollmentCompleted(this);
-                    if (!handlerResult1.IsSuccess)
+                    var __handlerResult1 = __sub.WhenEachEnrollmentCompleted(this);
+                    if (!__handlerResult1.IsSuccess)
                     {
-                        return handlerResult1;
+                        return __handlerResult1;
                     }
                 }
             }
@@ -407,12 +407,12 @@ internal class Enrollment : Poly.Runtime.IActionScoped
             }
             if (this._sectionEnrollmentsRegisteredSubscribers != null)
             {
-                foreach (var sub in this._sectionEnrollmentsRegisteredSubscribers)
+                foreach (var __sub in this._sectionEnrollmentsRegisteredSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachEnrollmentRegistered();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachEnrollmentRegistered();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -516,17 +516,17 @@ internal class Enrollment : Poly.Runtime.IActionScoped
             return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Required("'student' is required.", "Enrollment.student"));
         }
         var __student = student;
-        var created = new Enrollment(__enrolledOn, __dueDate, __grade, __section, __student);
-        Poly.Runtime.ActionScope.Create(created, "Enrollment");
+        var __created = new Enrollment(__enrolledOn, __dueDate, __grade, __section, __student);
+        Poly.Runtime.ActionScope.Create(__created, "Enrollment");
         if (section != null)
         {
-            section.AttachEnrollments(created);
+            section.AttachEnrollments(__created);
         }
         if (student != null)
         {
-            student.AttachEnrollments(created);
+            student.AttachEnrollments(__created);
         }
-        return DomainResult<Enrollment>.Success(created);
+        return DomainResult<Enrollment>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {

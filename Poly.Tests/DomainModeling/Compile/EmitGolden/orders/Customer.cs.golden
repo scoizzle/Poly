@@ -56,16 +56,16 @@ internal class Customer : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfShipAll()
     {
-        foreach (var target0 in this.Orders)
+        foreach (var __target0 in this.Orders)
         {
-            if (!target0.IsPaid())
+            if (!__target0.IsPaid())
             {
                 continue;
             }
-            var result1 = target0.Ship();
-            if (!result1.IsSuccess)
+            var __result1 = __target0.Ship();
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Customer.ShipAll"));
+                return DomainResult.Failure(__result1.Error!.At("Customer.ShipAll"));
             }
         }
         return DomainResult.Success();
@@ -96,16 +96,16 @@ internal class Customer : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfCancelPending()
     {
-        foreach (var target0 in this.Orders)
+        foreach (var __target0 in this.Orders)
         {
-            if (target0.CurrentStage != OrderStage.Pending)
+            if (__target0.CurrentStage != OrderStage.Pending)
             {
                 continue;
             }
-            var result1 = target0.Cancel("customer request");
-            if (!result1.IsSuccess)
+            var __result1 = __target0.Cancel("customer request");
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Customer.CancelPending"));
+                return DomainResult.Failure(__result1.Error!.At("Customer.CancelPending"));
             }
         }
         return DomainResult.Success();
@@ -158,10 +158,10 @@ internal class Customer : Poly.Runtime.IActionScoped
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Customer'.", "Customer.Email"));
         }
-        var created = new Customer(__email, __name, __tier, orders);
-        Poly.Runtime.ActionScope.Create(created, "Customer");
+        var __created = new Customer(__email, __name, __tier, orders);
+        Poly.Runtime.ActionScope.Create(__created, "Customer");
         db.Record("Customer", "Email", __email);
-        return DomainResult<Customer>.Success(created);
+        return DomainResult<Customer>.Success(__created);
     }
     private DomainResult EnsureUnique(string propertyName, object value)
     {

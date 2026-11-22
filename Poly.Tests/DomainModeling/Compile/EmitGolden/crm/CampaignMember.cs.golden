@@ -61,13 +61,13 @@ internal class CampaignMember : Poly.Runtime.IActionScoped
             return DomainResult<CampaignMember>.Failure(Poly.Runtime.DomainFailure.Required("'campaign' is required.", "CampaignMember.campaign"));
         }
         var __campaign = campaign;
-        var created = new CampaignMember(__contact, __campaign);
-        Poly.Runtime.ActionScope.Create(created, "CampaignMember");
+        var __created = new CampaignMember(__contact, __campaign);
+        Poly.Runtime.ActionScope.Create(__created, "CampaignMember");
         if (campaign != null)
         {
-            campaign.AttachMembers(created);
+            campaign.AttachMembers(__created);
         }
-        return DomainResult<CampaignMember>.Success(created);
+        return DomainResult<CampaignMember>.Success(__created);
     }
     public object __Snapshot()
     {

@@ -2467,8 +2467,8 @@ What the id does not cover, and what that costs:
   enum, answers `400` with an empty body (P-14).
 - **An optional unique key** (generated app): a `Text unique optional` property on an entity with a required scalar
   stops the host at boot, and every create on a `Date unique optional` key answers `409`, the first included (#611).
-- **Names**: a property named `Created` (#927) and an action named `Add` on an entity that has a `many` link and a
-  `unique` property (#934) fail to build. A domain named like a C# keyword is refused, and a domain named `DateTime`
+- **Names**: an action named `Add` on an entity that has a `many` link and a `unique` property (#934) fails to
+  build. A domain named like a C# keyword is refused, and a domain named `DateTime`
   that declares a `DateTime` property does not compile (CS0118) (E-10).
 - **`assign Qty to Dec * 2`** (a Number target, a Decimal operand): analysis accepts it and the generated C# does not
   compile (T-07).

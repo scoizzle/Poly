@@ -22,7 +22,7 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Person", "Name", "name");
 
         // L-08b (owner ruling): required means non-null for every type; "" is a value.
-        await Assert.That(cs).Contains("if (assignValue0 == null)");
+        await Assert.That(cs).Contains("if (__assignValue0 == null)");
         await Assert.That(cs).DoesNotContain("IsNullOrEmpty");
         await Assert.That(cs).Contains("\"'Name' is required.\"");
     }
@@ -72,7 +72,7 @@ public class ConstraintCheckShapeTests {
         // #546: the Required guard above already returned, so a `!= null` conjunct here is dead —
         // and it left the value maybe-null for the assignment after it (CS8601 in a strict build).
         await Assert.That(cs).Contains(
-            "if (!System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
+            "if (!System.Text.RegularExpressions.Regex.IsMatch(__assignValue0, \"^[A-Z]{3}\\\\z\"))");
         await Assert.That(cs).DoesNotContain("!= null &&");
     }
 
@@ -88,9 +88,9 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Note", "Body", "body");
 
         // L-08b: an empty string is a value, so the group is guarded by `!= null` only.
-        await Assert.That(cs).Contains("if (assignValue0 != null)");
-        await Assert.That(cs).Contains("assignValue0.Length < 7L");
-        await Assert.That(cs).Contains("assignValue0.Length > 20L");
+        await Assert.That(cs).Contains("if (__assignValue0 != null)");
+        await Assert.That(cs).Contains("__assignValue0.Length < 7L");
+        await Assert.That(cs).Contains("__assignValue0.Length > 20L");
     }
 
     [Test]
@@ -104,8 +104,8 @@ public class ConstraintCheckShapeTests {
             """);
         var cs = PrintAssign(domain, "Note", "Body", "body");
 
-        await Assert.That(cs).Contains("if (assignValue0.Length < 7L)");
-        await Assert.That(cs.Contains("if (!System.String.IsNullOrEmpty(assignValue0))")).IsFalse();
+        await Assert.That(cs).Contains("if (__assignValue0.Length < 7L)");
+        await Assert.That(cs.Contains("if (!System.String.IsNullOrEmpty(__assignValue0))")).IsFalse();
     }
 
     [Test]

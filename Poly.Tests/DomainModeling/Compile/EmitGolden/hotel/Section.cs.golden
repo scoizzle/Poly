@@ -66,10 +66,10 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Occupy' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
         }
-        var invoke0 = this.Hall.MarkChildBusy();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Hall.MarkChildBusy();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("Section.Occupy"));
+            return DomainResult.Failure(__invoke0.Error!.At("Section.Occupy"));
         }
         return DomainResult.Success();
     }
@@ -108,10 +108,10 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Vacate' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
         }
-        var invoke0 = this.Hall.ClearChildBusy();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Hall.ClearChildBusy();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("Section.Vacate"));
+            return DomainResult.Failure(__invoke0.Error!.At("Section.Vacate"));
         }
         return DomainResult.Success();
     }
@@ -189,13 +189,13 @@ internal class Section : Poly.Runtime.IActionScoped
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'hall' is required.", "Section.hall"));
         }
         var __hall = hall;
-        var created = new Section(__name, __capacity, __dayRate, __occupied, __hall);
-        Poly.Runtime.ActionScope.Create(created, "Section");
+        var __created = new Section(__name, __capacity, __dayRate, __occupied, __hall);
+        Poly.Runtime.ActionScope.Create(__created, "Section");
         if (hall != null)
         {
-            hall.AttachSections(created);
+            hall.AttachSections(__created);
         }
-        return DomainResult<Section>.Success(created);
+        return DomainResult<Section>.Success(__created);
     }
     public object __Snapshot()
     {

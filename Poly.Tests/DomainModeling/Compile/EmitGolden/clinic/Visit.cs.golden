@@ -157,13 +157,13 @@ internal class Visit : Poly.Runtime.IActionScoped
             return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Required("'primaryDoctor' is required.", "Visit.primaryDoctor"));
         }
         var __primaryDoctor = primaryDoctor;
-        var created = new Visit(__reason, __state, __patient, __primaryDoctor);
-        Poly.Runtime.ActionScope.Create(created, "Visit");
+        var __created = new Visit(__reason, __state, __patient, __primaryDoctor);
+        Poly.Runtime.ActionScope.Create(__created, "Visit");
         if (patient != null)
         {
-            patient.AttachVisits(created);
+            patient.AttachVisits(__created);
         }
-        return DomainResult<Visit>.Success(created);
+        return DomainResult<Visit>.Success(__created);
     }
     public object __Snapshot()
     {

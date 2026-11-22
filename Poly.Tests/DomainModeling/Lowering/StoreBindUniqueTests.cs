@@ -50,7 +50,7 @@ public class StoreBindUniqueTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Permit> Create(");
-        await Assert.That(create).Contains("var created = new Permit(");
+        await Assert.That(create).Contains("var __created = new Permit(");
         await Assert.That(create).DoesNotContain("CheckUnique");
         await Assert.That(cs).DoesNotContain("DomainInstanceStore");
         await Assert.That(cs).DoesNotContain("PrintedCollision");

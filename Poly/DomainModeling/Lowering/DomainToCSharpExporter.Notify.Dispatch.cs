@@ -151,7 +151,7 @@ public sealed partial class DomainToCSharpExporter {
                 // The body must use this parameter, not a same-named copy: a copy
                 // has no type, so the VM cannot place the argument. The registry is the target's state, so it is
                 // touched first (L-03c): a subscriber created in the action registers on an existing target.
-                var existing = new Variable("existing");
+                var existing = new Variable("__existing");
                 var subscriber = new Parameter(paramName, srcType);
                 var registerBody = new Block([
                     TouchThis(),
@@ -218,7 +218,7 @@ public sealed partial class DomainToCSharpExporter {
                         var handlerResult = names.Next("handlerResult");
                         handlerLocals.Add(handlerResult);
                         notifyCalls.Add(new Assignment(handlerResult, new Invoke(
-                            new Member(new Variable("sub"), handlerNames![info]),
+                            new Member(new Variable("__sub"), handlerNames![info]),
                             [.. args])));
                         notifyCalls.Add(new IfStatement(
                             new Syntactic.Not(new Member(handlerResult, "IsSuccess")),
@@ -229,7 +229,7 @@ public sealed partial class DomainToCSharpExporter {
                             new Member(new ThisReference(), fieldName),
                             new Constant(null)),
                         new ForEachLoop(
-                            new Variable("sub"),
+                            new Variable("__sub"),
                             new Member(new ThisReference(), fieldName),
                             new Block(notifyCalls, handlerLocals))));
                 }

@@ -91,13 +91,13 @@ internal class Line : Poly.Runtime.IActionScoped
             return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Required("'opportunity' is required.", "Line.opportunity"));
         }
         var __opportunity = opportunity;
-        var created = new Line(__qty, __unitPrice, __product, __opportunity);
-        Poly.Runtime.ActionScope.Create(created, "Line");
+        var __created = new Line(__qty, __unitPrice, __product, __opportunity);
+        Poly.Runtime.ActionScope.Create(__created, "Line");
         if (opportunity != null)
         {
-            opportunity.AttachLines(created);
+            opportunity.AttachLines(__created);
         }
-        return DomainResult<Line>.Success(created);
+        return DomainResult<Line>.Success(__created);
     }
     public object __Snapshot()
     {

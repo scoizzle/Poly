@@ -295,15 +295,15 @@ internal class Room : Poly.Runtime.IActionScoped
         {
             return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Number' value is already used on another 'Room'.", "Room.Number"));
         }
-        var created = new Room(__number, __floor, __nightlyRate, __maxOccupancy, __occupied, __dirty, __offline, __property, __roomType, stays);
-        Poly.Runtime.ActionScope.Create(created, "Room");
-        created.InitializeSubscriptions();
+        var __created = new Room(__number, __floor, __nightlyRate, __maxOccupancy, __occupied, __dirty, __offline, __property, __roomType, stays);
+        Poly.Runtime.ActionScope.Create(__created, "Room");
+        __created.InitializeSubscriptions();
         if (property != null)
         {
-            property.AttachRooms(created);
+            property.AttachRooms(__created);
         }
         db.Record("Room", "Number", __number);
-        return DomainResult<Room>.Success(created);
+        return DomainResult<Room>.Success(__created);
     }
     internal void InitializeSubscriptions()
     {

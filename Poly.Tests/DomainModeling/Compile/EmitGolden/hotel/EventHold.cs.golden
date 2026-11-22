@@ -172,10 +172,10 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StartHall' requires a linked 'hall' on entity 'EventHold'.", "EventHold.hall"));
         }
-        var invoke0 = this.Hall.Occupy();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Hall.Occupy();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("EventHold.StartHall"));
+            return DomainResult.Failure(__invoke0.Error!.At("EventHold.StartHall"));
         }
         this.CurrentStage = EventHoldStage.InUse;
         return DomainResult.Success();
@@ -218,10 +218,10 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StartSection' requires a linked 'section' on entity 'EventHold'.", "EventHold.section"));
         }
-        var invoke0 = this.Section.Occupy();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Section.Occupy();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("EventHold.StartSection"));
+            return DomainResult.Failure(__invoke0.Error!.At("EventHold.StartSection"));
         }
         this.CurrentStage = EventHoldStage.InUse;
         return DomainResult.Success();
@@ -264,16 +264,16 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'ReleaseHall' requires a linked 'hall' on entity 'EventHold'.", "EventHold.hall"));
         }
-        var invoke0 = this.Hall.Vacate();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Hall.Vacate();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("EventHold.ReleaseHall"));
+            return DomainResult.Failure(__invoke0.Error!.At("EventHold.ReleaseHall"));
         }
         this.CurrentStage = EventHoldStage.Released;
-        var notify1 = this.NotifyReleasedSubscribers();
-        if (!notify1.IsSuccess)
+        var __notify1 = this.NotifyReleasedSubscribers();
+        if (!__notify1.IsSuccess)
         {
-            return DomainResult.Failure(notify1.Error!.At("EventHold.ReleaseHall"));
+            return DomainResult.Failure(__notify1.Error!.At("EventHold.ReleaseHall"));
         }
         return DomainResult.Success();
     }
@@ -315,16 +315,16 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'ReleaseSection' requires a linked 'section' on entity 'EventHold'.", "EventHold.section"));
         }
-        var invoke0 = this.Section.Vacate();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Section.Vacate();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("EventHold.ReleaseSection"));
+            return DomainResult.Failure(__invoke0.Error!.At("EventHold.ReleaseSection"));
         }
         this.CurrentStage = EventHoldStage.Released;
-        var notify1 = this.NotifyReleasedSubscribers();
-        if (!notify1.IsSuccess)
+        var __notify1 = this.NotifyReleasedSubscribers();
+        if (!__notify1.IsSuccess)
         {
-            return DomainResult.Failure(notify1.Error!.At("EventHold.ReleaseSection"));
+            return DomainResult.Failure(__notify1.Error!.At("EventHold.ReleaseSection"));
         }
         return DomainResult.Success();
     }
@@ -338,9 +338,9 @@ internal class EventHold : Poly.Runtime.IActionScoped
         {
             this._guestEventsReleasedSubscribers = new List<Guest>();
         }
-        foreach (var existing in this._guestEventsReleasedSubscribers)
+        foreach (var __existing in this._guestEventsReleasedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -359,12 +359,12 @@ internal class EventHold : Poly.Runtime.IActionScoped
             }
             if (this._guestEventsReleasedSubscribers != null)
             {
-                foreach (var sub in this._guestEventsReleasedSubscribers)
+                foreach (var __sub in this._guestEventsReleasedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachEventHoldReleased();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachEventHoldReleased();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -490,13 +490,13 @@ internal class EventHold : Poly.Runtime.IActionScoped
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Required("'hall' is required.", "EventHold.hall"));
         }
         var __hall = hall;
-        var created = new EventHold(__headcount, __capacity, __dayRate, __startDate, __endDate, __guest, __hall, section);
-        Poly.Runtime.ActionScope.Create(created, "EventHold");
+        var __created = new EventHold(__headcount, __capacity, __dayRate, __startDate, __endDate, __guest, __hall, section);
+        Poly.Runtime.ActionScope.Create(__created, "EventHold");
         if (guest != null)
         {
-            guest.AttachEvents(created);
+            guest.AttachEvents(__created);
         }
-        return DomainResult<EventHold>.Success(created);
+        return DomainResult<EventHold>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {

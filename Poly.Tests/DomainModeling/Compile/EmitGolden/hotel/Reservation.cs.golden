@@ -78,14 +78,14 @@ internal class Reservation : Poly.Runtime.IActionScoped
     }
     private DomainResult<Folio> __BodyOfCreateFolio(decimal? balance)
     {
-        var folioResult = Folio.Create(balance, this);
-        if (!folioResult.IsSuccess)
+        var __folioResult = Folio.Create(balance, this);
+        if (!__folioResult.IsSuccess)
         {
-            return DomainResult<Folio>.Failure(folioResult.Error!);
+            return DomainResult<Folio>.Failure(__folioResult.Error!);
         }
-        var folio = folioResult.Value;
-        this.Folio = folio;
-        return DomainResult<Folio>.Success(folio);
+        var __folio = __folioResult.Value;
+        this.Folio = __folio;
+        return DomainResult<Folio>.Success(__folio);
     }
     internal void AttachFolio(Folio child)
     {
@@ -172,10 +172,10 @@ internal class Reservation : Poly.Runtime.IActionScoped
         if (this.CurrentStage == ReservationStage.Requested || this.CurrentStage == ReservationStage.Confirmed)
         {
             this.CurrentStage = ReservationStage.Cancelled;
-            var notify0 = this.NotifyCancelledSubscribers();
-            if (!notify0.IsSuccess)
+            var __notify0 = this.NotifyCancelledSubscribers();
+            if (!__notify0.IsSuccess)
             {
-                return DomainResult.Failure(notify0.Error!.At("Reservation.Cancel"));
+                return DomainResult.Failure(__notify0.Error!.At("Reservation.Cancel"));
             }
             return DomainResult.Success();
         }
@@ -219,16 +219,16 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a second link on 'folio': the source already has a target.", "Reservation.folio"));
         }
-        var create0 = this.CreateFolio(0L);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateFolio(0L);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult.Failure(create0.Error!.At("Reservation.CheckIn"));
+            return DomainResult.Failure(__create0.Error!.At("Reservation.CheckIn"));
         }
         this.CurrentStage = ReservationStage.InHouse;
-        var notify1 = this.NotifyInHouseSubscribers();
-        if (!notify1.IsSuccess)
+        var __notify1 = this.NotifyInHouseSubscribers();
+        if (!__notify1.IsSuccess)
         {
-            return DomainResult.Failure(notify1.Error!.At("Reservation.CheckIn"));
+            return DomainResult.Failure(__notify1.Error!.At("Reservation.CheckIn"));
         }
         return DomainResult.Success();
     }
@@ -263,10 +263,10 @@ internal class Reservation : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkNoShow' requires stage 'Confirmed' on entity 'Reservation'.", "Reservation.MarkNoShow", "Confirmed"));
         }
         this.CurrentStage = ReservationStage.NoShow;
-        var notify0 = this.NotifyNoShowSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyNoShowSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Reservation.MarkNoShow"));
+            return DomainResult.Failure(__notify0.Error!.At("Reservation.MarkNoShow"));
         }
         return DomainResult.Success();
     }
@@ -308,10 +308,10 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'PostStayCharge' requires a linked 'folio' on entity 'Reservation'.", "Reservation.folio"));
         }
-        var invoke0 = this.Folio.PostRoomNight(this.NightlyRate);
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Folio.PostRoomNight(this.NightlyRate);
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("Reservation.PostStayCharge"));
+            return DomainResult.Failure(__invoke0.Error!.At("Reservation.PostStayCharge"));
         }
         return DomainResult.Success();
     }
@@ -354,10 +354,10 @@ internal class Reservation : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'BillSettled'.", "Reservation.CheckOut", "BillSettled"));
         }
         this.CurrentStage = ReservationStage.Departed;
-        var notify0 = this.NotifyDepartedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyDepartedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Reservation.CheckOut"));
+            return DomainResult.Failure(__notify0.Error!.At("Reservation.CheckOut"));
         }
         return DomainResult.Success();
     }
@@ -373,9 +373,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this._roomStaysInHouseSubscribers = new List<Room>();
         }
-        foreach (var existing in this._roomStaysInHouseSubscribers)
+        foreach (var __existing in this._roomStaysInHouseSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -389,9 +389,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this._roomStaysDepartedSubscribers = new List<Room>();
         }
-        foreach (var existing in this._roomStaysDepartedSubscribers)
+        foreach (var __existing in this._roomStaysDepartedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -405,9 +405,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this._roomStaysCancelledSubscribers = new List<Room>();
         }
-        foreach (var existing in this._roomStaysCancelledSubscribers)
+        foreach (var __existing in this._roomStaysCancelledSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -421,9 +421,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this._roomStaysNoShowSubscribers = new List<Room>();
         }
-        foreach (var existing in this._roomStaysNoShowSubscribers)
+        foreach (var __existing in this._roomStaysNoShowSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -437,9 +437,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this._guestReservationsDepartedSubscribers = new List<Guest>();
         }
-        foreach (var existing in this._guestReservationsDepartedSubscribers)
+        foreach (var __existing in this._guestReservationsDepartedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -458,12 +458,12 @@ internal class Reservation : Poly.Runtime.IActionScoped
             }
             if (this._roomStaysInHouseSubscribers != null)
             {
-                foreach (var sub in this._roomStaysInHouseSubscribers)
+                foreach (var __sub in this._roomStaysInHouseSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachReservationInHouse();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachReservationInHouse();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -486,28 +486,28 @@ internal class Reservation : Poly.Runtime.IActionScoped
             }
             if (this._roomStaysDepartedSubscribers != null)
             {
-                foreach (var sub in this._roomStaysDepartedSubscribers)
+                foreach (var __sub in this._roomStaysDepartedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachReservationDeparted_SetOccupied();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachReservationDeparted_SetOccupied();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
-                    var handlerResult1 = sub.WhenEachReservationDeparted_SetDirty();
-                    if (!handlerResult1.IsSuccess)
+                    var __handlerResult1 = __sub.WhenEachReservationDeparted_SetDirty();
+                    if (!__handlerResult1.IsSuccess)
                     {
-                        return handlerResult1;
+                        return __handlerResult1;
                     }
                 }
             }
             if (this._guestReservationsDepartedSubscribers != null)
             {
-                foreach (var sub in this._guestReservationsDepartedSubscribers)
+                foreach (var __sub in this._guestReservationsDepartedSubscribers)
                 {
-                    var handlerResult2 = sub.WhenEachReservationDeparted(this);
-                    if (!handlerResult2.IsSuccess)
+                    var __handlerResult2 = __sub.WhenEachReservationDeparted(this);
+                    if (!__handlerResult2.IsSuccess)
                     {
-                        return handlerResult2;
+                        return __handlerResult2;
                     }
                 }
             }
@@ -530,12 +530,12 @@ internal class Reservation : Poly.Runtime.IActionScoped
             }
             if (this._roomStaysCancelledSubscribers != null)
             {
-                foreach (var sub in this._roomStaysCancelledSubscribers)
+                foreach (var __sub in this._roomStaysCancelledSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachReservationCancelled();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachReservationCancelled();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -558,12 +558,12 @@ internal class Reservation : Poly.Runtime.IActionScoped
             }
             if (this._roomStaysNoShowSubscribers != null)
             {
-                foreach (var sub in this._roomStaysNoShowSubscribers)
+                foreach (var __sub in this._roomStaysNoShowSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachReservationNoShow();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachReservationNoShow();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -734,13 +734,13 @@ internal class Reservation : Poly.Runtime.IActionScoped
         }
         if (guest != null)
         {
-            guest.AttachReservations(created);
+            guest.AttachReservations(__created);
         }
         if (room != null)
         {
-            room.AttachStays(created);
+            room.AttachStays(__created);
         }
-        return DomainResult<Reservation>.Success(created);
+        return DomainResult<Reservation>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {

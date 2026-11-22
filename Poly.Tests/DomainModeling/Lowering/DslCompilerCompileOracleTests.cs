@@ -176,6 +176,21 @@ public class DslCompilerCompileOracleTests {
         await AssertSolutionCompiles(poly);
     }
 
+    [Test]
+    public async Task Compile_All_PropertyNamedCreated_EmitsCompilableSolution() {
+        // #927 / #516: `Created` is an ordinary property name. The factory takes `created`, its effective value is
+        // `__created`, and the instance local must meet neither.
+        await AssertSolutionCompiles("""
+            domain Tasks
+            uses temporal
+
+            Task: entity {
+              Created: Date
+              OptDue: Date optional
+            }
+            """);
+    }
+
     private static string FindRepoRoot() {
         var dir = AppContext.BaseDirectory;
         while (dir is not null) {

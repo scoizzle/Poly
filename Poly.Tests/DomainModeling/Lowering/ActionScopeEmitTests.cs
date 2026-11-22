@@ -199,8 +199,14 @@ public class ActionScopeEmitTests {
         var (cs, _) = Print(Dsl, "ActionScopeNames");
         // L-03c adds `__depth`, the notify cascade's entry depth (a local of Notify{Stage}Subscribers).
         // L-08b adds the effective-value local of each Required or Defaulted create slot (`__` + the slot).
+        // #889: every lowered local is `__`-prefixed, so the list also names the numbered `LocalNames` families,
+        // the bare factory's instance and entry locals, the notify fan-out's, and the create-in factory's pair.
         // #630 adds the create-time notification record: its queue, its window flag, and the record and replay methods.
-        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+|code|label|score|pending\w*|stage|notified\d+|deferringStageNotifications|DeferStageNotification|ReplayStageNotifications)$");
+        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|scope|done|result|depth|BodyOf\w+|code|label|score"
+            + @"|created|entry|item|itemResult|existing|sub|create\d+|assignValue\d+|invoke\d+|target\d+"
+            + @"|handlerResult\d+|notify\d*|previousStage\d+|item\d+|match\d+|uniqueCheck\d+|sawItem\d+"
+            + @"|t\d+|adapterResult\d*"
+            + @"|pending\w*|stage|notified\d+|deferringStageNotifications|DeferStageNotification|ReplayStageNotifications)$");
         var stray = Regex.Matches(cs, @"\b__\w+").Select(m => m.Value).Where(n => !allowed.IsMatch(n)).Distinct().ToList();
         await Assert.That(string.Join(",", stray)).IsEqualTo("");
 

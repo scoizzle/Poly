@@ -110,8 +110,8 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         var bodyNodes = new List<Node>();
-        var localResult = new Variable($"{ToCamelCase(targetTypeName)}Result");
-        var local = new Variable(ToCamelCase(targetTypeName));
+        var localResult = new Variable($"__{ToCamelCase(targetTypeName)}Result");
+        var local = new Variable($"__{ToCamelCase(targetTypeName)}");
 
         bodyNodes.Add(new Assignment(localResult,
             new Invoke(
@@ -194,8 +194,8 @@ public sealed partial class DomainToCSharpExporter {
                 var needsPrevious = StageGroupNeedsPrevious(targetEntity, initialStage, domain);
                 // A handler failure fails the create-in: the dispatcher returns it, this method returns it
                 // as its own result with no caller prefix (the child's failure above is passed the same way).
-                // `__notify` is reserved, so a target property named Notify cannot collide with it.
-                notifyResult = new Variable("__notify");
+                // `__notify` is reserved; FreshLocal moves it off the instance local if the target is named Notify.
+                notifyResult = FreshLocal("__notify", [localResult, local]);
                 bodyNodes.Add(new Assignment(notifyResult, new Invoke(
                     new Member(local, $"Notify{initialStage}Subscribers"),
                     needsPrevious ? [new Constant(null)] : [])));
@@ -294,6 +294,20 @@ public sealed partial class DomainToCSharpExporter {
     /// and default have run. <c>__</c> is a reserved prefix, so it cannot shadow a parameter.
     /// </summary>
     internal static string EffectiveLocalName(string slotName) => "__" + ToCamelCase(slotName);
+
+    /// <summary>
+    /// A lowered local's variable, moved off the names <paramref name="taken"/> already holds in the method. An
+    /// effective-value local is <see cref="EffectiveLocalName"/> of a slot, so a property named <c>Created</c> owns
+    /// <c>__created</c> in the bare <c>Create</c>: the instance local takes <c>__created_2</c> beside it. Parameters
+    /// need no entry here — author names may not begin <c>__</c> (DMSTR009), so they never reach this space.
+    /// </summary>
+    private static Variable FreshLocal(string name, IEnumerable<Node> taken) {
+        var used = new HashSet<string>(taken.OfType<Variable>().Select(static variable => variable.Name), StringComparer.Ordinal);
+        var candidate = name;
+        for (var suffix = 2; !used.Add(candidate); suffix++)
+            candidate = $"{name}_{suffix}";
+        return new Variable(candidate);
+    }
 
     /// <summary>
     /// The node a create-time check reads for <paramref name="property"/> in the lowered
@@ -557,7 +571,7 @@ public sealed partial class DomainToCSharpExporter {
         // ctor to-one only. Null peer is a no-op.
         var createSuccessNodes = new List<Node>();
         createSuccessNodes.AddRange(constraintChecks);
-        var createdLocal = new Variable("created");
+        var createdLocal = FreshLocal("__created", slotLocals);
         var createLocals = new List<Node>(slotLocals) { createdLocal };
         createSuccessNodes.Add(new Assignment(
             createdLocal,
@@ -569,10 +583,10 @@ public sealed partial class DomainToCSharpExporter {
         createSuccessNodes.Add(ActionScopeCall("Create", createdLocal, new Constant(entity.Name)));
 
         // The initial entry runs before the instance is attached or registered anywhere, and its failure is returned
-        // as-is: a failed create leaves the instance in no collection and no registry. `__entry` cannot collide with a
-        // parameter (a property named Entry prints as `entry`; `__` is a reserved prefix).
+        // as-is: a failed create leaves the instance in no collection and no registry. `__entry` is reserved, and
+        // FreshLocal moves it off a property named Entry, whose effective value is `__entry`.
         if (entryMethod is not null) {
-            var entryResult = new Variable("__entry");
+            var entryResult = FreshLocal("__entry", createLocals);
             createLocals.Add(entryResult);
             createSuccessNodes.Add(new Assignment(entryResult, new Invoke(new Member(createdLocal, EnterInitialStageMethodName))));
             createSuccessNodes.Add(new IfStatement(

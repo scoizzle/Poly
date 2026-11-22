@@ -51,12 +51,12 @@ internal class Delivery : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfConfirm(string notes)
     {
-        var assignValue0 = notes;
-        if (assignValue0 == null)
+        var __assignValue0 = notes;
+        if (__assignValue0 == null)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Notes' is required.", "Delivery.Notes"));
         }
-        this.Notes = assignValue0;
+        this.Notes = __assignValue0;
         return DomainResult.Success();
     }
     internal static DomainResult<Delivery> Create(string? reference = default, long? weight = default, Truck? truck = default, string? notes = default)
@@ -120,13 +120,13 @@ internal class Delivery : Poly.Runtime.IActionScoped
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Required("'Notes' is required.", "Delivery.Notes"));
         }
         var __notes = notes;
-        var created = new Delivery(__reference, __weight, __truck, __notes);
-        Poly.Runtime.ActionScope.Create(created, "Delivery");
+        var __created = new Delivery(__reference, __weight, __truck, __notes);
+        Poly.Runtime.ActionScope.Create(__created, "Delivery");
         if (truck != null)
         {
-            truck.AttachDeliveries(created);
+            truck.AttachDeliveries(__created);
         }
-        return DomainResult<Delivery>.Success(created);
+        return DomainResult<Delivery>.Success(__created);
     }
     public object __Snapshot()
     {

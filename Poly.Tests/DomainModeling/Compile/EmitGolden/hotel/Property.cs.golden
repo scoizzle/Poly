@@ -63,13 +63,13 @@ internal class Property : Poly.Runtime.IActionScoped
     }
     private DomainResult<Hall> __BodyOfCreateHalls(string? name, long? capacity, decimal? dayRate, bool? occupied, bool? offline, long? busySections)
     {
-        var hallResult = Hall.Create(name, capacity, dayRate, occupied, offline, busySections, this, new List<Section>());
-        if (!hallResult.IsSuccess)
+        var __hallResult = Hall.Create(name, capacity, dayRate, occupied, offline, busySections, this, new List<Section>());
+        if (!__hallResult.IsSuccess)
         {
-            return DomainResult<Hall>.Failure(hallResult.Error!);
+            return DomainResult<Hall>.Failure(__hallResult.Error!);
         }
-        var hall = hallResult.Value;
-        return DomainResult<Hall>.Success(hall);
+        var __hall = __hallResult.Value;
+        return DomainResult<Hall>.Success(__hall);
     }
     internal void AttachHalls(Hall child)
     {
@@ -111,13 +111,13 @@ internal class Property : Poly.Runtime.IActionScoped
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Stage("'AddHall' requires stage 'Open' on entity 'Property'.", "Property.AddHall", "Open"));
         }
-        var create0 = this.CreateHalls(name, seats, rate);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateHalls(name, seats, rate);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Hall>.Failure(create0.Error!.At("Property.AddHall"));
+            return DomainResult<Hall>.Failure(__create0.Error!.At("Property.AddHall"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Hall>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Hall>.Success(__created1);
     }
     internal DomainResult Close()
     {
@@ -237,9 +237,9 @@ internal class Property : Poly.Runtime.IActionScoped
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'City' must be at most 60 characters.", "Property.City"));
         }
-        var created = new Property(__name, __city, halls, rooms);
-        Poly.Runtime.ActionScope.Create(created, "Property");
-        return DomainResult<Property>.Success(created);
+        var __created = new Property(__name, __city, halls, rooms);
+        Poly.Runtime.ActionScope.Create(__created, "Property");
+        return DomainResult<Property>.Success(__created);
     }
     public object __Snapshot()
     {

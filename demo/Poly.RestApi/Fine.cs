@@ -81,10 +81,10 @@ internal class Fine : Poly.Runtime.IActionScoped
         }
         this.CurrentStage = FineStage.Resolved;
         this.Paid = true;
-        var notify0 = this.NotifyResolvedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyResolvedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Fine.Pay"));
+            return DomainResult.Failure(__notify0.Error!.At("Fine.Pay"));
         }
         return DomainResult.Success();
     }
@@ -122,10 +122,10 @@ internal class Fine : Poly.Runtime.IActionScoped
         this.Paid = true;
         this.CurrentStage = FineStage.Resolved;
         this.Paid = true;
-        var notify0 = this.NotifyResolvedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyResolvedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Fine.Waive"));
+            return DomainResult.Failure(__notify0.Error!.At("Fine.Waive"));
         }
         return DomainResult.Success();
     }
@@ -136,9 +136,9 @@ internal class Fine : Poly.Runtime.IActionScoped
         {
             this._patronFinesResolvedSubscribers = new List<Patron>();
         }
-        foreach (var existing in this._patronFinesResolvedSubscribers)
+        foreach (var __existing in this._patronFinesResolvedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -157,12 +157,12 @@ internal class Fine : Poly.Runtime.IActionScoped
             }
             if (this._patronFinesResolvedSubscribers != null)
             {
-                foreach (var sub in this._patronFinesResolvedSubscribers)
+                foreach (var __sub in this._patronFinesResolvedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachFineResolved();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachFineResolved();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -245,13 +245,13 @@ internal class Fine : Poly.Runtime.IActionScoped
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'patron' is required.", "Fine.patron"));
         }
         var __patron = patron;
-        var created = new Fine(__amount, __reason, __dateIssued, paid, __patron);
-        Poly.Runtime.ActionScope.Create(created, "Fine");
+        var __created = new Fine(__amount, __reason, __dateIssued, paid, __patron);
+        Poly.Runtime.ActionScope.Create(__created, "Fine");
         if (patron != null)
         {
-            patron.AttachFines(created);
+            patron.AttachFines(__created);
         }
-        return DomainResult<Fine>.Success(created);
+        return DomainResult<Fine>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {

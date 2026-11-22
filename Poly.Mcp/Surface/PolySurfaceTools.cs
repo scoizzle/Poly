@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Text;
@@ -37,6 +38,14 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     private const int FindingCap = 20;
     private const int InlineLimit = 4000;
+
+    /// <summary>
+    /// The artifact files each workspace has written: <c>poly-&lt;workspace&gt;-&lt;format&gt;-&lt;sha16&gt;.&lt;ext&gt;</c> in
+    /// the OS temp directory, content-addressed so an unchanged export reuses one file. Closing the
+    /// workspace removes them; without that a long-lived session grows the temp directory per call (#598).
+    /// </summary>
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _exportedFiles =
+        new(StringComparer.Ordinal);
 
     // ── 1. guide ────────────────────────────────────────────────
 
@@ -112,9 +121,10 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                     ErrorCode: "WORKSPACE_NOT_FOUND");
             }
             store.Remove(workspace);
+            RemoveExportedFiles(workspace);
             return new PolyResponse(
                 Ok: true,
-                Summary: "Workspace closed. Its model and instances are gone.",
+                Summary: "Workspace closed. Its model, instances and exported artifact files are gone.",
                 Findings: [],
                 Data: null,
                 Next: ["poly_workspace"],
@@ -418,7 +428,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 6. export ───────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_export", Title = "Export an artifact", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Produces the artifact the task needs from the current model: dsl, json-schema, csharp, markdown, html, json-ld, or shacl. Small artifacts are returned inline; anything over 4 KB is written to a file and returned as {path, bytes, sha256}. Read-only; the model is unchanged.")]
+    [McpServerTool(Name = "poly_export", Title = "Export an artifact", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Produces the artifact the task needs from the current model: dsl, json-schema, csharp, markdown, html, json-ld, or shacl. Small artifacts are returned inline; anything over 4 KB is written to a temp file named by its sha256 and returned as {path, bytes, sha256}, so identical content reuses one file and poly_workspace op=close removes the files the workspace wrote. Read-only; the model is unchanged.")]
     public PolyResponse Export(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("dsl | json-schema | csharp | markdown | html | json-ld | shacl")] string format,
@@ -455,11 +465,13 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         var bytes = Encoding.UTF8.GetByteCount(content);
         object data;
         if (!inline && bytes > InlineLimit) {
-            var name = $"poly-{Sanitize(workspace)}-{normalized}-" +
-                $"{Path.GetFileNameWithoutExtension(Path.GetRandomFileName())}.{extension}";
-            var path = Path.Combine(Path.GetTempPath(), name);
-            File.WriteAllText(path, content);
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+            var name = $"poly-{Sanitize(workspace)}-{normalized}-{hash[..16]}.{extension}";
+            var path = Path.Combine(Path.GetTempPath(), name);
+            if (!File.Exists(path))
+                File.WriteAllText(path, content);
+            _exportedFiles.GetOrAdd(workspace, _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal))
+                .TryAdd(path, 0);
             data = new { format = normalized, path, bytes, sha256 = hash };
         }
         else {
@@ -766,6 +778,19 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     private static string Sanitize(string value) =>
         string.Concat(value.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '_'));
+
+    /// <summary>Deletes the artifact files this workspace wrote; a failed delete never fails the close.</summary>
+    private void RemoveExportedFiles(string workspace) {
+        if (!_exportedFiles.TryRemove(workspace, out var files))
+            return;
+        foreach (var path in files.Keys) {
+            try {
+                File.Delete(path);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
 
     private const string Quickstart = """
         Poly models a domain as one executable .poly document: entities, typed properties

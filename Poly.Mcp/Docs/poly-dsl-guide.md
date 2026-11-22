@@ -24,6 +24,9 @@
 > (`Within(5, 1, 10)`).
 > A `select` that names no element is `ok:false` with `ELEMENT_NOT_FOUND`, the same answer
 > `poly_inspect` gives, so a typo cannot read as an undecided proof.
+> `poly_export` inlines an artifact up to 4 KB; a larger one is written to the OS temp directory as
+> `poly-<workspace>-<format>-<sha16>.<ext>` and returned as `{path, bytes, sha256}`. Identical content
+> reuses the same file, and `poly_workspace(op:"close")` removes the files the workspace wrote.
 > Each result's text block is a prose summary (outcome, `workspace:` handle, findings, `next:`
 > calls, flattened data); the full envelope is in `structuredContent`.
 

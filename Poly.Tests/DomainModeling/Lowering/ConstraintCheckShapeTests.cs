@@ -222,6 +222,50 @@ public class ConstraintCheckShapeTests {
         await Assert.That(escapedCreate).Contains("\"^[A-Z]+\\\\$\"");
     }
 
+    // #545: at the old HEAD the Required guard printed `string.IsNullOrEmpty(name)`, which made the
+    // length-min guard below it dead. Required is non-null only now (L-08b), so "" is a value and the
+    // min check must stay reachable.
+    [Test]
+    public async Task Create_RequiredTextWithMinLength_MinCheckStaysReachable() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Person: entity {
+              Name: Text length(1, 80)
+            }
+            """);
+        var create = PrintCreate(domain, analysis, "Person");
+
+        await Assert.That(create).Contains("if (name == null)");
+        await Assert.That(create).Contains("if (__name.Length < 1L)");
+        await Assert.That(create).DoesNotContain("IsNullOrEmpty");
+
+        var sim = ModuleExec.For(domain).Create("Person", new Dictionary<string, object?> { ["Name"] = "" });
+        await Assert.That(sim.Succeeded).IsFalse();
+        await Assert.That(sim.Error).IsEqualTo("'Name' must be at least 1 characters.");
+    }
+
+    // #545: `(object)kind == null` boxed a non-nullable enum and was always false. The guard tests the
+    // `Kind?` create argument instead, which a caller can omit.
+    [Test]
+    public async Task Create_RequiredEnum_NullTestIsOnTheNullableArgument_NotBoxed() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Kind: enum { A, B }
+            Tag: entity {
+              Choice: Kind
+            }
+            """);
+        var create = PrintCreate(domain, analysis, "Tag");
+
+        await Assert.That(create).Contains("if (choice == null)");
+        await Assert.That(create).DoesNotContain("(object)");
+        await Assert.That(create).Contains("(Kind)choice");
+
+        var sim = ModuleExec.For(domain).Create("Tag", new Dictionary<string, object?>());
+        await Assert.That(sim.Succeeded).IsFalse();
+        await Assert.That(sim.Error).IsEqualTo("'Choice' is required.");
+    }
+
     private static string PrintCreate(Domain domain, AnalysisResult analysis, string entityName) {
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         return ExportedCSharp.ExtractMethod(cs, $"internal static DomainResult<{entityName}> Create(");

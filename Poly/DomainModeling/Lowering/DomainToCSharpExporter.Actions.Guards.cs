@@ -38,6 +38,10 @@ public sealed partial class DomainToCSharpExporter {
         void EmitOne(Policy policy, Stage stage, List<Node> into) {
             if (action is not null && PolicyGuardFacts.SuppressesStageGate(action, policy))
                 return;
+            // #545: the action's own `require P` already emitted this gate above, so the stage copy is dead
+            // (the first guard returned). Same-name `not_P` and `P` are different checks and both stay.
+            if (action.Policies.Any(p => string.Equals(p.Name, policy.Name, StringComparison.Ordinal)))
+                return;
             var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
             var realName = negated ? policy.Name[4..] : policy.Name;
             Node call = new Invoke(new Member(subject, realName));

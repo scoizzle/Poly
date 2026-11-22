@@ -319,7 +319,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 4. check ────────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. An expression is probed against the model's own functions and enums; every property it reads needs a value in bindings, and an expression that reads none needs no bindings. Returns proven, violated, or unknown: proven only when every write was verified against its range, length, pattern or equals constraints (unique, required and enum membership are checked elsewhere), unknown (with the count of unverified findings) while any write could not be: bound the source, widen the target, or guard a non-parameter write; a Text or Number action parameter written into a bounded property stays unknown until parameter constraints exist. Findings carry the element path and the analyzer's message. Does not change the model. Use poly_define to fix a violation.")]
+    [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. An expression is probed against the model's own functions and enums; every property it reads needs a value in bindings, and an expression that reads none needs no bindings. Returns proven, violated, or unknown: proven only when every write was verified against its range, length, pattern or equals constraints (unique, required and enum membership are checked elsewhere), unknown (with the count of unverified findings) while any write could not be: bound the source, widen the target, or guard a non-parameter write; a Text or Number action parameter written into a bounded property stays unknown until parameter constraints exist. Findings carry the element path and the analyzer's message, with the source line and column when the stored document's outline reaches that element; data.hints lists the hints the summary counts (data.hintCount is the total). Does not change the model. Use poly_define to fix a violation.")]
     public PolyResponse Check(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("Optional element path to focus, e.g. \"Product\" or \"Product.Submit\".")] string? select = null,
@@ -363,7 +363,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 State: StateOf(workspace));
         }
 
-        var allFindings = AllFindings(analysis);
+        var allFindings = AllFindings(analysis, workspaceState.SourceText);
         var selectMatched = true;
         string? scopePath = null;
         IReadOnlyList<ActionInvariantFact>? witness = null;
@@ -399,6 +399,10 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         }
 
         var hintCount = allFindings.Count(f => string.Equals(f.Severity, "Hint", StringComparison.OrdinalIgnoreCase));
+        var hints = allFindings
+            .Where(f => string.Equals(f.Severity, "Hint", StringComparison.OrdinalIgnoreCase))
+            .Take(FindingCap)
+            .ToList();
         var reportable = allFindings
             .Where(f => !string.Equals(f.Severity, "Hint", StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -432,6 +436,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 errorCount,
                 warningCount,
                 hintCount,
+                hints,
                 unverifiedFindings = unverified,
                 findingsTotal = reportable.Count,
                 truncated = reportable.Count > FindingCap,
@@ -719,17 +724,22 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         return state;
     }
 
-    private static List<PolyFinding> AllFindings(DomainToolResponse response) {
+    private static List<PolyFinding> AllFindings(DomainToolResponse response, string? sourceText = null) {
         if (response.Data is DslValidationData validation)
             return validation.Findings
                 .Select(f => new PolyFinding(f.Severity, f.Code, f.ElementPath, f.Message, Line: f.Line, Column: f.Column))
                 .ToList();
 
-        if (response.Data is AnalysisData analysis && analysis.DiagnosticFacts is { Count: > 0 } facts)
+        if (response.Data is AnalysisData analysis && analysis.DiagnosticFacts is { Count: > 0 } facts) {
+            var (outline, lines) = SourceOutline(sourceText);
             return facts
-                .Select(f => new PolyFinding(f.Severity, f.Code, f.ElementPath, f.Message))
+                .Select(f => {
+                    var (line, column) = PositionOf(f.ElementPath, outline, lines);
+                    return new PolyFinding(f.Severity, f.Code, f.ElementPath, f.Message, Line: line, Column: column);
+                })
                 .DistinctBy(f => (f.Code, f.Path, f.Message))
                 .ToList();
+        }
 
         if (response.Diagnostics is { Count: > 0 } diagnostics)
             return diagnostics
@@ -739,8 +749,29 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         return [];
     }
 
-    private static List<PolyFinding> FindingsFrom(DomainToolResponse response) =>
-        AllFindings(response).Take(FindingCap).ToList();
+    /// <summary>The stored document's outline and line map, or nulls when there is no readable source.</summary>
+    private static (DslOutline? Outline, LineMap? Lines) SourceOutline(string? sourceText) {
+        if (string.IsNullOrEmpty(sourceText))
+            return (null, null);
+        try {
+            return (DslOutline.Build(sourceText), new LineMap(sourceText));
+        }
+        catch (FormatException) {
+            // A document the tokenizer rejects has no outline; the finding keeps its element path.
+            return (null, null);
+        }
+    }
+
+    /// <summary>The 1-based line and column the element path starts at, or nulls when the outline cannot reach it.</summary>
+    private static (int? Line, int? Column) PositionOf(string elementPath, DslOutline? outline, LineMap? lines) {
+        if (outline is null || lines is null || outline.Locate(elementPath) is not { } node)
+            return (null, null);
+        var (line, column) = lines.At(node.StartOffset);
+        return (line, column);
+    }
+
+    private static List<PolyFinding> FindingsFrom(DomainToolResponse response, string? sourceText = null) =>
+        AllFindings(response, sourceText).Take(FindingCap).ToList();
 
     private static IReadOnlyList<string> Next(string workspace, params string[] tools) =>
         tools.Select(tool => $"{tool}(workspace:\"{workspace}\")").ToList();

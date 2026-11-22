@@ -2,6 +2,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
@@ -178,9 +179,21 @@ public sealed partial class DbContextGenerator {
             == AccessModifier.Internal;
 
     /// <summary>
+    /// True when the explicit mapping below writes <c>WithMany</c> for a collection end, so EF reads the
+    /// navigation as a skip navigation over a join table: a many-to-many (paired or not), or two collection ends.
+    /// <see cref="BuildNavigationConfigNode"/> asks the same question, because <c>FindNavigation</c> never sees a
+    /// skip navigation (#807).
+    /// </summary>
+    private static bool MapsAsSkipNavigation(StorageNavigation nav) =>
+        nav.IsCollection
+        && (nav.InverseIsCollection
+            || (nav.InversePropertyName is null && nav.Source.Cardinality == RelationshipCardinality.ManyToMany));
+
+    /// <summary>
     /// <c>b.HasMany(e =&gt; e.Nav).WithOne(i =&gt; i.Inverse)</c> or <c>b.HasOne(e =&gt; e.Nav).WithMany()</c>: the
     /// inverse is the one analysis resolved (<see cref="StorageNavigation.InversePropertyName"/>); none means
-    /// a one-directional navigation (a bare <c>WithOne()</c> / <c>WithMany()</c>).
+    /// a one-directional navigation (a bare <c>WithOne()</c> / <c>WithMany()</c>). An unpaired many-to-many is
+    /// <c>WithMany()</c>: <c>WithOne()</c> would store a one-to-many (#807).
     /// </summary>
     private Node BuildExplicitNavigationMapping(Parameter bParam, StorageNavigation nav) {
         var eParam = new Parameter("e");
@@ -188,9 +201,9 @@ public sealed partial class DbContextGenerator {
             new Member(bParam, nav.IsCollection ? "HasMany" : "HasOne"),
             new Lambda([eParam], new Member(eParam, nav.PropertyName)));
 
-        var inverseIsCollection = nav.InverseIsCollection;
         // The many side of a one-to-many is entered with WithOne; the one side of a many-to-one with WithMany.
-        var withMany = nav.IsCollection ? inverseIsCollection : nav.InversePropertyName is null || inverseIsCollection;
+        var withMany = MapsAsSkipNavigation(nav)
+            || (!nav.IsCollection && (nav.InversePropertyName is null || nav.InverseIsCollection));
 
         var withArgs = new List<Node>();
         if (nav.InversePropertyName is { } inversePropertyName) {
@@ -207,8 +220,10 @@ public sealed partial class DbContextGenerator {
         // domain type binds to an inherited DbContext member first (an entity named `Entry` to
         // DbContext.Entry<TEntity>, CS0119, #1012) and a namespace-qualified one binds to the entity when it is
         // named like its domain (`Library.Library`). A string names the CLR property and cannot be shadowed.
+        // A skip navigation (many-to-many) is not a navigation: FindNavigation returns null for it (#807).
         var findNavigation = new Invoke(
-            new Member(new Member(bParam, "Metadata"), "FindNavigation"),
+            new Member(new Member(bParam, "Metadata"),
+                MapsAsSkipNavigation(nav) ? "FindSkipNavigation" : "FindNavigation"),
             new Constant(nav.PropertyName));
 
         return new Invoke(

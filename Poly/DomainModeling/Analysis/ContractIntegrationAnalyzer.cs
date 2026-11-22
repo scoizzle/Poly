@@ -59,8 +59,8 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// this domain. A public action must also be reachable through public (#418): its owning
     /// entity must be public, because a public entity exports its name and its public actions.
     /// A public entity may navigate to an internal entity (L-22b): the navigation prints <c>internal</c> and the
-    /// pack maps it explicitly. Still an error (<see cref="ValidatePublicEntityInternalTargets"/>): an entity-typed
-    /// property, and a many-to-many navigation to an internal entity (until row L-22d).
+    /// pack maps it explicitly, a many-to-many as an EF skip navigation (L-22d). Still an error
+    /// (<see cref="ValidatePublicEntityInternalTargets"/>): an entity-typed property.
     /// Not checked: a public entity's properties (decision 13 exports its name and
     /// public actions only), an imported contract's ACL value types (that contract's surface),
     /// primitives, and enums (no visibility mark; #418 gives them a digest entry).
@@ -122,25 +122,9 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// L-22 (#604): an entity-typed property (the DSL reads one as a navigation; the model API can build one) of a
     /// public entity names an internal entity. Persistence ignores such a property, so demoting it would lose its data
     /// silently, and printing it public is CS0053: an error (not acknowledgeable), positioned on the property.
+    /// A navigation is not an error: it prints internal and the pack maps it explicitly (L-22d, #807).
     /// </summary>
     private static void ValidatePublicEntityInternalTargets(AnalysisContext context, Domain domain, Entity entity) {
-        // A many-to-many navigation to an internal entity prints internal, but the pack's explicit mapping cannot
-        // prove an EF skip navigation over a non-public member, so it fails closed rather than map it as one-to-many.
-        foreach (var navigation in entity.Navigations) {
-            if (navigation.Cardinality is not RelationshipCardinality.ManyToMany
-                || context.GetMetadata<ResolvedTypeReferenceMetadata>(navigation.Target)
-                    is not ResolvedTypeReferenceMetadata { Type: Entity target }
-                || !IsDeclaredInDomain(domain, target)
-                || target.Visibility == Visibility.Public)
-                continue;
-
-            context.ReportError(
-                navigation,
-                $"Public entity '{entity.Name}' many-to-many navigation '{navigation.Name}' targets internal entity " +
-                $"'{target.Name}'; that mapping is not supported. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
-                DomainModelDiagnosticCodes.PublicEntityPropertyTypedInternalEntity);
-        }
-
         foreach (var property in entity.Properties) {
             var target = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type)?.Type as Entity
                 ?? domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == property.Type.TypeName);

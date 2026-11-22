@@ -39,8 +39,10 @@ public sealed partial class DomainToCSharpExporter {
             if (action is not null && PolicyGuardFacts.SuppressesStageGate(action, policy))
                 return;
             // #545: the action's own `require P` already emitted this gate above, so the stage copy is dead
-            // (the first guard returned). Same-name `not_P` and `P` are different checks and both stay.
-            if (action.Policies.Any(p => string.Equals(p.Name, policy.Name, StringComparison.Ordinal)))
+            // (the first guard returned). Same-name `not_P` and `P` are different checks and both stay. Only the
+            // gate (no message suffix): the re-check after the body (#518/#577) is the invariant, not a duplicate.
+            if (messageSuffix is null && action is not null
+                && action.Policies.Any(p => string.Equals(p.Name, policy.Name, StringComparison.Ordinal)))
                 return;
             var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
             var realName = negated ? policy.Name[4..] : policy.Name;

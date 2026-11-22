@@ -63,22 +63,34 @@ public class PolicyGuardEmissionTests {
     public async Task StageAndActionRequireSamePolicy_BodyChecksItOnce() {
         var body = ClaimBody(StageAndAction);
 
-        await Assert.That(Occurrences(body, "!this.HasRoom()")).IsEqualTo(1);
-        await Assert.That(Occurrences(body, "blocked by policy 'HasRoom'")).IsEqualTo(1);
+        await Assert.That(Occurrences(body, "blocked by policy 'HasRoom'.\"")).IsEqualTo(1);
+    }
+
+    // The gate before the body is one check; the stage requirement's re-check after the body (#518/#577) is a
+    // different check — the body must keep the invariant — and carries its own message suffix.
+    private const string PostCheck = "It would leave stage 'Draft' invalid.";
+
+    [Test]
+    public async Task StageAndActionRequireSamePolicy_KeepsTheAfterBodyRecheck() {
+        var body = ClaimBody(StageAndAction);
+
+        await Assert.That(Occurrences(body, PostCheck)).IsEqualTo(1);
+        await Assert.That(Occurrences(body, "!this.HasRoom()")).IsEqualTo(2);
     }
 
     [Test]
     public async Task StageRequireAlone_BodyChecksItOnce() {
         var body = ClaimBody(StageOnly);
 
-        await Assert.That(Occurrences(body, "!this.HasRoom()")).IsEqualTo(1);
+        await Assert.That(Occurrences(body, "blocked by policy 'HasRoom'.\"")).IsEqualTo(1);
+        await Assert.That(Occurrences(body, PostCheck)).IsEqualTo(1);
     }
 
     [Test]
     public async Task ActionPolicyWithADifferentName_StillChecksBoth() {
         var body = ClaimBody(DifferentNames);
 
-        await Assert.That(Occurrences(body, "!this.HasRoom()")).IsEqualTo(1);
+        await Assert.That(Occurrences(body, "blocked by policy 'HasRoom'.\"")).IsEqualTo(1);
         await Assert.That(Occurrences(body, "!this.NotFull()")).IsEqualTo(1);
     }
 
@@ -96,8 +108,12 @@ public class PolicyGuardEmissionTests {
         });
 
         await Assert.That(ParityScenario.Differences(simulate, printed)).IsEmpty();
+        // The third claim would fill Items to 3 and leave Draft invalid, so the stage requirement's re-check
+        // after the body refuses it and rolls it back (#518/#577); the fourth starts from the same two items.
         await Assert.That(string.Join(",", simulate.Select(o => o.Success)))
-            .IsEqualTo("True,True,True,True,False");
+            .IsEqualTo("True,True,True,False,False");
+        await Assert.That(simulate[3].FailureGuard).IsEqualTo("HasRoom");
+        await Assert.That(printed[3].FailureGuard).IsEqualTo("HasRoom");
         await Assert.That(simulate[4].FailureGuard).IsEqualTo("HasRoom");
         await Assert.That(printed[4].FailureGuard).IsEqualTo("HasRoom");
         await Assert.That(simulate[4].FailurePath).IsEqualTo("Contract.Claim");

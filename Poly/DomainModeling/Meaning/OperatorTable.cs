@@ -3,6 +3,7 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
@@ -33,6 +34,9 @@ internal static class OperatorTable {
                 return true;
             case Divide:
                 kind = OperatorKind.Divide;
+                return true;
+            case Modulo:
+                kind = OperatorKind.Modulo;
                 return true;
             case Comparison comparison:
                 kind = KindOf(comparison.Kind);

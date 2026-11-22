@@ -4,6 +4,7 @@ using Poly.Introspection.CommonLanguageRuntime;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
@@ -89,7 +90,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             && Family(InferType(context, add.Left, props, parameters, enumTypes)) is TypeFamily.Text
             && Family(InferType(context, add.Right, props, parameters, enumTypes)) is TypeFamily.Text)
             return TextFamily;
-        if (expr is Add or Subtract or Multiply or Divide)
+        if (expr is Add or Subtract or Multiply or Divide or Modulo)
             return InferArithmetic(context, expr, props, parameters, enumTypes);
         if (expr is Negate negate)
             return InferNegate(context, negate, props, parameters, enumTypes);
@@ -208,6 +209,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 Add => Introspection.OperatorKind.Add,
                 Subtract => Introspection.OperatorKind.Subtract,
                 Multiply => Introspection.OperatorKind.Multiply,
+                Modulo => Introspection.OperatorKind.Modulo,
                 _ => Introspection.OperatorKind.Divide,
             };
             return context.TypeSystem.Operator(kind, left.Definition!, right.Definition) is { } resolution

@@ -4,6 +4,7 @@ using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using OperatorKind = Poly.Introspection.OperatorKind;
@@ -541,6 +542,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckNegate(context, negate, props, parameters, enumTypes);
                 WalkExpression(context, negate.Operand, props, parameters, enumTypes, walked);
                 return;
+            case Modulo mod:
+                StampBinary(context, mod, OperatorKind.Modulo, mod.Left, mod.Right, props, parameters, enumTypes);
+                CheckNumericArithmetic(context, mod, mod.Left, mod.Right, props, parameters, enumTypes);
+                return;
             case Not not:
                 var operand = InferType(context, not.Operand, props, parameters, enumTypes);
                 if (!IsTyped(operand))
@@ -732,7 +737,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private MatchExpr? AbsentMatchOperand(
         AnalysisContext context, DomainExpression value,
         Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
-        if (value is not (Add or Subtract or Multiply or Divide)) return null;
+        if (value is not (Add or Subtract or Multiply or Divide or Modulo)) return null;
         foreach (var operand in value.Children.OfType<DomainExpression>()) {
             if (RewriteLibraryIdent(operand) is MatchExpr match && InferType(context, match, props, parameters, enumTypes).Optional)
                 return match;
@@ -764,7 +769,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 WarnIntegerDivisions(context, value, model, props, parameters, enumTypes);
             return;
         }
-        if (expr is not (Add or Subtract or Multiply or Divide))
+        if (expr is not (Add or Subtract or Multiply or Divide or Modulo))
             return;
         if (expr is Divide divide
             && model.KindOf(InferType(context, divide.Left, props, parameters, enumTypes)) is NumericKind.Integer64

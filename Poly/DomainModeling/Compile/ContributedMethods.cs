@@ -560,6 +560,7 @@ internal static class ContributedMethods {
             Subtract e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Subtract(l, r)),
             Multiply e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Multiply(l, r)),
             Divide e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Divide(l, r)),
+            Modulo e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Modulo(l, r)),
             Poly.Ast.Nodes.And e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Poly.Ast.Nodes.And(l, r)),
             Poly.Ast.Nodes.Or e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Poly.Ast.Nodes.Or(l, r)),
             Coalesce e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Coalesce(l, r)),

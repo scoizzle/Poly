@@ -4,6 +4,7 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
@@ -70,6 +71,7 @@ public sealed partial class DomainDslPrinter {
                 or Poly.DomainModeling.Ontology.Subtract
                 or Poly.DomainModeling.Ontology.Multiply
                 or Poly.DomainModeling.Ontology.Divide
+                or Poly.DomainModeling.Ontology.Modulo
                 or Poly.DomainModeling.Ontology.Not
                 ? $"not ({Run(_printer, n.Operand)})"
                 : $"not {Run(_printer, n.Operand)}";
@@ -95,6 +97,9 @@ public sealed partial class DomainDslPrinter {
             n.Operand is Poly.DomainModeling.Ontology.Negate
                 ? $"-({Run(_printer, n.Operand)})"
                 : $"-{Run(_printer, n.Operand)}";
+
+        protected override string Modulo(Modulo m) =>
+            $"({Run(_printer, m.Left)} % {Run(_printer, m.Right)})";
 
         protected override string Exists(Exists e) =>
             $"{Run(_printer, e.Target)} exists";

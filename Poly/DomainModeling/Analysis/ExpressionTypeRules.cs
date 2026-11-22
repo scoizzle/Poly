@@ -2,6 +2,7 @@ using Poly.DomainModeling.Ontology;
 
 using Add = Poly.DomainModeling.Ontology.Add;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
@@ -261,7 +262,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             case SumExpr:
             case AnyExpr or AllExpr or NoneExpr or CountExpr:
                 return "its relationship does not resolve to an entity";
-            case Add or Subtract or Multiply or Divide:
+            case Add or Subtract or Multiply or Divide or Modulo:
                 var operands = expr.Children.OfType<DomainExpression>()
                     .Select(o => InferType(context, o, props, parameters, enumTypes)).ToList();
                 return operands.All(IsTyped)

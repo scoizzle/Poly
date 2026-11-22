@@ -18,8 +18,8 @@ public sealed class DslOperatorTableTests {
         var binary = table.BinaryRows.Select(r => (r.Op, r.Follow)).ToHashSet();
         foreach (var op in new[] {
                      DslTokenKind.Or, DslTokenKind.And, DslTokenKind.Plus, DslTokenKind.Minus, DslTokenKind.Star,
-                     DslTokenKind.Slash, DslTokenKind.Is, DslTokenKind.Eq, DslTokenKind.Neq, DslTokenKind.Gt,
-                     DslTokenKind.Gte, DslTokenKind.Lt, DslTokenKind.Lte,
+                     DslTokenKind.Slash, DslTokenKind.Percent, DslTokenKind.Is, DslTokenKind.Eq, DslTokenKind.Neq,
+                     DslTokenKind.Gt, DslTokenKind.Gte, DslTokenKind.Lt, DslTokenKind.Lte,
                  })
             await Assert.That(binary.Contains((op, null))).IsTrue();
         await Assert.That(binary.Contains((DslTokenKind.Is, DslTokenKind.Not))).IsTrue();
@@ -44,6 +44,7 @@ public sealed class DslOperatorTableTests {
         await Assert.That(add).IsLessThan(mul);
         await Assert.That(Binary(table, DslTokenKind.Minus).Precedence).IsEqualTo(add);
         await Assert.That(Binary(table, DslTokenKind.Slash).Precedence).IsEqualTo(mul);
+        await Assert.That(Binary(table, DslTokenKind.Percent).Precedence).IsEqualTo(mul);
         await Assert.That(table.Levels.Select(l => l.Precedence).SequenceEqual([or, and, compare, add, mul])).IsTrue();
     }
 
@@ -53,7 +54,7 @@ public sealed class DslOperatorTableTests {
 
         foreach (var op in new[] { DslTokenKind.Is, DslTokenKind.Eq, DslTokenKind.Neq, DslTokenKind.Gt, DslTokenKind.Gte, DslTokenKind.Lt, DslTokenKind.Lte })
             await Assert.That(Binary(table, op).Assoc).IsEqualTo(Assoc.None);
-        foreach (var op in new[] { DslTokenKind.Or, DslTokenKind.And, DslTokenKind.Plus, DslTokenKind.Minus, DslTokenKind.Star, DslTokenKind.Slash })
+        foreach (var op in new[] { DslTokenKind.Or, DslTokenKind.And, DslTokenKind.Plus, DslTokenKind.Minus, DslTokenKind.Star, DslTokenKind.Slash, DslTokenKind.Percent })
             await Assert.That(Binary(table, op).Assoc).IsEqualTo(Assoc.Left);
         await Assert.That(Binary(table, DslTokenKind.Is, DslTokenKind.Not).Assoc).IsEqualTo(Assoc.None);
     }

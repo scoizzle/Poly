@@ -118,6 +118,7 @@ public sealed class DslOperatorTable {
                 Row(DslTokenKind.Minus, add, Assoc.Left, DomainExpression.Subtract),
                 Row(DslTokenKind.Star, mul, Assoc.Left, DomainExpression.Multiply),
                 Row(DslTokenKind.Slash, mul, Assoc.Left, DomainExpression.Divide),
+                Row(DslTokenKind.Percent, mul, Assoc.Left, DomainExpression.Modulo),
             ],
             [
                 new PrefixRow(DslTokenKind.Not, add, DomainExpression.Not),

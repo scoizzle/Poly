@@ -402,6 +402,9 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
                 case Divide div:
                     Walk(div.Left); Walk(div.Right);
                     break;
+                case Modulo mod:
+                    Walk(mod.Left); Walk(mod.Right);
+                    break;
                 case DateOperation dOp:
                     Walk(dOp.Date); Walk(dOp.Offset);
                     break;
@@ -488,6 +491,10 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
             case Divide d:
                 InferTypesCore(d.Left, types);
                 InferTypesCore(d.Right, types);
+                break;
+            case Modulo m:
+                InferTypesCore(m.Left, types);
+                InferTypesCore(m.Right, types);
                 break;
             case Exists e:
                 InferTypesCore(e.Target, types);

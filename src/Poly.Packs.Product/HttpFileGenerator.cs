@@ -93,7 +93,7 @@ public sealed class HttpFileGenerator {
     private void AppendEntitySection(StringBuilder sb, Entity entity, bool isRoot) {
         var store = GetStorageEntity(entity);
         var route = Pluralize(ToCamelCase(entity.Name));
-        var keyExample = GetKeyExample(store);
+        var keyExample = GetKeyExample(entity);
 
         sb.AppendLine($"### ──────────── {Pluralize(entity.Name)} ────────────");
         sb.AppendLine();
@@ -113,7 +113,8 @@ public sealed class HttpFileGenerator {
                     .ToList();
                 // A Required link is sent as the target's key, the value the target's own create sample posts for it, so
                 // the target's sample and this one succeed in file order. CreatesDirectly guarantees a natural key.
-                var members = scalarProps.Select(p => $"\"{p.Name}\": {GetExampleJsonValue(p)}")
+                var notes = new List<string>();
+                var members = scalarProps.Select(p => $"\"{p.Name}\": {GetExampleJsonValue(p, notes)}")
                     .Concat(GetCreateSlots(entity).Where(MinimalApiGenerator.IsRequiredLink).Select(slot =>
                         $"\"{MinimalApiGenerator.CreateLinkMemberName(slot.Name)}\": "
                         + GetExampleJsonValue(MinimalApiGenerator.RouteKeyFor(_storageLookup[slot.Type.TypeName]).Property!)))
@@ -123,6 +124,8 @@ public sealed class HttpFileGenerator {
                     sb.AppendLine("Content-Type: application/json");
                     sb.AppendLine();
                     sb.AppendLine("{");
+                    foreach (var note in notes)
+                        sb.AppendLine(note);
                     for (int i = 0; i < members.Count; i++)
                         sb.AppendLine($"    {members[i]}{(i < members.Count - 1 ? "," : "")}");
                     sb.AppendLine("}");
@@ -135,8 +138,7 @@ public sealed class HttpFileGenerator {
             var parentCtx = GetAggregateParent(entity);
             if (parentCtx is { } ctx) {
                 var (parentEntity, relName) = ctx;
-                var parentStore = GetStorageEntity(parentEntity);
-                var parentKeyEx = GetKeyExample(parentStore);
+                var parentKeyEx = GetKeyExample(parentEntity);
                 var relRoute = $"{Pluralize(ToCamelCase(parentEntity.Name))}/{parentKeyEx}/{ToCamelCase(relName).ToLowerInvariant()}";
                 sb.AppendLine($"### List {Pluralize(ToCamelCase(entity.Name))} for {ToCamelCase(parentEntity.Name)}");
                 sb.AppendLine($"GET {_baseUrl}/api/{relRoute}");
@@ -163,8 +165,7 @@ public sealed class HttpFileGenerator {
             var parentCtx = GetAggregateParent(entity);
             if (parentCtx is { } ctx) {
                 var (parentEntity, relName) = ctx;
-                var parentStore = GetStorageEntity(parentEntity);
-                var parentKeyExample = GetKeyExample(parentStore);
+                var parentKeyExample = GetKeyExample(parentEntity);
                 parentRoute = $"{Pluralize(ToCamelCase(parentEntity.Name))}/{parentKeyExample}/{ToCamelCase(relName).ToLowerInvariant()}";
             }
         }
@@ -201,23 +202,31 @@ public sealed class HttpFileGenerator {
     private static string ActionDtoPropertyName(BehaviorParameter param) =>
         param.IsEntityRef ? Pascalize(param.Name) + "Id" : Pascalize(param.Name);
 
-    private static string GetKeyExample(StorageEntity store) {
-        var key = MinimalApiGenerator.RouteKeyFor(store);
+    /// <summary>
+    /// The path value a sample request uses for the entity's route key: the value its own create sample posts
+    /// for that key, so the requests in this file succeed in the order they appear (#596). A shadow key has no
+    /// such value, so the file keeps <c>1</c> — the row the opt-in seed (#595) writes, or the id a POST returns
+    /// once #589 publishes it.
+    /// </summary>
+    private string GetKeyExample(Entity entity) {
+        var key = MinimalApiGenerator.RouteKeyFor(GetStorageEntity(entity));
         if (key.Property is null) return "1";
-        return key.ClrType switch {
-            "string" => "example-value",
-            "long" or "int" => "42",
-            "Guid" => "550e8400-e29b-41d4-a716-446655440000",
-            _ => "example",
-        };
+        var json = GetExampleJsonValue(key.Property);
+        return json.StartsWith('"') && json.EndsWith('"') ? json[1..^1] : json;
     }
 
-    private string GetExampleJsonValue(Property prop) =>
-        GetExampleJsonValue(prop, new HashSet<string>(StringComparer.Ordinal));
+    private string GetExampleJsonValue(Property prop, List<string>? notes = null) =>
+        GetExampleJsonValue(prop, new HashSet<string>(StringComparer.Ordinal), notes);
 
-    private string GetExampleJsonValue(Property prop, HashSet<string> stack) {
+    private string GetExampleJsonValue(Property prop, HashSet<string> stack, List<string>? notes = null) {
         if (TryValueType(prop.Type.TypeName, out var valueType))
             return FormatValueType(valueType, stack);
+
+        var json = GetExampleJsonValueForType(prop);
+        return ApplyConstraints(prop, json, notes);
+    }
+
+    private string GetExampleJsonValueForType(Property prop) {
         if (prop.Constraints.Any(c => c is UniqueConstraint) &&
             (prop.Type.TypeName is "Text" or "String")) {
             var baseVal = ToCamelCase(prop.Name);
@@ -242,6 +251,74 @@ public sealed class HttpFileGenerator {
             "Binary" => "\"AAE=\"",
             _ => "0",
         };
+    }
+
+    /// <summary>
+    /// #596: the value a create sample posts must satisfy the property's own constraints, or the first request
+    /// a reader sends answers 400. A range clamps the number; a length pads or trims the text; a pattern is met
+    /// by trying the canonical candidates in order. When no candidate matches, the value is kept and
+    /// <paramref name="notes"/> says so — the file never claims a sample the domain would reject.
+    /// </summary>
+    private static string ApplyConstraints(Property prop, string json, List<string>? notes) {
+        var range = prop.Constraints.OfType<RangeConstraint>().FirstOrDefault();
+        if (range is not null)
+            json = ClampToRange(json, range);
+
+        if (prop.Type.TypeName is not ("Text" or "String"))
+            return json;
+
+        var length = prop.Constraints.OfType<LengthConstraint>().FirstOrDefault();
+        var pattern = prop.Constraints.OfType<PatternConstraint>().FirstOrDefault();
+        var seed = json.Trim('"');
+        if (pattern is null)
+            return Quote(FitLength(seed, length));
+
+        string? unmatched = null;
+        foreach (var candidate in PatternCandidates(seed)) {
+            var fitted = FitLength(candidate, length);
+            unmatched ??= fitted;
+            if (System.Text.RegularExpressions.Regex.IsMatch(fitted, pattern.Pattern))
+                return Quote(fitted);
+        }
+        notes?.Add($"### NOTE: the '{prop.Name}' sample does not satisfy pattern(\"{pattern.Pattern}\");"
+            + " edit it before sending.");
+        return Quote(unmatched!);
+    }
+
+    /// <summary>The values a constrained text sample may be: the natural one first, then shapes that meet a
+    /// common pattern (an uppercase code, an email, a number).</summary>
+    private static IEnumerable<string> PatternCandidates(string seed) => new[] {
+        seed, "sample", "example", "XXXXXXXX", "ABC123", "X1", "A1", "1", "user@test.com", "a@b.io",
+    }.Distinct(StringComparer.Ordinal);
+
+    private static string FitLength(string text, LengthConstraint? length) {
+        if (length is null) return text;
+        if (text.Length < length.MinLength)
+            text += new string('X', length.MinLength - text.Length);
+        return text.Length > length.MaxLength ? text[..length.MaxLength] : text;
+    }
+
+    private static string Quote(string text) => $"\"{text}\"";
+
+    private static string ClampToRange(string json, RangeConstraint range) {
+        if (!decimal.TryParse(json, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var value))
+            return json;
+        var clamped = value;
+        if (TryDecimal(range.Minimum, out var min) && clamped < min) clamped = min;
+        if (TryDecimal(range.Maximum, out var max) && clamped > max) clamped = max;
+        return clamped == value
+            ? json
+            : clamped.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static bool TryDecimal(object? bound, out decimal value) {
+        value = 0;
+        return bound is not null && decimal.TryParse(
+            Convert.ToString(bound, System.Globalization.CultureInfo.InvariantCulture),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out value);
     }
 
     private string GetExampleJsonValueForTransportParam(BehaviorParameter param) {

@@ -16,7 +16,7 @@
 GET http://localhost:5201/api/books
 
 ### Get book by ISBN
-GET http://localhost:5201/api/books/example-value
+GET http://localhost:5201/api/books/example-isbn
 
 ### Create a new book
 POST http://localhost:5201/api/books
@@ -26,7 +26,7 @@ Content-Type: application/json
     "Title": "sample",
     "Author": "sample",
     "ISBN": "example-isbn",
-    "Pages": 0,
+    "Pages": 1,
     "Genre": "Fiction"
 }
 
@@ -36,7 +36,7 @@ Content-Type: application/json
 GET http://localhost:5201/api/patrons
 
 ### Get patron by Email
-GET http://localhost:5201/api/patrons/example-value
+GET http://localhost:5201/api/patrons/user@test.com
 
 ### Create a new patron
 POST http://localhost:5201/api/patrons
@@ -44,7 +44,7 @@ Content-Type: application/json
 
 {
     "Name": "sample",
-    "Email": "example-email",
+    "Email": "user@test.com",
     "MemberSince": "2026-07-20",
     "Status": "Active",
     "MaxItems": 0,
@@ -53,7 +53,7 @@ Content-Type: application/json
 }
 
 ### Action: CheckOut
-POST http://localhost:5201/api/patrons/example-value/checkOut
+POST http://localhost:5201/api/patrons/user@test.com/checkOut
 Content-Type: application/json
 
 {
@@ -61,41 +61,41 @@ Content-Type: application/json
 }
 
 ### Action: Suspend
-POST http://localhost:5201/api/patrons/example-value/suspend
+POST http://localhost:5201/api/patrons/user@test.com/suspend
 
 ### Action: CloseAccount
-POST http://localhost:5201/api/patrons/example-value/closeAccount
+POST http://localhost:5201/api/patrons/user@test.com/closeAccount
 
 ### Action: Reinstate
-POST http://localhost:5201/api/patrons/example-value/reinstate
+POST http://localhost:5201/api/patrons/user@test.com/reinstate
 
 ### ──────────── Loans ────────────
 
 ### List loans for patron
-GET http://localhost:5201/api/patrons/example-value/loans
+GET http://localhost:5201/api/patrons/user@test.com/loans
 
 ### Get loan by id for patron
-GET http://localhost:5201/api/patrons/example-value/loans/1
+GET http://localhost:5201/api/patrons/user@test.com/loans/1
 
 ### Action: Renew
-POST http://localhost:5201/api/patrons/example-value/loans/1/renew
+POST http://localhost:5201/api/patrons/user@test.com/loans/1/renew
 
 ### Action: Return
-POST http://localhost:5201/api/patrons/example-value/loans/1/return
+POST http://localhost:5201/api/patrons/user@test.com/loans/1/return
 
 ### ──────────── Fines ────────────
 
 ### List fines for patron
-GET http://localhost:5201/api/patrons/example-value/fines
+GET http://localhost:5201/api/patrons/user@test.com/fines
 
 ### Get fine by id for patron
-GET http://localhost:5201/api/patrons/example-value/fines/1
+GET http://localhost:5201/api/patrons/user@test.com/fines/1
 
 ### Action: Pay
-POST http://localhost:5201/api/patrons/example-value/fines/1/pay
+POST http://localhost:5201/api/patrons/user@test.com/fines/1/pay
 
 ### Action: Waive
-POST http://localhost:5201/api/patrons/example-value/fines/1/waive
+POST http://localhost:5201/api/patrons/user@test.com/fines/1/waive
 
 ### ──────────── PremiumPatrons ────────────
 
@@ -103,7 +103,7 @@ POST http://localhost:5201/api/patrons/example-value/fines/1/waive
 GET http://localhost:5201/api/premiumPatrons
 
 ### Get premiumPatron by Email
-GET http://localhost:5201/api/premiumPatrons/example-value
+GET http://localhost:5201/api/premiumPatrons/user@test.com
 
 ### Create a new premiumPatron
 POST http://localhost:5201/api/premiumPatrons
@@ -111,7 +111,7 @@ Content-Type: application/json
 
 {
     "Name": "sample",
-    "Email": "example-email",
+    "Email": "user@test.com",
     "RewardPoints": 0,
     "Tier": "Silver",
     "PriorityAccess": false

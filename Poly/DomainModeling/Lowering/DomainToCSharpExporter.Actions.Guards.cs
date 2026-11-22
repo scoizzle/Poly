@@ -21,14 +21,14 @@ public sealed partial class DomainToCSharpExporter {
             subject: new ThisReference(), messageSuffix: null, failureReturn));
 
     /// <summary>
-    /// The stage <c>require</c> checks for one context, ready to prepend (the pre-guard) or
-    /// insert before the final return (the post-check, #576/#577/#518 — a stage requirement is an
-    /// INVARIANT, so the body must keep it true, not only meet it on entry). <paramref name="subject"/>
-    /// owns the policies: <c>this</c> for an action, the created local for <c>Create</c>.
-    /// <paramref name="messageSuffix"/> tells a refusal after the body from one before it. A
-    /// stage-scoped body checks its stage unconditionally; an entity-level body checks while
-    /// <c>CurrentStage</c> is that stage, so an action that transitioned away is judged by the stage
-    /// it landed in.
+    /// The stage <c>require</c> checks for one context, ready to prepend (an action's gate), to insert
+    /// before an action's final return (the post-check, #518/#577: a stage requirement is an INVARIANT,
+    /// so the body must keep it true, not only meet it on entry), or to insert after <c>Create</c>'s
+    /// initial values and entry (#576). <paramref name="subject"/> owns the policies: <c>this</c> for an
+    /// action, the created local for <c>Create</c>. <paramref name="messageSuffix"/> tells a refusing check
+    /// apart from its caller's. A stage-scoped context checks its stage unconditionally; an entity-level
+    /// one checks while <c>CurrentStage</c> is that stage, so an action or entry that transitioned away
+    /// is judged by the stage it landed in.
     /// </summary>
     private static List<Node> StagePolicyGuards(
         Action? action, Entity entity, string? policyStageName, string? stageEnumTypeName,

@@ -580,6 +580,17 @@ public sealed partial class DomainToCSharpExporter {
                 new Block([FailureLowering.Propagate(createResultType, entryResult)])));
         }
 
+        // #576: a stage `require` is an invariant, so the new instance is judged by the stage it lands in. After the
+        // initial values and the initial stage's entry (which may transition), that stage's requirements are checked
+        // on the created instance; the failure rolls the create back, so nothing is registered, attached or notified.
+        if (esm.HasStages) {
+            createSuccessNodes.AddRange(StagePolicyGuards(
+                action: null, entity, policyStageName: null, stageEnumTypeName,
+                subject: createdLocal,
+                messageSuffix: stage => $" It would leave stage '{stage.Name}' invalid.",
+                failureReturn: spec => FailureLowering.Return(createResultType, spec)));
+        }
+
         // InitializeSubscriptions registers the new instance in its peers' registries, so it runs after the entry
         // (a failed entry must leave no registry entry in a peer) and after all state, including collections passed
         // from data-store materialization, is set.

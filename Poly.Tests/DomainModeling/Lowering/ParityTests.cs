@@ -1010,20 +1010,41 @@ public class ParityTests {
 
     // Guard blocks are the module Failure string on both sides. The old simulate
     // path dropped that string into FailedGuards; that split left with DEI.
+    // A stage requirement is an invariant (#576): a create may not falsify it, and an action that stays
+    // in the stage may not either (#577). The fixture therefore falsifies it through the entity the
+    // policy reads — now authorable in the DSL, which the builder above predates.
+    private const string StagePolicyFalseDsl = """
+        domain D
+        Room: entity {
+          Occupied: Boolean default(false)
+          Occupy: action { assign Occupied to true }
+        }
+        Item: entity {
+          room: Room optional
+          Ready: policy { room Occupied is false }
+          Open: stage require Ready {
+            Go: action { }
+          }
+        }
+        """;
+
     [Test]
     public async Task Invoke_WhenStagePolicyIsFalse_BothSidesFail() {
-        var domain = StagePolicyDomain(false);
-        var source = PrintedCSharp(domain);
+        var source = PrintedCSharp(EvolvedDomain.FromDsl(StagePolicyFalseDsl).Domain);
         await Assert.That(source).Contains("bool Ready(");
         await Assert.That(source).Contains("blocked by policy 'Ready'");
 
-        var outcomes = await ParityScenario.FromDomain(domain, "ParityStagePolicyFalse")
+        var outcomes = await ParityScenario.FromDsl(StagePolicyFalseDsl, "ParityStagePolicyFalse")
             .AssertAgree(side => {
-                side.Create("Item");
+                var room = side.Create("Room");
+                var item = side.Create("Item", ("room", room));
+                side.Use(room);
+                side.Invoke("Occupy");
+                side.Use(item);
                 side.Invoke("Go");
             });
-        await Assert.That(outcomes[1].Success).IsFalse();
-        await Assert.That(outcomes[1].Message).Contains("blocked by policy 'Ready'");
+        await Assert.That(outcomes[5].Success).IsFalse();
+        await Assert.That(outcomes[5].Message).Contains("blocked by policy 'Ready'");
     }
 
     [Test]

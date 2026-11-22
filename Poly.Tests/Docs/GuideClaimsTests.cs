@@ -140,15 +140,12 @@ public class GuideClaimsTests {
     /// The rows this slice knows about: the id, the one slice that deletes the row, the measured detail,
     /// and which resolution retires it. Each entry is a recorded contradiction, never a pass.
     /// <para>
-    /// c576 is the remaining row for the guide's one stage-<c>require</c> invariant sentence: <c>Create</c>
-    /// still accepts an instance whose initial values falsify the requirement. Its sibling c577 (an action
-    /// that falsifies it) was retired by V-10's post-check (#518/#577) and its row deleted, as R6a requires.
+    /// c576 (create, L-17 #576) and c577 (an action, V-10 #518/#577) share the guide's one stage-<c>require</c>
+    /// invariant sentence; both are retired (#1064 and #1039 checked the requirement at create and after the
+    /// action), so the probes stay and no row remains, as R6a requires.
     /// </para>
     /// </summary>
     private static readonly DriftRow[] KnownGuideDrift = [
-        new("c576", "L-17", "accepted: created in Open with Cleared=true",
-            "L-17 refuses create in a stage whose require the initial values falsify. Shares the claim "
-            + "sentence with the retired c577 row."),
     ];
 
     /// <summary>The audit's answer: contradictions with no row, and rows with no contradiction.</summary>

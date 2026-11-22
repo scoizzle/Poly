@@ -533,8 +533,12 @@ public class DbContextGeneratorTests {
     }
 
     /// <summary>The first argument of every emitted <c>HasDefaultValue</c>, in order.</summary>
+    /// <summary>The column defaults the domain's own constraints state: the concurrency token's <c>HasDefaultValue(0)</c>
+    /// (#626/#653) is the host's, not a declared default, so it is left out.</summary>
     private static List<Node> DefaultValues(Domain domain) =>
-        OnModelCreating(domain).FindInvocations("HasDefaultValue").Select(i => i.Arguments[0]).ToList();
+        OnModelCreating(domain).FindInvocations("HasDefaultValue")
+            .Where(i => i.Delegate is not Member { Value: Invoke { Delegate: Member { MemberName: "IsConcurrencyToken" } } })
+            .Select(i => i.Arguments[0]).ToList();
 
     /// <summary>#563: a literal default is mapped, so a row inserted without the column reads what Create would
     /// have written.</summary>
@@ -609,6 +613,39 @@ public class DbContextGeneratorTests {
             """);
 
         await Assert.That(DefaultValues(domain)).IsEmpty();
+    }
+
+    /// <summary>#626/#653: the optimistic-concurrency token is one shadow column per entity, and the save-time bump
+    /// the action routes call is on the context. Both are storage-only: no entity CLR member and no DTO change.</summary>
+    [Test]
+    public async Task ConcurrencyToken_IsAShadowColumnWithABumpOnTheContext() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var unit = GenerationAssertions.DbContextIr(domain);
+        var rendered = new CSharpWriter().Write(unit);
+
+        await Assert.That(rendered).Contains("""b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);""");
+        await Assert.That(rendered).Contains("public void BumpVersions(object entity)");
+        await Assert.That(rendered).Contains("""entry.Property("Version").CurrentValue""");
+        await Assert.That(rendered).Contains("this.ChangeTracker.DetectChanges();");
+    }
+
+    /// <summary>#626/#653: a domain property may already be called <c>Version</c>. It keeps its own value and its own
+    /// column, and the token moves to the first free <c>PolyVersion</c> name rather than silently taking it over.</summary>
+    [Test]
+    public async Task ConcurrencyToken_SkipsANameTheDomainAlreadyUses() {
+        var domain = ParseDomain("""
+            domain Test
+            Document: entity { Version: Text Title: Text }
+            """);
+        var rendered = new CSharpWriter().Write(GenerationAssertions.DbContextIr(domain));
+
+        await Assert.That(rendered).Contains("""b.Property<long>("PolyVersion").IsConcurrencyToken().HasDefaultValue(0L);""");
+        await Assert.That(rendered).Contains("""entry.Property("PolyVersion").CurrentValue""");
+        await Assert.That(rendered).Contains("b.Property(x => x.Version)");
+        await Assert.That(rendered).DoesNotContain("""b.Property<long>("Version")""");
     }
 
     private static IEnumerable<Node> Descendants(Node node) {

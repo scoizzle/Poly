@@ -127,7 +127,7 @@ public partial class MinimalApiGeneratorTests {
             """);
 
         await Assert.That(host).Contains("app.MapPost(\"/api/slots\"");
-        await Assert.That(host).DoesNotContain("dto.Tag");
+        await Assert.That(host).DoesNotContain("dto.Tag.Contains(\"/\")");
     }
 
     /// <summary>#592: a required unique Text key is a DTO member, so its create refuses a '/' before the save.</summary>

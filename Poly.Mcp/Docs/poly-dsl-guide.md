@@ -114,12 +114,11 @@ auto-wires the child's back-reference**: the singular navigation the collection'
 names (or whose `via` names it), else the only one on the target that points back
 (`borrower` on `Loan` → `Patron`); `Create{Nav}` passes `this`, so it is not a constructor
 parameter, and a collection back-ref stays unset. Two or more singular navigations back
-with no `via` pairing is **DMREL005**, so that shape never reaches export. To-one bindings
-in `create in` initializers are **legal** (`create in loans { book: book }`) and flow in
-like a scalar. **A supplied collection argument wires the pair the other way (#572):**
-`Patron.Create(loans: kids)` sets each child's paired to-one (`kid.Borrower`) as well as
-the collection, and refuses a child already paired with a different owner (a Link failure)
-instead of re-pointing it.
+with no `via` pairing is **DMREL005**. To-one bindings in `create in` initializers are
+**legal** (`create in loans { book: book }`) and flow in like a scalar. **A supplied
+collection argument wires the pair the other way (#572):** `Patron.Create(loans: kids)`
+sets each child's paired to-one (`kid.Borrower`) and refuses a child already paired with
+a different owner (a Link failure) instead of re-pointing it.
 
 **Required coverage (DMEFF011):** every property **without** `optional` on the
 created entity must be provided in the `create` / `create in` initializers, unless it has

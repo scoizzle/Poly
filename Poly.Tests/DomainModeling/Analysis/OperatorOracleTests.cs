@@ -526,7 +526,6 @@ public class OperatorOracleTests {
         new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-07 (enum member literals)", 2, "a3b0e50adb3c6b77"),
         // Temporal cells: the analyzer's offset permission and its rejection of CLR-defined duration arithmetic.
         new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10b (the temporal offset permission: Date and DateTime ± Number, and Date - Date)", 5, "c35db5c816281edf"),
-        new(OracleKind.AnalyzerDisagrees, "DateTime", "Add,Subtract", "Duration", "analyzer rejects", "F-11 (#550: DateTime ± a Duration value is refused as not supported yet)", 2, "81c2b5da5da106de"),
         new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10b (temporal operands the CLR defines)", 7, "0409473254198adb"),
         // Permanent: C# defines string + object, and Poly allows only Text + Text. A named language policy, not a gap.
         new(OracleKind.AnalyzerDisagrees, "*", "Add", "*", "analyzer rejects, tree String", "T-07 (language policy: only Text + Text concatenates)", 16, "a66331455543d1e9")
@@ -574,7 +573,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AnalyzerDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 34);
+        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 32);
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>

@@ -1795,6 +1795,34 @@ public class PackOracleTests {
             .Because("10:00+02:00 is the same instant as 08:00Z: " + body.RootElement.GetRawText());
     }
 
+    /// <summary>#654: a DateTime plus a Duration value in an action body compiles on the generated HTTP host and the
+    /// stored end time is the sum (the duration library's <c>DateTime.Add(TimeSpan)</c>, not <c>AddDays</c>).</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task DateTimePlusDurationValue_ActionRunsOnTheHttpHost(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Slots654);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/slots",
+            new StringContent("""{"Name":"a","Start":"2031-01-01T10:00:00","Len":"01:30:00"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(await created.Content.ReadAsStringAsync());
+
+        using var extended = await oracle.Client.PostAsync(
+            "/api/slots/a/extend", new StringContent("{}", Encoding.UTF8, "application/json"));
+        await Assert.That((int)extended.StatusCode).IsEqualTo(200).Because(await extended.Content.ReadAsStringAsync());
+
+        using var read = await oracle.Client.GetAsync("/api/slots/a");
+        await Assert.That((int)read.StatusCode).IsEqualTo(200);
+        using var json = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        var stop = json.RootElement.GetProperty("stop").GetString();
+        // The GET carries its UTC marker (#937), so the text is read as the UTC instant, not converted to local time.
+        await Assert.That(DateTime.Parse(stop!, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind))
+            .IsEqualTo(new DateTime(2031, 1, 1, 11, 30, 0, DateTimeKind.Utc));
+    }
+
     /// <summary>E-10a (#924): an enum and an entity named like C# keywords boot, answer a POST with 201 and list the row.</summary>
     [Test]
     [Category("OracleFull")]

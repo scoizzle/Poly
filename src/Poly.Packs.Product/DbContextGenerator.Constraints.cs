@@ -51,6 +51,10 @@ public sealed partial class DbContextGenerator {
                 TypeArguments = [TypeReference.To(typeof(int))]
             };
         }
+        else if (string.Equals(col.ClrTypeName, "DateTime", StringComparison.Ordinal)) {
+            chain = new Invoke(new Member(chain, "HasConversion"),
+                UtcToStore(col.IsRequired), UtcFromStore(col.IsRequired));
+        }
 
         // .IsRequired()
         if (col.IsRequired && !DomainTypeMapping.IsNonNullableClrValueType(col.ClrTypeName)) {
@@ -67,6 +71,41 @@ public sealed partial class DbContextGenerator {
 
         return chain;
     }
+
+    /// <summary>
+    /// Writes a <c>DateTime</c> column as the instant it names and reads it back as <c>Utc</c>. The store keeps a
+    /// clock time and no kind, so a value read back was <c>Unspecified</c> and the GET text lost its <c>Z</c> (#937).
+    /// <c>Local</c> is written as its UTC instant; <c>Utc</c> and <c>Unspecified</c> keep their clock time — the DSL's
+    /// <c>Now</c> is one UTC clock, so an absent marker means that same clock.
+    /// </summary>
+    private static Node UtcToStore(bool nonNullable) {
+        var v = new Parameter("v");
+        var value = nonNullable ? (Node)v : new Member(v, "Value");
+        Node asUtc = new Conditional(
+            new Equal(new Member(value, "Kind"), new Member(new TypeReference("DateTimeKind"), "Local")),
+            new Invoke(new Member(value, "ToUniversalTime")),
+            new Invoke(new Member(new TypeReference("DateTime"), "SpecifyKind"),
+                value, Utc()));
+        return new Lambda([v], nonNullable ? asUtc : WhenPresent(v, asUtc));
+    }
+
+    /// <summary>The other half of <see cref="UtcToStore"/>: the value a stored <c>DateTime</c> column reads as.</summary>
+    private static Node UtcFromStore(bool nonNullable) {
+        var v = new Parameter("v");
+        Node asUtc = new Invoke(new Member(new TypeReference("DateTime"), "SpecifyKind"),
+            nonNullable ? (Node)v : new Member(v, "Value"), Utc());
+        return new Lambda([v], nonNullable ? asUtc : WhenPresent(v, asUtc));
+    }
+
+    /// <summary><c>v == null ? (DateTime?)null : <paramref name="whenPresent"/></c> — an optional column's converter.
+    /// The cast is what types the converter's provider side as <c>DateTime?</c>; an untyped <c>null</c> arm leaves the
+    /// conversion inferable only as an identity, which finds no <c>HasConversion</c> overload that takes two lambdas.</summary>
+    private static Node WhenPresent(Node v, Node whenPresent) =>
+        new Conditional(new Equal(v, new Constant(null!)),
+            new TypeCast(new Constant(null!), new OptionalTypeReference(new TypeReference("DateTime"))),
+            whenPresent);
+
+    private static Node Utc() => new Member(new TypeReference("DateTimeKind"), "Utc");
 
     /// <summary>Builds Syntax IR for a collection navigation's property access mode config.</summary>
     /// <summary>Formats a numeric bound for a SQL CHECK constraint. The decimal keeps its declared

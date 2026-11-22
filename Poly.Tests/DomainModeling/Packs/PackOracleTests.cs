@@ -1545,6 +1545,71 @@ public class PackOracleTests {
         await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(match.Groups[1].Value + " -> " + await created.Content.ReadAsStringAsync());
     }
 
+    /// <summary>#937: a DateTime stored with its UTC marker reads back with it. The POST echo and a later GET of the
+    /// same row carry the same instant in the same text, for the required and the optional column.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task StoredDateTime_GetCarriesTheUtcMarkerThePostEchoed(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.UtcRoundtrip937);
+
+        const string dt = "2026-01-01T10:00:00Z";
+        const string maybe = "2026-02-02T05:30:00Z";
+        using var created = await oracle.Client.PostAsync(
+            "/api/things", new StringContent(
+                $$"""{"Name":"t1","Dt":"{{dt}}"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(await created.Content.ReadAsStringAsync());
+        using var createdBody = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        await Assert.That(createdBody.RootElement.GetProperty("dt").GetString()).IsEqualTo(dt).Because("the POST echo");
+
+        using var set = await oracle.Client.PostAsync(
+            "/api/things/t1/set", new StringContent(
+                $$"""{"At":"{{maybe}}"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)set.StatusCode).IsEqualTo(200).Because(await set.Content.ReadAsStringAsync());
+
+        using var read = await oracle.Client.GetAsync("/api/things/t1");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        var bodyText = body.RootElement.GetRawText();
+        await Assert.That(body.RootElement.GetProperty("dt").GetString()).IsEqualTo(dt)
+            .Because("the stored instant keeps its Z: " + bodyText);
+        await Assert.That(body.RootElement.GetProperty("maybe").GetString()).IsEqualTo(maybe)
+            .Because("the optional column is DateTime? and keeps its Z too: " + bodyText);
+
+        // An optional DateTime the client never wrote is still null: the null arm of the DateTime? converter is not a value.
+        using var unset = await oracle.Client.PostAsync(
+            "/api/things", new StringContent(
+                """{"Name":"t2","Dt":"2026-01-01T10:00:00Z"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)unset.StatusCode).IsEqualTo(201).Because(await unset.Content.ReadAsStringAsync());
+        using var unsetRead = await oracle.Client.GetAsync("/api/things/t2");
+        await Assert.That(unsetRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var unsetBody = JsonDocument.Parse(await unsetRead.Content.ReadAsStringAsync());
+        await Assert.That(unsetBody.RootElement.GetProperty("maybe").ValueKind).IsEqualTo(JsonValueKind.Null)
+            .Because(unsetBody.RootElement.GetRawText());
+    }
+
+    /// <summary>#937: a client may send an offset. What is stored is the instant, so the GET answers that instant in
+    /// UTC with its marker — the same moment, in the one clock the DSL's <c>Now</c> names.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task StoredDateTime_WithAnOffset_ReadsBackAsTheSameInstantInUtc(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.UtcRoundtrip937);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/things", new StringContent(
+                """{"Name":"t1","Dt":"2026-01-01T10:00:00+02:00"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(await created.Content.ReadAsStringAsync());
+
+        using var read = await oracle.Client.GetAsync("/api/things/t1");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        await Assert.That(body.RootElement.GetProperty("dt").GetString()).IsEqualTo("2026-01-01T08:00:00Z")
+            .Because("10:00+02:00 is the same instant as 08:00Z: " + body.RootElement.GetRawText());
+    }
+
     /// <summary>E-10a (#924): an enum and an entity named like C# keywords boot, answer a POST with 201 and list the row.</summary>
     [Test]
     [Category("OracleFull")]

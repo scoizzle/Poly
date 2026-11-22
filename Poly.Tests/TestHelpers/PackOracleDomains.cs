@@ -929,6 +929,26 @@ public static class PackOracleDomains {
         """,
         "/api/things");
 
+    /// <summary>P (#937): a required and an optional DateTime. The create body carries only Required slots, so the
+    /// optional column is written by an action; both converters (<c>DateTime</c> and <c>DateTime?</c>) then run through
+    /// the SQLite round trip. Stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain UtcRoundtrip937 { get; } = new(
+        "UtcRoundtrip937",
+        """
+        domain Roundtrip
+        uses temporal
+        uses sqlite
+        uses http
+
+        Thing: entity {
+          Name: Text unique
+          Dt: DateTime
+          Maybe: DateTime optional
+          Set: action (at: DateTime) { assign Maybe to at }
+        }
+        """,
+        "/api/things");
+
     /// <summary>E-10a (#924): an enum and an entity named like C# keywords. Stays out of <see cref="All"/>.</summary>
     public static PackOracleDomain KeywordNames924 { get; } = new(
         "KeywordNames924",

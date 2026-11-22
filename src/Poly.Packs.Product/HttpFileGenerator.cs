@@ -75,6 +75,9 @@ public sealed class HttpFileGenerator {
         sb.AppendLine($"###  Start the server:");
         sb.AppendLine($"###    dotnet run --project path/to/project --urls \"{_baseUrl}\"");
         sb.AppendLine($"###");
+        sb.AppendLine($"###  The database starts empty. Add \"--SeedDemoData true\" to insert one");
+        sb.AppendLine($"###  sample row per entity.");
+        sb.AppendLine($"###");
         sb.AppendLine($"###  Then click \"Send Request\" above any request below.");
         sb.AppendLine($"### ═══════════════════════════════════════════════════════════");
         sb.AppendLine();

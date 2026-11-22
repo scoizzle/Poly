@@ -48,7 +48,10 @@ using (var scope = app.Services.CreateScope())
             Environment.Exit(1);
         }
     }
-    await SeedAsync(db);
+    if (builder.Configuration.GetValue<bool>("SeedDemoData"))
+    {
+        await SeedAsync(db);
+    }
 }
 
 app.MapGet("/api/books", async (LibraryDbContext db) => await db.Books.ToListAsync());

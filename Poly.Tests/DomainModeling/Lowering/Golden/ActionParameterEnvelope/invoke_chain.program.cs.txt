@@ -24,7 +24,10 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<TDbCtx>();
     await db.Database.EnsureCreatedAsync();
-    await SeedAsync(db);
+    if (builder.Configuration.GetValue<bool>("SeedDemoData"))
+    {
+        await SeedAsync(db);
+    }
 }
 
 app.MapGet("/api/meters", async (TDbCtx db) => await db.Meters.ToListAsync());

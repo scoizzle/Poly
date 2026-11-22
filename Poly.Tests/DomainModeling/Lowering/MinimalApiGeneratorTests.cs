@@ -100,6 +100,15 @@ public partial class MinimalApiGeneratorTests {
     }
 
     [Test]
+    public async Task Seed_IsOptIn_BehindTheConfigurationGate() {
+        // #595: a generated host must not write placeholder rows into whatever database
+        // it points at. The seed stays available, but only when the operator asks.
+        var d = ParseDomain("domain T\nItem: entity { Name: Text }");
+
+        await Assert.That(Render(d)).Contains("if (builder.Configuration.GetValue<bool>(\"SeedDemoData\"))");
+    }
+
+    [Test]
     public async Task Detail_UsesBindingName() {
         var d = ParseDomain("domain T\nItem: entity { Sku: Text unique }");
         await Assert.That(Render(d).Contains("is T.Item item")).IsTrue();

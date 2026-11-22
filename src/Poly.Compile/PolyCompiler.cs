@@ -304,10 +304,13 @@ public sealed class PolyCompiler {
                 ok = false;
                 continue;
             }
-            if (!_options.Catalog.Contains(id)) {
+            if (_options.Catalog.ExtensionError(id) is { } refusal) {
                 diags.Add(ExtensionDiagnostic(build, tree, id, occurrence: 1, Severities.Error,
                     DiagnosticCodes.UnknownExtension,
-                    $"Unknown domain extension '{id}'. Known ids: {string.Join(", ", _options.Catalog.KnownIds)}."));
+                    // A recorded-unavailable id (`mysql`) says why; an unknown one names the ids that resolve (C-06).
+                    _options.Catalog.IsUnavailable(id)
+                        ? refusal
+                        : $"Unknown domain extension '{id}'. Known ids: {string.Join(", ", _options.Catalog.KnownIds)}."));
                 ok = false;
             }
         }

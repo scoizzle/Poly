@@ -226,7 +226,7 @@ Every valid `.poly` document starts with a domain name. Optional `uses` lines li
 `[storage, persistence]` when none are listed; a non-empty list replaces it, so a `unique`
 property needs `persistence` or a vendor library there — nothing adds it for you, and any other list is
 `DMLIB001` at define time (`polyc`, `poly_define`, `apply_dsl`). Temporal stays implicit; unknown or duplicate ids fail closed.
-`uses <id>` loads the library's export package, never a sibling `.poly`. A package boundary
+`uses <id>` loads the library's export package, never a sibling `.poly`. `sqlite` and `sqlserver` are the vendor libraries the catalog resolves; `uses mysql` is `DSL0002` with the reason, not an unknown id (`Poly.Packs.MySql` ships, but no host provider arm loads it). A package boundary
 pins the surface with `uses billing 2024-11-20`; a `contract` block covers what no library contributes.
 
 A package may declare the host targets it is for (target ids such as `posix`); the host passes

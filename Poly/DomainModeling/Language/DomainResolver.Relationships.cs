@@ -154,7 +154,7 @@ public sealed partial class DomainResolver {
                     nav.At.Line, nav.At.Col);
             }
             if (!_entityNames.Contains(nav.TargetTypeName)) {
-                CheckUnsupportedKeyword(nav.PropertyName, nav.TargetTypeName);
+                CheckUnsupportedKeyword(nav.PropertyName, nav.At);
                 // A bare type name here is a nav target, but the author may have meant a
                 // value type or a value keyword (`Ref: Guid`). Name both possibilities.
                 var known = string.Join(", ", _primitiveTypeNames.OrderBy(n => n, StringComparer.Ordinal));

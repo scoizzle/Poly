@@ -1334,7 +1334,7 @@ peer) rolls that change back too, as the interpreter does.
 
 ## 8. Policies
 
-Policies are named boolean guard expressions attached to an entity.
+Policies are named boolean guard expressions attached to an entity. The body is always inline: `P: policy { <expression> }`. `P: policy external` is not a form — a policy has no external provider — and the parser refuses it at `external` with `'policy external' is not supported. Write the policy body inline: P: policy { <expression> }.`
 
 <!-- poly-verify: fragment:entity wrapper:policy-facts -->
 ```poly

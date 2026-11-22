@@ -53,39 +53,13 @@ internal static class ResolverErrorBaseline {
     /// (before its <c> @line:col</c>). A tag whose row's message no longer ends with its fragment is stale and fails until it is deleted.
     /// </summary>
     public static readonly (string Key, string Fixer, string Fragment)[] KnownWrong = [
-        // G-29: unsupported-keyword errors with no position, and the unknown `uses` id with no position.
-        ("S:Effects.unsupported.check/ok", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a"),
-        ("S:Effects.unsupported.check/case", "G-29", "ERR FormatException: 'Schedule' is not supported in Phase 1a"),
-        ("S:Effects.unsupported.message/ok", "G-29", "ERR FormatException: 'PARALLEL' is not supported in Phase 1a"),
-        ("S:Effects.unsupported.message/function", "G-29", "ERR FormatException: 'function' is not supported in Phase 1a"),
-        ("S:Entities.typed-line.unsupported/ok", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Who')"),
-        ("S:Entities.typed-line.unsupported/case", "G-29", "ERR FormatException: 'Schedule' is not supported in Phase 1a (used as type for 'Who')"),
-        ("S:Entities.typed-line.unsupported/function", "G-29", "ERR FormatException: 'function' is not supported in Phase 1a (used as type for 'Who')"),
-        ("S:Entities.fallback.unsupported/mis-keyword", "G-29", "ERR FormatException: 'for' is not supported in Phase 1a (used as type for 'Go')"),
-        ("S:Relationships.navline.text/unsupported", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Owner')"),
-        ("S:Relationships.navline.text/case", "G-29", "ERR FormatException: 'PARALLEL' is not supported in Phase 1a (used as type for 'Owner')"),
+        // G-29: the unknown `uses` id reaches an InvalidOperationException with no position.
         ("X:entities#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'. Record only ids this catalog can resolve."),
         ("X:expressions#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'. Record only ids this catalog can resolve."),
-        // G-05 keeps `actor` (S-09 owns the rest of TopLevelRejection's unpositioned refusals: `Function`, `schedule`); G-29 owns the inheritance error.
-        ("S:TopLevel.rejection.unsupported/ok", "G-05", "ERR FormatException: 'actor' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.unsupported/case", "S-09", "ERR FormatException: 'Function' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.unsupported-message/ok", "S-09", "ERR FormatException: 'schedule' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.inheritance/ok", "G-29", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported. Define 'Base' properties directly on 'X'."),
-        ("S:TopLevel.rejection.inheritance-define/unicode", "G-29", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported. Define 'Größe' properties directly on 'X'."),
     ];
 
     /// <summary>Where a tag's fixing row lives when that is not obvious from the fixer: a site in G-30 or G-33 code is fixed by whichever row converts it.</summary>
     public static readonly Dictionary<string, string> KnownWrongNotes = new(StringComparer.Ordinal) {
-        ["S:Effects.unsupported.check/ok"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
-        ["S:Effects.unsupported.check/case"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
-        ["S:Effects.unsupported.message/ok"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
-        ["S:Effects.unsupported.message/function"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
-        ["S:Entities.typed-line.unsupported/ok"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
-        ["S:Entities.typed-line.unsupported/case"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
-        ["S:Entities.typed-line.unsupported/function"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
-        ["S:Entities.fallback.unsupported/mis-keyword"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
-        ["S:Relationships.navline.text/unsupported"] = "site in the navigation line (G-30 converts it; G-29 owns the message)",
-        ["S:Relationships.navline.text/case"] = "site in the navigation line (G-30 converts it; G-29 owns the message)",
     };
 
     // ── sites no input can reach (stale-checked both ways) ───────────────────────────

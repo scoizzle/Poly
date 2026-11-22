@@ -199,7 +199,7 @@ public sealed partial class DomainResolver {
                                 ParseNavLine(name);
                             }
                             else {
-                                CheckUnsupportedKeyword(name, typeWord);
+                                CheckUnsupportedKeyword(name, Current);
                                 throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                             }
                             continue;
@@ -260,7 +260,7 @@ public sealed partial class DomainResolver {
                     ParseStandaloneAction(name, changes);
                 }
                 else {
-                    CheckUnsupportedKeyword(name, DslTokenText.Word(Current));
+                    CheckUnsupportedKeyword(name, Current);
                     throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                 }
                 continue;
@@ -517,13 +517,15 @@ public sealed partial class DomainResolver {
     }
 
     /// <summary>
-    /// Throws a specific "not supported in Phase 1a" error if <paramref name="keyword"/>
+    /// Throws a specific "not supported in Phase 1a" error at <paramref name="keyword"/>, the type word, if it
     /// is a known unsupported construct keyword. Otherwise returns without throwing.
     /// </summary>
-    private static void CheckUnsupportedKeyword(string name, string keyword) {
-        if (_unsupportedKeywords.Contains(keyword)) {
-            throw new FormatException(
-                $"'{keyword}' is not supported in Phase 1a (used as type for '{name}')");
+    private static void CheckUnsupportedKeyword(string name, DslToken keyword) {
+        var word = DslTokenText.Word(keyword);
+        if (_unsupportedKeywords.Contains(word)) {
+            throw GrammarError.Error(
+                $"'{word}' is not supported in Phase 1a (used as type for '{name}')",
+                keyword.Line, keyword.Col);
         }
     }
 }

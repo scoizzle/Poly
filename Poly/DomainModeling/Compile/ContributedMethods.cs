@@ -442,8 +442,9 @@ internal static class ContributedMethods {
     /// <summary>
     /// The element type of a loop variable the enclosing method declares over a field on this type. A subscription
     /// dispatcher calls every handler on its registry list's loop variable (<c>sub.Handler(…)</c>), so a handler that
-    /// needs a contributed parameter must resolve the loop's element type (#830). Every other receiver — a local, a
-    /// parameter, a call result — stays unresolved, and the call is refused rather than guessed.
+    /// needs a contributed parameter must resolve the loop's element type (#830). A create-in's unwrapped factory local
+    /// resolves to the factory's type (<see cref="CreatedLocalType"/>). Every other receiver — a local, a parameter, a
+    /// call result — stays unresolved, and the call is refused rather than guessed.
     /// </summary>
     private static string? LoopVariableElementType(
         Node receiver,
@@ -455,12 +456,41 @@ internal static class ContributedMethods {
             return null;
         var body = methods[enclosing]
             .FirstOrDefault(m => string.Equals(m.Name, enclosingMethod, StringComparison.Ordinal))?.Body;
+        // A create-in body unwraps its factory's result into a local (`var __child = __childResult.Value;` after
+        // `var __childResult = Child.Create(…)`) and calls the child's notify and replay methods on it (#630). That
+        // local's type is the factory's type, stated in the tree; it is the one local besides a loop variable that resolves.
+        if (body is not null && CreatedLocalType(body, variable.Name) is { } created)
+            return created;
         var loop = body is null ? null : FindLoop(body, variable.Name);
         if (loop?.Collection is not Member { Value: ThisReference } collection)
             return null;
         var field = module[enclosing].Fields?
             .FirstOrDefault(f => string.Equals(f.Name, collection.MemberName, StringComparison.Ordinal));
         return field is null ? null : CollectionElementType(field.FieldType);
+    }
+
+    /// <summary>The type <c>T</c> of a local assigned <c>r.Value</c> where <c>r</c> is assigned <c>T.Create(…)</c>, else null.</summary>
+    private static string? CreatedLocalType(Node body, string variableName) {
+        if (FindAssignment(body, variableName)?.Value is not Member { MemberName: "Value", Value: Variable result })
+            return null;
+        if (FindAssignment(body, result.Name)?.Value is not Invoke { Delegate: Member { MemberName: "Create" } factory })
+            return null;
+        return factory.Value switch {
+            NamedTypeReference named => named.TypeName,
+            TypeReference type => type.TypeName,
+            _ => null
+        };
+    }
+
+    private static Assignment? FindAssignment(Node node, string variableName) {
+        if (node is Assignment { Destination: Variable destination } assignment
+            && string.Equals(destination.Name, variableName, StringComparison.Ordinal))
+            return assignment;
+        foreach (var child in node.Children) {
+            if (child is not null && FindAssignment(child, variableName) is { } found)
+                return found;
+        }
+        return null;
     }
 
     private static ForEachLoop? FindLoop(Node node, string variableName) {

@@ -122,11 +122,9 @@ public sealed class PolyCompiler {
         try {
             tree = DslSyntaxTree.Parse(text);
         }
-        catch (GrammarException ex) {
-            diags.Add(FromGrammar(build, ex));
-            return Fail();
-        }
         catch (FormatException ex) {
+            // The header reader positions a duplicate id; HeaderFailure keeps the DSL0003 code for it,
+            // and hands any other refusal (a positioned tokenizer error included) to FromGrammar.
             diags.Add(HeaderFailure(build, text, ex));
             return Fail();
         }
@@ -342,28 +340,45 @@ public sealed class PolyCompiler {
     }
 
     /// <summary>
-    /// A <see cref="FormatException"/> with no position came out of header parsing. Re-read the header
-    /// tokens to tell a duplicate <c>uses</c> id from any other header problem.
+    /// A <see cref="FormatException"/> came out of header parsing. Re-read the header tokens to tell a
+    /// duplicate <c>uses</c> id (DSL0003, at the second id) from any other header problem; a
+    /// positioned refusal that is not the duplicate keeps its position through <see cref="FromGrammar"/>.
     /// </summary>
     private static CompileDiagnostic HeaderFailure(DiagnosticBuilder build, string text, FormatException ex) {
-        var reader = new DslTokenReader(text);
+        var detail = ex is GrammarException grammar ? grammar.Detail : ex.Message;
+        if (DuplicateIdToken(text) is { } duplicate)
+            return build.Span(duplicate.Start, duplicate.Length, Severities.Error,
+                DiagnosticCodes.DuplicateExtension, detail, "");
+        return ex is GrammarException positioned
+            ? FromGrammar(build, positioned)
+            : build.Unplaced(Severities.Error, DiagnosticCodes.Parse, detail);
+    }
+
+    /// <summary>
+    /// The second occurrence's id token when the header lists an id twice; null otherwise, or when the
+    /// text does not tokenize at all (the tokenizer's own refusal is already the reported one).
+    /// </summary>
+    private static DslToken? DuplicateIdToken(string text) {
         var tokens = new List<DslToken>();
-        while (true) {
-            var token = reader.Peek();
-            tokens.Add(token);
-            if (token.Kind == DslTokenKind.EndOfFile)
-                break;
-            reader.Consume(1);
+        try {
+            var reader = new DslTokenReader(text);
+            while (true) {
+                var token = reader.Peek();
+                tokens.Add(token);
+                if (token.Kind == DslTokenKind.EndOfFile)
+                    break;
+                reader.Consume(1);
+            }
+        }
+        catch (FormatException) {
+            return null;
         }
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 2; DslSyntaxTree.TryReadUse(tokens, i, out var id, out _, out var next); i = next) {
-            if (!seen.Add(id)) {
-                var token = tokens[i + 1];
-                return build.Span(token.Start, token.Length, Severities.Error,
-                    DiagnosticCodes.DuplicateExtension, ex.Message, "");
-            }
+            if (!seen.Add(id))
+                return tokens[i + 1];
         }
-        return build.Unplaced(Severities.Error, DiagnosticCodes.Parse, ex.Message);
+        return null;
     }
 
     private static CompileDiagnostic PlaceAnalysis(

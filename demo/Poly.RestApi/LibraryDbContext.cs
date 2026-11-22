@@ -42,7 +42,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.HasKey("Id");
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Author).HasColumnName("author").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.ISBN).HasColumnName("isbn").HasColumnType("TEXT").IsRequired().HasMaxLength(17);
+    b.Property(x => x.ISBN).HasColumnName("isbn").IsRequired().HasMaxLength(17);
     b.Property(x => x.Pages).HasColumnName("pages").HasColumnType("INTEGER");
     b.Property(x => x.Genre).HasColumnName("genre").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
     b.HasIndex(x => x.ISBN).IsUnique();
@@ -54,7 +54,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
+    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.MemberSince).HasColumnName("memberSince").HasColumnType("TEXT");
     b.Property(x => x.Status).HasColumnName("status").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
     b.Property(x => x.MaxItems).HasColumnName("maxItems").HasColumnType("INTEGER");
@@ -88,7 +88,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
+    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.RewardPoints).HasColumnName("rewardPoints").HasColumnType("INTEGER");
     b.Property(x => x.Tier).HasColumnName("tier").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
     b.Property(x => x.PriorityAccess).HasColumnName("priorityAccess").HasColumnType("INTEGER");

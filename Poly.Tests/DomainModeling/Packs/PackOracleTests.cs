@@ -326,7 +326,11 @@ public class PackOracleTests {
         var child = childrenJson.RootElement[0];
         await Assert.That(child.GetProperty("qty").GetInt32()).IsEqualTo(5);
         await Assert.That(child.GetProperty("order").GetProperty("code").GetString()).IsEqualTo("ORD1");
-        await Assert.That(child.GetProperty("order").GetProperty("lines").ValueKind).IsEqualTo(JsonValueKind.Null);
+        // The owner's collection is loaded too, so the cycle shows where IgnoreCycles cut it: the child itself is null.
+        var ownerLines = child.GetProperty("order").GetProperty("lines");
+        await Assert.That(ownerLines.ValueKind).IsEqualTo(JsonValueKind.Array);
+        await Assert.That(ownerLines.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(ownerLines[0].ValueKind).IsEqualTo(JsonValueKind.Null);
     }
 
     [Test]

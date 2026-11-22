@@ -304,13 +304,14 @@ public class PackOracleMatrixTests {
         await AssertProbeMatchesLedgerOrContract("mcp-library", "Patron.ReadCreated", "status=200");
     }
 
+    /// <summary>#559: crm <c>Product.ListPrice</c> is a <c>Decimal range(0, 100000000)</c> stored as TEXT, so the request
+    /// matrix's own value is the one the old textual CHECK refused (<c>"9" &gt; "100000000"</c>); it is now a 201.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
     [DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
     public async Task DecimalRange_PostValidValue_Succeeds(CancellationToken cancellationToken) {
         _ = cancellationToken;
-        // Product.ListPrice 9 fails #559 deterministically (TEXT compare: "9" > "100000000"); 10.5 would pass by luck.
         await AssertProbeMatchesLedgerOrContract("crm", "Product.CreateValid", "status=201");
     }
 

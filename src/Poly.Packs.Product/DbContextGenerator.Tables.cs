@@ -30,7 +30,7 @@ public sealed partial class DbContextGenerator {
         // (#563): Create and assign guard every write, so the DB can state it too.
         var checks = store.Columns
             .Where(c => c.IsRangeVerified && c.VerifiedRange is { } vr && (vr.Min is not null || vr.Max is not null))
-            .Select(c => (Name: $"CK_{c.ColumnName}", Sql: CheckSql(c.ColumnName, c.VerifiedRange!)))
+            .Select(c => (Name: $"CK_{c.ColumnName}", Sql: CheckSql(c)))
             .Concat(store.Columns
                 .Select(c => (Name: $"CK_{c.ColumnName}_length", Sql: LengthCheckSql(c)))
                 .Where(c => c.Sql is not null)

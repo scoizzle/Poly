@@ -97,6 +97,29 @@ public static class PackOracleDomains {
         """,
         "/api/shipments");
 
+    /// <summary>#559, bootable: the issue's Minimal reproduction plus <c>uses http</c>, so the POST route exists. The
+    /// SQLite host stores <c>Declared</c> as TEXT, so the range CHECK is what decides whether a valid value saves.
+    /// <c>Vault.Amount</c> has whole-number bounds above 2^53, which no double holds exactly: the CHECK must round the
+    /// bound and the stored value the same way or it refuses the value at the bound. It
+    /// stays out of <see cref="All"/>; <see cref="Logistics559"/> keeps the issue's block verbatim.</summary>
+    public static PackOracleDomain Shipment559 { get; } = new(
+        "Shipment559",
+        """
+        domain Logistics
+        uses http
+        uses sqlite
+        Shipment: entity {
+          Reference: Text unique length(4, 20)
+          WeightKg: Number range(1, 40000)
+          Declared: Decimal range(0, 1000000)
+        }
+        Vault: entity {
+          Code: Text unique length(4, 20)
+          Amount: Decimal range(9007199254740993, 9007199254741000)
+        }
+        """,
+        "/api/shipments");
+
     /// <summary>#620 Minimal reproduction. A failing action whose earlier effect is persisted.</summary>
     public static PackOracleDomain Warehouse620 { get; } = new(
         "Warehouse620",

@@ -1823,6 +1823,92 @@ public class PackOracleTests {
             .IsEqualTo(new DateTime(2031, 1, 1, 11, 30, 0, DateTimeKind.Utc));
     }
 
+    /// <summary>#940: an action's entity argument is the target's route-key CLR type, so a Number (<c>long</c>) key is a
+    /// JSON number the lookup compares with the column. The action resolves the row it names — the assign reads the
+    /// target through the argument — and an unknown, absent or null key is the host's 404, never a 500.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ActionEntityArgument_WithANumericNaturalKey_ResolvesTheTargetItNames(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.ActionKeyArgument940);
+
+        using var course = await oracle.Client.PostAsync(
+            "/api/courses", new StringContent("""{"Seq":42,"Name":"Math"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)course.StatusCode).IsEqualTo(201).Because(await course.Content.ReadAsStringAsync());
+        using var student = await oracle.Client.PostAsync(
+            "/api/students", new StringContent("""{"Email":"a@b"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)student.StatusCode).IsEqualTo(201).Because(await student.Content.ReadAsStringAsync());
+
+        using var joined = await oracle.Client.PostAsync(
+            "/api/students/a@b/join", new StringContent("""{"CourseId":42}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)joined.StatusCode).IsEqualTo(200).Because(await joined.Content.ReadAsStringAsync());
+
+        using var read = await oracle.Client.GetAsync("/api/students/a@b");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        await Assert.That(body.RootElement.GetProperty("joined").GetString()).IsEqualTo("Math")
+            .Because("the action read the course the argument named: " + body.RootElement.GetRawText());
+
+        foreach (var (label, bodyJson) in new[] {
+            ("unknown key", """{"CourseId":43}"""),
+            ("absent key", "{}"),
+            ("null key", """{"CourseId":null}"""),
+        }) {
+            using var missing = await oracle.Client.PostAsync(
+                "/api/students/a@b/join", new StringContent(bodyJson, Encoding.UTF8, "application/json"));
+            await Assert.That((int)missing.StatusCode).IsEqualTo(404).Because(label + ": " + await missing.Content.ReadAsStringAsync());
+        }
+
+        // A JSON value that is not a number is the binder's 400: the member is a number, not a string (#940's cause).
+        using var wrongKind = await oracle.Client.PostAsync(
+            "/api/students/a@b/join", new StringContent("""{"CourseId":"abc"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)wrongKind.StatusCode).IsEqualTo(400).Because(await wrongKind.Content.ReadAsStringAsync());
+
+        // A Date (<c>DateOnly</c>) key takes the reader's own JSON form, and the host compiles with the member a
+        // DateOnly?: the route key the create answered and the action argument are one spelling.
+        using var day = await oracle.Client.PostAsync(
+            "/api/days", new StringContent("""{"On":"2026-01-05","Label":"Mon"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)day.StatusCode).IsEqualTo(201).Because(await day.Content.ReadAsStringAsync());
+        using var attended = await oracle.Client.PostAsync(
+            "/api/students/a@b/attend", new StringContent("""{"DayId":"2026-01-05"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)attended.StatusCode).IsEqualTo(200).Because(await attended.Content.ReadAsStringAsync());
+        using var absentDay = await oracle.Client.PostAsync(
+            "/api/students/a@b/attend", new StringContent("{}", Encoding.UTF8, "application/json"));
+        await Assert.That((int)absentDay.StatusCode).IsEqualTo(404).Because(await absentDay.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>#940: an entity argument whose target has a shadow (int) key used to reach <c>FindAsync</c> with a string
+    /// and answer 500 for every id. The member is now the key's <c>int?</c>, so an unknown, absent or null key is the
+    /// action's 404. The 200 is not reachable over HTTP: no client can learn a shadow id (P-12, #589).</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ActionEntityArgument_WithAShadowKey_Answers404NotA500(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.ActionShadowKeyArgument940);
+
+        using var member = await oracle.Client.PostAsync(
+            "/api/members", new StringContent("""{"Label":"m"}""", Encoding.UTF8, "application/json"));
+        // A shadow-key create answers 201 with its id's Location (#589).
+        await Assert.That((int)member.StatusCode).IsEqualTo(201).Because(await member.Content.ReadAsStringAsync());
+        using var student = await oracle.Client.PostAsync(
+            "/api/students", new StringContent("""{"Email":"a@b"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)student.StatusCode).IsEqualTo(201).Because(await student.Content.ReadAsStringAsync());
+
+        // A string id is what a client sends to a member typed `string`, and it reached FindAsync as one (500).
+        foreach (var (label, bodyJson) in new[] {
+            ("string id", """{"MemberId":"999999"}"""),
+            ("number id", """{"MemberId":999999}"""),
+            ("absent id", "{}"),
+            ("null id", """{"MemberId":null}"""),
+        }) {
+            using var response = await oracle.Client.PostAsync(
+                "/api/students/a@b/pass", new StringContent(bodyJson, Encoding.UTF8, "application/json"));
+            await Assert.That((int)response.StatusCode).IsEqualTo(404).Because(label + ": " + await response.Content.ReadAsStringAsync());
+        }
+    }
+
     /// <summary>E-10a (#924): an enum and an entity named like C# keywords boot, answer a POST with 201 and list the row.</summary>
     [Test]
     [Category("OracleFull")]

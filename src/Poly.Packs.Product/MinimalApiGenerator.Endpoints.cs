@@ -15,36 +15,68 @@ public sealed partial class MinimalApiGenerator {
         var keyName = key.Name;
         var keyType = key.ClrType;
         var dbParam = new Parameter("db", new TypeReference(dbContextName));
+        var locals = new HashSet<string>(["db"], StringComparer.Ordinal);
+        var rowName = FreshLocal(locals, ToCamelCase(entity.Name));
 
         // app.MapGet("/api/books", async (dbContextName db) => await db.Books.ToListAsync())
-        statements.Add(new Invoke(
-            new Member(new TypeReference(AppVar), "MapGet"),
-            new Constant(route),
-            new Lambda([dbParam],
-                new Await(
-                    new Invoke(
-                        new Member(
-                            new Member(new TypeReference("db"), Pluralize(entity.Name)),
-                            "ToListAsync"))))));
+        // Each row's navigations load first (#594): a GET answers as the simulator's `get` does.
+        var rowLoads = NavigationLoads(store, rowName);
+        if (rowLoads.Count == 0) {
+            statements.Add(new Invoke(
+                new Member(new TypeReference(AppVar), "MapGet"),
+                new Constant(route),
+                new Lambda([dbParam],
+                    new Await(
+                        new Invoke(
+                            new Member(
+                                new Member(new TypeReference("db"), Pluralize(entity.Name)),
+                                "ToListAsync"))))));
+        }
+        else {
+            var rowsName = FreshLocal(locals, ToCamelCase(Pluralize(entity.Name)));
+            statements.Add(new Invoke(
+                new Member(new TypeReference(AppVar), "MapGet"),
+                new Constant(route),
+                new Lambda([dbParam], Stmts([
+                    Init(rowsName, new Await(
+                        new Invoke(new Member(new Member(new TypeReference("db"), Pluralize(entity.Name)), "ToListAsync")))),
+                    new ForEachLoop(new Variable(rowName), new Variable(rowsName), Stmts(rowLoads)),
+                    new Return(new Variable(rowsName)),
+                ]))));
+        }
 
         // app.MapGet("/api/books/{key}", async (keyType key, dbContextName db) =>
         //     await db.Books.FindAsync(key) is Book book ? Results.Ok(book) : a 404 ProblemDetails)
         // A natural key compares the unique property; FindAsync is the shadow key.
         var keyParam = new Parameter(keyName, ClrTypeNode(keyType));
         var camelName = ToCamelCase(entity.Name);
-        statements.Add(new Invoke(
-            new Member(new TypeReference(AppVar), "MapGet"),
-            new Constant($"{route}/{{{keyName}}}"),
-            new Lambda([keyParam, dbParam],
-                new Conditional(
-                    new TypeIs(
-                        LoadByRouteKey(Pluralize(entity.Name), store, new Variable(keyName)),
-                        new NamedTypeReference(VisibleType(entity.Name))) {
-                        VariableName = camelName
-                    },
-                    new Invoke(new Member(new TypeReference("Results"), "Ok"),
-                        new Variable(camelName)),
-                    ProblemResponse(404, "Not Found")))));
+        if (rowLoads.Count == 0) {
+            statements.Add(new Invoke(
+                new Member(new TypeReference(AppVar), "MapGet"),
+                new Constant($"{route}/{{{keyName}}}"),
+                new Lambda([keyParam, dbParam],
+                    new Conditional(
+                        new TypeIs(
+                            LoadByRouteKey(Pluralize(entity.Name), store, new Variable(keyName)),
+                            new NamedTypeReference(VisibleType(entity.Name))) {
+                            VariableName = camelName
+                        },
+                        new Invoke(new Member(new TypeReference("Results"), "Ok"),
+                            new Variable(camelName)),
+                        ProblemResponse(404, "Not Found")))));
+        }
+        else {
+            statements.Add(new Invoke(
+                new Member(new TypeReference(AppVar), "MapGet"),
+                new Constant($"{route}/{{{keyName}}}"),
+                new Lambda([keyParam, dbParam], Stmts([
+                    Init(rowName, LoadByRouteKey(Pluralize(entity.Name), store, new Variable(keyName))),
+                    new IfStatement(new Equal(new Variable(rowName), new Constant(null!)),
+                        new Block(new Return(ProblemResponse(404, "Not Found")))),
+                    .. rowLoads,
+                    new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Variable(rowName))),
+                ]))));
+        }
 
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
         if (store.IsRoot && CreatesDirectly(_entities, entity, GetCreateSlots(entity), _storageLookup)) {
@@ -52,6 +84,21 @@ public sealed partial class MinimalApiGenerator {
             var dtoParam = HasCreateDto(entity) ? new Parameter("dto", new TypeReference($"{entity.Name}Dto")) : null;
             AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, key);
         }
+    }
+
+    /// <summary>
+    /// The loads a GET runs for one row of <paramref name="store"/>: each collection, then each single link, one level.
+    /// That is the navigation state the simulator's <c>get</c> names, and the same one-hop floor an action route loads.
+    /// A navigation back to the row's owner is fixed up by EF and the host's <c>ReferenceHandler.IgnoreCycles</c> breaks
+    /// the cycle in the body, so one level is enough and no navigation loops.
+    /// </summary>
+    private static List<Node> NavigationLoads(StorageEntity store, string rowVariable) {
+        List<Node> loads = [];
+        foreach (var nav in store.CollectionNavigations)
+            loads.Add(LoadCollection(rowVariable, nav.PropertyName));
+        foreach (var nav in store.ReferenceNavigations)
+            loads.Add(LoadReference(rowVariable, nav.PropertyName));
+        return loads;
     }
 
     /// <summary>
@@ -278,20 +325,38 @@ public sealed partial class MinimalApiGenerator {
             new Member(entryCall, loadMember),
             new Lambda([eParam], new Member(eParam, pascalRel)));
 
+        // Each child's own navigations load too (#594), one level, as the simulator's `get` shows them.
+        var childLocals = new HashSet<string>(["parent", "db", parentKey, childKeyParam, "e"], StringComparer.Ordinal);
+        var childRow = FreshLocal(childLocals, ToCamelCase(entity.Name));
+        var childLoads = NavigationLoads(childStore, childRow);
+        var listBody = new List<Node> {
+            Init("parent",
+                LoadByRouteKey(pluralParent, parentStore, new Variable(parentKey))),
+            new IfStatement(new Equal(new Variable("parent"), new Constant(null!)),
+                new Block(new Return(
+                    ProblemResponse(404, "Not Found")))),
+            new Await(new Invoke(new Member(collCall, "LoadAsync"))),
+        };
+        if (childLoads.Count > 0) {
+            if (isCollection) {
+                listBody.Add(new ForEachLoop(new Variable(childRow),
+                    new Invoke(new Member(new Member(new Variable("parent"), pascalRel), "ToList")),
+                    Stmts(childLoads)));
+            }
+            else {
+                // A to-one child is returned as the reference itself, so its loads guard the empty link.
+                listBody.Add(Init(childRow, new Member(new Variable("parent"), pascalRel)));
+                listBody.Add(new IfStatement(new NotEqual(new Variable(childRow), new Constant(null!)),
+                    Stmts(childLoads)));
+            }
+        }
+        listBody.Add(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),
+            new Member(new Variable("parent"), pascalRel))));
+
         statements.Add(new Invoke(
             new Member(new TypeReference(AppVar), "MapGet"),
             new Constant(listRoute),
-            new Lambda([parentKeyP, dbP],
-                Stmts([
-                    Init("parent",
-                        LoadByRouteKey(pluralParent, parentStore, new Variable(parentKey))),
-                    new IfStatement(new Equal(new Variable("parent"), new Constant(null!)),
-                        new Block(new Return(
-                            ProblemResponse(404, "Not Found")))),
-                    new Await(new Invoke(new Member(collCall, "LoadAsync"))),
-                    new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),
-                        new Member(new Variable("parent"), pascalRel)))
-                ]))));
+            new Lambda([parentKeyP, dbP], Stmts(listBody))));
 
         if (!isCollection)
             return;
@@ -369,6 +434,9 @@ public sealed partial class MinimalApiGenerator {
                         ProblemResponse(404, "Not Found")))));
             }
         }
+        // The child's own navigations load before it answers (#594), as on the parent's own routes. `child` is non-null
+        // on every path that reaches here.
+        detailBody.AddRange(NavigationLoads(childStore, "child"));
         detailBody.Add(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),
             new Variable("child"))));
 

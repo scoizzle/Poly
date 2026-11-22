@@ -256,6 +256,56 @@ public class PackOracleTests {
         });
     }
 
+    /// <summary>#594: a <c>GET</c> of an entity returns its declared collections and single links loaded, as the
+    /// simulator's <c>get</c> shows them. A child reached through its parent's action is in the parent's JSON on the
+    /// detail route, on the list route and on the nested collection route; the child's link back to its owner is the
+    /// cycle the host's <c>ReferenceHandler.IgnoreCycles</c> breaks, so it reads back null instead of looping.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task GeneratedHost_GetLoadsNavigations_Issue594() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Navigations594);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var added = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/addline", new StringContent("""{"Qty":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)added.StatusCode).IsEqualTo(200);
+
+        using var tagged = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/tagit", new StringContent("""{"Label":"t1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)tagged.StatusCode).IsEqualTo(200);
+
+        // Detail: the collection and the single link both arrive loaded.
+        using var detail = await oracle.Client.GetAsync("/api/orders/ORD1");
+        await Assert.That(detail.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var detailJson = JsonDocument.Parse(await detail.Content.ReadAsStringAsync());
+        var lines = detailJson.RootElement.GetProperty("lines");
+        await Assert.That(lines.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(lines[0].GetProperty("qty").GetInt32()).IsEqualTo(5);
+        await Assert.That(detailJson.RootElement.GetProperty("tag").GetProperty("label").GetString()).IsEqualTo("t1");
+
+        // List: each row is loaded the same way. The seed row (#595) is present too, so find ORD1 by its key.
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        var row = listJson.RootElement.EnumerateArray().Single(o => o.GetProperty("code").GetString() == "ORD1");
+        await Assert.That(row.GetProperty("lines").GetArrayLength()).IsEqualTo(1);
+        await Assert.That(row.GetProperty("tag").GetProperty("label").GetString()).IsEqualTo("t1");
+
+        // The nested collection route loads each item's own navigations; the item's link to its owner is the cycle
+        // ReferenceHandler.IgnoreCycles breaks, so the body ends there instead of looping.
+        using var children = await oracle.Client.GetAsync("/api/orders/ORD1/lines");
+        await Assert.That(children.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var childrenJson = JsonDocument.Parse(await children.Content.ReadAsStringAsync());
+        await Assert.That(childrenJson.RootElement.GetArrayLength()).IsEqualTo(1);
+        var child = childrenJson.RootElement[0];
+        await Assert.That(child.GetProperty("qty").GetInt32()).IsEqualTo(5);
+        await Assert.That(child.GetProperty("order").GetProperty("code").GetString()).IsEqualTo("ORD1");
+        await Assert.That(child.GetProperty("order").GetProperty("lines").ValueKind).IsEqualTo(JsonValueKind.Null);
+    }
+
     [Test]
     public async Task GeneratedPublicEntityWithPublicNav_BootsAndServesOrderList() {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderPublicLine604);

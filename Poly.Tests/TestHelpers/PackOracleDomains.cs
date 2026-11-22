@@ -346,6 +346,37 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
+    /// <summary>#594: a <c>GET</c> returns the entity with its declared navigations loaded, as the simulator's
+    /// <c>get</c> shows them. Both sides of each navigation are <c>public</c>, so the navigation prints and appears in
+    /// the entity's JSON; the child's link back to its owner is the cycle <c>ReferenceHandler.IgnoreCycles</c> breaks.
+    /// Both children are reachable: <c>lines</c> through an action's <c>create in</c>, <c>tag</c> likewise. It stays out
+    /// of <see cref="All"/>: it pins one read behaviour, it is not a catalogue member.</summary>
+    public static PackOracleDomain Navigations594 { get; } = new(
+        "Navigations594",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        public entity Tag {
+          Label: Text length(1, 8)
+        }
+
+        public entity OrderLine {
+          Qty: Number range(1, 100)
+          order: Order via lines
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          lines: many owned OrderLine
+          tag: one Tag optional
+          public action AddLine (qty: Number) { create in lines { Qty: qty } }
+          public action TagIt (label: Text) { create in tag { Label: label } }
+        }
+        """,
+        "/api/orders");
+
     /// <summary>P-14a (row P-14). One host with every failure the HTTP contract maps: a Range, a unique,
     /// an occupied to-one link, a Stage and a Policy failure.</summary>
     public static PackOracleDomain Failures687 { get; } = new(

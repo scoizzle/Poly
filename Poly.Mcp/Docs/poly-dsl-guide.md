@@ -2157,6 +2157,19 @@ simulator: the host never wires an entity's subscribers after loading it, so an 
 run in a generated app only for subscribers registered in the same request. An action the generator cannot follow is
 **refused when the app is generated** (`polyc` exits non-zero, naming the action), never served with less than it reads: an action the generator cannot follow, for example a `when` handler chain that keeps registering subscribers (a handler that creates a child which registers the same owner again). Create routes (the POST of a root) read no stored link.
 
+### HTTP reads: what a `GET` returns (`uses http`)
+
+A `GET` that returns an entity returns it with its declared navigations **loaded, one level**: every collection and every
+single link, whether or not anything reads them. That holds on a detail route, for each row of a list route, and for each
+item of a nested collection route, so a child created through its parent's action is in the parent's body instead of an
+empty array (#594); it is the same navigation state the simulator's `get` names for an instance. Deeper levels are not
+loaded: a link reached through one of those navigations answers with its own scalars, and its own navigations are
+whatever EF fixed up. A reference that repeats a row already written in the same body is written once and `null` where it
+repeats — the host sets `ReferenceHandler.IgnoreCycles` — so a body never loops and the response never fails; on
+`/api/orders/{code}/lines` an item's `order` carries the owner and the owner's `lines` reads `null`. An entity with no
+navigation keeps its one-expression handler (`async (db) => await db.Books.ToListAsync()`). The shape of a navigation in
+the body is still **not stable** (section 14).
+
 ## 12. Dual Authoring Path
 
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.
@@ -2377,10 +2390,9 @@ What the id does not cover, and what that costs:
   Returned.
 - **The library demo's `Overdue` stage** has no transition into it (DMSS007), so `when loans Overdue` cannot fire on any
   host. This is a defect of the demo document, not of a host; the document's author removes it.
-- **Links and ids in a `GET`** (generated app): a link comes back null or unloaded, and a `many` collection comes back
-  empty although it has members (#594). An entity without a natural key has no `id` in its JSON body, so a list names
-  no value to `GET` by; its create answers `201` with a `Location` that does name the row (#589), and publishing the
-  `id` as a body member is P-12.
+- **No `id` in a `GET` for an entity without a natural key** (generated app): such an entity has no `id` in its JSON
+  body, so a list names no value to `GET` by; its create answers `201` with a `Location` that does name the row (#589),
+  and publishing the `id` as a body member is P-12.
 - **An action called with `{}`, or with a `null` Number or Boolean argument** (simulator and HTTP): it stores `0` or
   `false`. Over HTTP an explicit JSON `null` is a `400` with an empty body. Removed by X-05.
 - **Overloads, `M(decimal?)` declared before `M(long?)`** (C# surface only): an `int` argument binds `decimal?` where C#

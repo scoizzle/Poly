@@ -440,6 +440,16 @@ internal class Student : Poly.Runtime.IActionScoped
         var __holds = (holds == null ? 0L : (long)holds);
         var __completions = (completions == null ? 0L : (long)completions);
         var __lastGrade = (lastGrade == null ? 0L : (long)lastGrade);
+        if (enrollments != null)
+        {
+            foreach (var __enrollmentsElement in enrollments)
+            {
+                if (__enrollmentsElement == null)
+                {
+                    return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Required("'enrollments' contains a null element.", "Student.enrollments"));
+                }
+            }
+        }
         if (Student.ExistsWithEmail(db, __email))
         {
             return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Student'.", "Student.Email"));

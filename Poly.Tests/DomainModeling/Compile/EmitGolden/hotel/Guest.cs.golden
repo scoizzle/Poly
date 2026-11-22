@@ -386,6 +386,26 @@ internal class Guest : Poly.Runtime.IActionScoped
         var __stayCount = (stayCount == null ? 0L : (long)stayCount);
         var __nightCount = (nightCount == null ? 0L : (long)nightCount);
         var __eventCount = (eventCount == null ? 0L : (long)eventCount);
+        if (events != null)
+        {
+            foreach (var __eventsElement in events)
+            {
+                if (__eventsElement == null)
+                {
+                    return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Required("'events' contains a null element.", "Guest.events"));
+                }
+            }
+        }
+        if (reservations != null)
+        {
+            foreach (var __reservationsElement in reservations)
+            {
+                if (__reservationsElement == null)
+                {
+                    return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Required("'reservations' contains a null element.", "Guest.reservations"));
+                }
+            }
+        }
         if (Guest.ExistsWithEmail(db, __email))
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Guest'.", "Guest.Email"));

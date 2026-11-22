@@ -387,6 +387,8 @@ public sealed partial class DomainToCSharpExporter {
         var prop = slot.Shape == CreateSlotShape.Scalar
             ? entity.Properties.First(p => string.Equals(p.Name, slot.Name, StringComparison.Ordinal))
             : null;
+        if (slot.Shape == CreateSlotShape.Collection)
+            checks.Add(NullElementGuard(entity, slot));
         Node value = parameter;
         if (slot.Kind == CreateSlotKind.Required)
             checks.Add(Guard(ConstraintCheckWriter.RequiredSlotCheck(slot, parameter)));
@@ -411,6 +413,28 @@ public sealed partial class DomainToCSharpExporter {
                      value, nullableValue: slot.Kind == CreateSlotKind.Optional, includeRequired: false))
             checks.Add(Guard(check));
         return value;
+    }
+
+    /// <summary>
+    /// A <c>many</c> create argument's elements (#564): a null element is refused as <c>Required</c> on the collection, so a
+    /// policy that counts the collection cannot be satisfied by a null and no null reaches the stored list, where the next
+    /// read of an element would throw. It runs in the lowered <c>Create</c>, so the printed class and the interpreter refuse
+    /// the same call; an omitted collection is null itself and is skipped (the constructor coalesces it to an empty list).
+    /// </summary>
+    private static Node NullElementGuard(Entity entity, CreateSlot slot) {
+        var resultType = new NamedTypeReference("DomainResult",
+            TypeArguments: [new NamedTypeReference(entity.Name)]);
+        var collection = new Variable(ToCamelCase(slot.Name));
+        var element = new Variable($"__{ToCamelCase(slot.Name)}Element");
+        var refusal = new IfStatement(
+            new Equal(element, new Constant(null)),
+            new Block([FailureLowering.Return(resultType, new FailureLowering.Spec(
+                DomainFailureKind.Required,
+                new Constant($"'{slot.Name}' contains a null element."),
+                $"{entity.Name}.{slot.Name}"))]));
+        return new IfStatement(
+            new NotEqual(collection, new Constant(null)),
+            new Block([new ForEachLoop(element, collection, new Block([refusal]))]));
     }
 
     /// <summary>

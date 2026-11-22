@@ -194,6 +194,26 @@ internal class Patron : Poly.Runtime.IActionScoped
         }
         var __name = name;
         var __status = (status == null ? "Active" : status);
+        if (loans != null)
+        {
+            foreach (var __loansElement in loans)
+            {
+                if (__loansElement == null)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'loans' contains a null element.", "Patron.loans"));
+                }
+            }
+        }
+        if (fines != null)
+        {
+            foreach (var __finesElement in fines)
+            {
+                if (__finesElement == null)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'fines' contains a null element.", "Patron.fines"));
+                }
+            }
+        }
         var __created = new Patron(__name, __status, loans, fines);
         Poly.Runtime.ActionScope.Create(__created, "Patron");
         __created.InitializeSubscriptions();

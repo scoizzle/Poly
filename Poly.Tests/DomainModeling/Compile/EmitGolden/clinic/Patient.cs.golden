@@ -96,6 +96,16 @@ internal class Patient : Poly.Runtime.IActionScoped
             return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patient.Name"));
         }
         var __name = name;
+        if (visits != null)
+        {
+            foreach (var __visitsElement in visits)
+            {
+                if (__visitsElement == null)
+                {
+                    return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Required("'visits' contains a null element.", "Patient.visits"));
+                }
+            }
+        }
         var __created = new Patient(__name, visits);
         Poly.Runtime.ActionScope.Create(__created, "Patient");
         return DomainResult<Patient>.Success(__created);

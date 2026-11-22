@@ -169,6 +169,16 @@ internal class Campaign : Poly.Runtime.IActionScoped
             return DomainResult<Campaign>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Campaign.Name"));
         }
         var __name = name;
+        if (members != null)
+        {
+            foreach (var __membersElement in members)
+            {
+                if (__membersElement == null)
+                {
+                    return DomainResult<Campaign>.Failure(Poly.Runtime.DomainFailure.Required("'members' contains a null element.", "Campaign.members"));
+                }
+            }
+        }
         var __created = new Campaign(__name, members);
         Poly.Runtime.ActionScope.Create(__created, "Campaign");
         return DomainResult<Campaign>.Success(__created);

@@ -796,6 +796,36 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'account' is required.", "Opportunity.account"));
         }
         var __account = account;
+        if (activities != null)
+        {
+            foreach (var __activitiesElement in activities)
+            {
+                if (__activitiesElement == null)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'activities' contains a null element.", "Opportunity.activities"));
+                }
+            }
+        }
+        if (lines != null)
+        {
+            foreach (var __linesElement in lines)
+            {
+                if (__linesElement == null)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'lines' contains a null element.", "Opportunity.lines"));
+                }
+            }
+        }
+        if (quotes != null)
+        {
+            foreach (var __quotesElement in quotes)
+            {
+                if (__quotesElement == null)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'quotes' contains a null element.", "Opportunity.quotes"));
+                }
+            }
+        }
         var __created = new Opportunity(__title, __amount, __closeBy, __account, contact, activities, lines, quotes);
         Poly.Runtime.ActionScope.Create(__created, "Opportunity");
         var __entry = __created.__EnterInitialStage();

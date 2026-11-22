@@ -402,6 +402,26 @@ internal class Patron : Poly.Runtime.IActionScoped
         }
         var __currentBorrowCount = (currentBorrowCount == null ? 0L : (long)currentBorrowCount);
         var __outstandingFines = (outstandingFines == null ? 0L : (long)outstandingFines);
+        if (loans != null)
+        {
+            foreach (var __loansElement in loans)
+            {
+                if (__loansElement == null)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'loans' contains a null element.", "Patron.loans"));
+                }
+            }
+        }
+        if (fines != null)
+        {
+            foreach (var __finesElement in fines)
+            {
+                if (__finesElement == null)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'fines' contains a null element.", "Patron.fines"));
+                }
+            }
+        }
         if (Patron.ExistsWithEmail(db, __email))
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Patron'.", "Patron.Email"));

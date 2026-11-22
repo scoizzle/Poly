@@ -291,6 +291,16 @@ internal class Room : Poly.Runtime.IActionScoped
             return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Required("'roomType' is required.", "Room.roomType"));
         }
         var __roomType = roomType;
+        if (stays != null)
+        {
+            foreach (var __staysElement in stays)
+            {
+                if (__staysElement == null)
+                {
+                    return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Required("'stays' contains a null element.", "Room.stays"));
+                }
+            }
+        }
         if (Room.ExistsWithNumber(db, __number))
         {
             return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Number' value is already used on another 'Room'.", "Room.Number"));

@@ -154,6 +154,16 @@ internal class Customer : Poly.Runtime.IActionScoped
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 100 characters.", "Customer.Name"));
         }
         var __tier = (tier == null ? "standard" : tier);
+        if (orders != null)
+        {
+            foreach (var __ordersElement in orders)
+            {
+                if (__ordersElement == null)
+                {
+                    return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Required("'orders' contains a null element.", "Customer.orders"));
+                }
+            }
+        }
         if (Customer.ExistsWithEmail(db, __email))
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Customer'.", "Customer.Email"));

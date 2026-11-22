@@ -372,6 +372,26 @@ internal class Section : Poly.Runtime.IActionScoped
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'course' is required.", "Section.course"));
         }
         var __course = course;
+        if (enrollments != null)
+        {
+            foreach (var __enrollmentsElement in enrollments)
+            {
+                if (__enrollmentsElement == null)
+                {
+                    return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'enrollments' contains a null element.", "Section.enrollments"));
+                }
+            }
+        }
+        if (waitlist != null)
+        {
+            foreach (var __waitlistElement in waitlist)
+            {
+                if (__waitlistElement == null)
+                {
+                    return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'waitlist' contains a null element.", "Section.waitlist"));
+                }
+            }
+        }
         var __offeredSeats = (offeredSeats == null ? 0L : (long)offeredSeats);
         var __waitCleared = (waitCleared == null ? 0L : (long)waitCleared);
         var __created = new Section(__cap, __seatsTaken, __offeringTerm, __course, instructor, enrollments, waitlist, __offeredSeats, __waitCleared);

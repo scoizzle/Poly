@@ -36,7 +36,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     {
         modelBuilder.Entity<Book>(b => {
     b.ToTable("Books", t => {
-    t.HasCheckConstraint("CK_pages", "pages >= 1 AND pages <= 10000");
+    t.HasCheckConstraint("CK_pages", "\"pages\" >= 1 AND \"pages\" <= 10000");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
@@ -49,7 +49,7 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
 });
         modelBuilder.Entity<Patron>(b => {
     b.ToTable("Patrons", t => {
-    t.HasCheckConstraint("CK_maxItems", "maxItems >= 0 AND maxItems <= 20");
+    t.HasCheckConstraint("CK_maxItems", "\"maxItems\" >= 0 AND \"maxItems\" <= 20");
 });
     b.Property<int>("Id");
     b.HasKey("Id");

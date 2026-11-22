@@ -75,7 +75,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
         modelBuilder.Entity<Product>(b => {
     b.ToTable("Products", t => {
-    t.HasCheckConstraint("CK_listPrice", "listPrice >= 0 AND listPrice <= 100000000");
+    t.HasCheckConstraint("CK_listPrice", "\"listPrice\" >= 0 AND \"listPrice\" <= 100000000");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
@@ -116,7 +116,7 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
         modelBuilder.Entity<Opportunity>(b => {
     b.ToTable("Opportunities", t => {
-    t.HasCheckConstraint("CK_probability", "probability >= 0 AND probability <= 100");
+    t.HasCheckConstraint("CK_probability", "\"probability\" >= 0 AND \"probability\" <= 100");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
@@ -163,8 +163,8 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
         modelBuilder.Entity<Line>(b => {
     b.ToTable("Lines", t => {
-    t.HasCheckConstraint("CK_qty", "qty >= 1 AND qty <= 10000");
-    t.HasCheckConstraint("CK_unitPrice", "unitPrice >= 0 AND unitPrice <= 100000000");
+    t.HasCheckConstraint("CK_qty", "\"qty\" >= 1 AND \"qty\" <= 10000");
+    t.HasCheckConstraint("CK_unitPrice", "\"unitPrice\" >= 0 AND \"unitPrice\" <= 100000000");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
@@ -173,8 +173,8 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
         modelBuilder.Entity<QuoteLine>(b => {
     b.ToTable("QuoteLines", t => {
-    t.HasCheckConstraint("CK_qty", "qty >= 1 AND qty <= 10000");
-    t.HasCheckConstraint("CK_unitPrice", "unitPrice >= 0 AND unitPrice <= 100000000");
+    t.HasCheckConstraint("CK_qty", "\"qty\" >= 1 AND \"qty\" <= 10000");
+    t.HasCheckConstraint("CK_unitPrice", "\"unitPrice\" >= 0 AND \"unitPrice\" <= 100000000");
 });
     b.Property<int>("Id");
     b.HasKey("Id");

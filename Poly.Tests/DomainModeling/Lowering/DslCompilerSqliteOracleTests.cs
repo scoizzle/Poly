@@ -426,8 +426,8 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var db = result.Files!.Single(f => f.FileName == "DemoDbContext.cs").Source;
-        await Assert.That(db).Contains("qty >= 0");
-        await Assert.That(db).DoesNotContain("qty <= 0");
+        await Assert.That(db).Contains("\\\"qty\\\" >= 0");
+        await Assert.That(db).DoesNotContain("\\\"qty\\\" <= 0");
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Open max caps at the CLR type bound (long.MaxValue, exactly), never 0.

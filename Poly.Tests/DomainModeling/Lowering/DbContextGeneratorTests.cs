@@ -377,8 +377,8 @@ public class DbContextGeneratorTests {
 
         var checks = CheckConstraints(domain);
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("price >= 0");
-        await Assert.That(checks[0]).Contains("price <= 9007199254740993");
+        await Assert.That(checks[0]).Contains("\"price\" >= 0");
+        await Assert.That(checks[0]).Contains("\"price\" <= 9007199254740993");
     }
 
     /// <summary>V-05b A13: the CHECK text keeps the declared decimal scale
@@ -394,8 +394,8 @@ public class DbContextGeneratorTests {
 
         var checks = CheckConstraints(domain);
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("price >= 0.00");
-        await Assert.That(checks[0]).Contains("price <= 100.00");
+        await Assert.That(checks[0]).Contains("\"price\" >= 0.00");
+        await Assert.That(checks[0]).Contains("\"price\" <= 100.00");
     }
 
     /// <summary>V-05b fix round 1: an API-built fractional double bound is not an exact number, but it is
@@ -409,8 +409,8 @@ public class DbContextGeneratorTests {
         var checks = CheckConstraints(domain);
 
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("price >= 0.5");
-        await Assert.That(checks[0]).Contains("price <= 1.5");
+        await Assert.That(checks[0]).Contains("\"price\" >= 0.5");
+        await Assert.That(checks[0]).Contains("\"price\" <= 1.5");
     }
 
     /// <summary>V-05b fix round 2: a tiny finite double bound must not round to 0 in the CHECK; an open
@@ -436,7 +436,24 @@ public class DbContextGeneratorTests {
         var checks = CheckConstraints(domain);
 
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("price <= 18446744073709551615");
+        await Assert.That(checks[0]).Contains("\"price\" <= 18446744073709551615");
+    }
+
+    /// <summary>#632: the CHECK expression quotes the column identifier. An unquoted one is a
+    /// syntax error when the property is named after an SQL keyword (<c>Limit</c>, <c>Order</c>,
+    /// <c>Group</c>), which crashes the generated app in <c>EnsureCreatedAsync</c>.</summary>
+    [Test]
+    public async Task CheckSql_ColumnIdentifier_IsQuoted() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Limit: Number range(0, 100)
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).IsEqualTo("\"limit\" >= 0 AND \"limit\" <= 100");
     }
 
     private static IEnumerable<Node> Descendants(Node node) {

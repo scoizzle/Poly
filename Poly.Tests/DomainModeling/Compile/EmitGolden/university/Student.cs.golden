@@ -73,13 +73,13 @@ internal class Student : Poly.Runtime.IActionScoped
         {
             return DomainResult<Enrollment>.Failure(__enrollmentResult.Error!);
         }
-        var enrollment = enrollmentResult.Value;
-        var __notify = enrollment.__ReplayStageNotifications();
+        var __enrollment = __enrollmentResult.Value;
+        var __notify = __enrollment.__ReplayStageNotifications();
         if (!__notify.IsSuccess)
         {
             return DomainResult<Enrollment>.Failure(__notify.Error!);
         }
-        return DomainResult<Enrollment>.Success(enrollment);
+        return DomainResult<Enrollment>.Success(__enrollment);
     }
     internal void AttachEnrollments(Enrollment child)
     {

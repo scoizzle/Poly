@@ -129,8 +129,8 @@ public class ConstraintAssignLoweringTests {
             DomainExpression.Property("Code"),
             DomainExpression.Property("code")));
         var cs = new CSharpGenerator().Generate(lowered!);
-        await Assert.That(cs).Contains("if (assignValue0 == null)");
-        await Assert.That(cs.IndexOf("if (assignValue0 == null)", StringComparison.Ordinal))
+        await Assert.That(cs).Contains("if (__assignValue0 == null)");
+        await Assert.That(cs.IndexOf("if (__assignValue0 == null)", StringComparison.Ordinal))
             .IsLessThan(cs.IndexOf("IsMatch", StringComparison.Ordinal));
 
         // A bare Text property is required, so null fails that check before
@@ -162,7 +162,7 @@ public class ConstraintAssignLoweringTests {
             DomainExpression.Property("code")));
         var cs = new CSharpGenerator().Generate(lowered!);
 
-        await Assert.That(cs).Contains("if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0");
+        await Assert.That(cs).Contains("if (__assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(__assignValue0");
     }
 
     [Test]

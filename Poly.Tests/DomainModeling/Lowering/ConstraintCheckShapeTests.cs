@@ -55,7 +55,7 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Tag", "Code", "code");
 
         await Assert.That(cs).Contains(
-            "if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
+            "if (__assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(__assignValue0, \"^[A-Z]{3}\\\\z\"))");
     }
 
     [Test]

@@ -229,13 +229,13 @@ internal class Folio : Poly.Runtime.IActionScoped
             return DomainResult<Folio>.Failure(Poly.Runtime.DomainFailure.Required("'reservation' is required.", "Folio.reservation"));
         }
         var __reservation = reservation;
-        var created = new Folio(__balance, __reservation);
-        Poly.Runtime.ActionScope.Create(created, "Folio");
+        var __created = new Folio(__balance, __reservation);
+        Poly.Runtime.ActionScope.Create(__created, "Folio");
         if (reservation != null)
         {
-            reservation.AttachFolio(created);
+            reservation.AttachFolio(__created);
         }
-        return DomainResult<Folio>.Success(created);
+        return DomainResult<Folio>.Success(__created);
     }
     public object __Snapshot()
     {

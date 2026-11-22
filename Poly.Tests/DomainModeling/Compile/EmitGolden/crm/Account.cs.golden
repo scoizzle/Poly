@@ -169,13 +169,13 @@ internal class Account : Poly.Runtime.IActionScoped
         {
             return DomainResult<Opportunity>.Failure(__opportunityResult.Error!);
         }
-        var opportunity = opportunityResult.Value;
-        var __notify = opportunity.__ReplayStageNotifications();
+        var __opportunity = __opportunityResult.Value;
+        var __notify = __opportunity.__ReplayStageNotifications();
         if (!__notify.IsSuccess)
         {
             return DomainResult<Opportunity>.Failure(__notify.Error!);
         }
-        return DomainResult<Opportunity>.Success(opportunity);
+        return DomainResult<Opportunity>.Success(__opportunity);
     }
     internal void AttachOpportunities(Opportunity child)
     {
@@ -216,13 +216,13 @@ internal class Account : Poly.Runtime.IActionScoped
         {
             return DomainResult<Ticket>.Failure(__ticketResult.Error!);
         }
-        var ticket = ticketResult.Value;
-        var __notify = ticket.__ReplayStageNotifications();
+        var __ticket = __ticketResult.Value;
+        var __notify = __ticket.__ReplayStageNotifications();
         if (!__notify.IsSuccess)
         {
             return DomainResult<Ticket>.Failure(__notify.Error!);
         }
-        return DomainResult<Ticket>.Success(ticket);
+        return DomainResult<Ticket>.Success(__ticket);
     }
     internal void AttachTickets(Ticket child)
     {

@@ -77,13 +77,13 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<EventHold>.Failure(__eventHoldResult.Error!);
         }
-        var eventHold = eventHoldResult.Value;
-        var __notify = eventHold.__ReplayStageNotifications();
+        var __eventHold = __eventHoldResult.Value;
+        var __notify = __eventHold.__ReplayStageNotifications();
         if (!__notify.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(__notify.Error!);
         }
-        return DomainResult<EventHold>.Success(eventHold);
+        return DomainResult<EventHold>.Success(__eventHold);
     }
     internal void AttachEvents(EventHold child)
     {
@@ -122,13 +122,13 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<Reservation>.Failure(__reservationResult.Error!);
         }
-        var reservation = reservationResult.Value;
-        var __notify = reservation.__ReplayStageNotifications();
+        var __reservation = __reservationResult.Value;
+        var __notify = __reservation.__ReplayStageNotifications();
         if (!__notify.IsSuccess)
         {
             return DomainResult<Reservation>.Failure(__notify.Error!);
         }
-        return DomainResult<Reservation>.Success(reservation);
+        return DomainResult<Reservation>.Success(__reservation);
     }
     internal void AttachReservations(Reservation child)
     {

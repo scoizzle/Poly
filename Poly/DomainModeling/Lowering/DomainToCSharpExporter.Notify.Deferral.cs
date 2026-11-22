@@ -88,7 +88,7 @@ public sealed partial class DomainToCSharpExporter {
         var names = new LocalNames();
         var arms = new List<Node>();
         foreach (var (stageName, needsPrevious) in stages) {
-            var notified = names.Next("__notified");
+            var notified = names.Next("notified");
             arms.Add(new IfStatement(
                 new Equal(stage, new Constant(stageName)),
                 new Block([

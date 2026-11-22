@@ -76,8 +76,8 @@ public sealed class GeneratedCSharpQualityTests {
         var user = files.Single(f => f.FileName == "User.cs").Source;
 
         await Assert.That(user).Contains(
-            "if (!System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
-        await Assert.That(user).DoesNotContain("assignValue0 != null &&");
+            "if (!System.Text.RegularExpressions.Regex.IsMatch(__assignValue0, \"^[A-Z]{3}\\\\z\"))");
+        await Assert.That(user).DoesNotContain("__assignValue0 != null &&");
     }
 
     [Test]

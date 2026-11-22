@@ -95,13 +95,13 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult<WaitOffer>.Failure(__waitOfferResult.Error!);
         }
-        var waitOffer = waitOfferResult.Value;
-        var __notify = waitOffer.__ReplayStageNotifications();
+        var __waitOffer = __waitOfferResult.Value;
+        var __notify = __waitOffer.__ReplayStageNotifications();
         if (!__notify.IsSuccess)
         {
             return DomainResult<WaitOffer>.Failure(__notify.Error!);
         }
-        return DomainResult<WaitOffer>.Success(waitOffer);
+        return DomainResult<WaitOffer>.Success(__waitOffer);
     }
     internal void AttachWaitlist(WaitOffer child)
     {

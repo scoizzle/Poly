@@ -350,15 +350,24 @@ public sealed class ModuleInstanceExecutorTests {
     [Test]
     public async Task Invoke_RequiredFailure_ListsTheCurrentStageCopysPolicies() {
         // #945: the module dispatches the stage copy; the action the executor looks up
-        // must be that copy, so its policy list is the one the failure reports.
+        // must be that copy, so its policy list is the one the failure reports. A Required
+        // failure on a navigation is the one whose guard list reads the looked-up action's
+        // policies. Since #936 an unlinked read is absent (so `require not SectionFull` holds),
+        // and an invoke through the unlinked link is still Required.
         var executor = ExecutorFor("""
             domain EnrollSlice
-            Section: entity { SeatsTaken: Number default(0) }
+            Section: entity {
+              SeatsTaken: Number default(0)
+              Touch: action { assign SeatsTaken to SeatsTaken + 1 }
+            }
             Enrollment: entity {
               section: Section optional
               SectionFull: policy { section SeatsTaken >= 1 }
               Pending: stage {
-                Confirm: action require not SectionFull { transition to Confirmed }
+                Confirm: action require not SectionFull {
+                  invoke section.Touch
+                  transition to Confirmed
+                }
               }
               Confirmed: stage { }
               Confirm: action { }

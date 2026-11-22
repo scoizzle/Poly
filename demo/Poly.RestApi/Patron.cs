@@ -80,13 +80,13 @@ internal class Patron : Poly.Runtime.IActionScoped
         {
             return DomainResult<Loan>.Failure(__loanResult.Error!);
         }
-        var loan = loanResult.Value;
-        var __notify = loan.__ReplayStageNotifications();
+        var __loan = __loanResult.Value;
+        var __notify = __loan.__ReplayStageNotifications();
         if (!__notify.IsSuccess)
         {
             return DomainResult<Loan>.Failure(__notify.Error!);
         }
-        return DomainResult<Loan>.Success(loan);
+        return DomainResult<Loan>.Success(__loan);
     }
     internal void AttachLoans(Loan child)
     {
@@ -126,13 +126,13 @@ internal class Patron : Poly.Runtime.IActionScoped
         {
             return DomainResult<Fine>.Failure(__fineResult.Error!);
         }
-        var fine = fineResult.Value;
-        var __notify = fine.__ReplayStageNotifications();
+        var __fine = __fineResult.Value;
+        var __notify = __fine.__ReplayStageNotifications();
         if (!__notify.IsSuccess)
         {
             return DomainResult<Fine>.Failure(__notify.Error!);
         }
-        return DomainResult<Fine>.Success(fine);
+        return DomainResult<Fine>.Success(__fine);
     }
     internal void AttachFines(Fine child)
     {

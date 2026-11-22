@@ -203,12 +203,13 @@ public class ActionScopeEmitTests {
         // the bare factory's instance and entry locals, the notify fan-out's, and the create-in factory's pair.
         // #630 adds the create-time notification record: its queue, its window flag, and the record and replay methods.
         // #572 adds `__child`, the supplied collection argument's loop variable in each factory.
+        // #585 adds `__attach`, the result of an owned part's peer `Attach{Nav}` call.
         // #564 adds the element local of each `many` create slot's null check (`__` + the slot + `Element`).
         var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|scope|done|result|depth|BodyOf\w+|code|label|score"
             + @"|created|entry|item|itemResult|existing|sub|create\d+|assignValue\d+|invoke\d+|target\d+"
             + @"|handlerResult\d+|notify\d*|previousStage\d+|item\d+|match\d+|uniqueCheck\d+|sawItem\d+"
             + @"|t\d+|adapterResult\d*"
-            + @"|pending\w*|stage|notified\d+|deferringStageNotifications|DeferStageNotification|ReplayStageNotifications|\w+Element|child)$");
+            + @"|pending\w*|stage|notified\d+|deferringStageNotifications|DeferStageNotification|ReplayStageNotifications|\w+Element|child|attach)$");
         var stray = Regex.Matches(cs, @"\b__\w+").Select(m => m.Value).Where(n => !allowed.IsMatch(n)).Distinct().ToList();
         await Assert.That(string.Join(",", stray)).IsEqualTo("");
 

@@ -104,11 +104,12 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __activity = __activityResult.Value;
         return DomainResult<Activity>.Success(__activity);
     }
-    internal void AttachActivities(Activity child)
+    internal DomainResult AttachActivities(Activity child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._activities.Add(child);
         child.AttachOpportunity(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Line> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
@@ -144,11 +145,12 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __line = __lineResult.Value;
         return DomainResult<Line>.Success(__line);
     }
-    internal void AttachLines(Line child)
+    internal DomainResult AttachLines(Line child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
         child.AttachOpportunity(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Quote> CreateQuotes(string? title = default, decimal? amount = default)
     {
@@ -184,11 +186,12 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __quote = __quoteResult.Value;
         return DomainResult<Quote>.Success(__quote);
     }
-    internal void AttachQuotes(Quote child)
+    internal DomainResult AttachQuotes(Quote child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._quotes.Add(child);
         child.AttachOpportunity(this);
+        return DomainResult.Success();
     }
     internal DomainResult CompleteOpenWork()
     {
@@ -838,7 +841,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         if (account != null)
         {
-            account.AttachOpportunities(__created);
+            var __attach = account.AttachOpportunities(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Opportunity>.Failure(__attach.Error!);
+            }
         }
         if (activities != null)
         {

@@ -45,11 +45,12 @@ internal class Order : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Touch(this);
         this.Customer = child;
     }
-    internal void AttachItems(OrderItem child)
+    internal DomainResult AttachItems(OrderItem child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._items.Add(child);
         child.AttachOrder(this);
+        return DomainResult.Success();
     }
     internal DomainResult Cancel(string reason)
     {
@@ -282,7 +283,11 @@ internal class Order : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(__created, "Order");
         if (customer != null)
         {
-            customer.AttachOrders(__created);
+            var __attach = customer.AttachOrders(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Order>.Failure(__attach.Error!);
+            }
         }
         if (items != null)
         {

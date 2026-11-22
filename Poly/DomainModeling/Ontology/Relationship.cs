@@ -78,6 +78,16 @@ public sealed record Relationship(
         $"Cannot unlink '{relationshipName}': the owned target must keep its owner.";
 
     /// <summary>
+    /// Message when a link would give an owned part a second owner. The generated C# and the
+    /// simulator read one owner navigation on the part (<see cref="Relationship"/> pairs), so both
+    /// name the part and both owners this way (#585).
+    /// </summary>
+    public static string OwnerViolationMessage(
+        string relationshipName, string ownedEntityName, string ownerEntityName) =>
+        $"Cannot add a link on '{relationshipName}': the owned '{ownedEntityName}' already has an owner "
+        + $"('{ownerEntityName}'), so another '{ownerEntityName}' cannot own it.";
+
+    /// <summary>
     /// Message when Unlink would clear a required to-one navigation. A required link is permanent in
     /// this release: delete the instance and create a new one to move it.
     /// </summary>

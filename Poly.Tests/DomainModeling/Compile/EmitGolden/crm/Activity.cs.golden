@@ -138,7 +138,11 @@ internal class Activity : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(__created, "Activity");
         if (opportunity != null)
         {
-            opportunity.AttachActivities(__created);
+            var __attach = opportunity.AttachActivities(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Activity>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Activity>.Success(__created);
     }

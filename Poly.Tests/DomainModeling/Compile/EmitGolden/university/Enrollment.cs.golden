@@ -520,11 +520,19 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(__created, "Enrollment");
         if (section != null)
         {
-            section.AttachEnrollments(__created);
+            var __attach = section.AttachEnrollments(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Enrollment>.Failure(__attach.Error!);
+            }
         }
         if (student != null)
         {
-            student.AttachEnrollments(__created);
+            var __attach = student.AttachEnrollments(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Enrollment>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Enrollment>.Success(__created);
     }

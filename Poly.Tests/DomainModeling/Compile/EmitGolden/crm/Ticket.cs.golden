@@ -220,7 +220,11 @@ internal class Ticket : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(__created, "Ticket");
         if (account != null)
         {
-            account.AttachTickets(__created);
+            var __attach = account.AttachTickets(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Ticket>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Ticket>.Success(__created);
     }

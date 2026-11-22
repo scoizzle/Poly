@@ -734,11 +734,19 @@ internal class Reservation : Poly.Runtime.IActionScoped
         }
         if (guest != null)
         {
-            guest.AttachReservations(__created);
+            var __attach = guest.AttachReservations(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Reservation>.Failure(__attach.Error!);
+            }
         }
         if (room != null)
         {
-            room.AttachStays(__created);
+            var __attach = room.AttachStays(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Reservation>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Reservation>.Success(__created);
     }

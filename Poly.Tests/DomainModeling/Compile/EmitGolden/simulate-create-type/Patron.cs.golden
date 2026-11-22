@@ -20,11 +20,12 @@ internal class Patron : Poly.Runtime.IActionScoped
     {
         get => new List<Fine>(this._fines);
     }
-    internal void AttachFines(Fine child)
+    internal DomainResult AttachFines(Fine child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
         child.AttachPatron(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Fine> AssessByType()
     {

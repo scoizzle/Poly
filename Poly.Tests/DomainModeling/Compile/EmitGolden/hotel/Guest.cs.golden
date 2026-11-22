@@ -85,12 +85,13 @@ internal class Guest : Poly.Runtime.IActionScoped
         }
         return DomainResult<EventHold>.Success(__eventHold);
     }
-    internal void AttachEvents(EventHold child)
+    internal DomainResult AttachEvents(EventHold child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._events.Add(child);
         child.AttachGuest(this);
         child.RegisterGuestEventsReleasedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Reservation> CreateReservations(long? partySize = default, long? nights = default, decimal? nightlyRate = default, long? maxOccupancy = default, DateOnly? checkInDate = default, DateOnly? checkOutDate = default, Folio? folio = default, Room? room = default)
     {
@@ -131,12 +132,13 @@ internal class Guest : Poly.Runtime.IActionScoped
         }
         return DomainResult<Reservation>.Success(__reservation);
     }
-    internal void AttachReservations(Reservation child)
+    internal DomainResult AttachReservations(Reservation child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._reservations.Add(child);
         child.AttachGuest(this);
         child.RegisterGuestReservationsDepartedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Reservation> BookStay(Room room, long party, long nights, DateOnly arrive, DateOnly depart)
     {

@@ -679,7 +679,13 @@ A self-owning navigation (`Node.children: many owned Node`) is one owner edge an
 legal, but a container that owns a recursive type (`Folder.items: many owned Item` plus
 `Item.children: many owned Item`) gives `Item` two owner navigations and is rejected;
 make `Item.children` a plain reference, or declare the tree node as its own type.
-This is a type-level check only: a second owner *instance* is not refused yet.
+This is a type-level check only. A second owner *instance* is refused when the part names
+its owner — the part's own navigation back (`Order.customer`) is what the generated C# and
+the simulator both read, so putting a part that already names another owner into an owner's
+collection answers a `Link` failure: "Cannot add a link on 'orders': the owned 'Order'
+already has an owner ('Customer'), so another 'Customer' cannot own it." A part whose type
+declares no navigation back records no owner, so nothing refuses a second one yet (see
+*Known wrong*).
 
 **Ownership never closes a loop between different entities** (`DMDEP002`). Two or
 more different entity types that own each other through `owned` navigations are an
@@ -2556,6 +2562,9 @@ What the id does not cover, and what that costs:
   hotel `Guest.BookHall` and `Guest.BookSection`, logistics `Courier.Assign` (#940).
 - **An owned single part with no back-navigation** (`hq: owned Address optional`) is orphaned when its owner is deleted;
   owned parts reached by a collection or a back-navigation cascade. The behaviour is unchanged in this release (L-15).
+- **An owned part whose type declares no navigation back** (`orders: many owned Order` with no `Order.customer` on the
+  target): nothing records who owns it, so a second owner's link or create is accepted on both hosts (#585). Declare the
+  navigation back and the part names its owner, which turns a second owner into a `Link` failure.
 - **Only SQLite** is checked at startup, and only SQLite was probed for delete behaviour (`OnDelete(Restrict)` on a
   required link, cascade on owned parts).
 - **An action the generator cannot follow**, such as a `when` handler chain that keeps registering subscribers, is

@@ -95,7 +95,11 @@ internal class Line : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(__created, "Line");
         if (opportunity != null)
         {
-            opportunity.AttachLines(__created);
+            var __attach = opportunity.AttachLines(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Line>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Line>.Success(__created);
     }

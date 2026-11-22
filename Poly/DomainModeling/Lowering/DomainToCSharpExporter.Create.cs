@@ -112,6 +112,7 @@ public sealed partial class DomainToCSharpExporter {
         var bodyNodes = new List<Node>();
         var localResult = new Variable($"__{ToCamelCase(targetTypeName)}Result");
         var local = new Variable($"__{ToCamelCase(targetTypeName)}");
+        var locals = new List<Node> { localResult, local };
 
         bodyNodes.Add(new Assignment(localResult,
             new Invoke(
@@ -157,12 +158,18 @@ public sealed partial class DomainToCSharpExporter {
                     local));
 
                 // A singular create-in links `this` into the target's paired collection
-                // (e.g. local.AttachItems(this)); ambiguous/no pair is a no-op.
+                // (e.g. local.AttachItems(this)); ambiguous/no pair is a no-op. The attach returns a
+                // result (an owned part may name another owner, #585), so a refusal fails the create-in.
                 var inverse = FindInverseCollectionInfo(targetEntity, entity.Name, rel).Unique;
                 if (inverse is not null) {
-                    bodyNodes.Add(new Invoke(
+                    var attach = new Variable("__attach");
+                    locals.Add(attach);
+                    bodyNodes.Add(new Assignment(attach, new Invoke(
                         new Member(local, $"Attach{ToPascalCase(inverse.Name)}"),
-                        [new ThisReference()]));
+                        [new ThisReference()])));
+                    bodyNodes.Add(new IfStatement(
+                        new Syntactic.Not(new Member(attach, "IsSuccess")),
+                        new Block([FailureLowering.Propagate(createResultType, attach)])));
                 }
             }
 
@@ -196,6 +203,7 @@ public sealed partial class DomainToCSharpExporter {
                 // as its own result with no caller prefix (the child's failure above is passed the same way).
                 // `__notify` is reserved; FreshLocal moves it off the instance local if the target is named Notify.
                 notifyResult = FreshLocal("__notify", [localResult, local]);
+                locals.Add(notifyResult);
                 bodyNodes.Add(new Assignment(notifyResult, new Invoke(
                     new Member(local, $"Notify{initialStage}Subscribers"),
                     needsPrevious ? [new Constant(null)] : [])));
@@ -211,7 +219,10 @@ public sealed partial class DomainToCSharpExporter {
             // (DefersCreationNotifications).
             if (subscriberSubs is { Count: > 0 }
                 && subscriberSubs.Any(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))) {
-                notifyResult ??= new Variable("__notify");
+                if (notifyResult is null) {
+                    notifyResult = new Variable("__notify");
+                    locals.Add(notifyResult);
+                }
                 bodyNodes.Add(new Assignment(notifyResult, new Invoke(
                     new Member(local, ReplayStageNotificationsMethodName))));
                 bodyNodes.Add(new IfStatement(
@@ -232,7 +243,7 @@ public sealed partial class DomainToCSharpExporter {
         AddScopedActionMethods(methods, methodName,
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             methodParams,
-            new Block(bodyNodes, notifyResult is null ? [localResult, local] : [localResult, local, notifyResult]),
+            new Block(bodyNodes, locals),
             AccessModifier.Internal);
     }
 
@@ -666,13 +677,30 @@ public sealed partial class DomainToCSharpExporter {
             if (inverse is null)
                 continue;
 
+            // A singular inverse's attach only sets the peer's to-one and returns nothing (#587).
+            if (!CreateInWiring.IsCollection(inverse)) {
+                createSuccessNodes.Add(new IfStatement(
+                    new NotEqual(paramRef, new Constant(null)),
+                    new Block([new Invoke(
+                        new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
+                        [createdLocal])])));
+                continue;
+            }
+
+            // A collection's attach returns a result: an owned part that already names another owner is
+            // refused there (#585), so the factory returns that failure instead of a half-wired
+            // aggregate. The local lives in the guard's block: its first assignment types it.
+            var attach = new Variable("__attach");
             createSuccessNodes.Add(new IfStatement(
                 new NotEqual(paramRef, new Constant(null)),
                 new Block([
-                    new Invoke(
+                    new Assignment(attach, new Invoke(
                         new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
-                        [createdLocal])
-                ])));
+                        [createdLocal])),
+                    new IfStatement(
+                        new Syntactic.Not(new Member(attach, "IsSuccess")),
+                        new Block([FailureLowering.Propagate(createResultType, attach)]))
+                ], [attach])));
         }
 
         // A supplied collection argument wires the other side of the pair too (#572): the

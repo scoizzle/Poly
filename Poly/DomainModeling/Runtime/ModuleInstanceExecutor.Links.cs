@@ -35,6 +35,19 @@ public sealed partial class ModuleInstanceExecutor {
                         Relationship.SelfOwnLinkViolationMessage(relationshipName),
                         $"{source.EntityName}.{relationshipName}"));
 
+                // An owned part has one owner (#585). The part names its owner through one
+                // navigation back (OwnerNavigationOf, the rule the printed Attach reads), so a
+                // second owner is refused instead of holding a part it does not own.
+                if (contract.SourceOwnsTarget
+                    && OwnerNavigationOfTarget(contract) is { } ownerNav
+                    && target.Bag.TryGetValue(DomainTypeMapping.ToPascalCase(ownerNav.Name), out var ownerValue)
+                    && ownerValue is not null
+                    && !ReferenceEquals(ownerValue, source.Bag))
+                    return ModuleOutcome.Fail(DomainFailure.Link(
+                        Relationship.OwnerViolationMessage(
+                            relationshipName, contract.TargetEntityName, contract.SourceEntityName),
+                        $"{source.EntityName}.{relationshipName}"));
+
                 if (IsToMany(contract)) {
                     var field = CollectionField(contract);
                     if (source.Bag.TryGetValue(field, out var raw) && raw is IList list)
@@ -182,6 +195,18 @@ public sealed partial class ModuleInstanceExecutor {
     private RelationshipContract? ContractFor(string relationshipName, string sourceEntityName) =>
         ContractsFrom(sourceEntityName).FirstOrDefault(c =>
             string.Equals(c.Name, relationshipName, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The singular navigation on an owned contract's target that names its owner — the exporter's
+    /// <see cref="DomainToCSharpExporter.OwnerNavigationOf"/> rule, read from the contract so both
+    /// hosts answer the same. Null when the part names no owner.
+    /// </summary>
+    private Relationship? OwnerNavigationOfTarget(RelationshipContract contract) {
+        var childEntity = RequireEntity(contract.TargetEntityName);
+        var owned = RequireEntity(contract.SourceEntityName).Navigations
+            .First(n => string.Equals(n.Name, contract.Name, StringComparison.Ordinal));
+        return DomainToCSharpExporter.OwnerNavigationOf(childEntity, owned);
+    }
 
     private RelationshipContract RequireContract(
         string relationshipName, ModuleInstance source, ModuleInstance target) {

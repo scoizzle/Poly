@@ -133,11 +133,12 @@ internal class Account : Poly.Runtime.IActionScoped
         var __contact = __contactResult.Value;
         return DomainResult<Contact>.Success(__contact);
     }
-    internal void AttachContacts(Contact child)
+    internal DomainResult AttachContacts(Contact child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._contacts.Add(child);
         child.AttachAccount(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Opportunity> CreateOpportunities(string? title = default, decimal? amount = default, DateOnly? closeBy = default, Contact? contact = default)
     {
@@ -178,7 +179,7 @@ internal class Account : Poly.Runtime.IActionScoped
         }
         return DomainResult<Opportunity>.Success(__opportunity);
     }
-    internal void AttachOpportunities(Opportunity child)
+    internal DomainResult AttachOpportunities(Opportunity child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._opportunities.Add(child);
@@ -186,6 +187,7 @@ internal class Account : Poly.Runtime.IActionScoped
         child.RegisterAccountOpportunitiesWonSubscriber(this);
         child.RegisterAccountOpportunitiesProposeSubscriber(this);
         child.RegisterAccountOpportunitiesLostSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Ticket> CreateTickets(string? subject = default)
     {
@@ -226,12 +228,13 @@ internal class Account : Poly.Runtime.IActionScoped
         }
         return DomainResult<Ticket>.Success(__ticket);
     }
-    internal void AttachTickets(Ticket child)
+    internal DomainResult AttachTickets(Ticket child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._tickets.Add(child);
         child.AttachAccount(this);
         child.RegisterAccountTicketsClosedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Site> PlaceHq(string city, string region)
     {

@@ -63,11 +63,12 @@ internal class Campaign : Poly.Runtime.IActionScoped
         var __campaignMember = __campaignMemberResult.Value;
         return DomainResult<CampaignMember>.Success(__campaignMember);
     }
-    internal void AttachMembers(CampaignMember child)
+    internal DomainResult AttachMembers(CampaignMember child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._members.Add(child);
         child.AttachCampaign(this);
+        return DomainResult.Success();
     }
     internal DomainResult<CampaignMember> Enroll(Contact who)
     {

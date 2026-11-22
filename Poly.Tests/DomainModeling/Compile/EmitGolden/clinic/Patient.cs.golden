@@ -21,11 +21,12 @@ internal class Patient : Poly.Runtime.IActionScoped
     {
         get => new List<Visit>(this._visits);
     }
-    internal void AttachVisits(Visit child)
+    internal DomainResult AttachVisits(Visit child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._visits.Add(child);
         child.AttachPatient(this);
+        return DomainResult.Success();
     }
     internal DomainResult CheckInAll()
     {

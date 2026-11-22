@@ -79,7 +79,11 @@ internal class OrderItem : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(__created, "OrderItem");
         if (order != null)
         {
-            order.AttachItems(__created);
+            var __attach = order.AttachItems(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<OrderItem>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<OrderItem>.Success(__created);
     }

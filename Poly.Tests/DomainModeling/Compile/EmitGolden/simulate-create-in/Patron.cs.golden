@@ -54,11 +54,12 @@ internal class Patron : Poly.Runtime.IActionScoped
         var __fine = __fineResult.Value;
         return DomainResult<Fine>.Success(__fine);
     }
-    internal void AttachFines(Fine child)
+    internal DomainResult AttachFines(Fine child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
         child.AttachPatron(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Fine> AssessByRel()
     {

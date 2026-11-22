@@ -310,7 +310,11 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         if (borrower != null)
         {
-            borrower.AttachLoans(__created);
+            var __attach = borrower.AttachLoans(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Loan>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Loan>.Success(__created);
     }

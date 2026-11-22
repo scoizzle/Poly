@@ -95,7 +95,11 @@ internal class QuoteLine : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(__created, "QuoteLine");
         if (quote != null)
         {
-            quote.AttachLines(__created);
+            var __attach = quote.AttachLines(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<QuoteLine>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<QuoteLine>.Success(__created);
     }

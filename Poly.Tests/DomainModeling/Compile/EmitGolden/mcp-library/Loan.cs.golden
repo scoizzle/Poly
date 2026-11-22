@@ -237,7 +237,11 @@ internal class Loan : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(__created, "Loan");
         if (patron != null)
         {
-            patron.AttachLoans(__created);
+            var __attach = patron.AttachLoans(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Loan>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Loan>.Success(__created);
     }

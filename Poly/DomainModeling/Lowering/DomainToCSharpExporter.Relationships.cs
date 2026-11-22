@@ -102,15 +102,6 @@ public sealed partial class DomainToCSharpExporter {
         return count == 1 ? (found, count) : (null, count);
     }
 
-    private static string? ResolveNavTargetEntityName(
-        string sourceEntityName, string relationshipName, Domain domain) {
-        var source = domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, sourceEntityName, StringComparison.Ordinal));
-        var nav = source?.Navigations.FirstOrDefault(n =>
-            string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
-        return nav?.Target.TypeName;
-    }
-
     /// <summary>
     /// Emits the navigation properties (PascalCase; <c>IReadOnlyList</c> for collections)
     /// and the create-in / attach methods that go with a collection navigation.

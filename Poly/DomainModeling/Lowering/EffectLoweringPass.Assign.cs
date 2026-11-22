@@ -50,6 +50,21 @@ public sealed partial class EffectLoweringPass {
                 value.Value,
                 uniqueName,
                 _expressionPass.MayBeAbsent(a.Value, name => _binderEntities?.GetValueOrDefault(name)));
+
+        // A value read through an unlinked optional hop is absent (#936): an optional target stores absent,
+        // a required target fails the same Required the assign guard gives a null value. The value is read
+        // only on the present branch, so an unlinked hop is never dereferenced.
+        var presence = _expressionPass.PresenceOf(a.Value, Subject);
+        if (presence.ThroughHop && presence.Guard is not null) {
+            var requiredTarget = assignProp is not null && EntityStructureAnalyzer.IsRequired(assignProp);
+            Node absent = requiredTarget
+                ? AssignConstraintFailure(ConstraintCheckWriter.FailureSpec(
+                    ConstraintCheckWriter.RequiredCheck(assignProp!.Name, new Constant(null)),
+                    _entity.Name, assignProp.Name))
+                : new Assignment(target.Value, new Constant(null));
+            assignment = new IfStatement(presence.Guard, new Block([assignment]), new Block([absent]));
+        }
+
         return LoweredExpression.Before([target, value], assignment);
     }
     /// <summary>

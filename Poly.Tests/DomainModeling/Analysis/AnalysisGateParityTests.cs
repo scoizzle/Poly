@@ -682,11 +682,11 @@ public class AnalysisGateParityTests {
     /// <summary>
     /// An optional Duration reached through a to-one link, with the link present and the leaf less, equal and greater than the
     /// bare duration and absent: both hosts answer C#'s lifted comparison, in both operand orders. With the link ABSENT
-    /// (<c>advisor</c> unlinked) the lowering ANDs a null guard per to-one hop, so the whole comparison is false for every
-    /// operator, <c>!=</c> included: that differs from an absent LEAF (where <c>!=</c> is true), and is pinned as the hosts answer.
+    /// (<c>advisor</c> unlinked) the read is absent (#936), so the comparison answers the same rule as an absent leaf:
+    /// <c>!=</c> is true and every other operator false, in both operand orders.
     /// </summary>
     [Test]
-    public async Task OptionalDurationThroughALink_BothHostsAnswerCSharp_UnlinkedHopIsFalse() {
+    public async Task OptionalDurationThroughALink_BothHostsAnswerTheAbsentRule() {
         var policies = Ops.SelectMany((op, i) => new[] { $"P{i * 2}: policy {{ advisor Gap {op} 1 Hours }}", $"P{i * 2 + 1}: policy {{ 1 Hours {op} advisor Gap }}" });
         var dsl = $$"""
             domain T
@@ -710,9 +710,11 @@ public class AnalysisGateParityTests {
                 });
                 for (var i = 0; i < Ops.Length * 2; i++) {
                     var op = Ops[i / 2];
-                    var expected = linked && (i % 2 == 0
-                        ? Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps.Lifted(op, gap, one)
-                        : Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps.Lifted(op, one, gap));
+                    var expected = linked
+                        ? (i % 2 == 0
+                            ? Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps.Lifted(op, gap, one)
+                            : Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps.Lifted(op, one, gap))
+                        : op == "!=";
                     await Assert.That(outcomes[i + 2].State["P" + i]).IsEqualTo(expected.ToString())
                         .Because($"advisor Gap {op} 1 Hours (order {i % 2}) gap={gap?.ToString() ?? "absent"} linked={linked}");
                 }

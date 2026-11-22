@@ -721,16 +721,15 @@ public sealed class ModuleInstanceExecutorTests {
     }
 
     [Test]
-    public async Task Invoke_PathPrefixRequire_GuardListKeepsEveryActionPolicy() {
+    public async Task Invoke_RequireNotOverUnlinkedHop_Runs() {
+        // #936: `not (absent >= 1)` is true, so the unlinked hop no longer refuses the action.
         var executor = ExecutorFor(SectionDsl);
         var enrollment = executor.Create("Enrollment", Values()).Instance!;
 
-        var blocked = executor.Invoke(enrollment, "Confirm");
+        var result = executor.Invoke(enrollment, "Confirm");
 
-        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
-        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Enrollment.section");
-        await Assert.That(blocked.Failure.Guard).IsNull();
-        await Assert.That(blocked.FailedGuards).Contains("not_SectionFull");
+        await Assert.That(result.Succeeded).IsTrue().Because(result.Error ?? "");
+        await Assert.That(ModuleReads.Stage(enrollment)).IsEqualTo("Confirmed");
     }
 
     [Test]
@@ -789,8 +788,9 @@ public sealed class ModuleInstanceExecutorTests {
 
         var blocked = executor.Invoke(issue, "Escalate");
 
-        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
-        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Engineer.team");
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Policy);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Issue.Escalate");
+        await Assert.That(blocked.Failure.Guard).IsEqualTo("FromBlueTeam");
         await Assert.That(blocked.FailedGuards).Contains("FromBlueTeam");
     }
 
@@ -863,9 +863,9 @@ public sealed class ModuleInstanceExecutorTests {
         var blocked = executor.Invoke(parent, "Go");
 
         await Assert.That(blocked.Succeeded).IsFalse();
-        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
-        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Parent.Go.Child.owner");
-        await Assert.That(blocked.Failure.Guard).IsNull();
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Policy);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Parent.Go.Child.Poke");
+        await Assert.That(blocked.Failure.Guard).IsEqualTo("OwnerFlagged");
         await Assert.That(blocked.FailedGuards.Count).IsEqualTo(0);
     }
 
@@ -943,7 +943,8 @@ public sealed class ModuleInstanceExecutorTests {
     /// </summary>
     [Test]
     [Arguments(PolicyBlockDsl, "Person", "Activate", 10L, "IsAdult", "IsAdult")]
-    [Arguments(SectionDsl, "Enrollment", "Confirm", null, "not_SectionFull", "not_SectionFull")]
+    // The unlinked-section row is gone: since #936 `require not SectionFull` is true when the hop is absent,
+    // so there is no failure to project. The `not_` naming stays covered by the linked row below.
     [Arguments(SectionDsl, "Enrollment", "Confirm", 1L, "SectionFull", "not_SectionFull")]
     public async Task FailedGuards_ExecutorAndMcpMapper_AgreeExceptOnRequireNotPolicyBlocks(
         string dsl, string entityName, string actionName, long? seats, string executorGuard, string mcpGuard) {

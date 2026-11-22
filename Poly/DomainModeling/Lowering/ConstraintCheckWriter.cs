@@ -240,7 +240,7 @@ internal static class ConstraintCheckWriter {
     /// </summary>
     internal static Check RequiredSlotCheck(CreateSlot slot, Node value) => RequiredCheck(slot.Name, value);
 
-    private static Check RequiredCheck(string name, Node value) =>
+    internal static Check RequiredCheck(string name, Node value) =>
         new(Kind.Required, new Equal(value, new Constant(null)), null, new Constant($"'{name}' is required."));
 
     /// <summary>

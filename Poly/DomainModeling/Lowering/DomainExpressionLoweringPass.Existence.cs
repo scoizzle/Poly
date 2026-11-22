@@ -16,7 +16,11 @@ public sealed partial class DomainExpressionLoweringPass {
             };
         }
         var other = Route(e.Target);
-        return other with { Value = new NotEqual(other.Value, new Constant(null)) };
+        var value = new NotEqual(other.Value, new Constant(null));
+        var presence = PresenceOf(e.Target, _currentSubject);
+        return other with {
+            Value = presence.ThroughHop && presence.Guard is not null ? And(presence.Guard, value) : value
+        };
     }
 
     protected override LoweredExpression NotExists(NotExists ne) {
@@ -27,6 +31,11 @@ public sealed partial class DomainExpressionLoweringPass {
             };
         }
         var other = Route(ne.Target);
-        return other with { Value = new Equal(other.Value, new Constant(null)) };
+        var value = new Equal(other.Value, new Constant(null));
+        var presence = PresenceOf(ne.Target, _currentSubject);
+        // `not exists` through an unlinked hop is true: the hop is absent, so its target does not exist.
+        return other with {
+            Value = presence.ThroughHop && presence.Guard is not null ? Or(Not(presence.Guard), value) : value
+        };
     }
 }

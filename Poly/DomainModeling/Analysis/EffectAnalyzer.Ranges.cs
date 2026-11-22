@@ -3,6 +3,7 @@ using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
+using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Negate = Poly.DomainModeling.Ontology.Negate;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
@@ -14,7 +15,8 @@ internal sealed partial class EffectAnalyzer {
     private static readonly DomainDslPrinter WritePrinter = new();
 
     /// <summary>One constraint decided against one stage context's value.</summary>
-    private readonly record struct WriteFinding(WriteVerdict Verdict, Constraint Constraint, AbstractValue? Value);
+    private readonly record struct WriteFinding(
+        WriteVerdict Verdict, Constraint Constraint, AbstractValue? Value, ValueRange? Length);
 
     /// <summary>
     /// The unverified-write channel (Q4) for an assign whose value is not a literal or a bare parameter.
@@ -41,7 +43,7 @@ internal sealed partial class EffectAnalyzer {
         ValidateWrittenValue(
             context, domain, assign, assign.Value,
             $"assign {targetProp.Name} to {WritePrinter.PrintExpressionText(assign.Value)}",
-            targetProp, values);
+            targetProp, values, TextLengths.Of(assign.Value, entity, action, domain));
     }
 
     /// <summary>
@@ -66,7 +68,8 @@ internal sealed partial class EffectAnalyzer {
         ValidateWrittenValue(
             context, domain, initializer, initializer.Expression,
             $"create {targetEntity.Name} {{ {targetProp.Name}: {WritePrinter.PrintExpressionText(initializer.Expression)} }}",
-            targetProp, InitializerValues(context, initializer, creatorEntity, action));
+            targetProp, InitializerValues(context, initializer, creatorEntity, action),
+            TextLengths.Of(initializer.Expression, creatorEntity, action, domain));
     }
 
     /// <summary>
@@ -85,7 +88,9 @@ internal sealed partial class EffectAnalyzer {
             .ToList();
     }
 
-    /// <summary>The shared decision: every write-relevant constraint against every value, worst wins.</summary>
+    /// <summary>The shared decision: every write-relevant constraint against every value, worst wins.
+    /// <paramref name="length"/> is the assigned expression's length interval (null when it is not a
+    /// bounded Text), which a <c>length(...)</c> target is decided against.</summary>
     private static void ValidateWrittenValue(
         AnalysisContext context,
         Domain domain,
@@ -93,12 +98,13 @@ internal sealed partial class EffectAnalyzer {
         DomainExpression valueExpression,
         string writeText,
         Property targetProp,
-        IReadOnlyList<AbstractValue?> values) {
+        IReadOnlyList<AbstractValue?> values,
+        ValueRange? length) {
         WriteFinding? worst = null;
         foreach (var constraint in targetProp.Constraints) {
             if (!ConstraintValidation.IsWriteRelevant(constraint)) continue;
             foreach (var value in values) {
-                var finding = new WriteFinding(DecideWrite(constraint, value, valueExpression), constraint, value);
+                var finding = new WriteFinding(DecideWrite(constraint, value, valueExpression, length), constraint, value, length);
                 // A strictly worse verdict replaces the current one; on an equal rank the FIRST
                 // decided value wins, consistent with WriteVerdict.Worst returning `this` on a tie.
                 // (Ranks order the Unverified reasons too, so the outcome does not depend on the
@@ -133,13 +139,26 @@ internal sealed partial class EffectAnalyzer {
             .ToList();
     }
 
-    private static WriteVerdict DecideWrite(Constraint constraint, AbstractValue? value, DomainExpression assigned) {
+    private static WriteVerdict DecideWrite(
+        Constraint constraint, AbstractValue? value, DomainExpression assigned, ValueRange? length) {
         if (ConstraintKinds.Of(constraint) is null)
             return WriteVerdict.Unverified(
                 UnverifiedReason.NonFlowCheckedKind, DomainModelDiagnosticCodes.ConstraintUndecided);
         if (value is null)
             return WriteVerdict.Unverified(UnverifiedReason.UnknownBound, DomainModelDiagnosticCodes.ConstraintUndecided);
-        switch (ConstraintValidation.Decide(constraint, value)) {
+        var decision = ConstraintValidation.Decide(constraint, value);
+        // A known length interval decides a Text target the value's own length does not: inside is
+        // verified, and anything else is a known length that can fall outside. Row V-08 still owns the
+        // error side, so a disjoint interval is a warning, never Violated. The value's own length wins
+        // when it proves containment — a stage policy narrowing it makes it the narrower truth.
+        if (decision != ConstraintVerdict.Satisfied
+            && constraint is LengthConstraint lengthTarget && length is { } declaredLength) {
+            decision = WriteVerification.DecideLength(lengthTarget, declaredLength);
+            if (decision != ConstraintVerdict.Satisfied)
+                return WriteVerdict.Unverified(
+                    UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.EffectConstraintViolation);
+        }
+        switch (decision) {
             case ConstraintVerdict.Satisfied:
                 return WriteVerdict.Satisfied;
             case ConstraintVerdict.Violated:
@@ -159,19 +178,36 @@ internal sealed partial class EffectAnalyzer {
 
     /// <summary>
     /// Why an expression with no usable range could not be bounded: an operator the interval flow does
-    /// not model anywhere in the tree (division, a call, a match, ...) is named first; otherwise the
-    /// modelled node simply lost its bound because an operand has none.
+    /// not model anywhere in the tree (a call, a remainder, an existential, ...) is named first;
+    /// otherwise the modelled node simply lost its bound because an operand has none.
     /// </summary>
     private static UnverifiedReason OpaqueReason(DomainExpression assigned) =>
-        HasUnmodelledOperator(assigned) ? UnverifiedReason.UnsupportedOperator : UnverifiedReason.UnknownBound;
+        HasUnmodelledValue(assigned) ? UnverifiedReason.UnsupportedOperator : UnverifiedReason.UnknownBound;
 
     /// <summary>True when any node of the expression is an operator the interval flow does not model (pre-order).
-    /// The one purity gate: the shared evaluator's X − X cancellation and the opaque-reason text use it (B7).</summary>
+    /// The one purity gate: the shared evaluator's X − X cancellation uses it (B7).
+    /// A division and a match are still operators it will not duplicate or cancel — a division can throw,
+    /// a match can read a leaf — even though both now carry a value interval (#1040).</summary>
     internal static bool HasUnmodelledOperator(DomainExpression expression) => expression switch {
         Add add => HasUnmodelledOperator(add.Left) || HasUnmodelledOperator(add.Right),
         Subtract sub => HasUnmodelledOperator(sub.Left) || HasUnmodelledOperator(sub.Right),
         Multiply mul => HasUnmodelledOperator(mul.Left) || HasUnmodelledOperator(mul.Right),
         Negate negate => HasUnmodelledOperator(negate.Operand),
+        PropertyAccess or ParameterAccess or RelationshipNavigation or Literal => false,
+        _ => true,
+    };
+
+    /// <summary>True when any VALUE node of the expression has no interval transfer of its own — a call, a
+    /// remainder, an existential, …: the reason the write has no range names an operator rather than a
+    /// missing bound. Division and match have transfers since #1040, so this walk recurses through them; a
+    /// division whose divisor can be 0 is a missing bound (#502 owns the zero case), not an unmodelled
+    /// operator.</summary>
+    internal static bool HasUnmodelledValue(DomainExpression expression) => expression switch {
+        Add add => HasUnmodelledValue(add.Left) || HasUnmodelledValue(add.Right),
+        Subtract sub => HasUnmodelledValue(sub.Left) || HasUnmodelledValue(sub.Right),
+        Multiply mul => HasUnmodelledValue(mul.Left) || HasUnmodelledValue(mul.Right),
+        Divide divide => HasUnmodelledValue(divide.Left) || HasUnmodelledValue(divide.Right),
+        MatchExpr match => match.Arms.Any(a => HasUnmodelledValue(a.Value)) || HasUnmodelledValue(match.Else),
         PropertyAccess or ParameterAccess or RelationshipNavigation or Literal => false,
         _ => true,
     };
@@ -198,6 +234,14 @@ internal sealed partial class EffectAnalyzer {
                     $"constraint {described} on property '{targetProp.Name}'.",
                     finding.Verdict.Code!);
                 break;
+            case WriteOutcome.Unverified when finding.Verdict.Reason == UnverifiedReason.PossibleViolation
+                && constraint is LengthConstraint && finding.Length is { } length:
+                context.ReportWarning(
+                    errorNode,
+                    $"Assigned expression length [{FormatLengthBound(length.Min, lower: true)}, {FormatLengthBound(length.Max, lower: false)}] can fall outside " +
+                    $"constraint {described} on property '{targetProp.Name}'.",
+                    finding.Verdict.Code!);
+                break;
             case WriteOutcome.Unverified:
                 context.ReportWarning(
                     errorNode,
@@ -207,6 +251,13 @@ internal sealed partial class EffectAnalyzer {
                 break;
         }
     }
+
+    /// <summary>A length endpoint as text. A string's length cannot exceed <see cref="int.MaxValue"/>, so
+    /// that is the exact open side a Text with no <c>length(...)</c> carries; it prints as <c>+∞</c>.</summary>
+    private static string FormatLengthBound(decimal? bound, bool lower) =>
+        bound is not { } value ? (lower ? "0" : "+∞")
+        : !lower && value >= int.MaxValue ? "+∞"
+        : FormatRangeValue(value);
 
     private static bool IsRangeSubsumed(RangeConstraint inner, RangeConstraint outer) {
         // #367: a bound that is not a number is never ordered, so it is never subsumed (the old

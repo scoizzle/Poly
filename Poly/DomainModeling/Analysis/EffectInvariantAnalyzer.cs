@@ -3,6 +3,7 @@ using Poly.DomainModeling.Ontology;
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
@@ -507,6 +508,11 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
             case FunctionCall call:
                 return EvalCall(call, operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain), domain);
+            case Divide divide:
+                return EvalArithmetic(divide, divide.Left, divide.Right,
+                    operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
+            case MatchExpr match:
+                return EvalMatch(match, operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
             default:
                 return AbstractValue.Unknown;
         }
@@ -578,6 +584,22 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         IntervalTransfers.Transfer(node, [evalOperand(operand).NumericRange])?.ToRangeConstraint() is { } range
             ? AbstractValue.From([range])
             : AbstractValue.Unknown;
+
+    /// <summary>
+    /// A <c>match</c>'s interval (#608, #1040): the hull of the values it can produce, which is its
+    /// arms and its required <c>else</c>. An arm with no interval — an unbounded read, a call — leaves
+    /// the whole match unknown rather than guessing; an arm the analysis cannot reach still widens the
+    /// hull, which is sound. The arms' conditions do not narrow it: a wider hull is never a false proof.
+    /// </summary>
+    private static AbstractValue EvalMatch(MatchExpr match, Func<DomainExpression, AbstractValue> eval) {
+        ValueRange? hull = null;
+        foreach (var arm in match.Arms.Select(a => a.Value).Append(match.Else)) {
+            if (eval(arm).NumericRange is not { } range) return AbstractValue.Unknown;
+            hull = hull is null ? range : hull.Join(range);
+            if (hull is null) return AbstractValue.Unknown;
+        }
+        return hull?.ToRangeConstraint() is { } constraint ? AbstractValue.From([constraint]) : AbstractValue.Unknown;
+    }
 
     /// <summary>A literal's numeric value exactly, or null when it is not a number or has no exact form.</summary>
     private static decimal? DeclaredBound(object? value) => ExactNumber.TryFrom(value)?.ToDecimal();
@@ -905,6 +927,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
             case Negate negate:
                 return EvalUnary(negate, negate.Operand,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
+            case Divide divide:
+                return EvalArithmetic(divide, divide.Left, divide.Right,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
+            case MatchExpr match:
+                // A match in a binding evaluates its arms in the BINDING's scope: falling through to
+                // Eval would resolve a binder-rooted read against the caller's same-named navigation.
+                return EvalMatch(match,
                     operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
         }
         return Eval(expr, caller, action, env, paramEnv, domain: domain);

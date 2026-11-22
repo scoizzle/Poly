@@ -66,10 +66,24 @@ internal static class WriteVerification {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(value);
 
-        var length = value.Constraints.OfType<LengthConstraint>().FirstOrDefault();
-        return length is not null && length.MinLength >= target.MinLength && length.MaxLength <= target.MaxLength
-            ? ConstraintVerdict.Satisfied
+        return value.Constraints.OfType<LengthConstraint>().FirstOrDefault() is { } length
+            ? DecideLength(target, new ValueRange(length.MinLength, length.MaxLength))
             : ConstraintVerdict.Undecided;
+    }
+
+    /// <summary>
+    /// Decides a length against the value's length <paramref name="interval"/> (#1040), which is what
+    /// <see cref="TextLengths"/> computes for a Text expression: a declared <c>length(...)</c>, a
+    /// concatenation, a match. Satisfied only when the whole interval is inside the target's; a disjoint
+    /// interval stays Undecided for the reason above, so no length write is reported as an error yet.
+    /// </summary>
+    internal static ConstraintVerdict DecideLength(LengthConstraint target, ValueRange length) {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(length);
+
+        var lowerOk = length.Min is { } min && min >= target.MinLength;
+        var upperOk = length.Max is { } max && max <= target.MaxLength;
+        return lowerOk && upperOk ? ConstraintVerdict.Satisfied : ConstraintVerdict.Undecided;
     }
 
     /// <summary>

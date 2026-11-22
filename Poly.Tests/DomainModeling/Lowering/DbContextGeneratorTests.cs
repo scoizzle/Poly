@@ -368,8 +368,8 @@ public class DbContextGeneratorTests {
 
         var checks = CheckConstraints(domain);
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("capacity >= 0");
-        await Assert.That(checks[0]).Contains("capacity <= 100000");
+        await Assert.That(checks[0]).Contains("\"capacity\" >= 0");
+        await Assert.That(checks[0]).Contains("\"capacity\" <= 100000");
     }
 
     /// <summary>
@@ -388,7 +388,7 @@ public class DbContextGeneratorTests {
 
         var checks = CheckConstraints(domain);
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("capacity >= 0");
+        await Assert.That(checks[0]).Contains("\"capacity\" >= 0");
         await Assert.That(checks[0].Contains("capacity <=", StringComparison.Ordinal)).IsFalse();
     }
 
@@ -482,6 +482,133 @@ public class DbContextGeneratorTests {
         var checks = CheckConstraints(domain);
         await Assert.That(checks.Count).IsEqualTo(1);
         await Assert.That(checks[0]).IsEqualTo("\"limit\" >= 0 AND \"limit\" <= 100");
+    }
+
+    /// <summary>#563: a length constraint reaches the database as a CHECK, from the property's
+    /// <c>LengthConstraint</c>. The maximum compares code points (<c>length</c>) and the minimum compares
+    /// UTF-8 bytes (<c>length(CAST(… AS BLOB))</c>), so neither side can reject a value Create accepts.</summary>
+    [Test]
+    public async Task LengthConstraint_MinimumAndMaximum_EmitCheck() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Code: Text length(2, 80)
+            }
+            """);
+
+        var checks = OnModelCreating(domain).FindInvocations("HasCheckConstraint");
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(((Constant)checks[0].Arguments[0]).Value).IsEqualTo("CK_code_length");
+        await Assert.That(((Constant)checks[0].Arguments[1]).Value)
+            .IsEqualTo("length(CAST(code AS BLOB)) >= 2 AND length(code) <= 80");
+    }
+
+    /// <summary>#563: the CHECK is built from the property's <c>LengthConstraint</c>, not from
+    /// <see cref="StorageColumn.MaxLength"/>: Email's 256 fallback is an unrelated mapping default, so a
+    /// pattern-only Email gets no length CHECK (the database is never stricter than Create).</summary>
+    [Test]
+    public async Task PatternOnlyEmail_EmitsNoLengthCheck() {
+        var domain = ParseDomain("""
+            domain Test
+            Patron: entity {
+              Email: Text unique pattern("^[^@]+@[^@]+$")
+            }
+            """);
+
+        await Assert.That(CheckConstraints(domain)).IsEmpty();
+    }
+
+    /// <summary>#563: SQLite has no regex, and a GLOB translation is out of scope, so a pattern emits no CHECK.
+    /// The pattern stays where Create and assign enforce it.</summary>
+    [Test]
+    public async Task PatternConstraint_EmitsNoCheck() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              ScacCode: Text unique pattern("^[A-Z]{2,4}$")
+            }
+            """);
+
+        await Assert.That(CheckConstraints(domain)).IsEmpty();
+    }
+
+    /// <summary>The first argument of every emitted <c>HasDefaultValue</c>, in order.</summary>
+    private static List<Node> DefaultValues(Domain domain) =>
+        OnModelCreating(domain).FindInvocations("HasDefaultValue").Select(i => i.Arguments[0]).ToList();
+
+    /// <summary>#563: a literal default is mapped, so a row inserted without the column reads what Create would
+    /// have written.</summary>
+    [Test]
+    public async Task DefaultValue_BooleanLiteral_EmitsHasDefaultValue() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Active: Boolean default(true)
+            }
+            """);
+
+        var values = DefaultValues(domain);
+        await Assert.That(values.Count).IsEqualTo(1);
+        await Assert.That(values[0] is Constant { Value: true }).IsTrue();
+    }
+
+    [Test]
+    public async Task DefaultValue_NumberLiteral_EmitsHasDefaultValue() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Count: Number default(0)
+            }
+            """);
+
+        var values = DefaultValues(domain);
+        await Assert.That(values.Count).IsEqualTo(1);
+        await Assert.That(((Constant)values[0]).Value).IsEqualTo(0L);
+    }
+
+    /// <summary>#563: an enum member default is qualified by its enum type, the same node the exporter's
+    /// <c>Create</c> slot carries.</summary>
+    [Test]
+    public async Task DefaultValue_EnumMember_EmitsQualifiedMember() {
+        var domain = ParseDomain("""
+            domain Test
+            Tier: enum { Silver, Gold }
+            Item: entity {
+              Level: Tier default(Silver)
+            }
+            """);
+
+        var values = DefaultValues(domain);
+        await Assert.That(values.Count).IsEqualTo(1);
+        await Assert.That(values[0] is Member { MemberName: "Silver", Value: NamedTypeReference { TypeName: "Tier" } }).IsTrue();
+    }
+
+    /// <summary>#563: an integral literal default on a decimal column becomes a decimal constant, so EF's
+    /// default holds the property's own type.</summary>
+    [Test]
+    public async Task DefaultValue_IntegralLiteralOnDecimalColumn_IsDecimal() {
+        var amount = new Property("Amount", new DomainTypeReference("Decimal"),
+            [new DefaultValueConstraint(new Literal(5L))]);
+        var domain = DomainTestFactory.Create("Test", [new Entity("Item", [amount], [], [], [])], [])
+            with { Extensions = ["persistence"] };
+
+        var values = DefaultValues(domain);
+        await Assert.That(values.Count).IsEqualTo(1);
+        await Assert.That(((Constant)values[0]).Value).IsEqualTo(5m);
+    }
+
+    /// <summary>#563: a runtime default (now/today/guid) is computed by the host, so the database gets no default.</summary>
+    [Test]
+    public async Task DefaultValue_RuntimeDefault_EmitsNoHasDefaultValue() {
+        var domain = ParseDomain("""
+            domain Test
+            uses temporal
+            Item: entity {
+              MemberSince: Date default(Today)
+            }
+            """);
+
+        await Assert.That(DefaultValues(domain)).IsEmpty();
     }
 
     private static IEnumerable<Node> Descendants(Node node) {

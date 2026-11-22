@@ -56,6 +56,10 @@ app.MapGet("/api/books", async (LibraryDbContext db) => await db.Books.ToListAsy
 app.MapGet("/api/books/{isbn}", async (string isbn, LibraryDbContext db) => (await db.Books.FirstOrDefaultAsync(e => e.ISBN == isbn) is Library.Book book ? Results.Ok(book) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
+    if (dto.ISBN != null && dto.ISBN.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'ISBN' contains '/', which no route can read back; use a key without '/'");
+    }
     var bookResult = Library.Book.Create(db, dto.Title, dto.Author, dto.ISBN, dto.Pages, dto.Genre);
     if (!bookResult.IsSuccess)
     {
@@ -99,6 +103,10 @@ app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => 
 });
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
+    if (dto.Email != null && dto.Email.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'Email' contains '/', which no route can read back; use a key without '/'");
+    }
     var patronResult = Library.Patron.Create(db, dto.Name, dto.Email, dto.MemberSince, dto.Status, dto.MaxItems, dto.CurrentBorrowCount, dto.OutstandingFines, null, null);
     if (!patronResult.IsSuccess)
     {
@@ -125,6 +133,10 @@ app.MapGet("/api/premiumpatrons", async (LibraryDbContext db) => await db.Premiu
 app.MapGet("/api/premiumpatrons/{email}", async (string email, LibraryDbContext db) => (await db.PremiumPatrons.FirstOrDefaultAsync(e => e.Email == email) is Library.PremiumPatron premiumPatron ? Results.Ok(premiumPatron) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/premiumpatrons", async (PremiumPatronDto dto, LibraryDbContext db) => {
+    if (dto.Email != null && dto.Email.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'Email' contains '/', which no route can read back; use a key without '/'");
+    }
     var premiumPatronResult = Library.PremiumPatron.Create(db, dto.Name, dto.Email, dto.RewardPoints, dto.Tier, dto.PriorityAccess);
     if (!premiumPatronResult.IsSuccess)
     {

@@ -55,6 +55,10 @@ app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListA
 app.MapGet("/api/products/{sku}", async (string sku, CrmDbContext db) => (await db.Products.FirstOrDefaultAsync(e => e.Sku == sku) is Crm.Product product ? Results.Ok(product) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
+    if (dto.Sku != null && dto.Sku.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'Sku' contains '/', which no route can read back; use a key without '/'");
+    }
     var productResult = Crm.Product.Create(db, dto.Sku, dto.Name, dto.ListPrice);
     if (!productResult.IsSuccess)
     {
@@ -96,6 +100,10 @@ app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => {
 });
 
 app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
+    if (dto.Email != null && dto.Email.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'Email' contains '/', which no route can read back; use a key without '/'");
+    }
     var leadResult = Crm.Lead.Create(db, dto.Name, dto.Email, dto.Company, null);
     if (!leadResult.IsSuccess)
     {

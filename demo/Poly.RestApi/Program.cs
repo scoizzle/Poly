@@ -23,7 +23,7 @@ builder.Services.AddScoped<Poly.Runtime.IStoragePort, LibraryDbContext>();
 
 var app = builder.Build();
 
-var schemaId = 1592494169;
+var schemaId = 259545595;
 
 using (var scope = app.Services.CreateScope())
 {
@@ -31,7 +31,7 @@ using (var scope = app.Services.CreateScope())
     var created = await db.Database.EnsureCreatedAsync();
     if (created)
     {
-        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 1592494169");
+        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 259545595");
     }
     else
     {

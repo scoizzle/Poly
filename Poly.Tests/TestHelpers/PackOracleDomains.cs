@@ -1048,6 +1048,22 @@ public static class PackOracleDomains {
         """,
         "/api/blobs");
 
+    /// <summary>#563: the EF mapping mirrors the length and default constraints <c>Create</c> enforces, so a row
+    /// written outside the domain is held to the same rule. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain Constraints563 { get; } = new(
+        "Constraints563",
+        """
+        domain Freight
+        uses sqlite
+        uses http
+
+        Carrier: entity {
+          Name: Text unique length(2, 80)
+          Active: Boolean default(true)
+        }
+        """,
+        "/api/carriers");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 

@@ -18,9 +18,9 @@ public sealed partial class MinimalApiGenerator {
 
     /// <summary>
     /// What the schema id hashes: the storage pack's own printed <c>OnModelCreating</c> (tables, columns, keys, indexes,
-    /// relationships, check constraints), the column CLR type and requiredness, the stage column of an entity with
-    /// stages, and the navigations (EF derives a foreign key from its navigation): the model, not the host. Routes,
-    /// DTOs, action bodies, policies, comments and the EF version are not in it. Line endings are normalised to
+    /// relationships, check constraints, column defaults), the column CLR type and requiredness, the stage column of an
+    /// entity with stages, and the navigations (EF derives a foreign key from its navigation): the model, not the host.
+    /// Routes, DTOs, action bodies, policies, comments and the EF version are not in it. Line endings are normalised to
     /// <c>\n</c> (the writer uses <see cref="Environment.NewLine"/>) and nothing else is.
     /// </summary>
     internal string SchemaIdInput() {

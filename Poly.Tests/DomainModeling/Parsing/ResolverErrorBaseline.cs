@@ -72,12 +72,6 @@ internal static class ResolverErrorBaseline {
         ("S:TopLevel.rejection.unsupported-message/ok", "S-09", "ERR FormatException: 'schedule' is not supported in Phase 1a (use 'entity' instead)"),
         ("S:TopLevel.rejection.inheritance/ok", "G-29", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported. Define 'Base' properties directly on 'X'."),
         ("S:TopLevel.rejection.inheritance-define/unicode", "G-29", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported. Define 'Größe' properties directly on 'X'."),
-        // G-32 (#871): a `require` of a missing policy is reported at the end of the entity body, not at the `require` (frozen @33:1 for a require on line 23).
-        ("E:site:Entities:ResolvePendingRequires#1", "G-32", "@33:1 off=-1 len=0 :: Action 'Act' requires policy 'Q' which is not defined on entity 'X'."),
-        ("E:site:Entities:ResolvePendingRequires#2", "G-32", "@33:1 off=-1 len=0 :: Action 'Run' requires policy 'P' which is not defined on entity 'X'."),
-        ("E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1' which is not defined on entity 'X'."),
-        ("E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1' which is not defined on entity 'X'."),
-        ("E:defer:order:requires-before-navs", "G-32", "@7:2 off=-1 len=0 :: Action 'Go' requires policy 'M' which is not defined on entity 'Z'."),
     ];
 
     /// <summary>Where a tag's fixing row lives when that is not obvious from the fixer: a site in G-30 or G-33 code is fixed by whichever row converts it.</summary>
@@ -92,11 +86,6 @@ internal static class ResolverErrorBaseline {
         ["S:Entities.fallback.unsupported/mis-keyword"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
         ["S:Relationships.navline.text/unsupported"] = "site in the navigation line (G-30 converts it; G-29 owns the message)",
         ["S:Relationships.navline.text/case"] = "site in the navigation line (G-30 converts it; G-29 owns the message)",
-        ["E:site:Entities:ResolvePendingRequires#1"] = "#871; the site is in the entity body (G-30 converts it), the position fix is G-32's action `require`",
-        ["E:site:Entities:ResolvePendingRequires#2"] = "#871; the site is in the entity body (G-30 converts it), the position fix is G-32's action `require`",
-        ["E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2"] = "#871",
-        ["E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3"] = "#871",
-        ["E:defer:order:requires-before-navs"] = "#871",
     };
 
     // ── sites no input can reach (stale-checked both ways) ───────────────────────────

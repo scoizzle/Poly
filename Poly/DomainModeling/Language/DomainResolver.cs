@@ -61,7 +61,8 @@ public sealed partial class DomainResolver : DslCursor {
         string ActionName,
         string? StageName,
         string PolicyName,
-        bool Negated);
+        bool Negated,
+        DslToken At);
 
     private readonly record struct PendingStageRequire(
         string StageName,

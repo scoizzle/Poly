@@ -2041,6 +2041,38 @@ function Square(a: Number): Number = a * a
 - **Recursion is rejected**, not supported: a body is one expression with no base case, so a
   recursive function never terminates, and lowering would expand it without end.
 
+#### Built-in numeric functions (#547)
+
+Six numeric functions are built in, so a `Decimal` can be rounded to cents without a declaration:
+
+| Call | Meaning | Result |
+|------|---------|--------|
+| `Round(value, digits)` | round to `digits` places, midpoint **away from zero** (the money rule, never to even) | the operand's type |
+| `Abs(value)` | absolute value | the operand's type |
+| `Min(left, right)` | the smaller operand | the operands' common type |
+| `Max(left, right)` | the larger operand | the operands' common type |
+| `Floor(value)` | the largest whole value at or below | the operand's type |
+| `Ceiling(value)` | the smallest whole value at or above | the operand's type |
+
+`Round(Balance * 0.015, 2)` rounds a computed fee to cents and assigns it to a `Decimal`;
+`Round(1.005, 2)` is `1.01` and `Round(-1.005, 2)` is `-1.01` (banker's rounding would give
+`1.00` and is not used). `Min(Balance, Fee) - Abs(Net)` composes with arithmetic, and the
+interval analysis knows `Abs` is never negative and takes the hull of `Min`/`Max` operands;
+`Round`'s result range is not modelled.
+
+- Each call lowers to one `System.Math` call (`Round`, `Abs`, `Min`, `Max`, `Floor`,
+  `Ceiling`), so the simulator, the printed C#, `polyc check` and the generated host agree.
+- `digits` is a whole `Number` from `0` to `28`. `2` and `2.0` are both whole; `2.5` is refused.
+- Every argument is a present numeric value: `Number`, `Int32`, `Float` or `Decimal`. `Min` and
+  `Max` need two operands with a common type (`Decimal` with `Float` has none).
+- A whole value (`Number`, `Int32`) needs no call for `Round`, `Floor` or `Ceiling`: it is
+  already whole, so the call is that value.
+- These names are not reserved. A `function` declared with the same name wins, exactly as it
+  does over a contract endpoint, and its body runs.
+- Fail-closed: wrong arity is `DMFUN002`; a non-numeric, absent or `Float32` argument, a
+  fractional or out-of-range `digits`, or `Min`/`Max` operands with no common type is
+  `DMSEM003` at the argument.
+
 Not yet part of the surface (later slices of #406): functions on `value` types and `require`
 guards, operator overloads, lowering a function to its own tree artifact with an invoke id,
 and function calls in contract payload constraints.

@@ -271,6 +271,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return "an arm value has no type";
             case FunctionCall call:
                 return FunctionAnalysis.Find(context, call.Name) is null
+                    && BuiltinFunctions.Find(context.GetTypeLookup()?.Domain, call.Name) is null
                     ? $"'{call.Name}' is not a declared function with a return type"
                     : "its return type cannot be modeled";
             default:

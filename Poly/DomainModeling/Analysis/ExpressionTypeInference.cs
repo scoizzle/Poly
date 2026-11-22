@@ -119,9 +119,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 .AsOptional(!IsNavigationToCondition(navigation)),
             OwnedAccess owned => InferOwned(context, owned, props, enumTypes).AsOptional(),
             MatchExpr match => InferMatch(context, match, props, parameters, enumTypes, hint: null),
-            FunctionCall call => FunctionAnalysis.Find(context, call.Name) is { } function
-                ? ResolveName(context, function.ReturnType.TypeName, enumTypes)
-                : ExprType.Unresolved,
+            FunctionCall call => InferCall(context, call, props, parameters, enumTypes),
             _ => ExprType.Unresolved,
         };
     }

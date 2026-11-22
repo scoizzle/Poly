@@ -274,7 +274,7 @@ public sealed class RoundTripMatrixTests {
     [Test]
     public async Task Matrix_IsLarge_AndEveryDimensionHasCells() {
         var cells = RoundTripMatrixCells.All;
-        await Assert.That(cells.Count).IsEqualTo(330);
+        await Assert.That(cells.Count).IsEqualTo(331);
         var expected = new Dictionary<string, int> {
             ["nav"] = 16,
             ["keyword-target"] = 200,
@@ -294,6 +294,7 @@ public sealed class RoundTripMatrixTests {
             ["declaration"] = 4,
             ["contract"] = 7,
             ["expression"] = 7,
+            ["builtin"] = 1,
             ["duration"] = 8,
         };
         await Assert.That(cells.GroupBy(c => c.Dimension).ToDictionary(g => g.Key, g => g.Count())).IsEquivalentTo(expected);

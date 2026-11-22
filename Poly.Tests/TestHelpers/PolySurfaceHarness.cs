@@ -253,7 +253,7 @@ internal sealed class PolySurfaceHarness {
 
     /// <remarks>Assert a step through <c>Step(i).Ok</c>; <c>Success</c> only means the scenario ran, not that every step did.</remarks>
     public HarnessResult Simulate(string workspace, string steps, bool reset = false, bool stopOnError = true) =>
-        Decode(_surface.Simulate(workspace, steps, reset, stopOnError));
+        Decode(_surface.Simulate(workspace, JsonSerializer.SerializeToElement(steps), reset, stopOnError));
 
     /// <remarks>Assert a step through <c>Step(i).Ok</c>; <c>Success</c> only means the scenario ran, not that every step did.</remarks>
     public HarnessResult Simulate(string workspace, params SimStep[] steps) =>

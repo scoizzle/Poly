@@ -1,14 +1,18 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 using Poly.Compile;
@@ -46,6 +50,44 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     /// </summary>
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _exportedFiles =
         new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The one tool builder: the host serves exactly what this returns and every test builds its
+    /// tools from here, so no caller can see a schema the host does not publish. The SDK's
+    /// <c>WithTools&lt;T&gt;</c> cannot carry <see cref="McpServerToolCreateOptions"/>, and the
+    /// published schema is the argument contract the pre-binder validator derives from.
+    /// </summary>
+    internal static IReadOnlyList<McpServerTool> McpTools() =>
+        [.. typeof(PolySurfaceTools).GetMethods()
+            .Select(method => (Method: method, Attribute: method.GetCustomAttribute<McpServerToolAttribute>()))
+            .Where(pair => pair.Attribute?.Name is not null)
+            .Select(pair => McpServerTool.Create(pair.Method, Instance, CreateOptions()))];
+
+    /// <summary>One target per call, as <c>WithTools&lt;T&gt;</c> did: the tool adapters are per instance.</summary>
+    private static readonly Func<RequestContext<CallToolRequestParams>, object> Instance =
+        context => ActivatorUtilities.CreateInstance<PolySurfaceTools>(context.Services!);
+
+    private static McpServerToolCreateOptions CreateOptions() => new() {
+        SchemaCreateOptions = new AIJsonSchemaCreateOptions {
+            TransformOptions = new AIJsonSchemaTransformOptions {
+                TransformSchemaNode = (context, node) =>
+                    context.Path.Length == 2 && context.Path[0] == "properties" && context.Path[1] == "steps"
+                        && node is JsonObject property
+                        ? StepsAsArrayOrText(property)
+                        : node,
+            },
+        },
+    };
+
+    /// <summary>
+    /// #488: an agent's natural `steps` is the array the description names, so the schema
+    /// publishes the array beside the JSON text the binder takes. The rest of the property —
+    /// its description, and the parent's required set — is carried through untouched.
+    /// </summary>
+    private static JsonNode StepsAsArrayOrText(JsonObject property) {
+        property["type"] = new JsonArray("string", "array");
+        return property;
+    }
 
     // ── 1. guide ────────────────────────────────────────────────
 
@@ -506,25 +548,36 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         ["list"] = ["op", "entity"],
     };
 
-    [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. steps is a JSON array of objects; every object carries op plus that op's own keys, and any other key is a failed step that names the valid ones: " +
+    [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. steps is a JSON array of objects, or that array as its JSON text; every object carries op plus that op's own keys, and any other key is a failed step that names the valid ones: " +
         "create {entity, properties?, as?}; link {sourceInstanceId, relationship, targetInstanceId}; unlink (the same keys as link); " +
         "invoke {instanceId, action, args?}; evaluate {entity, policy, instanceId}; get {instanceId}; list {entity?}. " +
         "properties and args are JSON objects of property and parameter values. An instanceId takes an instance id or a create's as alias; a singular navigation in properties takes one too. " +
         "A guard-blocked step is a failed step, not a failed call; earlier steps stay committed. reset=true clears the instances first; a poly_define clears them too.")]
     public PolyResponse Simulate(
         [Description("Workspace handle from poly_workspace.")] string workspace,
-        [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42},\"as\":\"p\"}]. " +
+        [Description("The steps: a JSON array, or that array as its JSON text - both run the same scenario. " +
+            "e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42},\"as\":\"p\"}]. " +
             "A create's properties may name a singular navigation whose value is an instance id or an earlier step's alias, " +
             "e.g. {\"Name\":\"Grace\",\"account\":\"acme\"}; a required navigation must be given at create. " +
-            "An invoke's entity-typed args value takes an instance id or an earlier step's alias the same way.")] string steps,
+            "An invoke's entity-typed args value takes an instance id or an earlier step's alias the same way.")] JsonElement steps,
         [Description("Clear existing instances before running (default false).")] bool reset = false,
         [Description("Stop at the first failed step (default true).")] bool stopOnError = true) {
         if (!TryWorkspace(workspace, out var state))
             return WorkspaceRequired();
 
+        // The array an agent naturally writes and the JSON text of that array are one scenario:
+        // normalise here, so no step can tell which form its caller sent.
+        var json = steps.ValueKind switch {
+            JsonValueKind.String => steps.GetString()!,
+            JsonValueKind.Array => steps.GetRawText(),
+            _ => null,
+        };
+        if (json is null)
+            return new PolyResponse(false, "steps must be a JSON array.", [], null, ["poly_simulate"], StateOf(workspace));
+
         JsonDocument document;
         try {
-            document = JsonDocument.Parse(steps);
+            document = JsonDocument.Parse(json);
         }
         catch (JsonException ex) {
             return new PolyResponse(false, $"Invalid steps JSON: {ex.Message}", [], null, ["poly_simulate"], StateOf(workspace));

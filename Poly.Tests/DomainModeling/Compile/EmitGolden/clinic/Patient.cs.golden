@@ -25,6 +25,7 @@ internal class Patient : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._visits.Add(child);
+        child.AttachPatient(this);
     }
     internal DomainResult CheckInAll()
     {
@@ -108,6 +109,17 @@ internal class Patient : Poly.Runtime.IActionScoped
         }
         var __created = new Patient(__name, visits);
         Poly.Runtime.ActionScope.Create(__created, "Patient");
+        if (visits != null)
+        {
+            foreach (var __child in visits)
+            {
+                if (__child.Patient != null && __child.Patient != __created)
+                {
+                    return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'visits': the child's 'patient' is already set to another owner.", "Patient.visits"));
+                }
+                __child.AttachPatient(__created);
+            }
+        }
         return DomainResult<Patient>.Success(__created);
     }
     public object __Snapshot()

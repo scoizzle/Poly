@@ -67,6 +67,7 @@ internal class Campaign : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._members.Add(child);
+        child.AttachCampaign(this);
     }
     internal DomainResult<CampaignMember> Enroll(Contact who)
     {
@@ -181,6 +182,17 @@ internal class Campaign : Poly.Runtime.IActionScoped
         }
         var __created = new Campaign(__name, members);
         Poly.Runtime.ActionScope.Create(__created, "Campaign");
+        if (members != null)
+        {
+            foreach (var __child in members)
+            {
+                if (__child.Campaign != null && __child.Campaign != __created)
+                {
+                    return DomainResult<Campaign>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'members': the child's 'campaign' is already set to another owner.", "Campaign.members"));
+                }
+                __child.AttachCampaign(__created);
+            }
+        }
         return DomainResult<Campaign>.Success(__created);
     }
     public object __Snapshot()

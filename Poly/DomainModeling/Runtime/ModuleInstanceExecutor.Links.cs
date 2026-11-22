@@ -41,6 +41,12 @@ public sealed partial class ModuleInstanceExecutor {
                         list.Add(target.Bag);
                     else
                         source.Bag[field] = new List<object> { target.Bag };
+                    // A child entering the collection gets its paired to-one (#572): the two
+                    // sides of the pair agree on this host, and on the printed one whose attach
+                    // does the same. Refusing a second owner is S-12b's row, so this re-points
+                    // exactly as the printed attach does.
+                    if (PairedSingularInverse(contract) is { } paired)
+                        target.Bag[DomainTypeMapping.ToPascalCase(paired.Name)] = source.Bag;
                 }
                 else {
                     if (ReadLinked(source.Bag, contract).Any())
@@ -191,6 +197,22 @@ public sealed partial class ModuleInstanceExecutor {
 
     private static bool IsToMany(RelationshipContract contract) =>
         contract.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
+
+    /// <summary>
+    /// The child's navigation that pairs with this collection relationship
+    /// (<see cref="CreateInWiring.Inverse"/>), or null when none or more than one qualifies, or the
+    /// pair is itself a collection. The host sets it when a link puts the child in the collection.
+    /// </summary>
+    private Relationship? PairedSingularInverse(RelationshipContract contract) {
+        var source = RequireEntity(contract.SourceEntityName);
+        var nav = source.Navigations.FirstOrDefault(n =>
+            string.Equals(n.Name, contract.Name, StringComparison.Ordinal));
+        if (nav is null)
+            return null;
+        var target = RequireEntity(contract.TargetEntityName);
+        var paired = CreateInWiring.Inverse(source, nav, target);
+        return paired is null || CreateInWiring.IsCollection(paired) ? null : paired;
+    }
 
     private static string CollectionField(RelationshipContract contract) =>
         "_" + DomainTypeMapping.ToCamelCase(contract.Name);

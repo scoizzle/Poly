@@ -18,14 +18,14 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
     protected override object GraphRoot(object entity) => ((ModuleInstance)entity).Bag;
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
-        // A singular navigation is a Create parameter, as on the printed side (Tr.Create(tracks: paper)),
-        // so the lowered body attaches to the parent's inverse collection; collections and other links
-        // are linked after the create.
-        bool IsSingularNavigation(string name) => model.Navigations.Any(n =>
-            string.Equals(n.Name, name, StringComparison.Ordinal)
-            && n.Cardinality is RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne);
+        // Every navigation value is a Create argument, as on the printed side (Tr.Create(tracks: paper),
+        // Tr.Create(loans: kids)): a singular is the child's to-one, a collection the parent's field.
+        // The factory wires both sides of each pair (#572). Only a navigation the factory does not
+        // declare falls back to a link after the create.
+        bool IsNavigation(string name) => model.Navigations.Any(n =>
+            string.Equals(n.Name, name, StringComparison.Ordinal));
         var passedAsParameter = values
-            .Where(v => v.Value is ModuleInstance && IsSingularNavigation(v.Name))
+            .Where(v => LinksOf(v.Value) is not null && IsNavigation(v.Name))
             .Select(v => v.Name).ToHashSet(StringComparer.Ordinal);
         var properties = values.Where(v => LinksOf(v.Value) is null || passedAsParameter.Contains(v.Name))
             .ToDictionary(v => v.Name, v => v.Value is ModuleInstance linked ? linked.Id : v.Value, StringComparer.Ordinal);
@@ -61,8 +61,15 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
             var links = LinksOf(value);
             if (links is null || passedAsParameter.Contains(name))
                 continue;
-            foreach (var target in links)
-                _exec.Link(name, instance, target);
+            foreach (var target in links) {
+                var linked = _exec.Link(name, instance, target);
+                // The printed factory returns a failure for a create argument it refuses, so a link
+                // the host refuses makes this create fail rather than half-wire the aggregate (#572).
+                if (!linked.Succeeded) {
+                    LastFailure = linked.Failure;
+                    return (false, linked.Error, null);
+                }
+            }
         }
         return (true, null, instance);
     }

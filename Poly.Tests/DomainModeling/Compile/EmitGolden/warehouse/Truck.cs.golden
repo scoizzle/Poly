@@ -47,6 +47,7 @@ internal class Truck : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._deliveries.Add(child);
+        child.AttachTruck(this);
     }
     internal DomainResult Load(long weight)
     {
@@ -210,6 +211,17 @@ internal class Truck : Poly.Runtime.IActionScoped
         if (warehouse != null)
         {
             warehouse.AttachTrucks(__created);
+        }
+        if (deliveries != null)
+        {
+            foreach (var __child in deliveries)
+            {
+                if (__child.Truck != null && __child.Truck != __created)
+                {
+                    return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'deliveries': the child's 'truck' is already set to another owner.", "Truck.deliveries"));
+                }
+                __child.AttachTruck(__created);
+            }
         }
         db.Record("Truck", "Vin", __vin);
         return DomainResult<Truck>.Success(__created);

@@ -137,6 +137,7 @@ internal class Account : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._contacts.Add(child);
+        child.AttachAccount(this);
     }
     internal DomainResult<Opportunity> CreateOpportunities(string? title = default, decimal? amount = default, DateOnly? closeBy = default, Contact? contact = default)
     {
@@ -181,6 +182,7 @@ internal class Account : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._opportunities.Add(child);
+        child.AttachAccount(this);
         child.RegisterAccountOpportunitiesWonSubscriber(this);
         child.RegisterAccountOpportunitiesProposeSubscriber(this);
         child.RegisterAccountOpportunitiesLostSubscriber(this);
@@ -228,6 +230,7 @@ internal class Account : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._tickets.Add(child);
+        child.AttachAccount(this);
         child.RegisterAccountTicketsClosedSubscriber(this);
     }
     internal DomainResult<Site> PlaceHq(string city, string region)
@@ -597,6 +600,39 @@ internal class Account : Poly.Runtime.IActionScoped
         var __created = new Account(__name, __industry, parent, __wonCount, __openPipeline, hq, contacts, opportunities, tickets, __closedTickets);
         Poly.Runtime.ActionScope.Create(__created, "Account");
         __created.InitializeSubscriptions();
+        if (contacts != null)
+        {
+            foreach (var __child in contacts)
+            {
+                if (__child.Account != null && __child.Account != __created)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'contacts': the child's 'account' is already set to another owner.", "Account.contacts"));
+                }
+                __child.AttachAccount(__created);
+            }
+        }
+        if (opportunities != null)
+        {
+            foreach (var __child in opportunities)
+            {
+                if (__child.Account != null && __child.Account != __created)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'opportunities': the child's 'account' is already set to another owner.", "Account.opportunities"));
+                }
+                __child.AttachAccount(__created);
+            }
+        }
+        if (tickets != null)
+        {
+            foreach (var __child in tickets)
+            {
+                if (__child.Account != null && __child.Account != __created)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'tickets': the child's 'account' is already set to another owner.", "Account.tickets"));
+                }
+                __child.AttachAccount(__created);
+            }
+        }
         return DomainResult<Account>.Success(__created);
     }
     internal void InitializeSubscriptions()

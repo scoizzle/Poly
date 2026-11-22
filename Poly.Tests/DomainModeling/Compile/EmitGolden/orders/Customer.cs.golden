@@ -29,6 +29,7 @@ internal class Customer : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._orders.Add(child);
+        child.AttachCustomer(this);
     }
     internal DomainResult ShipAll()
     {
@@ -170,6 +171,17 @@ internal class Customer : Poly.Runtime.IActionScoped
         }
         var __created = new Customer(__email, __name, __tier, orders);
         Poly.Runtime.ActionScope.Create(__created, "Customer");
+        if (orders != null)
+        {
+            foreach (var __child in orders)
+            {
+                if (__child.Customer != null && __child.Customer != __created)
+                {
+                    return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'orders': the child's 'customer' is already set to another owner.", "Customer.orders"));
+                }
+                __child.AttachCustomer(__created);
+            }
+        }
         db.Record("Customer", "Email", __email);
         return DomainResult<Customer>.Success(__created);
     }

@@ -24,6 +24,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
+        child.AttachPatron(this);
     }
     internal DomainResult<Fine> AssessByType()
     {
@@ -104,6 +105,17 @@ internal class Patron : Poly.Runtime.IActionScoped
         }
         var __created = new Patron(__name, fines);
         Poly.Runtime.ActionScope.Create(__created, "Patron");
+        if (fines != null)
+        {
+            foreach (var __child in fines)
+            {
+                if (__child.Patron != null && __child.Patron != __created)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'fines': the child's 'patron' is already set to another owner.", "Patron.fines"));
+                }
+                __child.AttachPatron(__created);
+            }
+        }
         return DomainResult<Patron>.Success(__created);
     }
     public object __Snapshot()

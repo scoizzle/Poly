@@ -108,17 +108,18 @@ Patron: entity {
 }
 ```
 
-**Note (back-reference materialization):** the runtime link is a store edge — it
-drives path-prefix reads, quantifiers, and subscriptions from the source. The
-**C# export auto-wires the child's back-reference**: the singular navigation the
-collection's `via` names (or whose `via` names it), else the only one on the target that
-points back (e.g. `borrower` on `Loan` → `Patron`). `Create{Nav}` passes `this` and the
-back-ref is not a constructor parameter. When the back-ref is a collection, it stays an
-unset constructor parameter. Two or more singular navigations back to the source with no
-`via` pairing is a **DMREL005** analysis error, so that shape never reaches export. To-one
-navigation bindings in `create in` initializers are **legal**
-(e.g. `create in loans { book: book }`) — the binding flows into the child's
-value bag / constructor parameter like a scalar initializer.
+**Note (back-reference materialization):** the runtime link is a store edge — it drives
+path-prefix reads, quantifiers, and subscriptions from the source. The **C# export
+auto-wires the child's back-reference**: the singular navigation the collection's `via`
+names (or whose `via` names it), else the only one on the target that points back
+(`borrower` on `Loan` → `Patron`); `Create{Nav}` passes `this`, so it is not a constructor
+parameter, and a collection back-ref stays unset. Two or more singular navigations back
+with no `via` pairing is **DMREL005**, so that shape never reaches export. To-one bindings
+in `create in` initializers are **legal** (`create in loans { book: book }`) and flow in
+like a scalar. **A supplied collection argument wires the pair the other way (#572):**
+`Patron.Create(loans: kids)` sets each child's paired to-one (`kid.Borrower`) as well as
+the collection, and refuses a child already paired with a different owner (a Link failure)
+instead of re-pointing it.
 
 **Required coverage (DMEFF011):** every property **without** `optional` on the
 created entity must be provided in the `create` / `create in` initializers, unless it has
@@ -614,6 +615,16 @@ existing instance of the target, or an earlier step's alias
 may be. An unknown id, an instance of another entity, a collection navigation or a value that
 is not an id fails on the navigation (`Lead.account`). JSON Schema, SHACL and MCP describe do
 not show requiredness of a navigation yet.
+
+**A create wires both sides of a pair.** Every navigation argument of a generated
+`Create` is paired with its inverse: a **singular** argument attaches the new instance to
+the peer's paired navigation (`Order.Create(customer: ann)` adds the order to `ann.Orders`;
+`Profile.Create(owner: ann)` sets `ann.Profile`, not only the collection case), and a
+**collection** argument sets each child's paired to-one (`Patron.Create(loans: kids)` sets
+`kid.Borrower`) — see §0.3. A collection argument holding a child whose paired to-one
+already names another owner fails the create with a Link failure rather than re-pointing
+the child. Pairing is ambiguous when two navigations back to the source qualify: then
+neither side is wired, the same answer the create-in fill gives.
 Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because a bare `x: T` also reads back as one-to-one but fails closed when `T` is a Phase 1a keyword (`actor`, `schedule`, `parallel`, `for`, `function`; matched case-insensitively); `one T` is unambiguous.
 
 **Which entity is the root.** A collection nav (`children: many Child`) means the

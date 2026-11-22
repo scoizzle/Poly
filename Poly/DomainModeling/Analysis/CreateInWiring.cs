@@ -49,8 +49,9 @@ internal static class CreateInWiring {
     /// (declared on <paramref name="owner"/>, targeting <paramref name="peer"/>), or null when none
     /// or more than one qualifies. A collection pairs when its own create-in fill names
     /// <paramref name="nav"/>; a singular pairs when the reverse holds. This is the inverse direction
-    /// of <see cref="FilledNavigation"/>: the factory uses it to wire both sides of a create argument
-    /// (#572, #587), instead of taking any navigation whose target type happens to match.
+    /// of <see cref="FilledNavigation"/>: the factory and the host's link door wire both sides of a
+    /// supplied argument with it (#572, #587), instead of taking any navigation whose target type
+    /// happens to match.
     /// </summary>
     public static Relationship? Inverse(Entity owner, Relationship nav, Entity peer) {
         Relationship? found = null;
@@ -73,11 +74,12 @@ internal static class CreateInWiring {
         return count == 1 ? found : null;
     }
 
+    /// <summary>True for a collection navigation, false for a to-one.</summary>
+    public static bool IsCollection(Relationship nav) =>
+        nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
+
     private static bool PointsBack(Relationship nav, Entity source) =>
         !IsCollection(nav) && string.Equals(nav.Target.TypeName, source.Name, StringComparison.Ordinal);
-
-    private static bool IsCollection(Relationship nav) =>
-        nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
 
     /// <summary>
     /// The published fact for <c>create in</c> over <paramref name="relationshipName"/> on

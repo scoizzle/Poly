@@ -75,11 +75,13 @@ internal class Property : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._halls.Add(child);
+        child.AttachProperty(this);
     }
     internal void AttachRooms(Room child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._rooms.Add(child);
+        child.AttachProperty(this);
     }
     internal DomainResult<Hall> AddHall(string name, long seats, long rate)
     {
@@ -259,6 +261,28 @@ internal class Property : Poly.Runtime.IActionScoped
         }
         var __created = new Property(__name, __city, halls, rooms);
         Poly.Runtime.ActionScope.Create(__created, "Property");
+        if (halls != null)
+        {
+            foreach (var __child in halls)
+            {
+                if (__child.Property != null && __child.Property != __created)
+                {
+                    return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'halls': the child's 'property' is already set to another owner.", "Property.halls"));
+                }
+                __child.AttachProperty(__created);
+            }
+        }
+        if (rooms != null)
+        {
+            foreach (var __child in rooms)
+            {
+                if (__child.Property != null && __child.Property != __created)
+                {
+                    return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'rooms': the child's 'property' is already set to another owner.", "Property.rooms"));
+                }
+                __child.AttachProperty(__created);
+            }
+        }
         return DomainResult<Property>.Success(__created);
     }
     public object __Snapshot()

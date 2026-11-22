@@ -201,6 +201,29 @@ public class PackOracleTests {
         await Assert.That(rows).IsEquivalentTo(new[] { ("paid", "ORD1") });
     }
 
+    /// <summary>#905: a <c>Binary</c> member is <c>byte[]</c> on the generated host (the property carries its
+    /// materialization initializer, the seed passes a <c>byte[]</c>) and base64 over JSON, System.Text.Json's own
+    /// encoding: a POST of <c>"AAE="</c> creates the row and a GET returns the same <c>"data":"AAE="</c>.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task BinaryProperty_CreatesAndReadsBackAsBase64() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Binary905);
+
+        // An absent required Binary member is the module's Required failure (400), not a null stored in the column.
+        using var missing = await oracle.Client.PostAsync(
+            "/api/blobs", new StringContent("""{"Code":"BL0"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)missing.StatusCode).IsEqualTo(400);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/blobs", new StringContent("""{"Code":"BL1","Data":"AAE="}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var fetched = await oracle.Client.GetAsync("/api/blobs/BL1");
+        await Assert.That(fetched.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await fetched.Content.ReadAsStringAsync());
+        await Assert.That(json.RootElement.GetProperty("data").GetString()).IsEqualTo("AAE=");
+    }
+
     [Test]
     [Category("OracleFull")]
     public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_Boots_Issue791() {

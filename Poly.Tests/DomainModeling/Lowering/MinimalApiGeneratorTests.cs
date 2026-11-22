@@ -949,6 +949,53 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(CompileHost(http.Files!)).IsEmpty();
     }
 
+    /// <summary>#905: a Binary member is <c>byte[]</c> in the generated host, encoded as base64 by System.Text.Json.
+    /// Red tail before the fix: the seed passed <c>"Sample"</c> where <c>Create</c> takes <c>byte[]?</c>
+    /// (<c>CS1503: cannot convert from 'string' to 'byte[]?'</c>), and the module's property carried no
+    /// initializer (<c>CS8618</c> on <c>Data</c>).</summary>
+    [Test]
+    public async Task BinaryMember_DtoBindsByteArray_HostCompiles() {
+        const string poly = """
+            domain S
+            uses sqlite
+            uses http
+            Blob: entity {
+              Code: Text unique
+              Data: Binary
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(http.Files!.Single(f => f.FileName == "Program.cs").Source)
+            .Contains("public byte[]? Data { get; init; }");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    /// <summary>#905 follow-through: a Binary route key reaches the host as a path segment that cannot bind, and its
+    /// <c>Location</c> would be <c>byte[].ToString()</c>. The host refuses it when the app is generated rather than
+    /// serving a key no route can find. Red tail: no refusal — the host compiled a <c>byte[] code</c> route parameter.</summary>
+    [Test]
+    public async Task BinaryRouteKey_IsRefused_WhenTheHostIsGenerated() {
+        const string poly = """
+            domain S
+            uses sqlite
+            uses http
+            Blob: entity {
+              Code: Binary unique
+              Data: Text
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsFalse();
+        var errors = string.Join("; ", http.Errors ?? []);
+        await Assert.That(errors).Contains("'Blob'");
+        await Assert.That(errors).Contains("'Code'");
+    }
+
     [Test]
     public async Task ActionParameterOfDateTime_HostCompiles() {
         const string poly = """

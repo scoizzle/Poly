@@ -2140,6 +2140,9 @@ gets the escaped `Location` but the route cannot read it back, because ASP.NET d
 route value. An entity with no natural key has a shadow key EF assigns on save: its create answers `201` with the
 same shape of `Location` (`/api/orders/1`), read back from the tracked entry (#589), so the per-id routes are
 reachable from the response even though that `id` is not in the JSON body (see *Known wrong*).
+A `Binary` property cannot be the route key (the first `unique` property): the route cannot bind it
+from a path segment, so the host **refuses the domain when the app is generated** (`polyc` exits non-zero, naming
+the entity and the property). Give the entity a Text, Number, Uuid or Date `unique` property to be its key.
 
 ### HTTP actions: what the host loads (`uses http`)
 
@@ -2324,7 +2327,7 @@ What an author or a client may rely on in this release, what may still change, a
 
 - **The DSL** as this guide documents it.
 - **The JSON body of an entity**: its declared scalars (camel-cased member names) and, when the entity has stages,
-  `currentStage`.
+  `currentStage`. A `Binary` member is base64, System.Text.Json's own `byte[]` encoding (#905).
 - **The HTTP failure shape**: a failure the domain raises is ProblemDetails whose `title` is the failure kind (see
   *HTTP failures*, section 11). The statuses are `400` for `Required`, `Range`, `Length`, `Pattern`, `Enum`,
   `Arithmetic`, `Argument` and `Constraint`; `409` for `Stage`, `Link`, `Unique` and `Conflict` (nothing raises `Conflict`
@@ -2404,8 +2407,6 @@ What the id does not cover, and what that costs:
   enum, answers `400` with an empty body (P-14).
 - **An optional unique key** (generated app): a `Text unique optional` property on an entity with a required scalar
   stops the host at boot, and every create on a `Date unique optional` key answers `409`, the first included (#611).
-- **A `Binary` property**: analysis accepts it and every host then fails with `Type with name 'Binary' not found`
-  (#905).
 - **A stored `DateTime` in a `GET`** (generated app) comes back without its `Z`: the clock time is right, the UTC
   marker is lost through SQLite. Removed by #937.
 - **Names**: a property named `Created` (#927) and an action named `Add` on an entity that has a `many` link and a

@@ -235,6 +235,8 @@ public sealed class HttpFileGenerator {
             "Decimal" => "0.0",
             "Float" or "Double" => "0.0",
             "Guid" or "Uuid" => "\"550e8400-e29b-41d4-a716-446655440000\"",
+            // Binary over JSON is base64 (System.Text.Json's byte[] encoding): the two bytes 0x00 0x01.
+            "Binary" => "\"AAE=\"",
             _ => "0",
         };
     }
@@ -259,6 +261,8 @@ public sealed class HttpFileGenerator {
             "Decimal" => "0.0",
             "Float" or "Double" => "0.0",
             "Guid" or "Uuid" => "\"550e8400-e29b-41d4-a716-446655440000\"",
+            // Binary over JSON is base64 (System.Text.Json's byte[] encoding): the two bytes 0x00 0x01.
+            "Binary" => "\"AAE=\"",
             _ => "0",
         };
     }

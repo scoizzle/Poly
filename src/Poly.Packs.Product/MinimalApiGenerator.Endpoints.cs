@@ -14,6 +14,13 @@ public sealed partial class MinimalApiGenerator {
         var key = RouteKeyFor(store);
         var keyName = key.Name;
         var keyType = key.ClrType;
+        // A route key arrives as a path segment, which ASP.NET binds only for a type it can parse from text, and
+        // the created row's Location is the key's Convert.ToString (for byte[] that is "System.Byte[]"). Refuse the
+        // shape when the app is generated instead of serving a key no route can find (#905).
+        if (keyType == "byte[]")
+            throw new InvalidOperationException(
+                $"Entity '{entity.Name}' has a Binary route key ('{key.Property?.Name ?? keyName}'): the HTTP host cannot bind a Binary key from a path segment. " +
+                "Give the entity a Text, Number, Uuid or Date unique property to be its key, or remove 'unique' from the Binary property.");
         var dbParam = new Parameter("db", new TypeReference(dbContextName));
         var locals = new HashSet<string>(["db"], StringComparer.Ordinal);
         var rowName = FreshLocal(locals, ToCamelCase(entity.Name));

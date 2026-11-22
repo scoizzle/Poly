@@ -289,6 +289,10 @@ public class OverloadSweepTests {
          "  System.InvalidOperationException.ctor(System.String)\n",
          "  System.InvalidOperationException.ctor(System.String)\n" + QueueCopied,
          CreationNotificationWhy),
+        ("poly file docs/missions/evolve-2026-10-13/library.poly",
+         "  status: analysis-errors DMEFF011,DMLIB001,DMLIB001\n",
+         "  errors: 0\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()\n  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)\n  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)\n  Poly.Runtime.ActionScope.Create(System.Object,System.String)\n  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)\n  Poly.Runtime.DomainResult.Success()\n  System.Object.Equals(System.Object,System.Object)\n  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)\n  Poly.Runtime.ActionScope.Touch(System.Object)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()\n  Poly.Runtime.DomainResult.get_IsSuccess()\n  Poly.Runtime.DomainResult.get_Error()\n  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)\n  System.DateTime.get_UtcNow()\n  System.DateOnly.FromDateTime(System.DateTime)\n  System.DateOnly.AddDays(System.Int32)\n  Poly.Runtime.DomainFailure.At(System.String)\n  System.Collections.ICollection.get_Count()\n  System.Collections.IList.Clear()\n  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)\n  System.Object.ReferenceEquals(System.Object,System.Object)\n  System.Collections.Generic.List`1[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].ctor()\n  System.Collections.Generic.List`1[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Add(System.String)\n  System.String.Concat(System.String,System.String,System.String)\n  System.InvalidOperationException.ctor(System.String)\n  System.Collections.Generic.List`1[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].ctor(System.Collections.Generic.IEnumerable`1[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])\n  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)\n",
+         ShippedExampleWhy),
     ];
 
     /// <summary>
@@ -333,6 +337,9 @@ public class OverloadSweepTests {
     /// </summary>
     private const string L04aWhy = "L-04a: a failure that was thrown is returned (ConstraintFailureException.ctor and ErrorMessage out; "
         + "DomainResult.Failure, Error, IsSuccess and Success in), no overload winner changes";
+
+    private const string ShippedExampleWhy = "#857: the shipped library example now compiles (ReturnedOn optional, persistence declared, "
+        + "internal mailer contract), so its call sites are recorded in place of the analysis failure; no overload winner changes";
 
     /// <summary>
     /// Identities a slice adds at new call sites, where nothing rebinds: each method has exactly one overload, so the

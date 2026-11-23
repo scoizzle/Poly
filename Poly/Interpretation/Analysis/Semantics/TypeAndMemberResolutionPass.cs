@@ -1,6 +1,7 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
 using Poly.Ast.Nodes;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>Resolves both types and member references for all AST nodes.
@@ -237,9 +238,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             PopCount => context.TypeSystem.ClrDefinitionOf(typeof(int)),
             UsingStatement => null,
             TryCatchFinally tcf => ResolveNodeType(context, tcf.TryBlock),
-            SwitchStatement swt => swt.Cases.Count > 0
-                ? ResolveNodeType(context, swt.Cases[0].Body)
-                : swt.DefaultCase is not null ? ResolveNodeType(context, swt.DefaultCase) : null,
+            SwitchStatement swt => ResolveSwitchType(context, swt),
             Await aw => ResolveAwaitType(context, aw),
             Return r => r.Value is null ? null : ResolveNodeType(context, r.Value),
             _ => null
@@ -727,6 +726,26 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         var thenType = ResolveNodeType(context, then)?.GetRuntimeType();
         var elseType = ResolveNodeType(context, otherwise)?.GetRuntimeType();
         return Equals(thenType, elseType) ? then : null;
+    }
+
+    /// <summary>#805: a switch's value is its arms', so its type is the arms' common type (decimal
+    /// over long, long over int), lifted when any arm is nullable. The old answer — the first case
+    /// body's type — left a default of another shape stored as a raw word and read as the first
+    /// arm's type. Arms with no common type keep the first one; a statement switch that merely
+    /// discards mixed bodies is legal, and its value is never read.</summary>
+    private static ITypeDefinition? ResolveSwitchType(AnalysisContext context, SwitchStatement swt) {
+        var arms = new List<ITypeDefinition>();
+        foreach (var c in swt.Cases)
+            if (ResolveNodeType(context, c.Body) is { } body)
+                arms.Add(body);
+        if (swt.DefaultCase is not null && ResolveNodeType(context, swt.DefaultCase) is { } fallback)
+            arms.Add(fallback);
+        if (arms.Count == 0)
+            return null;
+        bool lift = arms.Any(IsNullableType);
+        var peeled = arms.Select(arm => PeelNullable(context, arm)).ToList();
+        var common = peeled.GetCommonType(context.TypeSystem);
+        return common is null ? arms[0] : Lift(context, common, lift);
     }
 
     private static ITypeDefinition? ResolveConditionalType(AnalysisContext context, Conditional cond) {

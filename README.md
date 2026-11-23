@@ -169,6 +169,10 @@ Full lists: [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md)
 - **[`AGENTS.md`](AGENTS.md)** — Agent and contributor conventions, placement rules, build/test instructions
 - **[`docs/reference/`](docs/reference/)** — Design records and research notes; work is tracked in GitHub issues
 
+## Support Poly
+
+Poly is built in spare hours by one developer. If Poly or its MCP server saves you time, you can sponsor its development on GitHub Sponsors: https://github.com/sponsors/scoizzle. Sponsorships pay for the AI tooling Poly is built with.
+
 ## License
 
 [MIT](LICENSE.txt)

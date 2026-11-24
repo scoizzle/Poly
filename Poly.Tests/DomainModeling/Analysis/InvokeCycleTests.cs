@@ -99,9 +99,10 @@ public class InvokeCycleTests {
         await Assert.That(ReportsCycle(result, "Order.Go → Line.Ping → Order.Go")).IsTrue();
     }
 
-    /// <summary>#1101: an action that transitions into a stage whose entry invokes it recurses through the entry.</summary>
+    /// <summary>#1101: the entry invokes the stage's own Go, and Busy.Go transitions to Open. Open has no entry, so
+    /// the chain ends at depth two: the per-copy graph does not merge Open.Go with Busy.Go into one node.</summary>
     [Test]
-    public async Task CycleThroughStageEntry_IsRefused_1101() {
+    public async Task CycleThroughStageEntry_EndsAtDepthTwo_IsAllowed_1101() {
         var result = Analyze("""
             domain Probe
             A: entity {
@@ -114,8 +115,47 @@ public class InvokeCycleTests {
             }
             """);
 
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    /// <summary>#1101: Busy's entry invokes Go, which in Busy is Busy.Go and transitions back into Busy, so the entry
+    /// runs again. This copy really recurses and is refused.</summary>
+    [Test]
+    public async Task StageEntryInvokesTheCopyThatReentersTheStage_IsRefused_1101() {
+        var result = Analyze("""
+            domain Probe
+            A: entity {
+              N: Number default(0)
+              Busy: stage {
+                entry { if (N < 3) { invoke Go } }
+                Go: action { transition to Busy }
+              }
+            }
+            """);
+
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(ReportsCycle(result, "Go → Busy (entry) → Go")).IsTrue();
+    }
+
+    /// <summary>#1101: the entity-level Go transitions to Busy; Busy's entry invokes Go, which in Busy is Busy.Go and
+    /// transitions to Open. The two same-named copies never invoke each other's stage path, so there is no cycle. The
+    /// stage copy is declared first so adding the entity-level action does not copy its transition into it.</summary>
+    [Test]
+    public async Task EntityLevelAndStageCopyWithSameName_WithoutMutualRecursion_IsAllowed_1101() {
+        var result = Analyze("""
+            domain Probe
+            A: entity {
+              N: Number default(0)
+              Busy: stage {
+                entry { if (N < 3) { invoke Go } }
+                Go: action { transition to Open }
+              }
+              Go: action { transition to Busy }
+              Open: stage { }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
     }
 
     /// <summary>#1101: one stage's copy of an action is enough to close a cycle (the edges of every copy count).</summary>

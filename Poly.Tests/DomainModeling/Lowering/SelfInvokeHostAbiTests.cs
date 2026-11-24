@@ -1,4 +1,5 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
@@ -69,9 +70,48 @@ public class SelfInvokeHostAbiTests {
     }
 
     [Test]
-    public async Task SelfInvoke_StageAction_Recursive_ExceedsDepth() {
-        // #535: an UNCONDITIONAL self-invoke is a DMEFF021 analysis error, so the depth guard's
-        // job is the cycle analysis still admits — one behind a guard that never fails at run time.
+    public async Task SelfInvoke_RuntimeDepthGuard_ExceedsDepth() {
+        // #1101: the analyzer refuses every recursive invoke cycle (DMEFF021), and an accepted chain of
+        // distinct actions cannot reach the guard: the ABI emitter inlines each callee's body, so a chain
+        // overflows the compiler's own stack at about 34 links (33 links lower and run without overflowing
+        // the VM). No accepted model therefore recurses. The guard's contract is the VM value-stack
+        // overflow translation, so this executor-level test installs the recursive body the analyzer would
+        // refuse into an already-lowered module and drives that guard directly.
+        var tick = new Poly.DomainModeling.Ontology.Action("Tick", InvocationResult.Void, [], [], []);
+        var entity = new Entity("Loop", Properties: [], Actions: [tick], Policies: [], Stages: []);
+        var domain = ValidDomain.Create("Loops", [entity]);
+        _ = ModuleExec.For(domain);
+
+        var recursive = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity))
+            .TryLowerVmNode(new InvokeActionEffect("Tick", []));
+        await Assert.That(recursive).IsNotNull();
+        var module = RuntimeAnalysisCache.GetOrLower(domain);
+        var replaced = false;
+        foreach (var type in module) {
+            if (!string.Equals(type.Name, "Loop", StringComparison.Ordinal)
+                || type.Methods is not IList<MethodDefinitionNode> methods)
+                continue;
+            for (var i = 0; i < methods.Count; i++) {
+                if (!string.Equals(methods[i].Name, "Tick", StringComparison.Ordinal))
+                    continue;
+                methods[i] = methods[i] with { Body = recursive };
+                replaced = true;
+            }
+        }
+        await Assert.That(replaced).IsTrue();
+
+        var exec = new ModuleInstanceExecutor(domain);
+        var instance = exec.Create("Loop", new Dictionary<string, object?>()).Instance!;
+
+        var result = exec.Invoke(instance, "Tick");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Error).Contains("depth exceeded");
+    }
+
+    /// <summary>#1101: the guarded self-invoke this class's depth guard used to accept is now a DMEFF021 error,
+    /// so the refusal is pinned where that acceptance was.</summary>
+    [Test]
+    public async Task SelfInvoke_StageAction_GuardedRecursion_IsRefused_1101() {
         var bounce = new Poly.DomainModeling.Ontology.Action("Bounce", InvocationResult.Void, [],
             Effects: [
                 new ConditionalEffect(
@@ -91,12 +131,11 @@ public class SelfInvokeHostAbiTests {
             Policies: [],
             Stages: [draft]);
         var domain = ValidDomain.Create("Loops", [entity]);
-        var exec = ModuleExec.For(domain);
-        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "x", ["N"] = 0L }).Instance!;
 
-        var bounceResult = exec.Invoke(instance, "Bounce");
-        await Assert.That(bounceResult.Succeeded).IsFalse();
-        await Assert.That(bounceResult.Error).Contains("depth exceeded");
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.HasErrors).IsTrue();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsTrue();
     }
 
     private static Invoke? FindInvoke(Node node) {

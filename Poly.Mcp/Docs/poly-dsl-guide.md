@@ -1150,7 +1150,9 @@ that invokes the stage's own action which transitions back into that stage. Each
 re-enters its own stage path is not a cycle. The reason is that the printed C# has no invoke depth
 guard, so a recursion that runs deep overflows the process while the simulator stops it cleanly. A
 cycle of transitions alone is `DMEFF013`'s rule, and a `when` subscription is not an edge (the
-notify dispatch has its own depth guard).
+notify dispatch has its own depth guard). A handler still counts after a transition into a stage
+it watches: lowering runs those handlers before the body's next effect, so one that can move the
+publisher's instance widens the stage set, and the `invoke` after the transition may re-enter.
 
 ### Require Gates
 

@@ -1,6 +1,11 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Effects;
+using Poly.DomainModeling.Runtime;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -298,5 +303,138 @@ public class InvokeCycleTests {
             """);
 
         await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    /// <summary>#1116: an invoke across a relationship can land on this same instance. Here S2's entry
+    /// runs B.Nudge, which fans out to every kid — this instance included — and Hop moves it back to S1,
+    /// so the <c>invoke Go</c> after the transition runs S1.Go again. The walk must widen the stage set
+    /// after a relationship invoke whose reach changes this entity's stage, not assume it cannot.</summary>
+    [Test]
+    public async Task RelationshipInvokeWhoseEntryMovesThisInstance_IsRefused_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              Nudge: action { for k in kids { invoke k.Hop } }
+            }
+            A: entity {
+              parent: B via kids optional
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { entry { invoke parent.Nudge } }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
+    /// <summary>#1116: the same miss without an entry. Kick runs in S2, invokes parent.Nudge, and Hop moves this
+    /// instance to S1; the following Go then dispatches S1.Go, which hops back to S2 and invokes Kick again. The
+    /// walk saw only {S2} and found no copy of Go there, so the cycle went unreported.</summary>
+    [Test]
+    public async Task RelationshipInvokeInTheBodyThatMovesThisInstance_IsRefused_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              Nudge: action { for k in kids { invoke k.Hop } }
+            }
+            A: entity {
+              parent: B via kids optional
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Kick
+              } }
+              S2: stage { Kick: action {
+                  invoke parent.Nudge
+                  invoke Go
+              } }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Kick → Go")).IsTrue();
+    }
+
+    /// <summary>#1116: a relationship invoke whose type-level reach never touches A's stages cannot move A,
+    /// so S1.Go's stage set stays {S2} and <c>invoke Go</c> dispatches S2.Go (which never recurses). A rule
+    /// that widened on every relationship invoke would see S1.Go again here and refuse a sound model.</summary>
+    [Test]
+    public async Task RelationshipInvokeWhoseReachNeverMovesThisEntity_IsAllowed_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              Open: stage { }
+              Busy: stage { Nudge: action { transition to Open } }
+            }
+            A: entity {
+              N: Number default(0)
+              b: B optional
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke b.Nudge
+                  invoke Go
+              } }
+              S2: stage { Go: action { assign N to 1 } }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsFalse();
+    }
+
+    /// <summary>#1116 Done-when, the runtime half: at the parent commit the scenario is accepted at define and
+    /// recurses until the simulator's invoke depth guard stops it. The analyzer now refuses it, so this test
+    /// installs the recursive step the analyzer would refuse into an already-lowered module (the #1117 seam):
+    /// a clean variant invokes an empty <c>Close</c> where the scenario invokes <c>Go</c>, and that one body is
+    /// replaced with <c>invoke Go</c>. The relationship fan-out then moves this instance back to S1 and the
+    /// invoke re-enters S1.Go.</summary>
+    [Test]
+    public async Task RelationshipInvokeScenario_RuntimeDepthGuard_ExceedsDepth_1116() {
+        var changes = new PolyDslParser("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              Nudge: action { for k in kids { invoke k.Hop } }
+            }
+            A: entity {
+              parent: B via kids optional
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Close
+              } }
+              S2: stage { entry { invoke parent.Nudge } }
+              Hop: action { transition to S1 }
+              Close: action { }
+            }
+            """).Parse();
+        var domain = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes).Root;
+        var exec = ModuleExec.For(domain);
+
+        var a = domain.Types.OfType<Entity>().Single(e => e.Name == "A");
+        var entities = domain.Types.OfType<Entity>().ToArray();
+        var recursive = new EffectLoweringPass(a, LoweringFixtures.Context(new ThisReference(), entities))
+            .TryLowerVmNode(new InvokeActionEffect("Go", []));
+        await Assert.That(recursive).IsNotNull();
+        var module = RuntimeAnalysisCache.GetOrLower(domain);
+        RuntimeAnalysisCache.ReplaceModule(domain, [.. module.Select(type => type.Name != "A" ? type : type with {
+            Methods = [.. type.Methods!.Select(m => m.Name == "Close" ? m with { Body = recursive } : m)],
+        })]);
+        exec = new ModuleInstanceExecutor(domain);
+
+        var owner = exec.Create("B", new Dictionary<string, object?>()).Instance!;
+        var self = exec.Create("A", new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.Link("kids", owner, self).Succeeded).IsTrue();
+
+        var result = exec.Invoke(self, "Go");
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Error).Contains("depth exceeded");
     }
 }

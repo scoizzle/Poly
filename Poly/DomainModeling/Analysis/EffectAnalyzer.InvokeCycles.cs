@@ -35,6 +35,13 @@ internal sealed partial class EffectAnalyzer {
     /// reported when it passes through an action: a cycle of transitions alone is DMEFF013's rule, which allows a
     /// guarded one. Subscriptions are not edges: the printed notify dispatch has its own depth guard.
     /// </para>
+    /// <para>
+    /// #1116: an invoke over a relationship, a binder or an entity parameter, or a create whose initial entry invokes
+    /// back, may land on <i>this same instance</i> and move its stage. After such an effect the walk widens the stage
+    /// set to every stage when the target's type-level reach (over the action/entry call graph, ignoring stages)
+    /// includes a transition on this entity type; a reach that never touches this type cannot move it. The decision is
+    /// made at the type level: a same-type relationship may alias this instance, so it is treated as may-alias.
+    /// </para>
     /// </summary>
     private static void ValidateInvokeCycles(AnalysisContext context, Domain domain) {
         // A duplicated entity name is the structural pass's error; the graph takes the first of each name.
@@ -112,28 +119,175 @@ internal sealed partial class EffectAnalyzer {
 
         /// <summary>True when <paramref name="stageName"/>'s entry, flattened, can transition or invoke on the same
         /// instance, so lowering's inlined entry may leave the instance in some other stage.</summary>
-        private static bool EntryMayChangeStage(Entity entity, string stageName) {
+        private bool EntryMayChangeStage(Entity entity, string stageName) {
             var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, stageName, StringComparison.Ordinal));
-            return stage is not null && EffectsMayChangeStage(stage.OnEntryEffects);
+            return stage is not null && EffectsMayChangeStage(entity, stage.OnEntryEffects);
         }
 
-        private static bool EffectsMayChangeStage(IReadOnlyList<Effect> effects) {
+        /// <summary>
+        /// Whether the flattened effects can move an instance of <paramref name="self"/> to another stage. A
+        /// same-instance transition or invoke already counts (#1101). An invoke across a relationship, a binder or an
+        /// entity parameter, and a create's initial entry, count only when their type-level reach (#1116) reaches
+        /// stage-changing code on <paramref name="self"/>: the invoked instance may be this one, but a reach that never
+        /// touches this entity type cannot move it.
+        /// </summary>
+        private bool EffectsMayChangeStage(Entity self, IReadOnlyList<Effect> effects) {
             foreach (var effect in effects) {
                 switch (effect) {
                     case StageTransitionEffect:
                     case InvokeActionEffect { TargetRelationship: null }:
                         return true;
+                    case InvokeActionEffect invoke:
+                        if (TargetOf(self, null, NoBinders, invoke.TargetRelationship!) is { } target
+                            && ReachTransitions(self, target, invoke.ActionName))
+                            return true;
+                        break;
+                    case ForEachInvokeEffect fan:
+                        if (NavigationTarget(self, fan.RelationshipName) is { } fanTarget
+                            && ReachTransitions(self, fanTarget, fan.ActionName))
+                            return true;
+                        break;
+                    case CreateEntityInRelationshipEffect createIn:
+                        if (NavigationTarget(self, createIn.RelationshipName) is { } created
+                            && ReachInitialEntry(self, created))
+                            return true;
+                        break;
+                    case CreateEntityInstance create:
+                        if (ReachInitialEntry(self, create.Type.TypeName))
+                            return true;
+                        break;
                     case ConditionalEffect conditional:
-                        if (EffectsMayChangeStage(conditional.ThenEffects)
-                            || (conditional.ElseEffects is { } elseEffects && EffectsMayChangeStage(elseEffects)))
+                        if (EffectsMayChangeStage(self, conditional.ThenEffects)
+                            || (conditional.ElseEffects is { } elseEffects && EffectsMayChangeStage(self, elseEffects)))
                             return true;
                         break;
                     case CompositeEffect composite:
-                        if (EffectsMayChangeStage(composite.Effects))
+                        if (EffectsMayChangeStage(self, composite.Effects))
                             return true;
                         break;
                     case ForEachEffect loop:
-                        if (EffectsMayChangeStage(loop.Body))
+                        if (EffectsMayChangeStage(self, loop.Body))
+                            return true;
+                        break;
+                }
+            }
+            return false;
+        }
+
+        private static readonly IReadOnlyDictionary<string, string> NoBinders =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// #1116: the type-level reach of an invoke, ignoring stages. True when any action copy, stage entry or
+        /// create entry reachable from <paramref name="entityName"/>'s copies of <paramref name="actionName"/> can
+        /// transition an instance of <paramref name="self"/>. The starting entity can be a different type; the walk
+        /// follows every invoke back, so a reach that lands on <paramref name="self"/>'s type counts even when the
+        /// invoked instance was reached through another relationship. Same-type relationships may alias this
+        /// instance (the analysis cannot prove them distinct), so this is deliberately conservative.
+        /// </summary>
+        private bool ReachTransitions(Entity self, string entityName, string actionName) =>
+            ReachActionCopies(self, entityName, actionName, new HashSet<string>(StringComparer.Ordinal));
+
+        private bool ReachActionCopies(Entity self, string entityName, string actionName, HashSet<string> visited) {
+            if (!entities.TryGetValue(entityName, out var entity))
+                return false;
+            if (entity.Actions.FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal)) is { } onEntity
+                && ReachEffects(self, entity, onEntity, onEntity.Effects, NoBinders, visited,
+                    $"{entityName}{Separator}action{Separator}{actionName}"))
+                return true;
+            foreach (var stage in entity.Stages)
+                if (stage.Actions.FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal)) is { } onStage
+                    && ReachEffects(self, entity, onStage, onStage.Effects, NoBinders, visited,
+                        $"{entityName}{Separator}{stage.Name}{Separator}action{Separator}{actionName}"))
+                    return true;
+            return false;
+        }
+
+        private bool ReachInitialEntry(Entity self, string entityName) =>
+            ReachInitialEntry(self, entityName, new HashSet<string>(StringComparer.Ordinal));
+
+        private bool ReachInitialEntry(Entity self, string entityName, HashSet<string> visited) =>
+            entities.TryGetValue(entityName, out var created) && created.InitialStage() is { } initial
+                && ReachEntryOf(self, entityName, initial.Name, visited);
+
+        /// <summary>A stage entry reached by a transition: lowering inlines it right after the stage assignment, so
+        /// the reach continues through it.</summary>
+        private bool ReachEntryOf(Entity self, string entityName, string stageName, HashSet<string> visited) {
+            if (!entities.TryGetValue(entityName, out var entity)
+                || entity.Stages.FirstOrDefault(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)) is not { } stage)
+                return false;
+            return ReachEffects(self, entity, null, stage.OnEntryEffects, NoBinders, visited,
+                $"{entityName}{Separator}{stageName}{Separator}entry{Separator}");
+        }
+
+        /// <summary>A stage exit reached by a transition out of the possible current stages. Type-level reach does
+        /// not know the source stage, so every exit of the entity is followed.</summary>
+        private bool ReachExitOf(Entity self, string entityName, string stageName, HashSet<string> visited) {
+            if (!entities.TryGetValue(entityName, out var entity)
+                || entity.Stages.FirstOrDefault(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)) is not { } stage)
+                return false;
+            return ReachEffects(self, entity, null, stage.OnExitEffects, NoBinders, visited,
+                $"{entityName}{Separator}{stageName}{Separator}exit{Separator}");
+        }
+
+        private bool ReachEffects(
+            Entity self, Entity entity, Action? action, IReadOnlyList<Effect> effects,
+            IReadOnlyDictionary<string, string> binders, HashSet<string> visited, string key) {
+            if (effects.Count == 0 || !visited.Add(key))
+                return false;
+            foreach (var effect in effects) {
+                switch (effect) {
+                    case StageTransitionEffect transition:
+                        // The body runs on an instance of `entity`. A transition on this entity type moves it; on
+                        // another type it still runs that stage's inlined entry and the possible source exits, so
+                        // the reach continues through them (#1116).
+                        if (string.Equals(entity.Name, self.Name, StringComparison.Ordinal))
+                            return true;
+                        if (ReachEntryOf(self, entity.Name, transition.TargetStage.StageName, visited))
+                            return true;
+                        foreach (var source in entity.Stages)
+                            if (ReachExitOf(self, entity.Name, source.Name, visited))
+                                return true;
+                        break;
+                    case InvokeActionEffect invoke:
+                        if (invoke.TargetRelationship is null) {
+                            if (ReachActionCopies(self, entity.Name, invoke.ActionName, visited))
+                                return true;
+                        }
+                        else if (TargetOf(entity, action, binders, invoke.TargetRelationship) is { } target
+                                 && ReachActionCopies(self, target, invoke.ActionName, visited))
+                            return true;
+                        break;
+                    case ForEachInvokeEffect fan:
+                        if (NavigationTarget(entity, fan.RelationshipName) is { } fanTarget
+                            && ReachActionCopies(self, fanTarget, fan.ActionName, visited))
+                            return true;
+                        break;
+                    case ForEachEffect loop:
+                        var inner = new Dictionary<string, string>(binders, StringComparer.Ordinal);
+                        if (NavigationTarget(entity, loop.RelationshipName) is { } loopTarget)
+                            inner[loop.BinderName] = loopTarget;
+                        if (ReachEffects(self, entity, action, loop.Body, inner, visited, $"{key}{Separator}for{Separator}{loop.BinderName}"))
+                            return true;
+                        break;
+                    case ConditionalEffect conditional:
+                        if (ReachEffects(self, entity, action, conditional.ThenEffects, binders, visited, $"{key}{Separator}then"))
+                            return true;
+                        if (conditional.ElseEffects is { } elseEffects
+                            && ReachEffects(self, entity, action, elseEffects, binders, visited, $"{key}{Separator}else"))
+                            return true;
+                        break;
+                    case CompositeEffect composite:
+                        if (ReachEffects(self, entity, action, composite.Effects, binders, visited, $"{key}{Separator}composite"))
+                            return true;
+                        break;
+                    case CreateEntityInRelationshipEffect createIn:
+                        if (NavigationTarget(entity, createIn.RelationshipName) is { } created
+                            && ReachInitialEntry(self, created, visited))
+                            return true;
+                        break;
+                    case CreateEntityInstance create:
+                        if (ReachInitialEntry(self, create.Type.TypeName, visited))
                             return true;
                         break;
                 }
@@ -161,12 +315,19 @@ internal sealed partial class EffectAnalyzer {
                             // Another instance: its stage is unknown, so every copy of the name can run.
                             foreach (var copy in CopiesOn(target, invoke.ActionName))
                                 Edge(from, copy);
+                            // #1116: the invoked instance may be this one; a reach through it that transitions this
+                            // entity type leaves the instance in any stage before the next effect runs.
+                            if (ReachTransitions(entity, target, invoke.ActionName))
+                                stages = AllStages(entity);
                         }
                         break;
                     case ForEachInvokeEffect fan:
-                        if (NavigationTarget(entity, fan.RelationshipName) is { } fanTarget)
+                        if (NavigationTarget(entity, fan.RelationshipName) is { } fanTarget) {
                             foreach (var copy in CopiesOn(fanTarget, fan.ActionName))
                                 Edge(from, copy);
+                            if (ReachTransitions(entity, fanTarget, fan.ActionName))
+                                stages = AllStages(entity);
+                        }
                         break;
                     case ForEachEffect loop:
                         var inner = new Dictionary<string, string>(binders, StringComparer.Ordinal);
@@ -211,11 +372,16 @@ internal sealed partial class EffectAnalyzer {
                             : new HashSet<string?>(StringComparer.Ordinal) { transition.TargetStage.StageName };
                         break;
                     case CreateEntityInRelationshipEffect createIn:
-                        if (NavigationTarget(entity, createIn.RelationshipName) is { } created)
+                        if (NavigationTarget(entity, createIn.RelationshipName) is { } created) {
                             InitialEntry(from, created);
+                            if (ReachInitialEntry(entity, created))
+                                stages = AllStages(entity);
+                        }
                         break;
                     case CreateEntityInstance create:
                         InitialEntry(from, create.Type.TypeName);
+                        if (ReachInitialEntry(entity, create.Type.TypeName))
+                            stages = AllStages(entity);
                         break;
                 }
             }

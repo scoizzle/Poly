@@ -265,8 +265,10 @@ internal sealed partial class EffectAnalyzer {
                 switch (effect) {
                     case StageTransitionEffect transition:
                         // The body runs on an instance of `entity`. A transition on this entity type moves it; on
-                        // another type it still runs that stage's inlined entry and the possible source exits, so
-                        // the reach continues through them (#1116).
+                        // another type it still runs that stage's inlined entry, the possible source exits and the
+                        // notify dispatch for the target stage, so the reach continues through them (#1116). That
+                        // dispatch runs the handlers of every subscriber watching the stage, and one of them may
+                        // reach a transition on this entity type.
                         if (string.Equals(entity.Name, self.Name, StringComparison.Ordinal))
                             return true;
                         if (ReachEntryOf(self, entity.Name, transition.TargetStage.StageName, visited))
@@ -274,6 +276,8 @@ internal sealed partial class EffectAnalyzer {
                         foreach (var source in entity.Stages)
                             if (ReachExitOf(self, entity.Name, source.Name, visited))
                                 return true;
+                        if (SubscribersReachStageChange(self, entity, transition.TargetStage.StageName, visited))
+                            return true;
                         break;
                     case InvokeActionEffect invoke:
                         if (invoke.TargetRelationship is null) {
@@ -332,29 +336,36 @@ internal sealed partial class EffectAnalyzer {
             var cacheKey = $"{entity.Name}{Separator}{stageName}";
             if (_subscriptionMovesStage.TryGetValue(cacheKey, out var cached))
                 return cached;
-            var moves = false;
+            var moves = SubscribersReachStageChange(
+                entity, entity, stageName, new HashSet<string>(StringComparer.Ordinal));
+            _subscriptionMovesStage[cacheKey] = moves;
+            return moves;
+        }
+
+        /// <summary>
+        /// Whether a <c>when</c> handler watching <paramref name="publisher"/>'s <paramref name="stageName"/> can
+        /// reach a stage change on <paramref name="self"/>. The handler runs on the subscriber, so its own
+        /// transitions are the subscriber's; the reach follows its invokes and its peer transitions back and
+        /// returns true only when it reaches a transition on this entity type. Handlers are keyed like actions so
+        /// a subscription chain that comes back around terminates.
+        /// </summary>
+        private bool SubscribersReachStageChange(
+            Entity self, Entity publisher, string stageName, HashSet<string> visited) {
             foreach (var subscriber in entities.Values) {
                 var ordinal = 0;
                 foreach (var subscription in SubscriptionsOf(subscriber)) {
                     ordinal++;
                     if (!subscription.StageNames.Any(n => string.Equals(n, stageName, StringComparison.Ordinal))
                         || NavigationTarget(subscriber, subscription.RelationshipName) is not { } target
-                        || !string.Equals(target, entity.Name, StringComparison.Ordinal))
+                        || !string.Equals(target, publisher.Name, StringComparison.Ordinal))
                         continue;
-                    // The handler runs on the subscriber, so its body's own transitions are the subscriber's; the reach
-                    // follows its invokes back and returns true only when it reaches a transition on this entity type.
-                    if (ReachEffects(entity, subscriber, null, subscription.Effects, NoBinders,
-                            new HashSet<string>(StringComparer.Ordinal),
+                    if (ReachEffects(self, subscriber, null, subscription.Effects, NoBinders, visited,
                             $"{subscriber.Name}{Separator}when{Separator}{ordinal}{Separator}{stageName}")) {
-                        moves = true;
-                        break;
+                        return true;
                     }
                 }
-                if (moves)
-                    break;
             }
-            _subscriptionMovesStage[cacheKey] = moves;
-            return moves;
+            return false;
         }
 
         /// <summary>Every <c>when</c> handler on the entity, entity-level and per stage. A stage-scoped handler is

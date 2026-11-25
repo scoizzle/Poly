@@ -616,4 +616,97 @@ public class InvokeCycleTests {
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.Error).Contains("depth exceeded");
     }
+
+    /// <summary>#1116 review: a peer transition can run a handler that moves <i>this</i> instance. Here
+    /// A's Go invokes parent.Ping, which transitions B to X; A watches parent X and its handler invokes Hop,
+    /// which moves A back to S1. The reach of parent.Ping used to follow only B's own entry and exits, so it
+    /// looked stage-preserving and the following <c>invoke Go</c> was taken to run S2.Go (which does not exist),
+    /// hiding the cycle.</summary>
+    [Test]
+    public async Task PeerTransitionWatchedByThisType_ReachedThroughRelationshipInvoke_IsRefused_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              Idle: stage { }
+              X: stage { }
+              Ping: action { transition to X }
+            }
+            A: entity {
+              parent: B via kids optional
+              when parent X { invoke Hop }
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke parent.Ping
+                  invoke Go
+              } }
+              S2: stage { }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
+    /// <summary>#1116 review: the handler chain crosses two subscriptions. A's transition to S2 runs B's
+    /// <c>when kids S2</c> handler, which transitions B to Y; that runs A's <c>when parent Y</c> handler, which
+    /// invokes Hop and moves A back to S1, so the following <c>invoke Go</c> re-enters S1.Go. The reach must
+    /// follow a handler's body and, from there, the handlers of the peer transition it makes.</summary>
+    [Test]
+    public async Task SubscriberChainThroughPeerTransitionBackToThisType_IsRefused_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              Idle: stage { }
+              Y: stage { }
+              when kids S2 { transition to Y }
+            }
+            A: entity {
+              parent: B via kids optional
+              when parent Y { invoke Hop }
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
+    /// <summary>#1116 review: the peer transition into X has a subscriber on this entity that only assigns a
+    /// property, so it cannot move this instance. The reach stays stage-preserving, <c>invoke Go</c> dispatches
+    /// S2.Go, and the model is sound. Following subscriber bodies must not widen on every handler.</summary>
+    [Test]
+    public async Task PeerTransitionWatchedByThisType_SubscriberNeverMovesThisType_IsAccepted_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              Idle: stage { }
+              X: stage { }
+              Ping: action { transition to X }
+            }
+            A: entity {
+              N: Number default(0)
+              parent: B via kids optional
+              when parent X { assign N to 1 }
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke parent.Ping
+                  invoke Go
+              } }
+              S2: stage { Go: action { assign N to 2 } }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsFalse();
+    }
 }

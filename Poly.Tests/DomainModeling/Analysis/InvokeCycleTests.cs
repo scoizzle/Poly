@@ -389,6 +389,107 @@ public class InvokeCycleTests {
             d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsFalse();
     }
 
+    /// <summary>#1116 review: two sibling conditionals in one body. The reach into B.Nudge keys each branch by its
+    /// parent body plus "then"; both branches share that key, so the second one — the only one that reaches Hop —
+    /// was skipped and the cycle went unreported. Only action, entry and exit keys may dedupe.</summary>
+    [Test]
+    public async Task SiblingConditionals_SecondReachesHop_IsRefused() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              N: Number default(0)
+              kids: many A via parent
+              Nudge: action {
+                if (N == 0) { assign N to 0 }
+                if (N == 0) { for k in kids { invoke k.Hop } }
+              }
+            }
+            A: entity {
+              parent: B via kids optional
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { entry { invoke parent.Nudge } }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsTrue();
+    }
+
+    /// <summary>#1116 review: two sibling <c>for</c> loops with the same binder name. The reach keyed a loop body by
+    /// its binder name, so the second loop shared the first's key, was skipped, and its invoke of Hop was missed.</summary>
+    [Test]
+    public async Task SiblingLoopsWithSameBinder_SecondReachesHop_IsRefused() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              N: Number default(0)
+              cs: many A via cparent
+              kids: many A via parent
+              Nudge: action {
+                for k in cs {
+                  assign N to 0
+                  invoke k.Ping
+                }
+                for k in kids {
+                  assign N to 0
+                  invoke k.Hop
+                }
+              }
+            }
+            A: entity {
+              cparent: B via cs optional
+              parent: B via kids optional
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { entry { invoke parent.Nudge } }
+              Hop: action { transition to S1 }
+              Ping: action { }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsTrue();
+    }
+
+    /// <summary>#1116 review: a stage entry that loops over a relationship and invokes on the binder. The
+    /// entry-may-change-stage check walked the loop body without binding the binder, so the invoke resolved to
+    /// nothing and the entry looked stage-preserving; the following <c>invoke Go</c> then found no S2 copy.</summary>
+    [Test]
+    public async Task EntryLoopBinderInvoke_IsRefused() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              owner: A via bs optional
+              Poke: action { invoke owner.Hop }
+            }
+            A: entity {
+              N: Number default(0)
+              bs: many B via owner
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { entry {
+                  for b in bs { assign N to 0
+                    invoke b.Poke }
+              } }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsTrue();
+    }
+
     /// <summary>#1116 Done-when, the runtime half: at the parent commit the scenario is accepted at define and
     /// recurses until the simulator's invoke depth guard stops it. The analyzer now refuses it, so this test
     /// installs the recursive step the analyzer would refuse into an already-lowered module (the #1117 seam):

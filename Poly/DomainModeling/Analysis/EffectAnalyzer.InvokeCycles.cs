@@ -131,14 +131,20 @@ internal sealed partial class EffectAnalyzer {
         /// stage-changing code on <paramref name="self"/>: the invoked instance may be this one, but a reach that never
         /// touches this entity type cannot move it.
         /// </summary>
-        private bool EffectsMayChangeStage(Entity self, IReadOnlyList<Effect> effects) {
+        private bool EffectsMayChangeStage(Entity self, IReadOnlyList<Effect> effects) =>
+            EffectsMayChangeStage(self, effects, NoBinders);
+
+        /// <summary><paramref name="binders"/> maps a <c>for</c> binder to its entity, as in <see cref="ReachEffects"/>:
+        /// without it an invoke on a loop binder resolves to nothing and the body looks stage-preserving.</summary>
+        private bool EffectsMayChangeStage(
+            Entity self, IReadOnlyList<Effect> effects, IReadOnlyDictionary<string, string> binders) {
             foreach (var effect in effects) {
                 switch (effect) {
                     case StageTransitionEffect:
                     case InvokeActionEffect { TargetRelationship: null }:
                         return true;
                     case InvokeActionEffect invoke:
-                        if (TargetOf(self, null, NoBinders, invoke.TargetRelationship!) is { } target
+                        if (TargetOf(self, null, binders, invoke.TargetRelationship!) is { } target
                             && ReachTransitions(self, target, invoke.ActionName))
                             return true;
                         break;
@@ -157,16 +163,20 @@ internal sealed partial class EffectAnalyzer {
                             return true;
                         break;
                     case ConditionalEffect conditional:
-                        if (EffectsMayChangeStage(self, conditional.ThenEffects)
-                            || (conditional.ElseEffects is { } elseEffects && EffectsMayChangeStage(self, elseEffects)))
+                        if (EffectsMayChangeStage(self, conditional.ThenEffects, binders)
+                            || (conditional.ElseEffects is { } elseEffects
+                                && EffectsMayChangeStage(self, elseEffects, binders)))
                             return true;
                         break;
                     case CompositeEffect composite:
-                        if (EffectsMayChangeStage(self, composite.Effects))
+                        if (EffectsMayChangeStage(self, composite.Effects, binders))
                             return true;
                         break;
                     case ForEachEffect loop:
-                        if (EffectsMayChangeStage(self, loop.Body))
+                        var inner = new Dictionary<string, string>(binders, StringComparer.Ordinal);
+                        if (NavigationTarget(self, loop.RelationshipName) is { } loopTarget)
+                            inner[loop.BinderName] = loopTarget;
+                        if (EffectsMayChangeStage(self, loop.Body, inner))
                             return true;
                         break;
                 }
@@ -235,6 +245,18 @@ internal sealed partial class EffectAnalyzer {
             IReadOnlyDictionary<string, string> binders, HashSet<string> visited, string key) {
             if (effects.Count == 0 || !visited.Add(key))
                 return false;
+            return ReachBody(self, entity, action, effects, binders, visited);
+        }
+
+        /// <summary>
+        /// One body's effects. Only the action, entry and exit keys dedupe: those are the points where the reach can
+        /// revisit itself. A nested body (a conditional branch, a <c>for</c> body or a composite) takes no key, because
+        /// a key made from its parent would collide for siblings — two conditionals in one body, or two loops over
+        /// different relationships with the same binder name — and the second sibling would never be walked.
+        /// </summary>
+        private bool ReachBody(
+            Entity self, Entity entity, Action? action, IReadOnlyList<Effect> effects,
+            IReadOnlyDictionary<string, string> binders, HashSet<string> visited) {
             foreach (var effect in effects) {
                 switch (effect) {
                     case StageTransitionEffect transition:
@@ -267,18 +289,18 @@ internal sealed partial class EffectAnalyzer {
                         var inner = new Dictionary<string, string>(binders, StringComparer.Ordinal);
                         if (NavigationTarget(entity, loop.RelationshipName) is { } loopTarget)
                             inner[loop.BinderName] = loopTarget;
-                        if (ReachEffects(self, entity, action, loop.Body, inner, visited, $"{key}{Separator}for{Separator}{loop.BinderName}"))
+                        if (ReachBody(self, entity, action, loop.Body, inner, visited))
                             return true;
                         break;
                     case ConditionalEffect conditional:
-                        if (ReachEffects(self, entity, action, conditional.ThenEffects, binders, visited, $"{key}{Separator}then"))
+                        if (ReachBody(self, entity, action, conditional.ThenEffects, binders, visited))
                             return true;
                         if (conditional.ElseEffects is { } elseEffects
-                            && ReachEffects(self, entity, action, elseEffects, binders, visited, $"{key}{Separator}else"))
+                            && ReachBody(self, entity, action, elseEffects, binders, visited))
                             return true;
                         break;
                     case CompositeEffect composite:
-                        if (ReachEffects(self, entity, action, composite.Effects, binders, visited, $"{key}{Separator}composite"))
+                        if (ReachBody(self, entity, action, composite.Effects, binders, visited))
                             return true;
                         break;
                     case CreateEntityInRelationshipEffect createIn:

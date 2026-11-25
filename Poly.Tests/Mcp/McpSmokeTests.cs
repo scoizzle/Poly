@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Surface;
 using Poly.Mcp.Tools;
@@ -2979,10 +2980,46 @@ E: entity {{
     // ── E6.2 RT golden: invoke depth exceeded ──────────────────
 
     [Test]
-    public async Task ApplyDsl_RecursiveInvoke_ExceedsDepth_FailsLoud() {
+    public async Task ApplyDsl_RuntimeDepthGuard_ExceedsDepth_FailsLoud() {
         var (sessionId, _) = McpTestTools.Store.Create("Test");
-        // #535: an unconditional self-invoke is refused at analysis (DMEFF021), so the depth guard
-        // covers the cycle analysis admits — one behind a guard that never fails at run time.
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
+            domain Test
+            Loop: entity {
+              Tick: action { }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // #1101: the analyzer refuses every recursive invoke cycle (DMEFF021), and an accepted chain of
+        // distinct actions cannot reach the guard — the ABI emitter inlines each callee and overflows its
+        // own stack at about 34 links (33 links lower and run without overflowing the VM). The guard's
+        // contract is the VM value-stack overflow translation, so install the recursive body the analyzer
+        // would refuse into the already-lowered module and drive the executor's guard directly.
+        await Assert.That(McpTestTools.Store.TryGet(sessionId, out var state)).IsTrue();
+        var entity = state.Domain.Types.OfType<Entity>().Single(e => e.Name == "Loop");
+        var recursive = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity))
+            .TryLowerVmNode(new InvokeActionEffect("Tick", []));
+        await Assert.That(recursive).IsNotNull();
+        var module = RuntimeAnalysisCache.GetOrLower(state.Domain, state.Execution.Session, state.Execution.Analysis);
+        RuntimeAnalysisCache.ReplaceModule(state.Domain, [.. module.Select(type => type.Name != "Loop" ? type : type with {
+            Methods = [.. type.Methods!.Select(m => m.Name == "Tick" ? m with { Body = recursive } : m)],
+        })]);
+
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Loop", "{}");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Tick");
+        await Assert.That(call.Success).IsFalse();
+        await Assert.That(call.Message).Contains("depth exceeded");
+    }
+
+    /// <summary>#1101: the guarded self-invoke this smoke test used to accept is now a DMEFF021 error, so the
+    /// refusal is pinned where that acceptance was.</summary>
+    [Test]
+    public async Task ApplyDsl_RecursiveInvoke_IsRefused_1101() {
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Loop: entity {
@@ -2997,17 +3034,10 @@ E: entity {{
               }
             }
             """);
-        await Assert.That(dsl.Success).IsTrue();
 
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Loop",
-            """{"Status":"x","N":0}""");
-        await Assert.That(create.Success).IsTrue();
-        var instanceId = ExtractInstanceId(
-            System.Text.Json.JsonSerializer.Serialize(create.Data));
-
-        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Bounce");
-        await Assert.That(call.Success).IsFalse();
-        await Assert.That(call.Message).Contains("depth exceeded");
+        await Assert.That(dsl.Success).IsFalse();
+        await Assert.That(dsl.Diagnostics).IsNotNull();
+        await Assert.That(dsl.Diagnostics!.Any(d => d.Contains("DMEFF021"))).IsTrue();
     }
 
     [Test]

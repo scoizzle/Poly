@@ -1142,12 +1142,15 @@ for items as item where item in Active
     invoke item.Mark()                       # fan-out, stage-filtered
 ```
 
-Nested invoke depth is limited (max 16); recursive cycles fail loud at run time, and an
-**unconditional** invoke cycle on one entity (`Ping: invoke Pong` + `Pong: invoke Ping`, or a
-self-invoke) is a `DMEFF021` analysis error, because every invocation of either action would hit
-that guard. A cycle behind a real guard is accepted (the guard may end it), and the depth guard
-remains the backstop on the simulator. The printed C# has no depth backstop, so a guarded cycle that
-recurses deep overflows the stack (#1101).
+A recursive invoke is not supported: any invoke cycle is a `DMEFF021` analysis error, guarded or
+not (#1101). That covers a self-invoke, `Ping: invoke Pong` + `Pong: invoke Ping`, a cycle across a
+relationship (`invoke order.Go` back from a line), the `for … invoke` fan-out, and a stage `entry`
+that invokes the stage's own action which transitions back into that stage. Each copy of an action
+— the entity-level copy and each stage's copy — is its own node, so a same-named copy that never
+re-enters its own stage path is not a cycle. The reason is that the printed C# has no invoke depth
+guard, so a recursion that runs deep overflows the process while the simulator stops it cleanly. A
+cycle of transitions alone is `DMEFF013`'s rule, and a `when` subscription is not an edge (the
+notify dispatch has its own depth guard).
 
 ### Require Gates
 

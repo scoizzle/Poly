@@ -43,7 +43,7 @@ public class InvokeCallStackScopeTests {
     }
 
     /// <summary>
-    /// #535: an unconditional invoke cycle is now a DMEFF021 error, so the gated result carries the
+    /// #535, #1101: an invoke cycle is a DMEFF021 error, so the gated result carries the
     /// original (empty) root. The proposal still has to be analyzable — the point of these two tests
     /// is that a recursive body terminates the analyzer and still publishes its invariants — so they
     /// analyze the ungated proposal and assert the gate's error beside it.
@@ -69,7 +69,7 @@ public class InvokeCallStackScopeTests {
             }
             """);
         await Assert.That(gated.Analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.UnconditionalInvokeCycle)).IsTrue();
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsTrue();
         var entity = root.Types.OfType<Entity>().Single(e => e.Name == "Item");
         var loop = entity.Actions.Single(x => x.Name == "Loop");
         await Assert.That(analysis.GetActionInvariants(loop)).IsNotNull();
@@ -92,7 +92,7 @@ public class InvokeCallStackScopeTests {
             }
             """);
         await Assert.That(gated.Analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.UnconditionalInvokeCycle)).IsTrue();
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsTrue();
         var entity = root.Types.OfType<Entity>().Single(e => e.Name == "Item");
         await Assert.That(analysis.GetActionInvariants(entity.Actions.Single(x => x.Name == "P"))).IsNotNull();
         await Assert.That(analysis.GetActionInvariants(entity.Actions.Single(x => x.Name == "Q"))).IsNotNull();

@@ -95,7 +95,7 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/SurfaceExtensionDogfoodTests.cs", "McpTestTools.Runtime", 37, "Q-05e"),
         // Q-05f1
         new("Mcp/McpSmokeTests.cs", "DomainToolResponse", 1, "Q-05f1"),
-        new("Mcp/McpSmokeTests.cs", "McpTestTools.Dsl", 107, "Q-05f1+M-13"),
+        new("Mcp/McpSmokeTests.cs", "McpTestTools.Dsl", 108, "Q-05f1+M-13"),
         new("Mcp/McpSmokeTests.cs", "McpTestTools.Session", 2, "Q-05f1+M-13"),
         // Q-05f2
         new("Mcp/McpSmokeTests.cs", "McpTestTools.Policy", 31, "Q-05f2+M-13"),

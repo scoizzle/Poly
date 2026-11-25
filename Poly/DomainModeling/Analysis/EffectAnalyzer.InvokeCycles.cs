@@ -167,6 +167,7 @@ internal sealed partial class EffectAnalyzer {
                             // The notify for the child's initial stage runs the creator's handler, which runs on
                             // this instance and may move it: the same site as the create-in cases below.
                             if (createdEntity.InitialStage() is { } initial
+                                && CreatorWatchesCreatedStage(self, createIn.RelationshipName, initial.Name)
                                 && SubscribersMayChangeStage(self, createdEntity, initial.Name))
                                 return true;
                         }
@@ -323,12 +324,14 @@ internal sealed partial class EffectAnalyzer {
                     case CreateEntityInRelationshipEffect createIn:
                         // A create-in lands the child in its initial stage without a transition, and lowering
                         // still dispatches that stage to the creator's subscriptions over this relationship: the
-                        // handler runs on this instance and may move it, before the body's next effect.
+                        // handler runs on this instance and may move it, before the body's next effect. The
+                        // creator is the body's entity, which may be another type than `self`.
                         if (NavigationTarget(entity, createIn.RelationshipName) is { } createdName
                             && entities.TryGetValue(createdName, out var createdEntity)) {
                             if (ReachInitialEntry(self, createdName, visited))
                                 return true;
                             if (createdEntity.InitialStage() is { } initial
+                                && CreatorWatchesCreatedStage(entity, createIn.RelationshipName, initial.Name)
                                 && SubscribersReachStageChange(self, createdEntity, initial.Name, visited))
                                 return true;
                         }
@@ -400,6 +403,18 @@ internal sealed partial class EffectAnalyzer {
                 foreach (var subscription in stage.Subscriptions)
                     yield return subscription;
         }
+
+        /// <summary>
+        /// The gate lowering uses for a create-in's initial notify (DomainToCSharpExporter.Create): only when the
+        /// creator has a subscription over the create-in's own relationship that watches the child's initial stage
+        /// does the printed create emit <c>Notify{Initial}Subscribers</c> on the new child. Without such an entry no
+        /// handler runs on the creator, so the create-in cannot move it.
+        /// </summary>
+        private static bool CreatorWatchesCreatedStage(
+            Entity creator, string relationshipName, string stageName) =>
+            SubscriptionsOf(creator).Any(subscription =>
+                string.Equals(subscription.RelationshipName, relationshipName, StringComparison.Ordinal)
+                && subscription.StageNames.Any(n => string.Equals(n, stageName, StringComparison.Ordinal)));
 
         /// <summary>Walks a body from the possible current stages and returns the stages it may leave the instance in.</summary>
         private HashSet<string?> WalkBody(
@@ -489,6 +504,7 @@ internal sealed partial class EffectAnalyzer {
                             if (ReachInitialEntry(entity, createdName)
                                 || (entities.TryGetValue(createdName, out var createdEntity)
                                     && createdEntity.InitialStage() is { } initial
+                                    && CreatorWatchesCreatedStage(entity, createIn.RelationshipName, initial.Name)
                                     && SubscribersMayChangeStage(entity, createdEntity, initial.Name)))
                                 stages = AllStages(entity);
                         }

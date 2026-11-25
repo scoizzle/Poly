@@ -795,4 +795,68 @@ public class InvokeCycleTests {
         await Assert.That(result.Analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsFalse();
     }
+
+    /// <summary>#1116 review: lowering notifies the creator's subscriptions watching the new child's initial stage
+    /// only when the creator has a subscription over the create-in's own relationship. Here B watches <c>New</c>
+    /// through <c>others</c>, while the create-in runs over <c>kids</c>: no notify is emitted, so the handler never
+    /// runs and the model stays sound. Consulting every subscriber of the child widened and refused it.</summary>
+    [Test]
+    public async Task CreateIn_CreatorHasNoSubscriptionOverThatRelationship_IsAccepted_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              others: many A via other
+              when others New { invoke Hop }
+              P: stage { Go: action {
+                  transition to Q
+                  create in kids { }
+                  invoke Go
+              } }
+              Q: stage { }
+              Hop: action { transition to P }
+            }
+            A: entity {
+              parent: B via kids optional
+              other: B via others optional
+              New: stage { }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    /// <summary>#1116 review: the creator of a peer create-in is the entity whose body is walked (C), not the
+    /// instance being widened (B). C has no subscription over <c>items</c>, so lowering emits no notify; B's
+    /// <c>when kids New</c> subscription is irrelevant to this create-in and must not widen B's stage set.</summary>
+    [Test]
+    public async Task PeerCreateIn_PeerHasNoSubscription_IsAccepted_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              helper: C via bs optional
+              when kids New { invoke Hop }
+              P: stage { Go: action {
+                  transition to Q
+                  invoke helper.Make
+                  invoke Go
+              } }
+              Q: stage { }
+              Hop: action { transition to P }
+            }
+            C: entity {
+              bs: many B via helper
+              items: many A via owner
+              Make: action { create in items { } }
+            }
+            A: entity {
+              parent: B via kids optional
+              owner: C via items optional
+              New: stage { }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+    }
 }

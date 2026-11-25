@@ -20,7 +20,9 @@ internal sealed partial class EffectAnalyzer {
     /// <list type="bullet">
     ///   <item>a stage action, stage entry or stage exit body starts in <c>{that stage}</c>;</item>
     ///   <item>an entity-level body starts in every stage, or "no stage" for a stageless entity;</item>
-    ///   <item><c>transition to T</c> sets it to <c>{T}</c> for the effects after it;</item>
+    ///   <item><c>transition to T</c> sets it to <c>{T}</c> for the effects after it, or to every stage when T's
+    ///   entry, flattened, can transition or invoke on the same instance: lowering inlines that entry right after the
+    ///   stage assignment, so it may move the instance again before the next effect runs;</item>
     ///   <item>a conditional joins its branches (with no else, joins with the incoming set);</item>
     ///   <item>a <c>for</c> body may run zero or more times, so its result joins its incoming set;</item>
     ///   <item>after a same-instance invoke it becomes every stage, because the callee may transition.</item>
@@ -108,6 +110,37 @@ internal sealed partial class EffectAnalyzer {
                 ? new HashSet<string?>(StringComparer.Ordinal) { null }
                 : new HashSet<string?>(entity.Stages.Select(s => (string?)s.Name), StringComparer.Ordinal);
 
+        /// <summary>True when <paramref name="stageName"/>'s entry, flattened, can transition or invoke on the same
+        /// instance, so lowering's inlined entry may leave the instance in some other stage.</summary>
+        private static bool EntryMayChangeStage(Entity entity, string stageName) {
+            var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, stageName, StringComparison.Ordinal));
+            return stage is not null && EffectsMayChangeStage(stage.OnEntryEffects);
+        }
+
+        private static bool EffectsMayChangeStage(IReadOnlyList<Effect> effects) {
+            foreach (var effect in effects) {
+                switch (effect) {
+                    case StageTransitionEffect:
+                    case InvokeActionEffect { TargetRelationship: null }:
+                        return true;
+                    case ConditionalEffect conditional:
+                        if (EffectsMayChangeStage(conditional.ThenEffects)
+                            || (conditional.ElseEffects is { } elseEffects && EffectsMayChangeStage(elseEffects)))
+                            return true;
+                        break;
+                    case CompositeEffect composite:
+                        if (EffectsMayChangeStage(composite.Effects))
+                            return true;
+                        break;
+                    case ForEachEffect loop:
+                        if (EffectsMayChangeStage(loop.Body))
+                            return true;
+                        break;
+                }
+            }
+            return false;
+        }
+
         /// <summary>Walks a body from the possible current stages and returns the stages it may leave the instance in.</summary>
         private HashSet<string?> WalkBody(
             string from, Entity entity, Action? action,
@@ -173,7 +206,9 @@ internal sealed partial class EffectAnalyzer {
                             if (left is not null)
                                 Edge(from, ExitNode(entity.Name, left));
                         Edge(from, EntryNode(entity.Name, transition.TargetStage.StageName));
-                        stages = new HashSet<string?>(StringComparer.Ordinal) { transition.TargetStage.StageName };
+                        stages = EntryMayChangeStage(entity, transition.TargetStage.StageName)
+                            ? AllStages(entity)
+                            : new HashSet<string?>(StringComparer.Ordinal) { transition.TargetStage.StageName };
                         break;
                     case CreateEntityInRelationshipEffect createIn:
                         if (NavigationTarget(entity, createIn.RelationshipName) is { } created)

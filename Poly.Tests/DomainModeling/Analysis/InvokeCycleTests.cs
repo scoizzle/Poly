@@ -137,6 +137,69 @@ public class InvokeCycleTests {
         await Assert.That(ReportsCycle(result, "Go → Busy (entry) → Go")).IsTrue();
     }
 
+    /// <summary>#1101 review: lowering inlines S2's entry right after the stage assignment, and that entry
+    /// transitions back to S1, so the invoke after the transition runs S1.Go again. The stage set after a
+    /// transition is not {T} when T's entry can move the instance.</summary>
+    [Test]
+    public async Task TransitionIntoEntryThatTransitionsBack_IsRefused_1101() {
+        var result = Analyze("""
+            domain Probe
+            A: entity {
+              N: Number default(0)
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { entry { transition to S1 } }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
+    /// <summary>#1101 review: the same recursion behind a guard; the guard does not break the transition back.</summary>
+    [Test]
+    public async Task GuardedTransitionIntoEntryThatTransitionsBack_IsRefused_1101() {
+        var result = Analyze("""
+            domain Probe
+            A: entity {
+              N: Number default(0)
+              S1: stage { Go: action {
+                  if (N < 3) {
+                    transition to S2
+                    invoke Go
+                  }
+              } }
+              S2: stage { entry { transition to S1 } }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
+    /// <summary>#1101 review: S2's entry invokes the entity-level Hop, which transitions back to S1, so the
+    /// invoke after the transition again runs S1.Go.</summary>
+    [Test]
+    public async Task TransitionIntoEntryThatInvokesTransitioningAction_IsRefused_1101() {
+        var result = Analyze("""
+            domain Probe
+            A: entity {
+              N: Number default(0)
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { entry { invoke Hop } }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
     /// <summary>#1101: the entity-level Go transitions to Busy; Busy's entry invokes Go, which in Busy is Busy.Go and
     /// transitions to Open. The two same-named copies never invoke each other's stage path, so there is no cycle. The
     /// stage copy is declared first so adding the entity-level action does not copy its transition into it.</summary>

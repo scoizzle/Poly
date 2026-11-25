@@ -3001,19 +3001,9 @@ E: entity {{
             .TryLowerVmNode(new InvokeActionEffect("Tick", []));
         await Assert.That(recursive).IsNotNull();
         var module = RuntimeAnalysisCache.GetOrLower(state.Domain, state.Execution.Session, state.Execution.Analysis);
-        var replaced = false;
-        foreach (var type in module) {
-            if (!string.Equals(type.Name, "Loop", StringComparison.Ordinal)
-                || type.Methods is not IList<MethodDefinitionNode> methods)
-                continue;
-            for (var i = 0; i < methods.Count; i++) {
-                if (!string.Equals(methods[i].Name, "Tick", StringComparison.Ordinal))
-                    continue;
-                methods[i] = methods[i] with { Body = recursive };
-                replaced = true;
-            }
-        }
-        await Assert.That(replaced).IsTrue();
+        RuntimeAnalysisCache.ReplaceModule(state.Domain, [.. module.Select(type => type.Name != "Loop" ? type : type with {
+            Methods = [.. type.Methods!.Select(m => m.Name == "Tick" ? m with { Body = recursive } : m)],
+        })]);
 
         var create = McpTestTools.Runtime.CreateInstance(sessionId, "Loop", "{}");
         await Assert.That(create.Success).IsTrue();

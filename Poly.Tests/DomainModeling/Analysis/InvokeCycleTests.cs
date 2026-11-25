@@ -490,6 +490,84 @@ public class InvokeCycleTests {
             d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsTrue();
     }
 
+    /// <summary>#1116: lowering emits the notify dispatch right after the stage assignment, so a <c>when</c>
+    /// handler watching S2 runs before the next effect. Here B's handler fans out to every kid — this instance
+    /// included — and Hop moves it back to S1, so the <c>invoke Go</c> after the transition runs S1.Go again. The
+    /// walk must widen the stage set after a transition into a stage whose subscribers can move this entity.</summary>
+    [Test]
+    public async Task WhenSubscriberThatMovesThisInstance_ThenInvokeReentry_IsRefused() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              when kids S2 { for k in kids { invoke k.Hop } }
+            }
+            A: entity {
+              parent: B via kids optional
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
+    /// <summary>#1116: a <c>when</c> handler that cannot move the publisher's stage does not widen the stage set,
+    /// so S1.Go's stage set stays {S2} and <c>invoke Go</c> dispatches S2.Go, which never recurses. Widening on
+    /// every subscriber would refuse a sound model.</summary>
+    [Test]
+    public async Task WhenSubscriberThatNeverMovesThisInstance_IsAccepted() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              N: Number default(0)
+              kids: many A via parent
+              when kids S2 { assign N to 1 }
+            }
+            A: entity {
+              N: Number default(0)
+              parent: B via kids optional
+              S1: stage { Go: action {
+                  transition to S2
+                  invoke Go
+              } }
+              S2: stage { Go: action { assign N to 1 } }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsFalse();
+    }
+
+    /// <summary>#1116: the handler moves this instance, but the action never re-invokes itself after the
+    /// transition, so there is no invoke re-entry to refuse. A subscription handler counting as a stage-set
+    /// widener does not make it an invoke-graph edge: a cycle driven only by subscriptions is not DMEFF021.</summary>
+    [Test]
+    public async Task WhenSubscriptionDrivenCycleWithoutInvokeReentry_IsNotDmeff021() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              when kids S2 { for k in kids { invoke k.Hop } }
+            }
+            A: entity {
+              parent: B via kids optional
+              S1: stage { Go: action { transition to S2 } }
+              S2: stage { }
+              Hop: action { transition to S1 }
+            }
+            """);
+
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsFalse();
+    }
+
     /// <summary>#1116 Done-when, the runtime half: at the parent commit the scenario is accepted at define and
     /// recurses until the simulator's invoke depth guard stops it. The analyzer now refuses it, so this test
     /// installs the recursive step the analyzer would refuse into an already-lowered module (the #1117 seam):

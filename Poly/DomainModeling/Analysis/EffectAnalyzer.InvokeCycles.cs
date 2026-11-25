@@ -33,7 +33,10 @@ internal sealed partial class EffectAnalyzer {
     /// binder or an entity parameter, and the <c>for … invoke</c> fan-out, whether guarded or not), a transition into
     /// the target stage's entry and out of the possible current stages' exits, and a create's initial entry. A cycle is
     /// reported when it passes through an action: a cycle of transitions alone is DMEFF013's rule, which allows a
-    /// guarded one. Subscriptions are not edges: the printed notify dispatch has its own depth guard.
+    /// guarded one. A subscription handler is not an edge: the printed notify dispatch has its own depth guard, so a
+    /// cycle driven only by subscriptions is not DMEFF021. It does count when widening the stage set after a
+    /// transition into a watched stage: lowering runs those handlers before the body's next effect, and a handler
+    /// may move this instance (see <see cref="SubscribersMayChangeStage"/>).
     /// </para>
     /// <para>
     /// #1116: an invoke over a relationship, a binder or an entity parameter, or a create whose initial entry invokes
@@ -80,6 +83,7 @@ internal sealed partial class EffectAnalyzer {
     private sealed class InvokeGraph(IReadOnlyDictionary<string, Entity> entities) {
         private const char Separator = '\u0001';
         private readonly Dictionary<string, HashSet<string>> _edges = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, bool> _subscriptionMovesStage = new(StringComparer.Ordinal);
 
         /// <summary>Every action copy, in declaration order, with its entity.</summary>
         public List<(string Node, string Entity)> Actions { get; } = [];
@@ -317,6 +321,52 @@ internal sealed partial class EffectAnalyzer {
             return false;
         }
 
+        /// <summary>
+        /// Whether <paramref name="stageName"/> is watched by a <c>when</c> handler on some entity whose relationship
+        /// targets <paramref name="entity"/>, and that handler's body can move an instance of <paramref name="entity"/>.
+        /// Lowering emits the notify dispatch right after the stage assignment and before the next effect of the
+        /// transition's body, so such a handler runs there and may move this instance again. This widens the stage set
+        /// only: a subscription is not an invoke-graph edge, so a cycle with no invoke re-entry stays out of DMEFF021.
+        /// </summary>
+        private bool SubscribersMayChangeStage(Entity entity, string stageName) {
+            var cacheKey = $"{entity.Name}{Separator}{stageName}";
+            if (_subscriptionMovesStage.TryGetValue(cacheKey, out var cached))
+                return cached;
+            var moves = false;
+            foreach (var subscriber in entities.Values) {
+                var ordinal = 0;
+                foreach (var subscription in SubscriptionsOf(subscriber)) {
+                    ordinal++;
+                    if (!subscription.StageNames.Any(n => string.Equals(n, stageName, StringComparison.Ordinal))
+                        || NavigationTarget(subscriber, subscription.RelationshipName) is not { } target
+                        || !string.Equals(target, entity.Name, StringComparison.Ordinal))
+                        continue;
+                    // The handler runs on the subscriber, so its body's own transitions are the subscriber's; the reach
+                    // follows its invokes back and returns true only when it reaches a transition on this entity type.
+                    if (ReachEffects(entity, subscriber, null, subscription.Effects, NoBinders,
+                            new HashSet<string>(StringComparer.Ordinal),
+                            $"{subscriber.Name}{Separator}when{Separator}{ordinal}{Separator}{stageName}")) {
+                        moves = true;
+                        break;
+                    }
+                }
+                if (moves)
+                    break;
+            }
+            _subscriptionMovesStage[cacheKey] = moves;
+            return moves;
+        }
+
+        /// <summary>Every <c>when</c> handler on the entity, entity-level and per stage. A stage-scoped handler is
+        /// included: the subscriber's stage is unknown here, so it may be in the stage that gates the handler.</summary>
+        private static IEnumerable<StageSubscription> SubscriptionsOf(Entity entity) {
+            foreach (var subscription in entity.Subscriptions)
+                yield return subscription;
+            foreach (var stage in entity.Stages)
+                foreach (var subscription in stage.Subscriptions)
+                    yield return subscription;
+        }
+
         /// <summary>Walks a body from the possible current stages and returns the stages it may leave the instance in.</summary>
         private HashSet<string?> WalkBody(
             string from, Entity entity, Action? action,
@@ -389,7 +439,10 @@ internal sealed partial class EffectAnalyzer {
                             if (left is not null)
                                 Edge(from, ExitNode(entity.Name, left));
                         Edge(from, EntryNode(entity.Name, transition.TargetStage.StageName));
+                        // Lowering emits the notify dispatch for the target stage before the next effect, so a
+                        // watching handler that can move this instance leaves it in any stage too.
                         stages = EntryMayChangeStage(entity, transition.TargetStage.StageName)
+                            || SubscribersMayChangeStage(entity, transition.TargetStage.StageName)
                             ? AllStages(entity)
                             : new HashSet<string?>(StringComparer.Ordinal) { transition.TargetStage.StageName };
                         break;

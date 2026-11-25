@@ -679,6 +679,92 @@ public class InvokeCycleTests {
         await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
     }
 
+    /// <summary>#1116 review: a create-in notifies the creator's <c>when</c> handlers watching the new child's
+    /// initial stage, even though no transition occurs. Here B's handler watching A's <c>New</c> invokes Hop,
+    /// which moves B back to P, so the <c>invoke Go</c> after the create-in re-enters P.Go. Both the walk's and
+    /// the reach's create-in cases used to follow only the child's initial entry, hiding the cycle.</summary>
+    [Test]
+    public async Task CreateInNotifiesCreatorsHandler_MovesThisInstance_IsRefused_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              when kids New { invoke Hop }
+              P: stage { Go: action {
+                  transition to Q
+                  create in kids { }
+                  invoke Go
+              } }
+              Q: stage { }
+              Hop: action { transition to P }
+            }
+            A: entity {
+              parent: B via kids optional
+              New: stage { }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
+    /// <summary>#1116 review: the same create-in notify reached through a stage entry. The walk treats the target
+    /// stage's inlined entry as able to move the instance, so Q's entry <c>create in kids { }</c> — whose notify runs
+    /// B's handler and moves B back to P — must widen the stage set after <c>transition to Q</c>; the following
+    /// <c>invoke Go</c> then re-enters P.Go.</summary>
+    [Test]
+    public async Task CreateInInStageEntryNotifiesCreatorsHandler_MovesThisInstance_IsRefused_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              kids: many A via parent
+              when kids New { invoke Hop }
+              P: stage { Go: action {
+                  transition to Q
+                  invoke Go
+              } }
+              Q: stage { entry { create in kids { } } }
+              Hop: action { transition to P }
+            }
+            A: entity {
+              parent: B via kids optional
+              New: stage { }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(ReportsCycle(result, "Go → Go")).IsTrue();
+    }
+
+    /// <summary>#1116 review: the same create-in, but the creator's handler only assigns a property, so it cannot
+    /// move this instance. The stage set stays {Q}, <c>invoke Go</c> dispatches no P.Go, and the model is sound:
+    /// consulting the child's initial-stage subscribers must not widen on every handler.</summary>
+    [Test]
+    public async Task CreateInNotifiesCreatorsHandler_HandlerOnlyAssigns_IsAccepted_1116() {
+        var result = Analyze("""
+            domain Probe
+            B: entity {
+              N: Number default(0)
+              kids: many A via parent
+              when kids New { assign N to 1 }
+              P: stage { Go: action {
+                  transition to Q
+                  create in kids { }
+                  invoke Go
+              } }
+              Q: stage { }
+            }
+            A: entity {
+              parent: B via kids optional
+              New: stage { }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.InvokeCycle)).IsFalse();
+    }
+
     /// <summary>#1116 review: the peer transition into X has a subscriber on this entity that only assigns a
     /// property, so it cannot move this instance. The reach stays stage-preserving, <c>invoke Go</c> dispatches
     /// S2.Go, and the model is sound. Following subscriber bodies must not widen on every handler.</summary>

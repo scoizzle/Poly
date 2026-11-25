@@ -36,7 +36,9 @@ internal sealed partial class EffectAnalyzer {
     /// guarded one. A subscription handler is not an edge: the printed notify dispatch has its own depth guard, so a
     /// cycle driven only by subscriptions is not DMEFF021. It does count when widening the stage set after a
     /// transition into a watched stage: lowering runs those handlers before the body's next effect, and a handler
-    /// may move this instance (see <see cref="SubscribersMayChangeStage"/>).
+    /// may move this instance (see <see cref="SubscribersMayChangeStage"/>). A create-in widens the same way: no
+    /// transition occurs, but lowering still notifies the creator's subscriptions watching the new child's initial
+    /// stage, and that handler runs on this instance.
     /// </para>
     /// <para>
     /// #1116: an invoke over a relationship, a binder or an entity parameter, or a create whose initial entry invokes
@@ -158,9 +160,16 @@ internal sealed partial class EffectAnalyzer {
                             return true;
                         break;
                     case CreateEntityInRelationshipEffect createIn:
-                        if (NavigationTarget(self, createIn.RelationshipName) is { } created
-                            && ReachInitialEntry(self, created))
-                            return true;
+                        if (NavigationTarget(self, createIn.RelationshipName) is { } createdName
+                            && entities.TryGetValue(createdName, out var createdEntity)) {
+                            if (ReachInitialEntry(self, createdName))
+                                return true;
+                            // The notify for the child's initial stage runs the creator's handler, which runs on
+                            // this instance and may move it: the same site as the create-in cases below.
+                            if (createdEntity.InitialStage() is { } initial
+                                && SubscribersMayChangeStage(self, createdEntity, initial.Name))
+                                return true;
+                        }
                         break;
                     case CreateEntityInstance create:
                         if (ReachInitialEntry(self, create.Type.TypeName))
@@ -312,9 +321,17 @@ internal sealed partial class EffectAnalyzer {
                             return true;
                         break;
                     case CreateEntityInRelationshipEffect createIn:
-                        if (NavigationTarget(entity, createIn.RelationshipName) is { } created
-                            && ReachInitialEntry(self, created, visited))
-                            return true;
+                        // A create-in lands the child in its initial stage without a transition, and lowering
+                        // still dispatches that stage to the creator's subscriptions over this relationship: the
+                        // handler runs on this instance and may move it, before the body's next effect.
+                        if (NavigationTarget(entity, createIn.RelationshipName) is { } createdName
+                            && entities.TryGetValue(createdName, out var createdEntity)) {
+                            if (ReachInitialEntry(self, createdName, visited))
+                                return true;
+                            if (createdEntity.InitialStage() is { } initial
+                                && SubscribersReachStageChange(self, createdEntity, initial.Name, visited))
+                                return true;
+                        }
                         break;
                     case CreateEntityInstance create:
                         if (ReachInitialEntry(self, create.Type.TypeName, visited))
@@ -332,12 +349,18 @@ internal sealed partial class EffectAnalyzer {
         /// transition's body, so such a handler runs there and may move this instance again. This widens the stage set
         /// only: a subscription is not an invoke-graph edge, so a cycle with no invoke re-entry stays out of DMEFF021.
         /// </summary>
-        private bool SubscribersMayChangeStage(Entity entity, string stageName) {
-            var cacheKey = $"{entity.Name}{Separator}{stageName}";
+        private bool SubscribersMayChangeStage(Entity entity, string stageName) =>
+            SubscribersMayChangeStage(entity, entity, stageName);
+
+        /// <summary>The memoized form for a publisher other than <paramref name="self"/>'s own type (a create-in's
+        /// new child), whose subscriptions run on <paramref name="self"/> as well: the key carries both types,
+        /// because the same publisher and stage may or may not move a given instance's entity type.</summary>
+        private bool SubscribersMayChangeStage(Entity self, Entity publisher, string stageName) {
+            var cacheKey = $"{self.Name}{Separator}{publisher.Name}{Separator}{stageName}";
             if (_subscriptionMovesStage.TryGetValue(cacheKey, out var cached))
                 return cached;
             var moves = SubscribersReachStageChange(
-                entity, entity, stageName, new HashSet<string>(StringComparer.Ordinal));
+                self, publisher, stageName, new HashSet<string>(StringComparer.Ordinal));
             _subscriptionMovesStage[cacheKey] = moves;
             return moves;
         }
@@ -458,9 +481,15 @@ internal sealed partial class EffectAnalyzer {
                             : new HashSet<string?>(StringComparer.Ordinal) { transition.TargetStage.StageName };
                         break;
                     case CreateEntityInRelationshipEffect createIn:
-                        if (NavigationTarget(entity, createIn.RelationshipName) is { } created) {
-                            InitialEntry(from, created);
-                            if (ReachInitialEntry(entity, created))
+                        if (NavigationTarget(entity, createIn.RelationshipName) is { } createdName) {
+                            InitialEntry(from, createdName);
+                            // The create-in lands the child in its initial stage without a transition, and
+                            // lowering still dispatches that stage to the creator's subscriptions over this
+                            // relationship, so a handler that moves this instance leaves it in any stage too.
+                            if (ReachInitialEntry(entity, createdName)
+                                || (entities.TryGetValue(createdName, out var createdEntity)
+                                    && createdEntity.InitialStage() is { } initial
+                                    && SubscribersMayChangeStage(entity, createdEntity, initial.Name)))
                                 stages = AllStages(entity);
                         }
                         break;

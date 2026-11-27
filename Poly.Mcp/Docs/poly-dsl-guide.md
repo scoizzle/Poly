@@ -16,6 +16,8 @@
 > (`stageName`, `preconditions`, `properties[].min/max`, `postconditions`) copied from the
 > analyzer's range/precondition facts; absent when the analysis published none. Only an
 > `Entity.Action` select carries a witness; a stage-qualified `Entity.Stage.Action` select does not.
+> A `select` that names no element is `ok:false` with `ELEMENT_NOT_FOUND`, the same answer
+> `poly_inspect` gives, so a typo cannot read as an undecided proof.
 > Each result's text block is a prose summary (outcome, `workspace:` handle, findings, `next:`
 > calls, flattened data); the full envelope is in `structuredContent`.
 

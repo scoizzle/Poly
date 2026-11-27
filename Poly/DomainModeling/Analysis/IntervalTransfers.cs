@@ -4,6 +4,7 @@ using Poly.DomainModeling.Ontology;
 
 using Add = Poly.DomainModeling.Ontology.Add;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Analysis;
@@ -11,7 +12,8 @@ namespace Poly.DomainModeling.Analysis;
 /// <summary>
 /// The interval of an operator applied to its operand intervals — one immutable row per node kind, so a
 /// new node adds a row beside it and never a second evaluator (A4, B6). A node with no row is
-/// <c>null</c> (unknown): the transfer never guesses an interval.
+/// <c>null</c> (unknown): the transfer never guesses an interval. A two-operand row sits in
+/// <see cref="Rows"/>; a one-operand row (unary minus) sits in <see cref="UnaryRows"/>.
 /// </summary>
 internal static class IntervalTransfers {
     private static readonly FrozenDictionary<Type, Func<ValueRange?, ValueRange?, ValueRange?>> Rows =
@@ -24,10 +26,18 @@ internal static class IntervalTransfers {
                 : left.Mul(right),
         }.ToFrozenDictionary();
 
+    private static readonly FrozenDictionary<Type, Func<ValueRange?, ValueRange?>> UnaryRows =
+        new Dictionary<Type, Func<ValueRange?, ValueRange?>> {
+            [typeof(Negate)] = static range => range?.Negate(),
+        }.ToFrozenDictionary();
+
     /// <summary>The interval of <paramref name="node"/> over <paramref name="operands"/>, or null when the
     /// node's transfer is not modelled.</summary>
-    internal static ValueRange? Transfer(DomainExpression node, IReadOnlyList<ValueRange?> operands) =>
-        operands.Count == 2 && Rows.TryGetValue(node.GetType(), out var row) ? row(operands[0], operands[1]) : null;
+    internal static ValueRange? Transfer(DomainExpression node, IReadOnlyList<ValueRange?> operands) {
+        if (operands.Count == 1)
+            return UnaryRows.TryGetValue(node.GetType(), out var unary) ? unary(operands[0]) : null;
+        return operands.Count == 2 && Rows.TryGetValue(node.GetType(), out var row) ? row(operands[0], operands[1]) : null;
+    }
 
     private static ValueRange? Combine(
         ValueRange? left, ValueRange? right, Func<ValueRange, ValueRange?, ValueRange?> op) =>

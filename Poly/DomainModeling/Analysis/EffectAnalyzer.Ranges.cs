@@ -4,6 +4,7 @@ using Poly.DomainModeling.Ontology;
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Analysis;
@@ -170,6 +171,7 @@ internal sealed partial class EffectAnalyzer {
         Add add => HasUnmodelledOperator(add.Left) || HasUnmodelledOperator(add.Right),
         Subtract sub => HasUnmodelledOperator(sub.Left) || HasUnmodelledOperator(sub.Right),
         Multiply mul => HasUnmodelledOperator(mul.Left) || HasUnmodelledOperator(mul.Right),
+        Negate negate => HasUnmodelledOperator(negate.Operand),
         PropertyAccess or ParameterAccess or RelationshipNavigation or Literal => false,
         _ => true,
     };

@@ -921,8 +921,17 @@ public static partial class AbiEmitter {
             }
             if (ifTrue.Type != ifFalse.Type) {
                 var target = ValueTypeOf(ifTrue.Type, ifFalse.Type);
-                ifTrue = Convert(ifTrue, target);
-                ifFalse = Convert(ifFalse, target);
+                if (Nullable.GetUnderlyingType(target) is not null) {
+                    // A lifted conditional (#803): a non-nullable arm of another shape (a
+                    // decimal's heap handle, a narrower number) is decoded from its own
+                    // representation and lifted, never converted from the raw word.
+                    ifTrue = AsNullableOperand(c.IfTrue, ifTrue, target, ctx);
+                    ifFalse = AsNullableOperand(c.IfFalse, ifFalse, target, ctx);
+                }
+                else {
+                    ifTrue = Convert(ifTrue, target);
+                    ifFalse = Convert(ifFalse, target);
+                }
             }
             return Condition(test, ifTrue, ifFalse);
         }
@@ -988,14 +997,36 @@ public static partial class AbiEmitter {
     private static bool IsValueRepresented(Node node, Context ctx) =>
         ctx.KindOf(node) is ValueRepresentationKind.StackScalar;
 
-    /// <summary>The one type two arms of a value can share: <c>double</c> if either is
-    /// one, else <c>float</c> if either is one, else <c>long</c> if either is one, else the
-    /// left type unchanged.</summary>
-    private static Type ValueTypeOf(Type left, Type right) =>
-        left == typeof(double) || right == typeof(double) ? typeof(double)
+    /// <summary>The one type two arms of a value can share.
+    /// <para>A nullable arm lifts the other one: C#'s conditional has the nullable type when
+    /// one arm is <c>T?</c> and the other converts to <c>T</c> (#803). Without this, the
+    /// <c>long</c> rule below turned a <c>long?</c> arm into <c>long</c>, and reading the
+    /// lifted value threw <c>Nullable object must have a value</c> when it was null.</para>
+    /// <para>Otherwise: <c>double</c> if either is one, else <c>float</c> if either is one,
+    /// else <c>long</c> if either is one, else the left type unchanged.</para></summary>
+    private static Type ValueTypeOf(Type left, Type right) {
+        if (Nullable.GetUnderlyingType(left) is not null || Nullable.GetUnderlyingType(right) is not null) {
+            var leftUnderlying = Nullable.GetUnderlyingType(left) ?? left;
+            var rightUnderlying = Nullable.GetUnderlyingType(right) ?? right;
+            if (IsNumericArm(leftUnderlying) && IsNumericArm(rightUnderlying)) {
+                try {
+                    return typeof(Nullable<>).MakeGenericType(
+                        CSharpBinaryNumericType(leftUnderlying, rightUnderlying, shift: false));
+                }
+                catch (InvalidOperationException) {
+                    // No lifted operator (decimal beside double): the non-nullable rule
+                    // below chooses a target and the conversion fails closed.
+                }
+            }
+        }
+        return left == typeof(double) || right == typeof(double) ? typeof(double)
             : left == typeof(float) || right == typeof(float) ? typeof(float)
             : left == typeof(long) || right == typeof(long) ? typeof(long)
             : left;
+    }
+
+    private static bool IsNumericArm(Type type) =>
+        type != typeof(bool) && (type.IsPrimitive || type == typeof(decimal) || type.IsEnum);
 
     private static bool ContainsSuspend(Node node) {
         if (node is SuspendNode)

@@ -731,9 +731,33 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveConditionalType(AnalysisContext context, Conditional cond) {
         var ifTrue = ResolveNodeType(context, cond.IfTrue);
+        var ifFalse = ResolveNodeType(context, cond.IfFalse);
+        // #803: C# lifts the conditional when one arm is T? and the other converts to T,
+        // and the conditional's type is then T?. The tree does not state the lift, so
+        // analysis names it here; without this the root was the non-nullable arm's type
+        // and a null arm read back as a bare word.
+        if (LiftedConditional(context, ifTrue, ifFalse) is { } lifted)
+            return lifted;
         if (ifTrue is not null && ifTrue.GetRuntimeType() != typeof(void))
             return ifTrue;
-        return ResolveNodeType(context, cond.IfFalse) ?? ifTrue;
+        return ifFalse ?? ifTrue;
+    }
+
+    /// <summary>The nullable arm of a conditional whose other arm converts to its underlying
+    /// type: the conditional's own type. Null when neither arm lifts the other.</summary>
+    private static ITypeDefinition? LiftedConditional(
+        AnalysisContext context, ITypeDefinition? first, ITypeDefinition? second) =>
+        NullableArmOfConditional(context, first, second)
+        ?? NullableArmOfConditional(context, second, first);
+
+    private static ITypeDefinition? NullableArmOfConditional(
+        AnalysisContext context, ITypeDefinition? nullableArm, ITypeDefinition? other) {
+        if (nullableArm is null || other is null || !IsNullableType(nullableArm) || IsNullableType(other))
+            return null;
+        var underlying = PeelNullable(context, nullableArm);
+        var converts = context.TypeSystem.IsAssignableWithoutConversion(underlying, other)
+            || context.TypeSystem.Conversion(other, underlying) is { Kind: ConversionOperatorKind.Implicit };
+        return converts ? nullableArm : null;
     }
 
     private static bool IsVoidYieldNode(Node node) =>

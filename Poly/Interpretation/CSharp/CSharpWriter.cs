@@ -1365,7 +1365,7 @@ public sealed class CSharpWriter {
     private static bool FoldCanOverflow(Node node) => node is Add or Subtract or Multiply;
 
     private static bool IsConstantIntegralOperand(Node node) =>
-        node is Constant { Value: int or long or uint or ulong or short or ushort or byte or sbyte }
+        node is Constant { Value: int or long or uint or ulong or short or ushort or byte or sbyte or char }
         || IsConstantIntegral(node);
 
     /// <summary>

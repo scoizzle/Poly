@@ -1,4 +1,5 @@
 // EffectAnalyzer partial: recursive invoke cycle detection (#535, #1101).
+using Poly.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 
@@ -259,6 +260,9 @@ internal sealed partial class EffectAnalyzer {
             IReadOnlyDictionary<string, string> binders, HashSet<string> visited, string key) {
             if (effects.Count == 0 || !visited.Add(key))
                 return false;
+            // ReachActionCopies follows a callee's body, so this reach recurses along an invoke chain (#1115):
+            // a chain deeper than the thread's stack is the typed failure, never an abort.
+            ExecutionStack.Ensure();
             return ReachBody(self, entity, action, effects, binders, visited);
         }
 

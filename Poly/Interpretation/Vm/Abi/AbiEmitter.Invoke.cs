@@ -27,6 +27,10 @@ public static partial class AbiEmitter {
     /// Invoke: for Lambda targets, compile the body inline (no separate delegate).
     /// </summary>
     private static Expression EmitInvoke(Invoke invoke, Context ctx) {
+        // An AST callee's body is compiled into the caller's frame (TryCompileAstCallable), so this
+        // recursion follows the whole invoke chain (#1115). Probe what is left so a chain too deep for
+        // the compile thread is the typed failure, never an abort.
+        Poly.Analysis.ExecutionStack.Ensure();
         // Handle Invoke(Member(instance, "Method"), args) — resolve the method
         // and call it directly via CLR reflection, bypassing full lambda handling.
         if (invoke.Delegate is Member member) {

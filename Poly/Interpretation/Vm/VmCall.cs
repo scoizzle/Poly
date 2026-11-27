@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Poly.Interpretation.Vm;
 
 /// <summary>
@@ -94,6 +96,14 @@ internal static class VmCall {
     /// and stack pointer even when the body throws.</summary>
     public static long Invoke(
         VmState state, Action<VmState> function, ReadOnlySpan<long> args, int closureHandle = 0) {
+        // A nested call recurses on the CLR stack, so an invoke chain's depth is bounded by what the calling
+        // thread has left. A frame's slots cannot grow the backing array here: every live frame caches the
+        // array it was entered with. The calling host sizes the stack for the chain up front (VmState's
+        // value-stack slots), and the extent check below is the depth guard. The probe is a second, best-effort
+        // check — its remaining-stack estimate is smaller than some compiled frames — so a recursion, or a
+        // chain past the buffer, is the typed failure, never the process abort a stack overflow is (#1115).
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+            throw new InvalidOperationException("VM: value stack overflow.");
         var stack = state.Stack;
         int callSp = stack.StackPointer;
         int need = callSp + Extent(args.Length);

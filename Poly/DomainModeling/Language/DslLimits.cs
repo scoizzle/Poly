@@ -41,7 +41,9 @@ public static class DslLimits {
     /// levels and at 500 chained stages. The hop therefore remains; row G-25b decides it. A direct
     /// <c>DomainSession.Lower</c> and the DSL printer do not hop: they run on the caller's stack, where a tree deeper
     /// than that stack's remainder is the typed <see cref="Poly.Analysis.ExecutionStack"/> failure, never an abort
-    /// (#882).
+    /// (#882). The simulator hops too (#1115): the ABI emitter inlines an invoked action's body into the caller's
+    /// frame, so both its compile and its run depth follow an invoke chain, and 34 legal links aborted a default
+    /// thread before the hop.
     /// </summary>
     internal const int ParseStackBytes = 16 * 1024 * 1024;
 

@@ -1,3 +1,4 @@
+using Poly.Analysis;
 using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -623,6 +624,9 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
         HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain,
         string? currentStage, DomainGuardAxes axes) {
+        // A self-invoke steps the callee's body here (ApplyInvoke), so this walk's depth follows an invoke
+        // chain (#1115): a chain deeper than the thread's stack is a typed failure, never an abort.
+        ExecutionStack.Ensure();
         foreach (var effect in effects) {
             switch (effect) {
                 case AssignEffect { Target: PropertyAccess target } assign: {

@@ -10,6 +10,9 @@ public interface INodeAnalyzer {
 
 public static class NodeAnalyzerExtensions {
     public static void AnalyzeChildren(this INodeAnalyzer analyzer, AnalysisContext context, Node node) {
+        // The pass dispatch is one level per node: a document deeper than the thread's stack is a typed failure,
+        // never an abort (#882).
+        ExecutionStack.Ensure();
         foreach (var child in node.Children) {
             if (child is null)
                 continue;

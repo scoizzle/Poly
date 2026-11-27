@@ -977,7 +977,8 @@ Statements may nest at most 64 levels: the level of an `if` or `for` is the numb
 is one level below the rung before it (it is a nested `if`). A statement at level 65 is a positioned
 parse error (`DSL0001`, "statement nesting exceeds the limit of 64") on its `if` or `for` keyword,
 not a crash, however deep the input goes. Like the expression limit, it is a parse limit, not a
-stack guarantee for the steps after the parse.
+stack guarantee for the steps after the parse (see *Expressions*, where the compiler's own stack
+and the typed failure for one that is still too small are described).
 
 ### Invoke
 
@@ -1293,7 +1294,10 @@ comparison operand, `where` body or call/match argument adds 1, while a chain of
 adds N - 1, and so does a path of N words (`a b c` is one navigation per word after the first).
 Deeper input is a positioned parse error, not a crash, and the parser enforces the limit without
 depending on the host's stack size. That is a guarantee about parsing only: the steps after the
-parse (analysis, compile, export) still walk the tree and need enough stack for it.
+parse (analysis, compile, export) still walk the tree and need enough stack for it. The compiler
+runs those steps on a stack of its own, so a legal document compiles from any caller thread; a
+direct `session.Lower` or `DomainDslPrinter` walk on a thread too small for the tree fails with
+`DSL0004` naming the stack, never a process abort.
 Statements have their own limit of 64 levels (§6).
 
 Valid expressions:

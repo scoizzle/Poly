@@ -6,6 +6,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <LangVersion>latest</LangVersion>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- ExecutionStack reads the calling frame's stack address to budget the ABI compile (#1115). -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <OutputType>Library</OutputType>
         <RootNamespace>Poly</RootNamespace>
 

@@ -773,20 +773,15 @@ public static partial class AbiEmitter {
     private static readonly object AstCallableGate = new();
     private static readonly ConditionalWeakTable<Node, Dictionary<CompilationMode, Action<VmState>[]>> AstCallables = new();
 
-    // How many AST callables this thread is compiling into the frame it started from (#1115). The
-    // emitter inlines each invoked body, so this follows an invoke chain; past
-    // MaxInlineInvokeFrames the chain is refused with a typed failure rather than recursing into the
-    // stack overflow the old remaining-stack probe could not reliably prevent.
-    [ThreadStatic] private static int _astInlineDepth;
-
     /// <summary>
     /// The most actions one invoke chain may hold (#1115). An invoked action's body is compiled into
-    /// the caller's frame, so compile depth follows the chain; this counted limit is well below the
-    /// ~344 links at which the 16 MB compile stack overflows (measured in Debug). Each action in the
-    /// chain contributes two inline frames (its wrapper and its <c>__BodyOf</c> body), which is what
-    /// <see cref="MaxInlineInvokeFrames"/> counts.
+    /// the caller's frame, so compile depth follows the chain. This counted limit is a cheap early refusal
+    /// for the plain chain only: how much stack a link spends depends on how deeply its invoke is nested,
+    /// so <see cref="Poly.Analysis.ExecutionStack.EnsureCompileFrame"/> bounds the actual stack use and
+    /// can refuse a nested chain at fewer links. Each action contributes two inline frames (its wrapper
+    /// and its <c>__BodyOf</c> body), which is what <see cref="MaxInlineInvokeFrames"/> counts.
     /// </summary>
-    public const int MaxInvokeChainActions = 256;
+    internal const int MaxInvokeChainActions = 256;
 
     /// <summary>The inline-frame budget: an action's wrapper plus its body.</summary>
     private const int MaxInlineInvokeFrames = MaxInvokeChainActions * 2;
@@ -1127,17 +1122,17 @@ public static partial class AbiEmitter {
             if (ReferenceEquals(entry.Key, key) && entry.Mode == mode)
                 return entry.Slot;
         }
-        // The compile started from link 1, so this callee is link _astInlineDepth + 2. A chain past
+        // The compile started from link 1, so this callee is link pending.Count + 2. A chain past
         // the counted limit is refused here, before more frames are pushed (#1115).
-        if (_astInlineDepth + 2 > MaxInlineInvokeFrames)
+        if (pending.Count + 2 > MaxInlineInvokeFrames)
             throw new InvokeChainTooDeepException(
                 "VM compile rejected: the invoke chain is too deep — the simulator inlines invoked bodies and stops at "
                 + $"{MaxInvokeChainActions} actions{CallableName(key)}. Shorten the chain.");
 
         var start = pending.Count;
+        var outermost = start == 0;
         var slot = new Action<VmState>[1];
         pending.Add((key, mode, slot));
-        _astInlineDepth++;
         try {
             var lambdas = new List<Lambda>();
             CollectLambdas(body, lambdas);
@@ -1170,14 +1165,12 @@ public static partial class AbiEmitter {
                 asyncReturn,
                 iteratorElement);
         }
-        catch (Exception ex) {
+        catch (Exception ex) when (
+            ex is (InvalidOperationException or NotSupportedException)
+            and not (UnresumableBodyRejection or InvokeChainTooDeepException)) {
             // Drop this slot and everything compiled under it: those bodies may
             // call this slot, which stays empty.
             pending.RemoveRange(start, pending.Count - start);
-            if (ex is UnresumableBodyRejection or InvokeChainTooDeepException)
-                throw;
-            if (ex is not (InvalidOperationException or NotSupportedException))
-                throw;
             // An IsAsync method's body must compile: falling back to a CLR lookup of the same
             // name would run a different method. Surface the body's compile reject instead.
             if (asyncReturn is not null || iteratorElement is not null)
@@ -1191,11 +1184,16 @@ public static partial class AbiEmitter {
             rejection = ex.Message;
             return null;
         }
-        finally {
-            _astInlineDepth--;
+        catch (Exception) when (outermost) {
+            // An exception thrown at depth (a compile refusal or an out-of-stack stop) unwinds through every
+            // enclosing call. No handler runs below the outermost one: the stack is nearly spent, and a
+            // per-level catch/rethrow would need stack to run exactly where there is none (#1115). The
+            // outermost call drops the whole pending set, whose slots stay empty.
+            pending.Clear();
+            throw;
         }
 
-        if (start == 0) {
+        if (outermost) {
             lock (AstCallableGate) {
                 foreach (var (k, m, s) in pending)
                     AstCallables.GetOrCreateValue(k)[m] = s;

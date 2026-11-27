@@ -88,7 +88,7 @@ internal class PremiumPatron : Poly.Runtime.IActionScoped
         db.Record("PremiumPatron", "Email", __email);
         return DomainResult<PremiumPatron>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

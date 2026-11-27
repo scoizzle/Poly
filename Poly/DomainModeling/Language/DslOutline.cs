@@ -57,6 +57,29 @@ public sealed class DslOutline {
     }
 
     /// <summary>
+    /// Finds the node for a domain element path (<c>Domain/Entity/Member…</c>). The outline spells
+    /// paths with dots and the domain with slashes, so this walks by name segment and never
+    /// compares the two spellings. Returns null when not even the first segment after the domain
+    /// name is found.
+    /// </summary>
+    public OutlineNode? Locate(string domainPath) {
+        ArgumentNullException.ThrowIfNull(domainPath);
+        var segments = domainPath.Split('/');
+        IReadOnlyList<OutlineNode> level = Roots;
+        OutlineNode? found = null;
+        foreach (var segment in segments.Skip(1)) {
+            var next = level.FirstOrDefault(n =>
+                string.Equals(n.Name, segment, StringComparison.Ordinal)
+                && n.Kind is not ("domain" or "uses"));
+            if (next is null)
+                break;
+            found = next;
+            level = next.Children;
+        }
+        return found;
+    }
+
+    /// <summary>
     /// Checks that an edit fragment is exactly one balanced declaration. A member fragment must
     /// start at a member (or, with <paramref name="topLevel"/>, at a top-level declaration); the
     /// returned positions are relative to the fragment, so they are never document lines.

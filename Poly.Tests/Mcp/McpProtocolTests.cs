@@ -59,10 +59,15 @@ public class McpProtocolTests {
             ("a wrong-typed steps with no workspace names steps", "poly_simulate",
                 new JsonObject { ["steps"] = 42 },
                 "INVALID_ARGUMENT", ["steps"]),
-            // #488's repro. M-07 widens `steps` to array-or-string and inverts this assertion.
-            ("steps as a JSON array is invalid until M-07 accepts arrays", "poly_simulate",
-                new JsonObject { ["workspace"] = workspace, ["steps"] = new JsonArray() },
-                "INVALID_ARGUMENT", ["steps", "string"]),
+            // #488's repro is inverted below (`Simulate_StepsAsArray_RunsTheSameScenarioAsItsJsonText`):
+            // M-07 widens `steps` to array-or-string, so the refusal this row used to pin now
+            // covers the JSON kinds that union still does not take.
+            ("steps as a boolean is the wrong type", "poly_simulate",
+                new JsonObject { ["workspace"] = workspace, ["steps"] = true },
+                "INVALID_ARGUMENT", ["steps", "array or string"]),
+            ("steps: null is not a step list", "poly_simulate",
+                new JsonObject { ["workspace"] = workspace, ["steps"] = null },
+                "INVALID_ARGUMENT", ["steps", "array or string"]),
             // Green on master: the unknown-name error is not folded into INVALID_ARGUMENT.
             ("an unknown argument still names the valid ones", "poly_guide",
                 new JsonObject { ["bogus"] = 1 },
@@ -89,6 +94,51 @@ public class McpProtocolTests {
         var nullTopic = await host.ToolAsync("poly_guide", JsonNode.Parse("""{"topic":null}""")!.AsObject());
         await Assert.That(nullTopic["ok"]?.GetValue<bool>()).IsTrue();
     }
+
+    /// <summary>
+    /// #488: an agent's natural `steps` is the array the description names, not its escaped JSON
+    /// text. M-07 publishes `steps` as array-or-string and both forms are one scenario — this was
+    /// pinned invalid until then, so the assertion is inverted rather than deleted: the refusal
+    /// for a JSON kind the union does not take lives on in the number, boolean and null rows above.
+    /// </summary>
+    [Test]
+    public async Task Simulate_StepsAsArray_RunsTheSameScenarioAsItsJsonText() {
+        using var host = await PolycProcess.McpAsync(TimeSpan.FromSeconds(20));
+        await host.InitializeAsync();
+        var workspace = await OpenWorkspaceAsync(host);
+        await host.ToolAsync("poly_define", new JsonObject { ["workspace"] = workspace, ["poly"] = Valid });
+
+        // The second step reaches the first through its alias, so the trace only matches when the
+        // array really ran as steps instead of being echoed back as an unparsed value.
+        var steps = new JsonArray(
+            JsonNode.Parse("""{"op":"create","entity":"Product","properties":{"Total":42},"as":"p"}""")!,
+            JsonNode.Parse("""{"op":"get","instanceId":"p"}""")!);
+        var arrayForm = await SimulateAsync(host, workspace, steps.DeepClone());
+        var textForm = await SimulateAsync(host, workspace, steps.ToJsonString());
+
+        await Assert.That(arrayForm["ok"]?.GetValue<bool>()).IsTrue()
+            .Because($"the array form must run, not be refused: {arrayForm.ToJsonString()}");
+        await Assert.That(arrayForm["data"]!["count"]!.GetValue<int>()).IsEqualTo(2);
+        await Assert.That(arrayForm["data"]!["failedAt"]).IsNull();
+        await Assert.That(Outcomes(arrayForm)).IsEqualTo("create:True,get:True")
+            .Because("the get resolves the alias the create bound");
+        await Assert.That(Outcomes(textForm)).IsEqualTo(Outcomes(arrayForm))
+            .Because("an array and its JSON text are the same scenario");
+
+        // A step that is not an object is the body's failure in either form, never the wire's.
+        var badArray = await SimulateAsync(host, workspace, JsonNode.Parse("[1]")!);
+        var badText = await SimulateAsync(host, workspace, JsonValue.Create("[1]")!);
+        await Assert.That(badArray["data"]!["failedAt"]!.GetValue<int>()).IsEqualTo(0);
+        await Assert.That(badText["data"]!["failedAt"]!.GetValue<int>()).IsEqualTo(0);
+        await Assert.That(badArray["data"]!["trace"]!.ToJsonString())
+            .IsEqualTo(badText["data"]!["trace"]!.ToJsonString());
+    }
+
+    private static Task<JsonNode> SimulateAsync(McpClient host, string workspace, JsonNode steps) =>
+        host.ToolAsync("poly_simulate", new JsonObject { ["workspace"] = workspace, ["steps"] = steps });
+
+    private static string Outcomes(JsonNode result) => string.Join(",", result["data"]!["trace"]!.AsArray()
+        .Select(step => $"{step!["op"]!.GetValue<string>()}:{step["ok"]!.GetValue<bool>()}"));
 
     /// <summary>N1: a missing workspace is reported only when every other argument is well-formed.</summary>
     [Test]
@@ -305,7 +355,6 @@ public class McpProtocolTests {
 
     [Test]
     public async Task Validator_RejectsEveryWrongJsonKind_WithTheExpectedType() {
-        var surface = new PolySurfaceTools(McpTestTools.Store, NullLogger<PolySurfaceTools>.Instance);
         var tools = typeof(PolySurfaceTools).GetMethods()
             .Select(method => (Method: method, Attribute: method.GetCustomAttribute<McpServerToolAttribute>()))
             .Where(pair => pair.Attribute?.Name is not null)
@@ -313,7 +362,7 @@ public class McpProtocolTests {
         await Assert.That(tools.Count).IsEqualTo(7);
 
         foreach (var (method, attribute) in tools) {
-            var tool = McpServerTool.Create(method, surface, new McpServerToolCreateOptions());
+            var tool = PolySurfaceTools.McpTools().Single(candidate => candidate.ProtocolTool.Name == attribute!.Name);
             var spec = ArgumentSpecCatalog.For(tool);
             foreach (var argument in spec) {
                 var wrong = WrongValue(argument.JsonTypes);
@@ -345,12 +394,8 @@ public class McpProtocolTests {
             .Because($"{exception.GetType().Name}: {exception.Message}");
     }
 
-    private static McpServerTool ToolFor(string name) {
-        var surface = new PolySurfaceTools(McpTestTools.Store, NullLogger<PolySurfaceTools>.Instance);
-        var method = typeof(PolySurfaceTools).GetMethods()
-            .Single(candidate => candidate.GetCustomAttribute<McpServerToolAttribute>()?.Name == name);
-        return McpServerTool.Create(method, surface, new McpServerToolCreateOptions());
-    }
+    private static McpServerTool ToolFor(string name) =>
+        PolySurfaceTools.McpTools().Single(tool => tool.ProtocolTool.Name == name);
 
     private static Dictionary<string, JsonElement> Args(params (string Name, JsonElement Value)[] entries) =>
         entries.ToDictionary(entry => entry.Name, entry => entry.Value, StringComparer.Ordinal);

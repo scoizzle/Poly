@@ -301,7 +301,7 @@ public class PolySurfaceV2Tests {
               {"op":"get","instanceId":"p1"}
             ]
             """;
-        var response = surface.Simulate(workspace, steps);
+        var response = surface.Simulate(workspace, JsonSerializer.SerializeToElement(steps));
 
         var data = JsonSerializer.SerializeToNode(response.Data)!;
         await Assert.That(response.Ok).IsTrue();
@@ -344,11 +344,11 @@ public class PolySurfaceV2Tests {
         var workspace = Open(surface);
         await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
         var created = surface.Simulate(workspace,
-            """[{"op":"create","entity":"Product","properties":{"Total":1}}]""");
+            JsonSerializer.SerializeToElement("""[{"op":"create","entity":"Product","properties":{"Total":1}}]"""));
         await Assert.That(created.State!.Instances).IsEqualTo(1);
         var revision = created.State.Revision;
 
-        var rejected = surface.Simulate(workspace, "not json", reset: true);
+        var rejected = surface.Simulate(workspace, JsonSerializer.SerializeToElement("not json"), reset: true);
 
         await Assert.That(rejected.Ok).IsFalse();
         await Assert.That(rejected.State!.Instances).IsEqualTo(1);
@@ -361,7 +361,7 @@ public class PolySurfaceV2Tests {
         var workspace = Open(surface);
         await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
 
-        var response = surface.Simulate(workspace, """["create"]""");
+        var response = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""["create"]"""));
 
         await Assert.That(response.Ok).IsTrue();
         var data = JsonSerializer.SerializeToNode(response.Data)!;
@@ -410,7 +410,7 @@ public class PolySurfaceV2Tests {
             """);
         await Assert.That(defined.Ok).IsTrue();
 
-        var response = surface.Simulate(workspace, """
+        var response = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""
             [
               {"op":"create","entity":"Order","properties":{"Total":10},"as":"o"},
               {"op":"create","entity":"Line","properties":{"Sku":"A"},"as":"l"},
@@ -421,7 +421,7 @@ public class PolySurfaceV2Tests {
               {"op":"unlink","sourceInstanceId":"o","relationship":"lines","targetInstanceId":"l"},
               {"op":"list","entity":"Line"}
             ]
-            """);
+            """));
 
         var data = JsonSerializer.SerializeToNode(response.Data)!;
         await Assert.That(response.Ok).IsTrue();
@@ -449,31 +449,31 @@ public class PolySurfaceV2Tests {
             """);
         await Assert.That(defined.Ok).IsTrue();
 
-        var stopped = surface.Simulate(workspace, """
+        var stopped = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""
             [
               {"op":"create","entity":"Task","properties":{"Locked":true,"Attempts":0},"as":"t"},
               {"op":"invoke","instanceId":"t","action":"Run"},
               {"op":"get","instanceId":"t"}
             ]
-            """);
+            """));
         var stoppedData = JsonSerializer.SerializeToNode(stopped.Data)!;
         await Assert.That(stopped.Ok).IsTrue();
         await Assert.That(stoppedData["trace"]!.AsArray().Count).IsEqualTo(2)
             .Because("the guard-blocked invoke is a failed step and stopOnError defaults true");
         await Assert.That(stoppedData["failedAt"]!.GetValue<int>()).IsEqualTo(1);
 
-        var reset = surface.Simulate(workspace, """[{"op":"list","entity":"Task"}]""", reset: true);
+        var reset = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""[{"op":"list","entity":"Task"}]"""), reset: true);
         var resetData = JsonSerializer.SerializeToNode(reset.Data)!;
         await Assert.That(resetData["trace"]![0]!["data"]!["count"]!.GetValue<int>()).IsEqualTo(0)
             .Because("reset clears instances before the steps run");
 
-        var continued = surface.Simulate(workspace, """
+        var continued = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""
             [
               {"op":"create","entity":"Task","properties":{"Locked":false,"Attempts":0},"as":"t"},
               {"op":"invoke","instanceId":"t","action":"Run"},
               {"op":"get","instanceId":"t"}
             ]
-            """, stopOnError: false);
+            """), stopOnError: false);
         var continuedData = JsonSerializer.SerializeToNode(continued.Data)!;
         await Assert.That(continuedData["trace"]!.AsArray().Count).IsEqualTo(3);
         await Assert.That(continuedData["failedAt"]).IsNull();
@@ -520,9 +520,8 @@ public class PolySurfaceV2Tests {
             .ToList();
         await Assert.That(tools.Count).IsEqualTo(7);
 
-        var surface = Surface();
         foreach (var (method, attribute) in tools) {
-            var tool = McpServerTool.Create(method, surface, new McpServerToolCreateOptions());
+            var tool = PolySurfaceTools.McpTools().Single(candidate => candidate.ProtocolTool.Name == attribute!.Name);
             var spec = ArgumentSpecCatalog.Map(attribute!.Name!, tool.ProtocolTool.InputSchema);
             var parameters = method.GetParameters()
                 .Select(parameter => parameter.Name!)
@@ -545,6 +544,25 @@ public class PolySurfaceV2Tests {
                     .Because($"{attribute.Name}.workspace required-ness follows its signature");
             }
         }
+    }
+
+    /// <summary>
+    /// #488: `steps` publishes the array an agent writes beside the JSON text the binder takes,
+    /// and that union is what makes the pre-binder validator accept one. The transform must not
+    /// drop the description or the required-ness the signature carries.
+    /// </summary>
+    [Test]
+    public async Task Simulate_StepsArgument_PublishesTheArrayAndTheTextForm() {
+        var tool = PolySurfaceTools.McpTools().Single(candidate => candidate.ProtocolTool.Name == "poly_simulate");
+        var steps = ArgumentSpecCatalog.Map("poly_simulate", tool.ProtocolTool.InputSchema)
+            .Single(argument => argument.Name == "steps");
+
+        await Assert.That(steps.Required).IsTrue();
+        await Assert.That(string.Join(",", steps.JsonTypes.OrderBy(type => type, StringComparer.Ordinal)))
+            .IsEqualTo("array,string");
+
+        var published = tool.ProtocolTool.InputSchema.GetProperty("properties").GetProperty("steps");
+        await Assert.That(published.GetProperty("description").GetString()).Contains("both run the same scenario");
     }
 
     [Test]

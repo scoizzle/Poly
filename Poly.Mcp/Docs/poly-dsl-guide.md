@@ -2473,6 +2473,11 @@ What an author or a client may rely on in this release, what may still change, a
 ### Stable
 
 - **The DSL** as this guide documents it.
+- **An invoke chain nested at most 256 actions deep**: the simulator compiles each invoked body into its caller's
+  frame. The depth is a cheap early refusal for a plain chain; a chain's real cost is stack, so the compile also
+  budgets the parse thread's stack and refuses a deeply nested chain sooner with the same typed failure. A wide
+  fan-out (one action invoking hundreds of others, or a broad tree) shares one depth and is not refused. Every
+  refusal says the chain is too deep and to shorten it, never aborting the process (a legal 200-link plain chain runs).
 - **The JSON body of an entity**: its declared scalars (camel-cased member names) and, when the entity has stages,
   `currentStage`. A `Binary` member is base64, System.Text.Json's own `byte[]` encoding (#905).
 - **The HTTP failure shape**: a failure the domain raises is ProblemDetails whose `title` is the failure kind (see

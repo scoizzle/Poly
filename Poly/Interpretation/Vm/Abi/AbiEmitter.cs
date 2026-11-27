@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Analysis;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
@@ -272,6 +273,9 @@ public static partial class AbiEmitter {
     /// location, and a consumer that needs one asks with
     /// <see cref="CompiledNode.RequireResult"/>, which fails closed.</summary>
     private static CompiledNode Compile(Node node, Context ctx) {
+        // The emitter recurses once per tree level and once per inlined callee; both are unbounded by a counted
+        // limit, so the compile refuses before the parse thread's stack runs out (#1115).
+        ExecutionStack.EnsureCompileFrame();
         if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
             return Compile(replacement, ctx);
         int entryDepth = ctx.RingDepth;

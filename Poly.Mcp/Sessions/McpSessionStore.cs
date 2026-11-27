@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Runtime;
 using Poly.Packs.Product;
 
@@ -92,17 +93,23 @@ internal sealed record McpSessionState(
     private (DomainSession Session, AnalysisResult Analysis) EnsureExecution() {
         if (_execution.HasValue)
             return _execution.Value;
-        var ids = Domain.Extensions.ToList();
-        var hasOverlay = ids.Any(id => id is "persistence" or "sqlite" or "sqlserver");
-        var session = hasOverlay
-            ? Modeling
-            : DomainSession.ForExtensions([.. ids, "persistence"], ProductCatalog.Model);
-        var analysis = session.Analyze(Domain);
-        // Publish the pair before lowering: lowering refuses a domain whose execution analysis has
-        // errors, and a caller that catches the throw still needs this analysis to report why.
-        _execution = (session, analysis);
-        RuntimeAnalysisCache.GetOrLower(Domain, session, analysis);
-        return _execution.Value;
+        // poly_define analyzes on the 16 MB parse stack (PolyCompiler.Analyze), so a document it
+        // accepts — a nested invoke chain, say — is deeper than a request thread's remaining stack.
+        // Analyze and lower on the same parse stack here, or the first simulate step re-analyzes the
+        // same document on the request thread and refuses what define accepted (#1115).
+        return DslLimits.RunOnParseStack(() => {
+            var ids = Domain.Extensions.ToList();
+            var hasOverlay = ids.Any(id => id is "persistence" or "sqlite" or "sqlserver");
+            var session = hasOverlay
+                ? Modeling
+                : DomainSession.ForExtensions([.. ids, "persistence"], ProductCatalog.Model);
+            var analysis = session.Analyze(Domain);
+            // Publish the pair before lowering: lowering refuses a domain whose execution analysis has
+            // errors, and a caller that catches the throw still needs this analysis to report why.
+            _execution = (session, analysis);
+            RuntimeAnalysisCache.GetOrLower(Domain, session, analysis);
+            return _execution.Value;
+        });
     }
 
     /// <summary>The executor if one exists; read-only paths use it so they never lower.</summary>

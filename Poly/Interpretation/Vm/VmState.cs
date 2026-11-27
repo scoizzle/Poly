@@ -14,7 +14,7 @@ public sealed class VmState : IDisposable {
 
     /// <summary>The pooled value stack for scalars and heap handles.
     /// Backed by <see cref="ArrayPool{long}"/>.</summary>
-    public VmValueStack Stack { get; } = new();
+    public VmValueStack Stack { get; }
 
     /// <summary>Current program counter (µop index) for debug/trace
     /// purposes. Updated by the compiled delegate in Debug/Normal mode.
@@ -80,8 +80,14 @@ public sealed class VmState : IDisposable {
     /// The state owns a pooled <see cref="VmValueStack"/> and a
     /// <see cref="Heap"/> — dispose when done to return pool buffers.</summary>
     /// <param name="program">The compiled program to execute.</param>
-    public VmState(VmProgram program) {
+    /// <param name="valueStackSlots">Slots the value stack starts with. A frame cannot grow the backing array
+    /// under the frames already on it (<see cref="VmCall"/>'s contract: every live frame caches its array), so
+    /// a program whose call chain needs more slots than this is sized up front by its host. The stack's depth
+    /// guard still refuses a chain past the buffer's extent.</param>
+    public VmState(VmProgram program, int valueStackSlots = 256) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(valueStackSlots);
         Program = program;
+        Stack = new VmValueStack(valueStackSlots);
     }
 
     /// <summary>Seeds top-level arguments on the value stack. Reference-type

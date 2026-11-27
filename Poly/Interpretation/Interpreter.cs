@@ -215,8 +215,16 @@ public static class Interpreter {
     /// can set state properties (e.g. <c>MaxLoopIterations</c>) and
     /// call <c>state.SetArgs(...)</c> to seed arguments.
     /// </summary>
-    public static ExecutionResult Execute(VmProgram program, Action<VmState> configure) {
-        var state = new VmState(program);
+    public static ExecutionResult Execute(VmProgram program, Action<VmState> configure) =>
+        Execute(program, configure, valueStackSlots: 256);
+
+    /// <inheritdoc cref="Execute(VmProgram, Action{VmState})"/>
+    /// <param name="valueStackSlots">Slots the value stack starts with, for a program whose call chain a host
+    /// knows is deep. A live frame caches the backing array, so the buffer is sized before execution rather
+    /// than grown under it.</param>
+    public static ExecutionResult Execute(
+        VmProgram program, Action<VmState> configure, int valueStackSlots) {
+        var state = new VmState(program, valueStackSlots);
         configure(state);
         state.Status = InterpreterStatus.Running;
         state.Program.Delegate(state);

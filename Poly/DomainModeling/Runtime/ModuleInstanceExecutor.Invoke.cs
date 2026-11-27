@@ -1,3 +1,4 @@
+using Poly.Interpretation.Vm.Abi;
 using Poly.Runtime;
 
 namespace Poly.DomainModeling.Runtime;
@@ -55,11 +56,24 @@ public sealed partial class ModuleInstanceExecutor {
                 try {
                     ran = Run(target.EntityName, method, target.Bag, callArgs);
                 }
+                catch (InsufficientExecutionStackException) {
+                    // #1115: the compile thread ran out of stack before the emitter's counted limit could stop it, or a
+                    // chain deeper than that stack. A typed failure, never the process abort a stack overflow is.
+                    throw new HostException(
+                        $"Action '{actionName}' has an invoke chain too deep for the simulator to compile or run. "
+                        + "Nothing ran; shorten the chain.");
+                }
+                catch (AbiEmitter.InvokeChainTooDeepException ex) {
+                    // #1115: the emitter's counted inline depth refused the chain. Its message already names the limit.
+                    throw new HostException(ex.Message);
+                }
                 catch (InvalidOperationException ex) when (
                     ex.Message.Contains("value stack overflow", StringComparison.Ordinal)) {
+                    // A legal acyclic chain that the run's own depth guard stopped: this is depth, not recursion (the
+                    // analyzer refuses every invoke cycle at define), so the message must not call it a cycle (#1115).
                     throw new HostException(
-                        $"Action invoke depth exceeded while calling '{actionName}'. "
-                        + "Possible recursive invoke cycle (e.g. action → invoke self, or OnEntry → invoke → transition loops).");
+                        $"Action invoke depth exceeded while calling '{actionName}': the invoke chain is too deep for "
+                        + "the simulator's value stack. Nothing ran; shorten the chain.");
                 }
                 if (ran is not IDomainResult result)
                     throw new InvalidOperationException(

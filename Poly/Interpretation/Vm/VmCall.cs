@@ -12,6 +12,11 @@ namespace Poly.Interpretation.Vm;
 /// Runtime calls (<see cref="Invoke"/>) and emitted function bodies agree on this
 /// layout: <c>FramePos</c> is the first argument slot, a parameter is read at
 /// <c>FramePos + index</c>, and the result is written to <c>slots[FramePos]</c>.
+/// A call that returns restores the frame state; a call that throws abandons the
+/// run, and <see cref="Interpreter"/> restores it once at the entry point. A
+/// catch-and-rethrow in this frame would make a deep unwind cost thousands of bytes
+/// per live level, so the refusal thrown for a chain too deep could overflow the very
+/// stack it protects (#1115).
 /// </remarks>
 internal static class VmCall {
     /// <summary>Previous FP and saved SP precede the argument slots.</summary>
@@ -93,7 +98,8 @@ internal static class VmCall {
 
     /// <summary>Run <paramref name="function"/> in a new frame and return the result
     /// it wrote at <c>slots[FramePointer]</c>. Restores the frame pointer, closure,
-    /// and stack pointer even when the body throws.</summary>
+    /// and stack pointer when the body returns; a body that throws abandons the run,
+    /// and <see cref="Interpreter"/> restores the entry state once.</summary>
     public static long Invoke(
         VmState state, Action<VmState> function, ReadOnlySpan<long> args, int closureHandle = 0) {
         // A nested call recurses on the CLR stack, so an invoke chain's depth is bounded by what the calling
@@ -122,18 +128,10 @@ internal static class VmCall {
         int framePos = FramePointer(callSp);
         state.FramePos = framePos;
         state.ClosureHandle = closureHandle;
-        // A catch-and-rethrow rather than try/finally: the restore then runs inline on the
-        // normal path, which is the only path a hot loop takes. A finally is emitted as a
-        // funclet call even when nothing threw — a second prologue and epilogue per frame.
-        try {
-            function(state);
-        }
-        catch {
-            state.FramePos = savedFp;
-            state.ClosureHandle = savedClosure;
-            stack.SetStackPointer(callSp);
-            throw;
-        }
+        // No catch here. A catch-and-rethrow at every live frame makes an unwind cost thousands of bytes per level,
+        // so a depth refusal thrown 1,365 links deep aborted the stack it was protecting on linux/amd64 (#1115);
+        // the entry point restores the frame state once instead.
+        function(state);
         long result = slots[framePos];
         state.FramePos = savedFp;
         state.ClosureHandle = savedClosure;

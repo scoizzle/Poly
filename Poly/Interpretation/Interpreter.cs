@@ -227,8 +227,26 @@ public static class Interpreter {
         var state = new VmState(program, valueStackSlots);
         configure(state);
         state.Status = InterpreterStatus.Running;
-        state.Program.Delegate(state);
+        RunDelegate(state);
         return new ExecutionResult(state, InterpretResult(state));
+    }
+
+    /// <summary>
+    /// Runs the compiled delegate and restores the entry frame state once if it throws. A failed run abandons its
+    /// frames, so this is the one place the restore is needed: a catch-and-rethrow in every call frame
+    /// (<see cref="VmCall"/>) made an unwind cost thousands of bytes per live level, so a depth refusal thrown deep
+    /// in an invoke chain overflowed the stack it was protecting (#1115).
+    /// </summary>
+    private static void RunDelegate(VmState state) {
+        try {
+            state.Program.Delegate(state);
+        }
+        catch {
+            state.FramePos = 0;
+            state.ClosureHandle = 0;
+            state.Stack.Reset();
+            throw;
+        }
     }
 
     // ── Shared implementation ─────────────────────────────────────
@@ -238,7 +256,7 @@ public static class Interpreter {
     /// created). Internal — tests and resumption scenarios only.
     /// </summary>
     internal static void Execute(VmState state) {
-        state.Program.Delegate(state);
+        RunDelegate(state);
     }
 
     /// <summary>
@@ -249,7 +267,7 @@ public static class Interpreter {
     internal static InterpreterResult Resume(VmState state, params IEnumerable<object?> args) {
         state.Status = InterpreterStatus.Resuming;
         state.SetArgs(args);
-        state.Program.Delegate(state);
+        RunDelegate(state);
         return InterpretResult(state);
     }
 

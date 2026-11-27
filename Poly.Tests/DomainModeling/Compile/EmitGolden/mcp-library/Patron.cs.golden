@@ -67,6 +67,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._loans.Add(child);
+        child.AttachPatron(this);
         child.RegisterPatronLoansOverdueSubscriber(this);
     }
     internal DomainResult<Fine> CreateFines(long? amount = default, string? reason = default)
@@ -192,6 +193,17 @@ internal class Patron : Poly.Runtime.IActionScoped
         var created = new Patron(__name, __status, loans, fines);
         Poly.Runtime.ActionScope.Create(created, "Patron");
         created.InitializeSubscriptions();
+        if (loans != null)
+        {
+            foreach (var __child in loans)
+            {
+                if (__child.Patron != null && __child.Patron != created)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'loans': the child's 'patron' is already set to another owner.", "Patron.loans"));
+                }
+                __child.AttachPatron(created);
+            }
+        }
         return DomainResult<Patron>.Success(created);
     }
     private void InitializeSubscriptions()

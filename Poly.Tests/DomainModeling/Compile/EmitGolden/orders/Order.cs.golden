@@ -40,10 +40,16 @@ internal class Order : Poly.Runtime.IActionScoped
         get => this._items;
     }
     public OrderStage CurrentStage { get; private set; }
+    internal void AttachCustomer(Customer child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Customer = child;
+    }
     internal void AttachItems(OrderItem child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._items.Add(child);
+        child.AttachOrder(this);
     }
     internal DomainResult Cancel(string reason)
     {
@@ -267,6 +273,17 @@ internal class Order : Poly.Runtime.IActionScoped
         if (customer != null)
         {
             customer.AttachOrders(created);
+        }
+        if (items != null)
+        {
+            foreach (var __child in items)
+            {
+                if (__child.Order != null && __child.Order != created)
+                {
+                    return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'items': the child's 'order' is already set to another owner.", "Order.items"));
+                }
+                __child.AttachOrder(created);
+            }
         }
         return DomainResult<Order>.Success(created);
     }

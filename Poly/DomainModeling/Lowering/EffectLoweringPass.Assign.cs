@@ -43,10 +43,10 @@ public sealed partial class EffectLoweringPass {
         // only on the present branch, so an unlinked hop is never dereferenced.
         var presence = _expressionPass.PresenceOf(a.Value, Subject);
         var requiredTarget = assignProp is not null && EntityStructureAnalyzer.IsRequired(assignProp);
+        var optionalMatch = ContainsOptionalMatch(a.Value);
         // A match over an absent-able arm lowers to an optional local; the guard above proves it has a value,
         // so the present branch writes the target's own type (the word the printed module declares).
-        if (requiredTarget && presence.ThroughHop && presence.Guard is not null
-            && ContainsOptionalMatch(a.Value))
+        if (requiredTarget && presence.Guard is not null && optionalMatch)
             value = value with {
                 Value = new TypeCast(value.Value,
                     DomainToCSharpExporter.MapDomainTypeRef(assignProp!.Type, _domain, _analysis))
@@ -65,7 +65,7 @@ public sealed partial class EffectLoweringPass {
                 uniqueName,
                 _expressionPass.MayBeAbsent(a.Value, name => _binderEntities?.GetValueOrDefault(name)));
 
-        if (presence.ThroughHop && presence.Guard is not null) {
+        if (presence.Guard is not null && (presence.ThroughHop || (requiredTarget && optionalMatch))) {
             Node absent = requiredTarget
                 ? AssignConstraintFailure(ConstraintCheckWriter.FailureSpec(
                     ConstraintCheckWriter.RequiredCheck(assignProp!.Name, new Constant(null)),

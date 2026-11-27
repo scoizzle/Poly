@@ -1468,6 +1468,9 @@ treats it that way (#936):
   while the optional date is absent;
 - an `assign` into an `optional` target stores absent (`assign Note to advisor Name` leaves `Note` null); into a
   required target it fails `Required` (`'Target' is required.`) and changes nothing;
+- a `match` whose **selected** arm reads it is absent, exactly as that read is outside the `match`, while an arm
+  that does not read the hop is present (`match { Flag -> advisor Score, else -> 1 }` is `1` while the advisor is
+  unlinked, and `Required` into a required target when `Flag` is true);
 - an `invoke Rel.Action` on an unlinked link stays a `Required` refusal: there is no instance to run the action on,
   and a silent no-op would skip an effect the document asked for.
 

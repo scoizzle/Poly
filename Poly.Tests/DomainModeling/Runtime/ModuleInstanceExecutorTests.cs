@@ -82,6 +82,32 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(executor.Storage.Exists("Widget", "Code", "A")).IsFalse();
     }
 
+    /// <summary>
+    /// X-11 (#793): a parameterised action's bound body must be the same tree on every invoke,
+    /// so the executor's compiled-body cache hits. Binding per call built a fresh tree, and the
+    /// reference check never matched: every invoke re-analyzed and re-compiled.
+    /// </summary>
+    [Test]
+    public async Task Invoke_ParameterisedAction_CompilesOnceAcrossInvokes() {
+        var executor = ExecutorFor(Unique);
+        var widget = executor.Create("Widget", Values(("Code", "A"))).Instance!;
+
+        var first = executor.Invoke(widget, "Relabel", Values(("code", "B")));
+        await Assert.That(first.Succeeded).IsTrue().Because(first.Error ?? "");
+        var body = executor.CompiledBodyFor("Widget", "Relabel");
+        await Assert.That(body).IsNotNull();
+        var compiles = executor.CompileCount;
+
+        for (var i = 0; i < 3; i++) {
+            var again = executor.Invoke(widget, "Relabel", Values(("code", $"C{i}")));
+            await Assert.That(again.Succeeded).IsTrue().Because(again.Error ?? "");
+        }
+
+        await Assert.That(executor.CompileCount).IsEqualTo(compiles);
+        await Assert.That(ReferenceEquals(executor.CompiledBodyFor("Widget", "Relabel"), body)).IsTrue();
+        await Assert.That(widget.Bag["Code"]).IsEqualTo("C2");
+    }
+
     [Test]
     public async Task Invoke_UniqueCollision_FailsAndLeavesBagAndPortUnchanged() {
         var executor = ExecutorFor(Unique);

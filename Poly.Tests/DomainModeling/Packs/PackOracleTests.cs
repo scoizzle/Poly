@@ -220,16 +220,21 @@ public class PackOracleTests {
         await Assert.That(json.RootElement.ValueKind).IsEqualTo(JsonValueKind.Array);
     }
 
+    /// <summary>#595: the seed is opt-in. A default boot writes nothing, so a generated host cannot pollute the
+    /// database it points at or reserve unique values; <c>--SeedDemoData true</c> still writes one row per entity.</summary>
     [Test]
-    public async Task GeneratedInventoryApp_SeedRow_Present_Pins595() {
-        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Inventory588);
+    public async Task GeneratedInventoryApp_Seed_IsOptIn_Issue595() {
+        await using (var plain = await PackOracle.BootAsync(PackOracleDomains.Inventory588)) {
+            using var list = await plain.Client.GetAsync("/api/orders");
+            using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+            await Assert.That(json.RootElement.GetArrayLength()).IsEqualTo(0);
+        }
 
-        using var list = await oracle.Client.GetAsync("/api/orders");
-        using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
-
-        // #595 pin: the generated Program.cs seeds a placeholder row into a fresh database.
-        // P-07 removes the seed and flips this assertion to zero.
-        await Assert.That(json.RootElement.GetArrayLength()).IsEqualTo(1);
+        await using var seeded = await PackOracle.BootAsync(
+            PackOracleDomains.Inventory588, options: new PackOracleBootOptions { SeedDemoData = true });
+        using var seededList = await seeded.Client.GetAsync("/api/orders");
+        using var seededJson = JsonDocument.Parse(await seededList.Content.ReadAsStringAsync());
+        await Assert.That(seededJson.RootElement.GetArrayLength()).IsEqualTo(1);
     }
 
     /// <summary>Two boots: the worst case (2 x 135 s) exceeds the assembly's 180 s default, so this test carries
@@ -825,7 +830,8 @@ public class PackOracleTests {
     [Timeout(300_000)]
     public async Task Failure_KindDrivesStatus_AndBodyIsProblemDetails(CancellationToken cancellationToken) {
         _ = cancellationToken;
-        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Failures687);
+        await using var oracle = await PackOracle.BootAsync(
+            PackOracleDomains.Failures687, options: new PackOracleBootOptions { SeedDemoData = true });
 
         static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
 
@@ -856,7 +862,7 @@ public class PackOracleTests {
             "Unique constraint violated: 'Code' value is already used on another 'Child'.", "Child.Code", null);
 
         // Link: the action's second create into the now-occupied to-one is 409. Node has no natural
-        // key, so its seed row is routed by the shadow id.
+        // key, so its opt-in seed row (#595) is routed by the shadow id.
         using var relinked = await oracle.Client.PostAsync("/api/nodes/1/extend", Json("{}"));
         await ExpectProblem(relinked, 409, "Link",
             "Cannot add a second link on 'next': the source already has a target.", "Node.next", null);
@@ -883,13 +889,14 @@ public class PackOracleTests {
 
     /// <summary>P-13a (#912): the host hands the module the stored link. The first create into an empty <c>next</c>
     /// lands; every later one is the module's own 409 Link and creates no second row. <c>/api/nodes/1</c> is the
-    /// seed row (#595, #589), so the count is measured against the count before the first call.</summary>
+    /// opt-in seed row (#595, #589), so the count is measured against the count before the first call.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
     public async Task Action_CreateIntoOccupiedToOne_IsLinkConflict_AndCreatesNoSecondRow_Issue912(CancellationToken cancellationToken) {
         _ = cancellationToken;
-        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.NodeLink912);
+        await using var oracle = await PackOracle.BootAsync(
+            PackOracleDomains.NodeLink912, options: new PackOracleBootOptions { SeedDemoData = true });
 
         async Task<int> CountAsync() {
             using var list = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/nodes"));

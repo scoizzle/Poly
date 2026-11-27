@@ -69,10 +69,11 @@ internal class Quote : Poly.Runtime.IActionScoped
         var quoteLine = quoteLineResult.Value;
         return DomainResult<QuoteLine>.Success(quoteLine);
     }
-    internal void AttachLines(QuoteLine child)
+    internal DomainResult AttachLines(QuoteLine child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult<QuoteLine> AddLine(Product sku, long qty)
     {
@@ -273,7 +274,11 @@ internal class Quote : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Quote");
         if (opportunity != null)
         {
-            opportunity.AttachQuotes(created);
+            var __attach = opportunity.AttachQuotes(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Quote>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Quote>.Success(created);
     }

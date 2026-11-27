@@ -38,10 +38,11 @@ internal class Truck : Poly.Runtime.IActionScoped
         get => this._deliveries;
     }
     public TruckStage CurrentStage { get; private set; }
-    internal void AttachDeliveries(Delivery child)
+    internal DomainResult AttachDeliveries(Delivery child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._deliveries.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult Load(long weight)
     {
@@ -194,7 +195,11 @@ internal class Truck : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Truck");
         if (warehouse != null)
         {
-            warehouse.AttachTrucks(created);
+            var __attach = warehouse.AttachTrucks(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Truck>.Failure(__attach.Error!);
+            }
         }
         db.Record("Truck", "Vin", __vin);
         return DomainResult<Truck>.Success(created);

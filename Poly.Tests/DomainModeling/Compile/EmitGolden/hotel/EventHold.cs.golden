@@ -441,7 +441,11 @@ internal class EventHold : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "EventHold");
         if (guest != null)
         {
-            guest.AttachEvents(created);
+            var __attach = guest.AttachEvents(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<EventHold>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<EventHold>.Success(created);
     }

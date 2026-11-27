@@ -128,7 +128,7 @@ public class ActionScopeTouchShapeTests {
     [Test]
     public async Task AttachAndRegister_TouchThisBeforeTheirWrites() {
         var cs = Print(Dsl);
-        var attach = Method(cs, "void AttachBooks(");
+        var attach = Method(cs, "DomainResult AttachBooks(");
         var register = Method(cs, "Subscriber(Shelf subscriber)");
 
         await Assert.That(At(attach, Touch)).IsLessThan(At(attach, "this._books.Add("));
@@ -354,7 +354,8 @@ public class ActionScopeTouchShapeTests {
 
     /// <summary>
     /// The predicted hunk classes, read off every checked-in golden and demo file: H1 a Touch first in each wrapper's
-    /// try, H2 one in each handler, H3 one first in each <c>Attach*</c>, H4 one first in each <c>Register*Subscriber</c>,
+    /// try, H2 one in each handler, H3 one first in each <c>Attach*</c> (a <c>DomainResult</c> since #585), H4 one first in
+    /// each <c>Register*Subscriber</c>,
     /// H5 the entry depth captured and assigned back in each notify method, H6 <c>ActionScope.Create</c> after
     /// <c>new</c> in each factory body. L-04b: every static <c>Create</c> is a root-scope wrapper (an H1 with no Touch of its
     /// own: the body records and the entry method touches), and every <c>Create{Nav}</c> an H1 with a Touch. The counts are the files' own mutators on the merged head (S-13a included): a file
@@ -396,7 +397,7 @@ public class ActionScopeTouchShapeTests {
             Each("H1", @"DomainResult(<[\w.?<>]+>)? \w+\([^)]*\)\n\s*\{\n\s*var __scope = ",
                 m => System.Text.RegularExpressions.Regex.IsMatch(m, @"try\n\s*\{\n\s*(Poly\.Runtime\.ActionScope\.Touch\(this\);\n\s*var __result = |var __result = \w+\.__BodyOfCreate\()"));
             Each("H2", @"DomainResult When(Each|Any|All)\w*\(", m => m.Contains(Touch, StringComparison.Ordinal));
-            Each("H3", @"void Attach\w+\(", m => FirstStatement(m) == Touch);
+            Each("H3", @"DomainResult Attach\w+\(", m => FirstStatement(m) == Touch);
             Each("H4", @"void Register\w+Subscriber\(", m => FirstStatement(m) == Touch);
             Each("H5", @"DomainResult Notify\w+Subscribers\(", m =>
                 FirstStatement(m).StartsWith("var __depth = this.EnterNotifyCascade(", StringComparison.Ordinal)

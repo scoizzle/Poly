@@ -646,11 +646,19 @@ internal class Reservation : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Create(created, "Reservation");
         if (guest != null)
         {
-            guest.AttachReservations(created);
+            var __attach = guest.AttachReservations(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Reservation>.Failure(__attach.Error!);
+            }
         }
         if (room != null)
         {
-            room.AttachStays(created);
+            var __attach = room.AttachStays(created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Reservation>.Failure(__attach.Error!);
+            }
         }
         return DomainResult<Reservation>.Success(created);
     }

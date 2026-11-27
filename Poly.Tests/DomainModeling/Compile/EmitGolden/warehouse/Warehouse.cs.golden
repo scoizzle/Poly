@@ -65,10 +65,11 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         var truck = truckResult.Value;
         return DomainResult<Truck>.Success(truck);
     }
-    internal void AttachTrucks(Truck child)
+    internal DomainResult AttachTrucks(Truck child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._trucks.Add(child);
+        return DomainResult.Success();
     }
     internal DomainResult AdjustCapacity(long delta)
     {

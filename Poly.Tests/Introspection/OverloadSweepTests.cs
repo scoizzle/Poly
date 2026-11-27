@@ -93,6 +93,13 @@ public class OverloadSweepTests {
          "  System.Object.ReferenceEquals(System.Object,System.Object)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_ErrorMessage()\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n",
          "  System.Object.ReferenceEquals(System.Object,System.Object)\n",
          L04aWhy),
+        // #585: this document owns a collection whose part names its owner, so its `Attach{Nav}` now returns a result,
+        // refuses a second owner, and the catalog moves: the guard's `Link` site arrives and the two `Stage`/`At` lines
+        // follow the factory's result lines. Same identities, no overload winner changes.
+        ("poly file docs/probes/grep-2026-10-17/grep.poly",
+         "  errors: 0\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)\n  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)\n  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)\n  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)\n  Poly.Runtime.DomainFailure.At(System.String)\n  Poly.Runtime.DomainResult.get_IsSuccess()\n  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainResult.get_Error()\n  Poly.Runtime.DomainResult.Success()\n  System.String.IsNullOrEmpty(System.String)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  System.String.Concat(System.Object,System.Object,System.Object)\n  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)\n  System.Collections.IList.Clear()\n  System.Object.ReferenceEquals(System.Object,System.Object)\n  System.String.Concat(System.String,System.String,System.String)\n  System.InvalidOperationException.ctor(System.String)\n",
+         "  errors: 0\n  Poly.Runtime.ActionScope.Touch(System.Object)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()\n  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)\n  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)\n  Poly.Runtime.DomainFailure.Link(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainResult.Success()\n  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)\n  Poly.Runtime.DomainFailure.At(System.String)\n  Poly.Runtime.DomainResult.get_IsSuccess()\n  Poly.Runtime.DomainResult.get_Error()\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  System.String.Concat(System.Object,System.Object,System.Object)\n  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)\n  Poly.Runtime.ActionScope.Create(System.Object,System.String)\n  System.Collections.IList.Clear()\n  System.Object.ReferenceEquals(System.Object,System.Object)\n  System.String.Concat(System.String,System.String,System.String)\n  System.InvalidOperationException.ctor(System.String)\n",
+         L585Why),
         ("poly file docs/probes/scratch-2026-10-14/payroll.poly",
          "  System.DateOnly.AddDays(System.Int32)\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n",
          "  System.DateOnly.AddDays(System.Int32)\n",
@@ -167,6 +174,15 @@ public class OverloadSweepTests {
         + "DomainResult.Failure, Error, IsSuccess and Success in), no overload winner changes";
 
     /// <summary>
+    /// #585: an owned part has one owner, so <c>Attach{Nav}</c> returns a result and refuses a child that already names
+    /// another owner. An owner's attach gains <c>Success</c>, and a document whose owned part names its owner gains the
+    /// guard's <c>Link</c> failure site; the <c>IsSuccess</c>/<c>Error</c> reads of that result are
+    /// <see cref="ExplainedSites"/>. No call site rebinds to another overload of the same method.
+    /// </summary>
+    private const string L585Why = "#585: the owned-part attach returns a result and refuses a second owner "
+        + "(DomainResult.Success and DomainFailure.Link sites arrive), no overload winner changes";
+
+    /// <summary>
     /// Identities a slice adds at new call sites, where nothing rebinds: each method has exactly one overload, so the
     /// line can only appear, never change winner. The run drops these lines before comparing, so every baseline entry is
     /// still compared on what it had; a changed winner anywhere still fails. Each row names its slice and is pinned below.
@@ -197,6 +213,12 @@ public class OverloadSweepTests {
         ("System.String.IsNullOrEmpty(System.String)",
          "L-08b: required means non-null for every type (owner ruling 2026-11-13), so the create and assign Required guards "
          + "are `x == null` and their `string.IsNullOrEmpty` sites leave"),
+        ("Poly.Runtime.DomainResult.Success()",
+         "#585: `Attach{Nav}` returns its result, so every owner of a collection has a void-result site it did not have"),
+        ("Poly.Runtime.DomainResult.get_Error()",
+         "#585: a create whose peer attach is refused propagates the attach's own failure"),
+        ("Poly.Runtime.DomainResult.get_IsSuccess()",
+         "#585: a create whose peer attach is refused reads the attach's result"),
     ];
 
     private static string WithoutExplainedAdditions(string body) =>

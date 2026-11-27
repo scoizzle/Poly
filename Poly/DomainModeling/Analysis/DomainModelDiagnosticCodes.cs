@@ -409,6 +409,15 @@ internal static class DomainModelDiagnosticCodes {
     public const string EffectLinkNotLowerable = "DMEFF020";
 
     /// <summary>
+    /// An unconditional invoke cycle on one entity (#535): <c>Ping: invoke Pong</c> +
+    /// <c>Pong: invoke Ping</c>, or a self-invoke, with no real guard on any edge of the cycle.
+    /// The runtime cuts an invoke chain at a depth guard, so every invocation of an action on
+    /// the cycle fails; a cycle behind a guard may terminate and stays allowed, as
+    /// <see cref="UnconditionalAutomaticTransitionCycle"/> does for transitions. An error.
+    /// </summary>
+    public const string UnconditionalInvokeCycle = "DMEFF021";
+
+    /// <summary>
     /// A <c>match</c> arm condition (#409) is not Boolean. An error.
     /// </summary>
     public const string MatchConditionNotBoolean = "DMMAT001";

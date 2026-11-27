@@ -56,6 +56,27 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(executor.Storage.Exists("Widget", "Code", "A")).IsTrue();
     }
 
+    /// <summary>A unique <c>Number</c> key is the number's text on the port: every create used to
+    /// fail with a NullReferenceException, because the VM treated the inline number as a heap
+    /// handle when it called <c>ToString</c> (#493).</summary>
+    [Test]
+    public async Task Create_UniqueNumber_UsesTheNumbersTextAsThePortKey() {
+        var executor = ExecutorFor("""
+            domain Lab
+            Thing: entity {
+              K: Number unique
+            }
+            """);
+
+        var first = executor.Create("Thing", Values(("K", 9L)));
+        var second = executor.Create("Thing", Values(("K", 9L)));
+
+        await Assert.That(first.Succeeded).IsTrue();
+        await Assert.That(second.Succeeded).IsFalse();
+        await Assert.That(second.Error).Contains("Unique constraint violated");
+        await Assert.That(executor.Storage.Exists("Thing", "K", "9")).IsTrue();
+    }
+
     [Test]
     public async Task Storage_IsScopedToTheExecutor() {
         var domain = Lower(Unique);
@@ -1038,6 +1059,38 @@ public sealed class ModuleInstanceExecutorTests {
 
         await Assert.That(outcome.Succeeded).IsTrue().Because(outcome.Error ?? "");
         await Assert.That(outcome.Instance!.Bag["Qty"]).IsEqualTo(5L);
+    }
+
+    /// <summary>The issue's second symptom: a <c>create in</c> initializer for a unique Number child, written
+    /// as a literal and through a parameter, runs and records the key (#493).</summary>
+    [Test]
+    public async Task CreateIn_UniqueNumberChild_LiteralAndParameter_RecordsTheKey() {
+        var literal = ExecutorFor("""
+            domain M
+            Visit: entity { K: Number unique }
+            Doc: entity {
+              Seen: many Visit
+              Go: action { create in Seen { K: 1 } }
+            }
+            """);
+        var doc = literal.Create("Doc", Values());
+        var literalOutcome = literal.Invoke(doc.Instance!, "Go");
+
+        var parameter = ExecutorFor("""
+            domain M
+            Visit: entity { K: Number unique }
+            Doc: entity {
+              Seen: many Visit
+              Go: action (n: Number) { create in Seen { K: n } }
+            }
+            """);
+        var doc2 = parameter.Create("Doc", Values());
+        var parameterOutcome = parameter.Invoke(doc2.Instance!, "Go", Values(("n", 2L)));
+
+        await Assert.That(literalOutcome.Succeeded).IsTrue().Because(literalOutcome.Error ?? "");
+        await Assert.That(literal.Storage.Exists("Visit", "K", "1")).IsTrue();
+        await Assert.That(parameterOutcome.Succeeded).IsTrue().Because(parameterOutcome.Error ?? "");
+        await Assert.That(parameter.Storage.Exists("Visit", "K", "2")).IsTrue();
     }
 
     private static ModuleInstanceExecutor ExecutorFor(string poly) =>

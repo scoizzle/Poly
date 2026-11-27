@@ -778,7 +778,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 WarnIntegerDivisions(context, value, model, props, parameters, enumTypes);
             return;
         }
-        if (expr is not (Add or Subtract or Multiply or Divide or Modulo))
+        if (expr is not (Add or Subtract or Multiply or Divide or Modulo or Negate))
             return;
         if (expr is Divide divide
             && model.KindOf(InferType(context, divide.Left, props, parameters, enumTypes)) is NumericKind.Integer64

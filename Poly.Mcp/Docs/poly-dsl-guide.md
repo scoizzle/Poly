@@ -2268,8 +2268,6 @@ What the id does not cover, and what that costs:
   stops the host at boot, and every create on a `Date unique optional` key answers `409`, the first included (#611).
 - **A `Binary` property**: analysis accepts it and every host then fails with `Type with name 'Binary' not found`
   (#905).
-- **A stored `DateTime` in a `GET`** (generated app) comes back without its `Z`: the clock time is right, the UTC
-  marker is lost through SQLite. Removed by #937.
 - **Names**: a property named `Created` (#927) and an action named `Add` on an entity that has a `many` link and a
   `unique` property (#934) fail to build. A domain named like a C# keyword is refused, and a domain named `DateTime`
   that declares a `DateTime` property does not compile (CS0118) (E-10).

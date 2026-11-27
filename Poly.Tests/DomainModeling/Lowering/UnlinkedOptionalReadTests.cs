@@ -325,6 +325,45 @@ public class UnlinkedOptionalReadTests {
         await Assert.That(refused.Message).Contains("requires a linked 'service'");
     }
 
+    /// <summary>
+    /// A negated read through an unlinked hop reaches the constrained-assign wrap as absent, not as a value: the
+    /// range-constrained Number target fails <c>Required</c> and keeps its value, on both hosts. A linked hop stores
+    /// the negation, so the same wrap's range check runs on a real value.
+    /// </summary>
+    [Test]
+    public async Task Assign_NegatedUnlinkedHop_ToRangeConstrainedNumber_FailsRequired_AndStoresTheNegationWhenLinked() {
+        const string dsl = """
+            domain NegRange
+            Advisor: entity { Score: Number }
+            Customer: entity {
+              Name: Text
+              advisor: Advisor optional
+              Limited: Number range(-100, 100)
+              Take: action { assign Limited to -(advisor Score) }
+            }
+            """;
+        var scenario = ParityScenario.FromDsl(dsl, "UnlinkedNegatedRangeAssign");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Name", "Ada"), ("Limited", 7L));
+            side.Invoke("Take");
+        });
+        var refused = unlinked[^1];
+        await Assert.That(refused.Success).IsFalse();
+        await Assert.That(refused.FailureKind).IsEqualTo("Required");
+        await Assert.That(refused.FailurePath).IsEqualTo("Customer.Limited");
+        await Assert.That(refused.State["Limited"]).IsEqualTo("7");
+
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 5L));
+            side.Create("Customer", ("Name", "Ada"), ("Limited", 7L), ("advisor", advisor));
+            side.Invoke("Take");
+        });
+        await Assert.That(linked[^1].Success).IsTrue()
+            .Because($"{linked[^1].FailureKind} {linked[^1].Message}");
+        await Assert.That(linked[^1].State["Limited"]).IsEqualTo("-5");
+    }
+
     static ParityOutcome Step(IReadOnlyList<ParityOutcome> outcomes, string step) =>
         outcomes.First(o => o.Step == step);
 

@@ -179,8 +179,17 @@ public class TypedExpressionMetadataTests {
     [Arguments("assign D to D / 2")]
     [Arguments("assign D to 7.5 / 2")]
     [Arguments("assign N to 7 / 2")]
+    [Arguments("assign N to -(7 / 2)")]
     public async Task Assign_DecimalDivisionOrNumberTarget_IsClean(string assignment) =>
         await Assert.That(DecimalDivisionWarnings(assignment)).IsEmpty();
+
+    /// <summary>
+    /// Negation is the same arithmetic spine as <c>+ - * / %</c> (#1033): an integral division under unary minus
+    /// truncates before it widens into a Decimal, exactly as <c>0 - 7 / 2</c> does, and the warning names the division.
+    /// </summary>
+    [Test]
+    public async Task Dmnum001_NegatedIntegralDivisionIntoDecimal_Warns() =>
+        await Assert.That(string.Join(" | ", DecimalDivisionWarnings("assign D to -(7 / 2)"))).IsEqualTo(Dmnum001("(7 / 2)"));
 
     /// <summary>
     /// DMNUM001 also covers the other places a value is put into a Decimal: a default, a function's return, a function

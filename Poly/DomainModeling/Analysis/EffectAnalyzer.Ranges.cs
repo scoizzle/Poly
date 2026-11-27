@@ -207,6 +207,7 @@ internal sealed partial class EffectAnalyzer {
         Subtract sub => HasUnmodelledValue(sub.Left) || HasUnmodelledValue(sub.Right),
         Multiply mul => HasUnmodelledValue(mul.Left) || HasUnmodelledValue(mul.Right),
         Divide divide => HasUnmodelledValue(divide.Left) || HasUnmodelledValue(divide.Right),
+        Negate negate => HasUnmodelledValue(negate.Operand),
         MatchExpr match => match.Arms.Any(a => HasUnmodelledValue(a.Value)) || HasUnmodelledValue(match.Else),
         PropertyAccess or ParameterAccess or RelationshipNavigation or Literal => false,
         _ => true,

@@ -40,10 +40,26 @@ public sealed partial class DomainExpressionLoweringPass {
         DomainExpression expr, Node subject, Node? pending, string? entityName) => expr switch {
             PropertyAccess property => PropertyPresence(property, subject, pending, entityName),
             RelationshipNavigation navigation => NavigationPresence(navigation, subject, pending, entityName),
-            Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide or Ontology.Modulo =>
-                OperandPresence(expr, subject, pending, entityName),
+            Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide or Ontology.Modulo
+                or Ontology.Negate => OperandPresence(expr, subject, pending, entityName),
+            MatchExpr match => MatchPresence(match, subject, pending, entityName),
             _ => ValuePresence.Present,
         };
+
+    /// <summary>
+    /// A <c>match</c> is present exactly when the arm it selected has a value. The chain evaluates every arm
+    /// condition once and fills its result local with the selected arm's value or absent, so presence is that
+    /// local's own null test, not a second evaluation of the conditions: a quantifier arm condition (which hoists
+    /// statements) needs no shape here at all.
+    /// </summary>
+    private ValuePresence MatchPresence(
+        MatchExpr match, Node subject, Node? pending, string? entityName) {
+        var throughHop = match.Arms.Select(a => a.Value).Append(match.Else)
+            .Any(value => PresenceIn(value, subject, null, entityName).ThroughHop);
+        return _matchResults.TryGetValue(match, out var result)
+            ? Combine(pending, new NotEqual(result, new Constant(null!)), throughHop)
+            : Combine(pending, null, throughHop);
+    }
 
     private ValuePresence PropertyPresence(
         PropertyAccess property, Node subject, Node? pending, string? entityName) {

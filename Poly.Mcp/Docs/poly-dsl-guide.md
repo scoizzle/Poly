@@ -1468,6 +1468,9 @@ treats it that way (#936):
   while the optional date is absent;
 - an `assign` into an `optional` target stores absent (`assign Note to advisor Name` leaves `Note` null); into a
   required target it fails `Required` (`'Target' is required.`) and changes nothing;
+- a `match` whose **selected** arm reads it is absent, exactly as that read is outside the `match`, while an arm
+  that does not read the hop is present (`match { Flag -> advisor Score, else -> 1 }` is `1` while the advisor is
+  unlinked, and `Required` into a required target when `Flag` is true);
 - an `invoke Rel.Action` on an unlinked link stays a `Required` refusal: there is no instance to run the action on,
   and a silent no-op would skip an effect the document asked for.
 
@@ -2521,10 +2524,6 @@ What the id does not cover, and what that costs:
 
 ### Known wrong
 
-- **An absent value assigned into an `optional` Number** (simulator): the printed module stores null, the simulator
-  stores `0` when the write sits inside a branch, so `assign Seen to advisor Score` on an unlinked hop disagrees there;
-  a `Text` target stores absent on both. The rule itself is in *an unlinked optional navigation reads as absent*
-  (section 10). Not yet removed: the simulator's optional value-type slot has to carry the assigned null.
 - **`==` on a value type** (simulator): it compares the JSON text of an argument payload, so equal values with their
   fields in another order, or `2` against `2.0` in a `Decimal` field, are unequal there; the generated C# is right.
   Removed by X-06.

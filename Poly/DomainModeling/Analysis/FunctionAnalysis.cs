@@ -48,7 +48,7 @@ internal static class FunctionAnalysis {
         switch (expression) {
             case ParameterAccess or Literal:
                 return;
-            case Add or Subtract or Multiply or Divide or Modulo or Comparison or And or Or or Not:
+            case Add or Subtract or Multiply or Divide or Modulo or Negate or Comparison or And or Or or Not:
                 break;
             case FunctionCall call when IsEndpointCall(context, call):
                 context.ReportError(function,

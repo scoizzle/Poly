@@ -404,6 +404,12 @@ public class AnalyzerBehaviourPinTests {
         "assign T to (match { Flag -> Opt, else -> 1 }) * 2", "", "ok")]
     [Arguments("arithmetic over a match whose arms are all optional", "T: Number optional",
         "assign T to (match { Flag -> Opt, else -> Opt2 }) + 1", "", "ok")]
+    [Arguments("subtraction over a match that may be absent, required target", "T: Number default(0)",
+        "assign T to 0 - (match { Flag -> null, else -> 1 })", "", "DMSEM003")]
+    [Arguments("negation of a match that may be absent, required target", "T: Number default(0)",
+        "assign T to -(match { Flag -> null, else -> 1 })", "", "DMSEM003")]
+    [Arguments("negation of a match that may be absent, optional target", "T: Number optional",
+        "assign T to -(match { Flag -> null, else -> 1 })", "", "ok")]
     [Arguments("an unnamed Decimal arm and a Number into a Number", "T: Number default(0)",
         "assign T to match { Flag -> Qty, else -> Dec * 2 }", "", "DMSEM003")]
     [Arguments("an unnamed Decimal arm first and a Number into a Number", "T: Number default(0)",

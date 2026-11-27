@@ -730,16 +730,25 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// The first operand, down the <c>+ - * /</c> spine of <paramref name="value"/>, that is a <c>match</c> that may be absent
-    /// (T-09a). Over an optional target the sum is absent when it is, on every host; into a required target the C# compiler
-    /// rejects a <c>long?</c> (CS0266) and the VM and <c>polyc</c> refuse it, so analysis refuses it at the match.
+    /// The first operand, down the <c>+ - * / %</c> or unary-minus spine of <paramref name="value"/>, that is a
+    /// <c>match</c> that may be absent (T-09a). Over an optional target the sum is absent when it is, on every host;
+    /// into a required target the C# compiler rejects a <c>long?</c> (CS0266) and the VM and <c>polyc</c> refuse it,
+    /// so analysis refuses it at the match.
     /// </summary>
     private MatchExpr? AbsentMatchOperand(
         AnalysisContext context, DomainExpression value,
         Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        value = RewriteLibraryIdent(value);
+        if (value is Negate negate) {
+            var operand = RewriteLibraryIdent(negate.Operand);
+            if (operand is MatchExpr negated && InferType(context, negated, props, parameters, enumTypes).Optional)
+                return negated;
+            return AbsentMatchOperand(context, operand, props, parameters, enumTypes);
+        }
         if (value is not (Add or Subtract or Multiply or Divide or Modulo)) return null;
-        foreach (var operand in value.Children.OfType<DomainExpression>()) {
-            if (RewriteLibraryIdent(operand) is MatchExpr match && InferType(context, match, props, parameters, enumTypes).Optional)
+        foreach (var child in value.Children.OfType<DomainExpression>()) {
+            var operand = RewriteLibraryIdent(child);
+            if (operand is MatchExpr match && InferType(context, match, props, parameters, enumTypes).Optional)
                 return match;
             if (AbsentMatchOperand(context, operand, props, parameters, enumTypes) is { } inner)
                 return inner;
@@ -769,7 +778,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 WarnIntegerDivisions(context, value, model, props, parameters, enumTypes);
             return;
         }
-        if (expr is not (Add or Subtract or Multiply or Divide or Modulo))
+        if (expr is not (Add or Subtract or Multiply or Divide or Modulo or Negate))
             return;
         if (expr is Divide divide
             && model.KindOf(InferType(context, divide.Left, props, parameters, enumTypes)) is NumericKind.Integer64

@@ -198,9 +198,25 @@ public class UnlinkedOptionalReadTests {
         """;
 
     /// <summary>
-    /// An assign from an unlinked hop stores absent in an optional target, on both hosts. The Text target is the
-    /// #936 example (P-13b); an optional <em>Number</em> target is blocked in the simulator, which stores <c>0</c>
-    /// for a null written through a branch while the printed module stores null (reported on #936).
+    /// An assign from an unlinked hop stores absent in an optional target, on both hosts: the Text target is
+    /// the #936 example (P-13b), and the optional <em>Number</em> target is the same absent value in a
+    /// value-type slot, not the <c>0</c> a bare null constant lowers to.
+    /// </summary>
+    [Test]
+    public async Task Assign_ToOptionalNumberTarget_UnlinkedOptionalHop_StoresAbsent() {
+        var scenario = ParityScenario.FromDsl(AssignDsl, "UnlinkedAssignOptionalNumber");
+        var outcomes = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L));
+            side.Invoke("Snapshot");
+        });
+
+        await Assert.That(outcomes[^1].Success).IsTrue()
+            .Because($"{outcomes[^1].FailureKind} {outcomes[^1].Message}");
+        await Assert.That(outcomes[^1].State["Seen"]).IsNull();
+    }
+
+    /// <summary>
+    /// An assign from an unlinked hop stores absent in an optional Text target, on both hosts (#936, P-13b).
     /// </summary>
     [Test]
     public async Task Assign_ToOptionalTarget_UnlinkedOptionalHop_StoresAbsent() {
@@ -309,6 +325,45 @@ public class UnlinkedOptionalReadTests {
         await Assert.That(refused.Message).Contains("requires a linked 'service'");
     }
 
+    /// <summary>
+    /// A negated read through an unlinked hop reaches the constrained-assign wrap as absent, not as a value: the
+    /// range-constrained Number target fails <c>Required</c> and keeps its value, on both hosts. A linked hop stores
+    /// the negation, so the same wrap's range check runs on a real value.
+    /// </summary>
+    [Test]
+    public async Task Assign_NegatedUnlinkedHop_ToRangeConstrainedNumber_FailsRequired_AndStoresTheNegationWhenLinked() {
+        const string dsl = """
+            domain NegRange
+            Advisor: entity { Score: Number }
+            Customer: entity {
+              Name: Text
+              advisor: Advisor optional
+              Limited: Number range(-100, 100)
+              Take: action { assign Limited to -(advisor Score) }
+            }
+            """;
+        var scenario = ParityScenario.FromDsl(dsl, "UnlinkedNegatedRangeAssign");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Name", "Ada"), ("Limited", 7L));
+            side.Invoke("Take");
+        });
+        var refused = unlinked[^1];
+        await Assert.That(refused.Success).IsFalse();
+        await Assert.That(refused.FailureKind).IsEqualTo("Required");
+        await Assert.That(refused.FailurePath).IsEqualTo("Customer.Limited");
+        await Assert.That(refused.State["Limited"]).IsEqualTo("7");
+
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 5L));
+            side.Create("Customer", ("Name", "Ada"), ("Limited", 7L), ("advisor", advisor));
+            side.Invoke("Take");
+        });
+        await Assert.That(linked[^1].Success).IsTrue()
+            .Because($"{linked[^1].FailureKind} {linked[^1].Message}");
+        await Assert.That(linked[^1].State["Limited"]).IsEqualTo("-5");
+    }
+
     static ParityOutcome Step(IReadOnlyList<ParityOutcome> outcomes, string step) =>
         outcomes.First(o => o.Step == step);
 
@@ -342,6 +397,350 @@ public class UnlinkedOptionalReadTests {
             side.EvaluatePolicy("ScoreOdd");
         });
         await AssertAnswers(linked, new() { ["ScoreOdd"] = true });
+    }
+
+    /// <summary>A negated read through an unlinked hop is absent like every other arithmetic: the comparison
+    /// answers the absent rule instead of dereferencing the missing advisor, on both hosts.</summary>
+    [Test]
+    public async Task Policy_NegationThroughUnlinkedHop_AnswersTheAbsentRule_OnBothHosts() {
+        const string dsl = """
+            domain Neg
+            Advisor: entity { Score: Number }
+            Customer: entity {
+              Name: Text
+              advisor: Advisor optional
+              ScoreNeg: policy { 0 > -(advisor Score) }
+            }
+            """;
+        var scenario = ParityScenario.FromDsl(dsl, "NegationThroughHop");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Name", "Ada"));
+            side.EvaluatePolicy("ScoreNeg");
+        });
+        await AssertAnswers(unlinked, new() { ["ScoreNeg"] = false });
+
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 1L));
+            side.Create("Customer", ("Name", "Ada"), ("advisor", advisor));
+            side.EvaluatePolicy("ScoreNeg");
+        });
+        await AssertAnswers(linked, new() { ["ScoreNeg"] = true });
+    }
+
+    /// <summary>
+    /// A <c>match</c> whose taken arm reads through an unlinked hop is absent, like the same read outside a
+    /// match: an optional target stores absent and a required target fails <c>Required</c>, without ever
+    /// dereferencing the missing advisor, on both hosts. An arm that does not read through the hop still
+    /// yields its present value.
+    /// </summary>
+    [Test]
+    public async Task Match_UnlinkedHopInArm_AnswersTheAbsentRule_OnBothHosts() {
+        const string dsl = """
+            domain MatchHop
+            Advisor: entity { Score: Number }
+            Customer: entity {
+              MustScore: Number
+              Seen: Number optional
+              Flag: Boolean default(false)
+              advisor: Advisor optional
+              Force: action { assign MustScore to match { Flag -> advisor Score, else -> 1 } }
+              Snapshot: action { assign Seen to match { Flag -> advisor Score, else -> 1 } }
+            }
+            """;
+        var scenario = ParityScenario.FromDsl(dsl, "MatchUnlinkedHop");
+
+        // The taken arm reads through the unlinked hop: the optional target stores absent ...
+        var optional = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L), ("Flag", true));
+            side.Invoke("Snapshot");
+        });
+        await Assert.That(optional[^1].Success).IsTrue()
+            .Because($"{optional[^1].FailureKind} {optional[^1].Message}");
+        await Assert.That(optional[^1].State["Seen"]).IsNull();
+
+        // ... and the required target fails Required, leaving it as it was.
+        var required = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L), ("Flag", true));
+            side.Invoke("Force");
+        });
+        var refused = required[^1];
+        await Assert.That(refused.Success).IsFalse();
+        await Assert.That(refused.FailureKind).IsEqualTo("Required");
+        await Assert.That(refused.FailurePath).IsEqualTo("Customer.MustScore");
+        await Assert.That(refused.State["MustScore"]).IsEqualTo("7");
+
+        // The else arm does not touch the hop, so the match is present even while it is unlinked.
+        var otherwise = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L), ("Flag", false));
+            side.Invoke("Snapshot");
+        });
+        await Assert.That(otherwise[^1].Success).IsTrue()
+            .Because($"{otherwise[^1].FailureKind} {otherwise[^1].Message}");
+        await Assert.That(otherwise[^1].State["Seen"]).IsEqualTo("1");
+
+        // A linked advisor makes the taken arm present and yields its real value.
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 5L));
+            side.Create("Customer", ("MustScore", 7L), ("Flag", true), ("advisor", advisor));
+            side.Invoke("Snapshot");
+            side.Invoke("Force");
+        });
+        await Assert.That(linked[^1].Success).IsTrue()
+            .Because($"{linked[^1].FailureKind} {linked[^1].Message}");
+        await Assert.That(linked[^1].State["Seen"]).IsEqualTo("5");
+        await Assert.That(linked[^1].State["MustScore"]).IsEqualTo("5");
+    }
+
+    const string QuantifierArmDsl = """
+        domain QuantMatch
+        Advisor: entity { Score: Number }
+        Order: entity { Big: Boolean default(false) }
+        Customer: entity {
+          Seen: Number optional
+          MustScore: Number
+          advisor: Advisor optional
+          orders: many Order
+          Snapshot: action { assign Seen to match { any orders where Big -> advisor Score, else -> 1 } }
+          Force: action { assign MustScore to match { any orders where Big -> advisor Score, else -> 1 } }
+          BigScore: policy { match { any orders where Big -> advisor Score, else -> 1 } > 0 }
+        }
+        """;
+
+    /// <summary>
+    /// A quantifier arm condition hoists statements, and the arm it guards may read through an unlinked hop. The
+    /// match chain evaluates the condition once and records which arm it took, so presence reads that record instead
+    /// of rebuilding the condition: an untaken hop arm leaves the <c>else</c> value present, on both hosts.
+    /// </summary>
+    [Test]
+    public async Task Match_QuantifierArmConditionWithHopArm_LowersAndAgrees_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(QuantifierArmDsl, "MatchQuantHop");
+
+        // No orders: the quantifier arm is not taken, so the else value is present even with an unlinked advisor.
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L));
+            side.Invoke("Snapshot");
+        });
+        await Assert.That(unlinked[^1].Success).IsTrue()
+            .Because($"{unlinked[^1].FailureKind} {unlinked[^1].Message}");
+        await Assert.That(unlinked[^1].State["Seen"]).IsEqualTo("1");
+
+        // A linked advisor and no order: still the else value.
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 4L));
+            side.Create("Customer", ("MustScore", 7L), ("advisor", advisor));
+            side.Invoke("Snapshot");
+        });
+        await Assert.That(linked[^1].Success).IsTrue()
+            .Because($"{linked[^1].FailureKind} {linked[^1].Message}");
+        await Assert.That(linked[^1].State["Seen"]).IsEqualTo("1");
+    }
+
+    /// <summary>The policy form of the same match: the absent rule answers the comparison on both hosts.</summary>
+    [Test]
+    public async Task Policy_QuantifierArmConditionWithHopArm_AnswersTheAbsentRule_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(QuantifierArmDsl, "MatchQuantHopPolicy");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L));
+            side.EvaluatePolicy("BigScore");
+        });
+        await Assert.That(unlinked[^1].State["BigScore"]).IsEqualTo("True");
+
+        var linked = await scenario.AssertAgree(side => {
+            var order = side.Create("Order", ("Big", true));
+            var advisor = side.Create("Advisor", ("Score", 4L));
+            side.Create("Customer", ("MustScore", 7L), ("advisor", advisor), ("orders", new[] { order }));
+            side.EvaluatePolicy("BigScore");
+        });
+        await Assert.That(linked[^1].State["BigScore"]).IsEqualTo("True");
+    }
+
+    /// <summary>
+    /// A taken arm that reads through an unlinked hop is absent: an optional target stores absent, a required target
+    /// fails <c>Required</c>, and an ordering over it is false — no missing hop is dereferenced, on both hosts.
+    /// </summary>
+    [Test]
+    public async Task Match_QuantifierArmCondition_TakenHopArmWithUnlinkedHop_IsAbsent_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(QuantifierArmDsl, "MatchQuantHopTaken");
+
+        var optional = await scenario.AssertAgree(side => {
+            var order = side.Create("Order", ("Big", true));
+            side.Create("Customer", ("MustScore", 7L), ("orders", new[] { order }));
+            side.Invoke("Snapshot");
+        });
+        await Assert.That(optional[^1].Success).IsTrue()
+            .Because($"{optional[^1].FailureKind} {optional[^1].Message}");
+        await Assert.That(optional[^1].State["Seen"]).IsNull();
+
+        var required = await scenario.AssertAgree(side => {
+            var order = side.Create("Order", ("Big", true));
+            side.Create("Customer", ("MustScore", 7L), ("orders", new[] { order }));
+            side.Invoke("Force");
+        });
+        await Assert.That(required[^1].Success).IsFalse();
+        await Assert.That(required[^1].FailureKind).IsEqualTo("Required");
+        await Assert.That(required[^1].FailurePath).IsEqualTo("Customer.MustScore");
+        await Assert.That(required[^1].State["MustScore"]).IsEqualTo("7");
+
+        var policy = await scenario.AssertAgree(side => {
+            var order = side.Create("Order", ("Big", true));
+            side.Create("Customer", ("MustScore", 7L), ("orders", new[] { order }));
+            side.EvaluatePolicy("BigScore");
+        });
+        await Assert.That(policy[^1].State["BigScore"]).IsEqualTo("False");
+    }
+
+    const string PinDsl = """
+        domain Pin
+        Advisor: entity { Score: Number Name: Text }
+        Customer: entity {
+          Flag: Boolean default(false)
+          Seen: Number optional
+          MustScore: Number
+          Bounded: Number range(0, 10) default(0)
+          Note: Text
+          advisor: Advisor optional
+          Nested: action { assign MustScore to match { Flag -> match { Flag -> advisor Score, else -> 2 }, else -> 1 } }
+          NestedNull: action { assign Seen to match { Flag -> match { Flag -> null, else -> 3 }, else -> 1 } }
+          BoundedScore: action { assign Bounded to match { Flag -> advisor Score, else -> 5 } }
+          RequireNote: action { assign Note to match { Flag -> advisor Name, else -> "x" } }
+          Fallback: action { assign MustScore to match { Flag -> 1, else -> Seen } }
+          HopCondition: action { assign MustScore to match { advisor Score > 3 -> advisor Score, else -> 1 } }
+        }
+        """;
+
+    /// <summary>
+    /// A nested match as an arm value: the outer chain asks the inner match's recorded presence, so the selected
+    /// inner arm that reads an unlinked hop makes the whole value absent — <c>Required</c> into a required target.
+    /// </summary>
+    [Test]
+    public async Task Match_NestedMatchIntoRequiredTarget_UnlinkedHopFailsRequired_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(PinDsl, "PinNestedMatch");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Flag", true), ("MustScore", 7L), ("Note", "n"));
+            side.Invoke("Nested");
+        });
+        await Assert.That(unlinked[^1].Success).IsFalse();
+        await Assert.That(unlinked[^1].FailureKind).IsEqualTo("Required");
+        await Assert.That(unlinked[^1].FailurePath).IsEqualTo("Customer.MustScore");
+
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 4L), ("Name", "Pat"));
+            side.Create("Customer", ("Flag", true), ("MustScore", 7L), ("Note", "n"), ("advisor", advisor));
+            side.Invoke("Nested");
+        });
+        await Assert.That(linked[^1].Success).IsTrue()
+            .Because($"{linked[^1].FailureKind} {linked[^1].Message}");
+        await Assert.That(linked[^1].State["MustScore"]).IsEqualTo("4");
+    }
+
+    /// <summary>A nested match whose selected inner arm is <c>null</c> into an optional target stores absent.</summary>
+    [Test]
+    public async Task Match_NestedNullArmIntoOptionalTarget_StoresAbsent_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(PinDsl, "PinNestedNull");
+        var outcomes = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Flag", true), ("MustScore", 7L), ("Note", "n"));
+            side.Invoke("NestedNull");
+        });
+        await Assert.That(outcomes[^1].Success).IsTrue()
+            .Because($"{outcomes[^1].FailureKind} {outcomes[^1].Message}");
+        await Assert.That(outcomes[^1].State["Seen"]).IsNull();
+    }
+
+    /// <summary>A match into a range-constrained required target: unlinked is <c>Required</c>, a present out-of-range score is <c>Range</c>.</summary>
+    [Test]
+    public async Task Match_RangeConstrainedTarget_KeepsRequiredThenRange_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(PinDsl, "PinRangeTarget");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Flag", true), ("MustScore", 7L), ("Note", "n"));
+            side.Invoke("BoundedScore");
+        });
+        await Assert.That(unlinked[^1].Success).IsFalse();
+        await Assert.That(unlinked[^1].FailureKind).IsEqualTo("Required");
+        await Assert.That(unlinked[^1].FailurePath).IsEqualTo("Customer.Bounded");
+
+        var outOfRange = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 50L), ("Name", "Pat"));
+            side.Create("Customer", ("Flag", true), ("MustScore", 7L), ("Note", "n"), ("advisor", advisor));
+            side.Invoke("BoundedScore");
+        });
+        await Assert.That(outOfRange[^1].Success).IsFalse();
+        await Assert.That(outOfRange[^1].FailureKind).IsEqualTo("Range");
+        await Assert.That(outOfRange[^1].FailurePath).IsEqualTo("Customer.Bounded");
+        await Assert.That(outOfRange[^1].State["Bounded"]).IsEqualTo("0");
+    }
+
+    /// <summary>A match into a required Text target: unlinked is <c>Required</c>, a linked name writes the value.</summary>
+    [Test]
+    public async Task Match_RequiredTextTarget_KeepsRequiredThenWrites_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(PinDsl, "PinTextTarget");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Flag", true), ("MustScore", 7L), ("Note", "n"));
+            side.Invoke("RequireNote");
+        });
+        await Assert.That(unlinked[^1].Success).IsFalse();
+        await Assert.That(unlinked[^1].FailureKind).IsEqualTo("Required");
+        await Assert.That(unlinked[^1].FailurePath).IsEqualTo("Customer.Note");
+        await Assert.That(unlinked[^1].State["Note"]).IsEqualTo("n");
+
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 4L), ("Name", "Pat"));
+            side.Create("Customer", ("Flag", true), ("MustScore", 7L), ("Note", "n"), ("advisor", advisor));
+            side.Invoke("RequireNote");
+        });
+        await Assert.That(linked[^1].Success).IsTrue()
+            .Because($"{linked[^1].FailureKind} {linked[^1].Message}");
+        await Assert.That(linked[^1].State["Note"]).IsEqualTo("Pat");
+    }
+
+    /// <summary>An optional <c>else</c> arm that is absent into a required target fails <c>Required</c>, on both hosts.</summary>
+    [Test]
+    public async Task Match_OptionalElseArmIntoRequiredTarget_FailsRequired_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(PinDsl, "PinOptionalElse");
+
+        var absentElse = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Flag", false), ("MustScore", 7L), ("Note", "n"));
+            side.Invoke("Fallback");
+        });
+        await Assert.That(absentElse[^1].Success).IsFalse();
+        await Assert.That(absentElse[^1].FailureKind).IsEqualTo("Required");
+        await Assert.That(absentElse[^1].FailurePath).IsEqualTo("Customer.MustScore");
+        await Assert.That(absentElse[^1].State["MustScore"]).IsEqualTo("7");
+
+        var presentArm = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Flag", true), ("MustScore", 7L), ("Note", "n"));
+            side.Invoke("Fallback");
+        });
+        await Assert.That(presentArm[^1].Success).IsTrue()
+            .Because($"{presentArm[^1].FailureKind} {presentArm[^1].Message}");
+        await Assert.That(presentArm[^1].State["MustScore"]).IsEqualTo("1");
+    }
+
+    /// <summary>An arm condition that reads through the unlinked hop does not select its arm; a linked score does.</summary>
+    [Test]
+    public async Task Match_HopCondition_UnlinkedMissesTheArm_LinkedTakesIt_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(PinDsl, "PinHopCondition");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L), ("Note", "n"));
+            side.Invoke("HopCondition");
+        });
+        await Assert.That(unlinked[^1].Success).IsTrue()
+            .Because($"{unlinked[^1].FailureKind} {unlinked[^1].Message}");
+        await Assert.That(unlinked[^1].State["MustScore"]).IsEqualTo("1");
+
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 4L), ("Name", "Pat"));
+            side.Create("Customer", ("MustScore", 7L), ("Note", "n"), ("advisor", advisor));
+            side.Invoke("HopCondition");
+        });
+        await Assert.That(linked[^1].Success).IsTrue()
+            .Because($"{linked[^1].FailureKind} {linked[^1].Message}");
+        await Assert.That(linked[^1].State["MustScore"]).IsEqualTo("4");
     }
 
     static async Task AssertAnswers(IReadOnlyList<ParityOutcome> outcomes, Dictionary<string, bool> expected) {

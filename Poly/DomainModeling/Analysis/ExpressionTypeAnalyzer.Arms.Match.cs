@@ -223,7 +223,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckMatchNames(context, match, cmp.Left, props, parameters, enumTypes, where);
                 CheckMatchNames(context, match, cmp.Right, props, parameters, enumTypes, where);
                 return;
-            case And or Or or Not or Add or Subtract or Multiply or Divide or Modulo:
+            case And or Or or Not or Add or Subtract or Multiply or Divide or Modulo or Negate:
                 foreach (var child in expr.Children.OfType<DomainExpression>())
                     CheckMatchNames(context, match, child, props, parameters, enumTypes, where);
                 return;

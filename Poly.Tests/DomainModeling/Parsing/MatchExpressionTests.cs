@@ -193,6 +193,22 @@ public class MatchExpressionTests {
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == "DMMAT004")).IsTrue();
     }
 
+    /// <summary>Negation is transparent to the match's own name check: the bare name under unary minus is DMMAT004,
+    /// the code a bare name in any other arm value gets, not the generic unresolved-name code.</summary>
+    [Test]
+    public async Task Match_UnresolvedName_UnderNegation_IsDMMAT004() {
+        var analysis = Analyze("""
+            domain Shop
+            Order: entity {
+              Qty: Number
+              Flag: Boolean default(false)
+              Classify: action { assign Qty to match { Flag -> -Nope, else -> 1 } }
+            }
+            """);
+
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "DMMAT004")).IsTrue();
+    }
+
     [Test]
     public async Task Match_Nested_RoundTripsAndExecutes() {
         var nested = Wrap("match { Qty > 10 -> match { Flag -> \"bigflag\", else -> \"big\" }, else -> \"small\" }");

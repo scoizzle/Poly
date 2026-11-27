@@ -438,7 +438,26 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 7. simulate ─────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. Steps are a JSON array of {op: create|link|unlink|invoke|evaluate|get|list, ...}. A guard-blocked step is a failed step, not a failed call; earlier steps stay committed. reset=true starts from a clean instance state.")]
+    /// <summary>
+    /// The keys each step op reads, in the order the tool description lists them. A step object's
+    /// keys outside this set are a caller error: dropping them silently turned a misspelled key
+    /// into a different, successful scenario (#536).
+    /// </summary>
+    private static readonly Dictionary<string, string[]> StepKeys = new(StringComparer.Ordinal) {
+        ["create"] = ["op", "entity", "properties", "as"],
+        ["link"] = ["op", "sourceInstanceId", "relationship", "targetInstanceId"],
+        ["unlink"] = ["op", "sourceInstanceId", "relationship", "targetInstanceId"],
+        ["invoke"] = ["op", "instanceId", "action", "args"],
+        ["evaluate"] = ["op", "entity", "policy", "instanceId"],
+        ["get"] = ["op", "instanceId"],
+        ["list"] = ["op", "entity"],
+    };
+
+    [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. steps is a JSON array of objects; every object carries op plus that op's own keys, and any other key is a failed step that names the valid ones: " +
+        "create {entity, properties?, as?}; link {sourceInstanceId, relationship, targetInstanceId}; unlink (the same keys as link); " +
+        "invoke {instanceId, action, args?}; evaluate {entity, policy, instanceId}; get {instanceId}; list {entity?}. " +
+        "properties and args are JSON objects of property and parameter values. An instanceId takes an instance id or a create's as alias; a singular navigation in properties takes one too. " +
+        "A guard-blocked step is a failed step, not a failed call; earlier steps stay committed. reset=true clears the instances first; a poly_define clears them too.")]
     public PolyResponse Simulate(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42},\"as\":\"p\"}]. " +
@@ -478,6 +497,16 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 if (step.ValueKind != JsonValueKind.Object)
                     throw new InvalidOperationException("Each step must be a JSON object.");
                 op = step.TryGetProperty("op", out var opValue) ? opValue.GetString() ?? "" : "";
+                if (StepKeys.TryGetValue(op, out var validKeys)) {
+                    var unknownKeys = step.EnumerateObject()
+                        .Select(property => property.Name)
+                        .Where(name => !validKeys.Contains(name, StringComparer.Ordinal))
+                        .ToList();
+                    if (unknownKeys.Count > 0)
+                        throw new InvalidOperationException(
+                            $"Unknown key(s) {string.Join(", ", unknownKeys.Select(name => $"'{name}'"))} for op '{op}'. "
+                            + $"Valid keys: {string.Join(", ", validKeys)}.");
+                }
                 response = op switch {
                     "create" => _runtime.CreateInstance(
                         workspace,

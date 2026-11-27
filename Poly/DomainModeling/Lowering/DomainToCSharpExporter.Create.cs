@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Syntactic = Poly.Ast.Nodes;
@@ -129,10 +130,17 @@ public sealed partial class DomainToCSharpExporter {
 
         // Target.Create already Attaches via singular nav args (including auto-wired
         // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
-        // _field.Add / Register* / peer Attach when Create wired this collection.
-        var (wiredInverse, _) = FindInverseCollectionInfo(entity, targetTypeName);
-        var createWiredThisCollection = filledName is not null
-            && fieldName is not null
+        // _field.Add / Register* / peer Attach when Create wired this collection. Use the
+        // factory's own pairing rule (CreateInWiring.Inverse), so an ambiguous pair skips
+        // both the factory attach and this Add, never one of them.
+        var filledNav = filledName is null
+            ? null
+            : targetEntity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, filledName, StringComparison.Ordinal));
+        var wiredInverse = filledNav is null
+            ? null
+            : CreateInWiring.Inverse(targetEntity, filledNav, entity);
+        var createWiredThisCollection = fieldName is not null
             && wiredInverse is not null
             && string.Equals(wiredInverse.Name, rel.Name, StringComparison.Ordinal);
 
@@ -566,12 +574,13 @@ public sealed partial class DomainToCSharpExporter {
                 peerEntity = domain.Types.OfType<Entity>()
                     .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
 
-            // Unique collection inverse on the peer (FindInverseCollectionInfo).
-            // count == 0: OneToOne / no
-            // collection — ctor already set the to-one. count > 1: skip Attach
-            // (named create-in CreateNav fallback Add). count == 1: Attach*.
-            var inverse = peerEntity is not null
-                ? FindInverseCollectionInfo(peerEntity, entity.Name).Unique
+            // The navigation's paired inverse on the peer (CreateInWiring.Inverse), collection or
+            // singular: the factory wires the other side of every supplied argument (#587). No pair
+            // (or an ambiguous one) leaves the ctor's to-one only.
+            var navRel = entity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, navParam.Name, StringComparison.Ordinal));
+            var inverse = navRel is not null && peerEntity is not null
+                ? CreateInWiring.Inverse(entity, navRel, peerEntity)
                 : null;
 
             if (inverse is null)

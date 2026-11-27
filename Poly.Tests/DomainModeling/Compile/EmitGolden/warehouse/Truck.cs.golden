@@ -38,6 +38,11 @@ internal class Truck : Poly.Runtime.IActionScoped
         get => this._deliveries;
     }
     public TruckStage CurrentStage { get; private set; }
+    internal void AttachWarehouse(Warehouse child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Warehouse = child;
+    }
     internal void AttachDeliveries(Delivery child)
     {
         Poly.Runtime.ActionScope.Touch(this);

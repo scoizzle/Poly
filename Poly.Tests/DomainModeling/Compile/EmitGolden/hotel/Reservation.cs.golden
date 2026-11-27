@@ -85,6 +85,21 @@ internal class Reservation : Poly.Runtime.IActionScoped
         this.Folio = folio;
         return DomainResult<Folio>.Success(folio);
     }
+    internal void AttachFolio(Folio child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Folio = child;
+    }
+    internal void AttachGuest(Guest child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Guest = child;
+    }
+    internal void AttachRoom(Room child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Room = child;
+    }
     internal DomainResult Confirm()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -644,6 +659,10 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __room = room;
         var created = new Reservation(__partySize, __nights, __nightlyRate, __maxOccupancy, __checkInDate, __checkOutDate, folio, __guest, __room);
         Poly.Runtime.ActionScope.Create(created, "Reservation");
+        if (folio != null)
+        {
+            folio.AttachReservation(created);
+        }
         if (guest != null)
         {
             guest.AttachReservations(created);

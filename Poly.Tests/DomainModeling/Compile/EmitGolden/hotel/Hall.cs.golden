@@ -41,6 +41,11 @@ internal class Hall : Poly.Runtime.IActionScoped
         get => this._sections;
     }
     public HallStage CurrentStage { get; private set; }
+    internal void AttachProperty(Property child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Property = child;
+    }
     internal void AttachSections(Section child)
     {
         Poly.Runtime.ActionScope.Touch(this);

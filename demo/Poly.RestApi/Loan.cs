@@ -39,6 +39,16 @@ internal class Loan : Poly.Runtime.IActionScoped
     public Book? Book { get; private set; }
     public Patron? Borrower { get; private set; }
     public LoanStage CurrentStage { get; private set; }
+    internal void AttachBook(Book child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Book = child;
+    }
+    internal void AttachBorrower(Patron child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Borrower = child;
+    }
     internal DomainResult Renew()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

@@ -35,6 +35,11 @@ internal class Quote : Poly.Runtime.IActionScoped
         get => this._lines;
     }
     public QuoteStage CurrentStage { get; private set; }
+    internal void AttachOpportunity(Opportunity child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Opportunity = child;
+    }
     internal DomainResult<QuoteLine> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);

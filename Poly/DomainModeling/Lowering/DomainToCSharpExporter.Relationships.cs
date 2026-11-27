@@ -46,6 +46,41 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
+    /// The singular inverse of a collection navigation: <c>Attach{Nav}(child)</c> assigns the peer's
+    /// to-one navigation and registers this entity's subscriptions on the child. The collection form
+    /// below adds to the field; both are the wiring a factory calls for a supplied create argument.
+    /// </summary>
+    private static void AddAttachSingularNavMethod(
+        Entity entity,
+        Relationship rel,
+        List<SubscriptionInfo>? subscriberSubs,
+        List<MethodDefinitionNode> methods) {
+        var targetType = new NamedTypeReference(rel.Target.TypeName);
+        var child = new Parameter("child", targetType);
+        var body = new List<Node> {
+            TouchThis(),
+            new Assignment(new Member(new ThisReference(), ToPascalCase(rel.Name)), child)
+        };
+        if (subscriberSubs is { Count: > 0 }) {
+            foreach (var info in subscriberSubs
+                .Where(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))
+                .GroupBy(s => s.StageName)
+                .Select(g => g.First())) {
+                body.Add(new Invoke(
+                    new Member(child, SubscriberRegisterMethodName(info)),
+                    [new ThisReference()]));
+            }
+        }
+        methods.Add(new MethodDefinitionNode(
+            $"Attach{ToPascalCase(rel.Name)}",
+            new TypeReference("void"),
+            Parameters: [child],
+            Body: new Block(body),
+            AccessModifier: AccessModifier.Internal
+        ));
+    }
+
+    /// <summary>
     /// Collection inverses on <paramref name="peerEntity"/> targeting
     /// <paramref name="childEntityName"/> — same rule as runtime
     /// <c>TryLinkInverseCollection</c>. <c>Unique</c> is set only when
@@ -135,6 +170,7 @@ public sealed partial class DomainToCSharpExporter {
                 // no non-nullable-uninitialized warnings (CS8618).
                 if (EffectHelpers.CreatesIn(entity, rel.Name))
                     AddCreateSingularNavMethod(entity, rel, domain, subscriberSubs, methods, metadata);
+                AddAttachSingularNavMethod(entity, rel, subscriberSubs, methods);
                 props.Add(new PropertyDefinitionNode(
                     pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),

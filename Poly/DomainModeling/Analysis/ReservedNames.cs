@@ -334,9 +334,8 @@ internal static class ReservedNames {
             // Create.cs:61; the factory exists only for a nav something creates in (Relationships.cs:173,182).
             if (EffectHelpers.CreatesIn(entity, nav.Name))
                 yield return new ReservedName($"Create{pascalName}", ReservedKind.GeneratedMember, "the create-in factory");
-            // Relationships.cs:39 — collection navs only.
-            if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-                yield return new ReservedName($"Attach{pascalName}", ReservedKind.GeneratedMember, "the attach method");
+            // Relationships.cs:39 — every navigation, collection or singular (#572, #587).
+            yield return new ReservedName($"Attach{pascalName}", ReservedKind.GeneratedMember, "the attach method");
             if (includeNavigationProperty)
                 yield return new ReservedName(pascalName, ReservedKind.GeneratedMember, "the navigation property");
             // Relationships.cs:149 — the backing field is its own member, so it is always checked.

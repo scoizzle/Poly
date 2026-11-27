@@ -881,6 +881,53 @@ public class PackOracleTests {
         await ExpectProblem(missing, 404, "Not Found", null, null, null);
     }
 
+    /// <summary>
+    /// #562: the unique check in <c>Create</c> is check-then-act, so concurrent creates of one key both pass
+    /// it. The database's unique index is the authority; the request that loses must answer the same 409
+    /// ProblemDetails the pre-check gives, never a 500, and one row must exist. Twelve requests are fired
+    /// together because the pre-check window is one round trip wide.
+    /// </summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Create_ConcurrentSameUniqueKey_OneCreatedRestUniqueConflict_Issue562(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Failures687);
+
+        static StringContent Json() => new("""{"Code":"RACE","Qty":5}""", Encoding.UTF8, "application/json");
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 12)
+            .Select(_ => oracle.Client.PostAsync("/api/children", Json())));
+        try {
+            var statuses = responses.Select(r => (int)r.StatusCode).ToArray();
+            await Assert.That(statuses.Count(s => s == 201)).IsEqualTo(1)
+                .Because("exactly one create may win the unique key; got " + string.Join(",", statuses));
+
+            foreach (var loser in responses.Where(r => (int)r.StatusCode != 201)) {
+                await Assert.That((int)loser.StatusCode).IsEqualTo(409)
+                    .Because("a duplicate unique key is a conflict, never a server error");
+                await Assert.That(loser.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+                using var problem = JsonDocument.Parse(await loser.Content.ReadAsStringAsync());
+                await Assert.That(problem.RootElement.GetProperty("status").GetInt32()).IsEqualTo(409);
+                await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Unique");
+                await Assert.That(problem.RootElement.GetProperty("detail").GetString())
+                    .IsEqualTo("Unique constraint violated: 'Code' value is already used on another 'Child'.");
+                await Assert.That(problem.RootElement.GetProperty("elementPath").GetString()).IsEqualTo("Child.Code");
+            }
+
+            using var list = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/children"));
+            var rows = list.RootElement.EnumerateArray()
+                .Count(row => row.EnumerateObject()
+                    .Any(property => string.Equals(property.Name, "code", StringComparison.OrdinalIgnoreCase)
+                        && property.Value.GetString() == "RACE"));
+            await Assert.That(rows).IsEqualTo(1);
+        }
+        finally {
+            foreach (var response in responses)
+                response.Dispose();
+        }
+    }
+
     /// <summary>P-13a (#912): the host hands the module the stored link. The first create into an empty <c>next</c>
     /// lands; every later one is the module's own 409 Link and creates no second row. <c>/api/nodes/1</c> is the
     /// seed row (#595, #589), so the count is measured against the count before the first call.</summary>

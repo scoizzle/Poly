@@ -49,9 +49,19 @@ internal static class DictionaryBackedValue {
     /// value-type read: unboxing the condition then casts the zero to <c>Missing</c>.
     /// </summary>
     internal static Expression MissingKeyFallback(ITypeDefinition targetType) {
+        // Text is a reference type: an absent key is the absence of a value, so it reads
+        // null (the owner ruling that null is absence) and the required guard can see it.
+        if (RuntimeTypeOf(targetType) == typeof(string))
+            return Expression.Constant(null, typeof(object));
         // An unset optional value is null. Nullable<T> has no primitive, so the
         // value-type zero below would not apply and Missing cannot convert to T?.
         if (targetType.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null)
+            return Expression.Constant(null, typeof(object));
+        // A modeled enum has no CLR zero here; absence is null, which the value-payload
+        // required guard reads, never a Missing member the enum guard would report.
+        if (targetType is Poly.Interpretation.Analysis.Semantics.AstTypeDefinition {
+            Form: Poly.Ast.Nodes.TypeDeclarationForm.Enum
+        })
             return Expression.Constant(null, typeof(object));
         var convert = ConvertMethod(RuntimeTypeOf(targetType));
         if (convert is null || !convert.ReturnType.IsValueType)

@@ -128,7 +128,7 @@ internal static class ConstraintCheckWriter {
         bool nullableValue,
         bool includeRequired) =>
         ChecksFor(prop, RequiredApplies(entity, prop, domain, analysis), domain, analysis, style, value,
-            nullableValue, includeRequired);
+            nullableValue, includeRequired, entity.Name);
 
     /// <summary>
     /// The checks for one value-type member. A value-type member is required unless it carries
@@ -145,8 +145,8 @@ internal static class ConstraintCheckWriter {
         Node value,
         bool nullableValue,
         bool includeRequired) =>
-        ChecksFor(prop, required && CanBeNull(prop, domain), domain, analysis, style, value,
-            nullableValue, includeRequired);
+        ChecksFor(prop, required && (CanBeNull(prop, domain) || IsEnum(prop, domain, analysis)), domain, analysis,
+            style, value, nullableValue, includeRequired, ownerName: null);
 
     private static IReadOnlyList<Check> ChecksFor(
         Property prop,
@@ -156,14 +156,15 @@ internal static class ConstraintCheckWriter {
         ConstraintCheckStyle style,
         Node value,
         bool nullableValue,
-        bool includeRequired) {
+        bool includeRequired,
+        string? ownerName) {
         var checks = new List<Check>();
         var system = TargetOf(domain);
         // Fail closed: a constraint whose applicability the target cannot decide is never silently left unguarded.
         if (!system.DecidesConstraintApplicability()
             && prop.Constraints.Any(static c => c is RangeConstraint or LengthConstraint or PatternConstraint))
             throw new InvalidOperationException(
-                $"The target type system '{system.GetType().Name}' declares no constraint applicability, so the constraints on '{prop.Name}' cannot be guarded.");
+                $"The target type system '{system.GetType().Name}' declares no constraint applicability, so the constraints on '{QualifiedName(ownerName, prop)}' cannot be guarded.");
         var isText = system.LengthApplies(prop.Type.TypeName);
         var isNumber = system.RangeApplies(prop.Type.TypeName);
         var isBinaryFloat = isNumber && system.Bind(prop.Type.TypeName) is { } bound && system.Spell(bound) is "Float" or "Float32";
@@ -384,6 +385,13 @@ internal static class ConstraintCheckWriter {
     /// <summary>A required value can still be null in CLR terms: Text/Binary or any nullable domain type.</summary>
     private static bool CanBeNull(Property prop, Domain domain) =>
         IsText(prop, domain) || IsNullableDomainType(prop.Type.TypeName, domain);
+
+    /// <summary>An enum has no absence in CLR, so the lowered module reads an omitted member as null.</summary>
+    private static bool IsEnum(Property prop, Domain domain, INodeMetadataProvider analysis) =>
+        DomainToCSharpExporter.TryResolveEnumType(domain, analysis, prop.Type.TypeName, out _);
+
+    private static string QualifiedName(string? ownerName, Property prop) =>
+        ownerName is null ? prop.Name : $"{ownerName}.{prop.Name}";
 
     /// <summary>True when the domain type maps to a nullable CLR type (string or reference type).</summary>
     private static bool IsNullableDomainType(string typeName, Domain domain) {

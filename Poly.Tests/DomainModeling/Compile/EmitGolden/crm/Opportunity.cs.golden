@@ -544,7 +544,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         if (request.Currency == null)
         {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Currency' is required.", "ChargeRequest.Currency"));
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Currency' is required.", "request.Currency"));
         }
         if (this.CurrentStage != OpportunityStage.Commit)
         {

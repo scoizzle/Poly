@@ -28,7 +28,7 @@ internal static class ValuePayloadGuardWriter {
             if (required)
                 guards.Add(RequiredGuard(value, parameter.Name, path, actionResultType));
             var memberGuards = MemberGuards(valueType, value, domain, analysis, actionResultType,
-                new HashSet<string>(StringComparer.Ordinal) { valueType.Name });
+                parameter.Name, new HashSet<string>(StringComparer.Ordinal) { valueType.Name });
             if (required) {
                 guards.AddRange(memberGuards);
                 continue;
@@ -44,19 +44,19 @@ internal static class ValuePayloadGuardWriter {
 
     private static List<Node> MemberGuards(
         ValueType valueType, Node value, Domain domain, INodeMetadataProvider analysis, Node actionResultType,
-        HashSet<string> nesting) {
+        string pathPrefix, HashSet<string> nesting) {
         var guards = new List<Node>();
         foreach (var prop in valueType.Properties) {
             var required = !prop.Constraints.OfType<OptionalConstraint>().Any();
             var access = (Node)new Member(value, prop.Name);
-            var path = $"{valueType.Name}.{prop.Name}";
+            var path = $"{pathPrefix}.{prop.Name}";
             if (ValueTypeOf(domain, prop.Type.TypeName) is { } nested) {
                 if (!nesting.Add(nested.Name))
                     throw new NotSupportedException(
                         $"Value type '{nested.Name}' contains itself, so its payload constraints cannot be lowered soundly.");
                 if (required)
                     guards.Add(RequiredGuard(access, prop.Name, path, actionResultType));
-                var nestedGuards = MemberGuards(nested, access, domain, analysis, actionResultType, nesting);
+                var nestedGuards = MemberGuards(nested, access, domain, analysis, actionResultType, path, nesting);
                 nesting.Remove(nested.Name);
                 if (required) {
                     guards.AddRange(nestedGuards);

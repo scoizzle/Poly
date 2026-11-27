@@ -32,6 +32,25 @@ public sealed class ValuePayloadConstraintParityTests {
         }
         """;
 
+    const string MissingMemberDsl = """
+        domain PayloadReview
+
+        Tier: enum { Gold, Silver }
+
+        Money: value {
+          Amount: Decimal range(0, 1000)
+          Currency: Text length(3, 3)
+          Level: Tier
+        }
+
+        Order: entity {
+          Paid: Boolean optional
+          Pay: action (m: Money) {
+            assign Paid to true
+          }
+        }
+        """;
+
     const string ContractDsl = """
         domain PayloadConstraints
 
@@ -138,6 +157,38 @@ public sealed class ValuePayloadConstraintParityTests {
 
         await Assert.That(outcomes[1].Success).IsTrue().Because(outcomes[1].Message ?? "");
         await Assert.That(outcomes[1].State["Paid"]).IsEqualTo("True");
+    }
+
+    [Test]
+    public async Task PayloadMissingRequiredTextMember_FailsRequiredOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl(MissingMemberDsl, "PayloadMissingText")
+            .AssertAgree(side => {
+                side.Create("Order");
+                side.Invoke("Pay", ("m", new Dictionary<string, object?> {
+                    ["Amount"] = 10L,
+                    ["Level"] = "Gold",
+                }));
+            });
+
+        await Assert.That(outcomes[1].ExceptionType).IsNull();
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[1].Message).Contains("'Currency' is required.");
+    }
+
+    [Test]
+    public async Task PayloadMissingEnumMember_FailsRequiredOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl(MissingMemberDsl, "PayloadMissingEnum")
+            .AssertAgree(side => {
+                side.Create("Order");
+                side.Invoke("Pay", ("m", new Dictionary<string, object?> {
+                    ["Amount"] = 10L,
+                    ["Currency"] = "EUR",
+                }));
+            });
+
+        await Assert.That(outcomes[1].ExceptionType).IsNull();
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[1].Message).Contains("'Level' is required.");
     }
 
     [Test]

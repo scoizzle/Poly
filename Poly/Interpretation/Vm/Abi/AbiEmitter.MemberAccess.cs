@@ -148,9 +148,11 @@ public static partial class AbiEmitter {
 
     /// <summary>
     /// A keyed read: the stored value coerced to the member's target type, else the
-    /// member's <c>DefaultValue</c> when the key is not present. A value-type member
-    /// with no default reads as that type's zero value; a reference member with no
-    /// default reads as <see cref="System.Reflection.Missing.Value"/>.
+    /// member's <c>DefaultValue</c> when the key is not present. An absent key is null
+    /// for a reference member (Text, Binary, every modeled enum and value record) and
+    /// for an optional value member; a CLR value type reads as its zero value when a
+    /// conversion exists, and only a CLR value type with no conversion (DateTime, Guid)
+    /// still reads as <see cref="System.Reflection.Missing.Value"/>.
     /// </summary>
     private static Expression BagKeyRead(
         Expression instance, string key, ITypeDefinition target, Node? defaultValue, bool optional = false) {

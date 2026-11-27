@@ -317,15 +317,30 @@ public class PolicyGuardFactsTests {
 
     /// <summary>The runtime half of the wrong-today row: the stage gate is suppressed, so <c>Qty</c> = 70 reaches
     /// the assign, which fails <c>Seen</c>'s range; 50 succeeds. A write that relies on the stage's <c>Small</c> is
-    /// not safe.</summary>
+    /// not safe. The state is set through the host seam: since #576 a create cannot enter a stage whose requirement
+    /// its own values falsify, and since #577 an action cannot leave it falsified, so only a reload from storage can
+    /// carry it — which is the case the stage gate exists for.</summary>
     [Test]
     public async Task StagePAndActionNotP_Simulator_AssignFailsAboveSeenRange() {
         var exec = Simulator(StageSmallActionNotSmall("range(0, 60)"), out _);
-        var fifty = Make(exec, "Order", ("Qty", 50L));
-        var seventy = Make(exec, "Order", ("Qty", 70L));
+        var fifty = Reloaded(exec, Make(exec, "Order", ("Qty", 5L)), ("Qty", 50L));
+        var seventy = Reloaded(exec, Make(exec, "Order", ("Qty", 5L)), ("Qty", 70L));
         await Assert.That(Outcome(exec.Invoke(fifty, "Peek"))).IsEqualTo("ok");
         await Assert.That(exec.Invoke(seventy, "Peek").Succeeded).IsFalse();
     }
+
+    /// <summary>
+    /// Puts an instance in the state a load from durable storage can still carry: a stage whose <c>require</c> its
+    /// own values falsify. #576 refuses it at create and #577 refuses to let an action leave it falsified, so the
+    /// host seam is the only provenance that keeps a row aimed at the stage gate rather than at the create.
+    /// </summary>
+    private static ModuleInstance Reloaded(
+        ModuleInstanceExecutor exec, ModuleInstance instance, params (string Name, object? Value)[] values) {
+        foreach (var (name, value) in values)
+            exec.SetProperty(instance, name, value);
+        return instance;
+    }
+
 
     /// <summary>The flagged loop, transition and write-back creates can fail at runtime with the guard held at
     /// entry: each runs with boundary input (<c>Qty</c> at the guard's edge, or the loop's zero-record case).</summary>
@@ -386,7 +401,7 @@ public class PolicyGuardFactsTests {
     [Test]
     public async Task StagePolicyPlusActionNot_RunsOnSimulator_StageGateSuppressed() {
         var exec = Simulator(StageSmallActionNotSmall("range(0, 100)"), out _);
-        var large = Make(exec, "Order", ("Qty", 50L));
+        var large = Reloaded(exec, Make(exec, "Order", ("Qty", 5L)), ("Qty", 50L));
         var small = Make(exec, "Order", ("Qty", 5L));
         await Assert.That(Outcome(exec.Invoke(large, "Peek"))).IsEqualTo("ok");
         await Assert.That(large.Bag["Seen"]).IsEqualTo(50L);
@@ -600,7 +615,12 @@ public class PolicyGuardFactsTests {
         await Assert.That(RangeFindings(Analyze(dsl).Analysis)).IsEqualTo(master);
         var exec = Simulator(dsl, out _);
         if (cell == "c") return; // its simulator run is in Probe_LoopAndWriteBack_Simulator_FailsWithGuardHeld
-        await Assert.That(exec.Invoke(Make(exec, "Order", ("Qty", 11L)), "Go").Succeeded).IsFalse();
+        // (e) is in stage Open whose requirement `Small` the create cannot falsify (#576) and no action may
+        // falsify (#577): the falsified state comes from the host seam, as a reload from storage would.
+        var order = cell == "e"
+            ? Reloaded(exec, Make(exec, "Order", ("Qty", 5L)), ("Qty", 11L))
+            : Make(exec, "Order", ("Qty", 11L));
+        await Assert.That(exec.Invoke(order, "Go").Succeeded).IsFalse();
     }
 
     // ── DMCS001 for a negated guard no value passes (closing round item 4) ──

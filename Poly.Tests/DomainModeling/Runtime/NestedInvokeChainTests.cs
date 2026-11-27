@@ -8,7 +8,10 @@ namespace Poly.Tests.DomainModeling.Runtime;
 /// that limit whose invoke sits inside nested branches is thousands of frames deep and used to abort the process
 /// on the 16 MB compile stack. Every measurement runs in a child process because a stack overflow cannot be
 /// caught: the probe is payload only in the parent and acts when the child runner sets <c>POLY_CHILD_PROBE</c>.
-/// The child accepts success or the typed refusal, and the parent proves it was never aborted.
+/// Round 4: the probe analyzes and lowers on the 16 MB parse stack (<see cref="DslLimits.RunOnParseStack"/>) the way
+/// <c>poly_define</c> and the simulator do, so every row reaches the ABI compile budget instead of stopping in
+/// analysis on the test thread. The child then accepts success or the typed compile refusal (the counted inline
+/// limit or the spent stack budget), and the parent proves it was never aborted.
 /// </summary>
 [NotInParallel("ChildProcessSlots")]
 public class NestedInvokeChainTests {
@@ -38,24 +41,26 @@ public class NestedInvokeChainTests {
             return;
         var links = int.Parse(Environment.GetEnvironmentVariable(LinksVariable)!);
         var nest = int.Parse(Environment.GetEnvironmentVariable(NestVariable)!);
-        try {
+        // poly_define analyzes on the parse stack and the simulator lowers there (#1115 round 4). Doing the
+        // same here means a row that gets past this point really reached the ABI compile budget rather than
+        // stopping in analysis on this thread's default stack.
+        var (domain, executor) = DslLimits.RunOnParseStack(() => {
             var (domain, _) = EvolvedDomain.FromDsl(NestedChain(links, nest));
-            var executor = ModuleExec.For(domain);
-            var created = executor.Create("A", new Dictionary<string, object?>());
-            if (!created.Succeeded) {
-                await Assert.That(created.Error).Contains("invoke chain");
-                await Assert.That(created.Error).Contains("too deep");
-                return;
-            }
-            var outcome = executor.Invoke(created.Instance!, "A1");
-            // Either it runs, or it is the typed refusal; an abort fails the parent.
-            if (!outcome.Succeeded) {
-                await Assert.That(outcome.Error).Contains("invoke chain");
-                await Assert.That(outcome.Error).Contains("too deep");
-            }
+            return (domain, ModuleExec.For(domain));
+        });
+        var created = executor.Create("A", new Dictionary<string, object?>());
+        if (!created.Succeeded) {
+            await Assert.That(created.Error).Contains("invoke chain");
+            await Assert.That(created.Error).Contains("too deep");
+            await Assert.That(created.Error).DoesNotContain("thread with a larger stack");
+            return;
         }
-        catch (InsufficientExecutionStackException) {
-            // The analysis or lowering pass stopped with its typed stack failure: not an abort.
+        var outcome = executor.Invoke(created.Instance!, "A1");
+        // Either it runs, or it is the typed compile refusal; an abort fails the parent.
+        if (!outcome.Succeeded) {
+            await Assert.That(outcome.Error).Contains("invoke chain");
+            await Assert.That(outcome.Error).Contains("too deep");
+            await Assert.That(outcome.Error).DoesNotContain("thread with a larger stack");
         }
     }
 
@@ -100,12 +105,13 @@ public class NestedInvokeChainTests {
     public async Task NestedInvokeChain_LinkCounts_NeverAbortTheProcess(int links, int nest) =>
         await ChildSucceeds(links, nest);
 
-    // A plain chain: the counted limit still refuses cheaply, and a long one must never abort.
+    // A plain chain: the counted limit still refuses cheaply, and a long one must never abort. Round 4 makes the
+    // probe analyze and lower every link for real, so the lengths stay inside the child's 120 s budget; a 10 000-link
+    // row that used to stop in analysis now spends minutes in the passes and proves nothing the 1 000-link row does not.
     [Test]
     [Arguments(256)]
     [Arguments(257)]
     [Arguments(1000)]
-    [Arguments(10000)]
     public async Task PlainInvokeChain_NeverAbortsTheProcess(int links) =>
         await ChildSucceeds(links, 0);
 }

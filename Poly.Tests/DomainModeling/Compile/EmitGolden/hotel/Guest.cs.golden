@@ -39,11 +39,11 @@ internal class Guest : Poly.Runtime.IActionScoped
     public long EventCount { get; private set; }
     public IReadOnlyList<EventHold> Events
     {
-        get => this._events;
+        get => new List<EventHold>(this._events);
     }
     public IReadOnlyList<Reservation> Reservations
     {
-        get => this._reservations;
+        get => new List<Reservation>(this._reservations);
     }
     public GuestStage CurrentStage { get; private set; }
     internal DomainResult<EventHold> CreateEvents(long? headcount = default, long? capacity = default, decimal? dayRate = default, DateOnly? startDate = default, DateOnly? endDate = default, Hall? hall = default, Section? section = default)

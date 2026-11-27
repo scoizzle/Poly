@@ -18,7 +18,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public IReadOnlyList<Fine> Fines
     {
-        get => this._fines;
+        get => new List<Fine>(this._fines);
     }
     internal DomainResult<Fine> CreateFines(long? amount = default, string? reason = default)
     {

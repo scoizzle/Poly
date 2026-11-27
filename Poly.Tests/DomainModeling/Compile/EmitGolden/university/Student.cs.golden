@@ -39,7 +39,7 @@ internal class Student : Poly.Runtime.IActionScoped
     public long LastGrade { get; private set; }
     public IReadOnlyList<Enrollment> Enrollments
     {
-        get => this._enrollments;
+        get => new List<Enrollment>(this._enrollments);
     }
     public StudentStage CurrentStage { get; private set; }
     internal DomainResult<Enrollment> CreateEnrollments(DateOnly? enrolledOn = default, DateOnly? dueDate = default, long? grade = default, Section? section = default)

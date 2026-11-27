@@ -47,15 +47,15 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     public Contact? Contact { get; private set; }
     public IReadOnlyList<Activity> Activities
     {
-        get => this._activities;
+        get => new List<Activity>(this._activities);
     }
     public IReadOnlyList<Line> Lines
     {
-        get => this._lines;
+        get => new List<Line>(this._lines);
     }
     public IReadOnlyList<Quote> Quotes
     {
-        get => this._quotes;
+        get => new List<Quote>(this._quotes);
     }
     public OpportunityStage CurrentStage { get; private set; }
     internal DomainResult<Activity> CreateActivities(string? subject = default, DateOnly? dueOn = default)

@@ -114,10 +114,16 @@ public sealed partial class DomainToCSharpExporter {
                     AccessModifier: AccessModifier.Private
                 ));
 
+                // The getter hands out a copy, never the live List the field holds (#556, #541):
+                // a downcast to List<T>/IList<T> would otherwise bypass every generated guard,
+                // subscription registration and constraint. A copy is safe to mutate and safe to
+                // enumerate while an action mutates the aggregate.
                 props.Add(new PropertyDefinitionNode(
                     pascalName, readOnlyType,
                     Getter: new PropertyGetterDefinitionNode(
-                        Body: new Member(new ThisReference(), fieldName)),
+                        Body: new New(
+                            listType,
+                            [new Member(new ThisReference(), fieldName)])),
                     IsReadOnly: true,
                     AccessModifier: DomainAccess.NavigationAccess(entity, targetType, domain)
                 ));

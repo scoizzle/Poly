@@ -108,8 +108,13 @@ public static partial class AbiEmitter {
         if (member is not AstPropertyDefinition property || instance is null) return null;
         var stored = BagKeyRead(
             instance, property.Name, property.MemberTypeDefinition, property.Definition.DefaultValue);
-        if (GetterField(property) is not { } field || EmitMemberRead(field, instance) is not Expression fieldRead)
+        if (GetterBackingField(property) is not { } getter
+            || EmitMemberRead(getter.Field, instance) is not Expression fieldRead)
             return stored;
+        // A copy getter (#556, #541) hands out a snapshot of its field. The bag read must answer
+        // the same way, or the simulator would iterate the live list while printed C# iterates a copy.
+        if (getter.Copies)
+            fieldRead = Call(null, CopyCollectionInfo, Constant((int)CollectionKind.List), fieldRead);
         var hasProperty = Call(
             Convert(instance, typeof(IDictionary<string, object?>)),
             DictionaryBackedValue.DictContainsKey,
@@ -117,14 +122,26 @@ public static partial class AbiEmitter {
         return Condition(hasProperty, stored, fieldRead);
     }
 
-    /// <summary>The field a <c>get =&gt; this.field</c> body reads, when that field exists.</summary>
-    private static ITypeField? GetterField(AstPropertyDefinition property) {
-        if (property.Definition.Getter?.Body is not Member { Value: ThisReference, MemberName: var name })
+    /// <summary>The field a getter reads, and whether the getter hands out a copy of it.</summary>
+    private readonly record struct GetterBacking(ITypeField Field, bool Copies);
+
+    /// <summary>
+    /// The field a <c>get =&gt; this.field</c> body reads, when that field exists, and the same for the
+    /// copy getter <c>get =&gt; new List&lt;T&gt;(this.field)</c> a collection navigation prints (#556, #541):
+    /// the bag read answers from the backing field, copying it for a copy getter.
+    /// </summary>
+    private static GetterBacking? GetterBackingField(AstPropertyDefinition property) {
+        var (name, copies) = property.Definition.Getter?.Body switch {
+            Member { Value: ThisReference, MemberName: var fieldName } => (fieldName, false),
+            New { Arguments: [Member { Value: ThisReference, MemberName: var copiedName }] } => (copiedName, true),
+            _ => ((string?)null, false),
+        };
+        if (name is null)
             return null;
         foreach (var field in property.DeclaringTypeDefinition.Fields) {
             if (field is AstFieldDefinition
                 && string.Equals(field.Name, name, StringComparison.Ordinal))
-                return field;
+                return new GetterBacking(field, copies);
         }
         return null;
     }

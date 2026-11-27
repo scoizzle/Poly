@@ -79,9 +79,8 @@ public static class DomainParityExclusions {
         new(599, "L-05", "Both sides throw the same depth-overflow or loop-guard exception and roll the cascade back "
             + "since L-03c (every mutator touches its receiver), so the module has no divergence to ratchet; the "
             + "returned failure in place of the throw is L-05's done-when."),
-        new(607, "L-25", "Both sides throw 'Collection was modified' and roll the action back since L-03c, so the "
-            + "module has no divergence to ratchet; what a body that grows the collection it iterates should do is "
-            + "L-25's done-when."),
+        new(607, "L-25", "Both sides read a copy of the collection they iterate (#541), so growing it mid-loop is "
+            + "legal on both and the module has no divergence to ratchet; whether it should be is L-25's done-when."),
         new(611, "L-11", "Both sides throw NullReferenceException on the unset optional unique Text, so the "
             + "module has no divergence to ratchet."),
         new(617, "L-05", "The sides agree and both roll the transition back since L-03c (AtomicityParityTests "

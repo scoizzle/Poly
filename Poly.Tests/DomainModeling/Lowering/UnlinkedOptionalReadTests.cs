@@ -492,6 +492,105 @@ public class UnlinkedOptionalReadTests {
         await Assert.That(linked[^1].State["MustScore"]).IsEqualTo("5");
     }
 
+    const string QuantifierArmDsl = """
+        domain QuantMatch
+        Advisor: entity { Score: Number }
+        Order: entity { Big: Boolean default(false) }
+        Customer: entity {
+          Seen: Number optional
+          MustScore: Number
+          advisor: Advisor optional
+          orders: many Order
+          Snapshot: action { assign Seen to match { any orders where Big -> advisor Score, else -> 1 } }
+          Force: action { assign MustScore to match { any orders where Big -> advisor Score, else -> 1 } }
+          BigScore: policy { match { any orders where Big -> advisor Score, else -> 1 } > 0 }
+        }
+        """;
+
+    /// <summary>
+    /// A quantifier arm condition hoists statements, and the arm it guards may read through an unlinked hop. The
+    /// match chain evaluates the condition once and records which arm it took, so presence reads that record instead
+    /// of rebuilding the condition: an untaken hop arm leaves the <c>else</c> value present, on both hosts.
+    /// </summary>
+    [Test]
+    public async Task Match_QuantifierArmConditionWithHopArm_LowersAndAgrees_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(QuantifierArmDsl, "MatchQuantHop");
+
+        // No orders: the quantifier arm is not taken, so the else value is present even with an unlinked advisor.
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L));
+            side.Invoke("Snapshot");
+        });
+        await Assert.That(unlinked[^1].Success).IsTrue()
+            .Because($"{unlinked[^1].FailureKind} {unlinked[^1].Message}");
+        await Assert.That(unlinked[^1].State["Seen"]).IsEqualTo("1");
+
+        // A linked advisor and no order: still the else value.
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 4L));
+            side.Create("Customer", ("MustScore", 7L), ("advisor", advisor));
+            side.Invoke("Snapshot");
+        });
+        await Assert.That(linked[^1].Success).IsTrue()
+            .Because($"{linked[^1].FailureKind} {linked[^1].Message}");
+        await Assert.That(linked[^1].State["Seen"]).IsEqualTo("1");
+    }
+
+    /// <summary>The policy form of the same match: the absent rule answers the comparison on both hosts.</summary>
+    [Test]
+    public async Task Policy_QuantifierArmConditionWithHopArm_AnswersTheAbsentRule_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(QuantifierArmDsl, "MatchQuantHopPolicy");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L));
+            side.EvaluatePolicy("BigScore");
+        });
+        await Assert.That(unlinked[^1].State["BigScore"]).IsEqualTo("True");
+
+        var linked = await scenario.AssertAgree(side => {
+            var order = side.Create("Order", ("Big", true));
+            var advisor = side.Create("Advisor", ("Score", 4L));
+            side.Create("Customer", ("MustScore", 7L), ("advisor", advisor), ("orders", new[] { order }));
+            side.EvaluatePolicy("BigScore");
+        });
+        await Assert.That(linked[^1].State["BigScore"]).IsEqualTo("True");
+    }
+
+    /// <summary>
+    /// A taken arm that reads through an unlinked hop is absent: an optional target stores absent, a required target
+    /// fails <c>Required</c>, and an ordering over it is false — no missing hop is dereferenced, on both hosts.
+    /// </summary>
+    [Test]
+    public async Task Match_QuantifierArmCondition_TakenHopArmWithUnlinkedHop_IsAbsent_OnBothHosts() {
+        var scenario = ParityScenario.FromDsl(QuantifierArmDsl, "MatchQuantHopTaken");
+
+        var optional = await scenario.AssertAgree(side => {
+            var order = side.Create("Order", ("Big", true));
+            side.Create("Customer", ("MustScore", 7L), ("orders", new[] { order }));
+            side.Invoke("Snapshot");
+        });
+        await Assert.That(optional[^1].Success).IsTrue()
+            .Because($"{optional[^1].FailureKind} {optional[^1].Message}");
+        await Assert.That(optional[^1].State["Seen"]).IsNull();
+
+        var required = await scenario.AssertAgree(side => {
+            var order = side.Create("Order", ("Big", true));
+            side.Create("Customer", ("MustScore", 7L), ("orders", new[] { order }));
+            side.Invoke("Force");
+        });
+        await Assert.That(required[^1].Success).IsFalse();
+        await Assert.That(required[^1].FailureKind).IsEqualTo("Required");
+        await Assert.That(required[^1].FailurePath).IsEqualTo("Customer.MustScore");
+        await Assert.That(required[^1].State["MustScore"]).IsEqualTo("7");
+
+        var policy = await scenario.AssertAgree(side => {
+            var order = side.Create("Order", ("Big", true));
+            side.Create("Customer", ("MustScore", 7L), ("orders", new[] { order }));
+            side.EvaluatePolicy("BigScore");
+        });
+        await Assert.That(policy[^1].State["BigScore"]).IsEqualTo("False");
+    }
+
     static async Task AssertAnswers(IReadOnlyList<ParityOutcome> outcomes, Dictionary<string, bool> expected) {
         foreach (var (policy, answer) in expected) {
             var actual = outcomes.First(o => o.Step == $"policy {policy}");

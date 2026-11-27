@@ -47,48 +47,18 @@ public sealed partial class DomainExpressionLoweringPass {
         };
 
     /// <summary>
-    /// A <c>match</c> is present exactly when the arm it selects has a value: the first arm whose condition
-    /// holds, or the <c>else</c> arm. Each contribution is that arm's condition (and no earlier arm's) together
-    /// with the arm value's own guard, so an unlinked hop inside one arm does not make a different arm absent.
+    /// A <c>match</c> is present exactly when the arm it selected has a value. The chain evaluates every arm
+    /// condition once and fills its result local with the selected arm's value or absent, so presence is that
+    /// local's own null test, not a second evaluation of the conditions: a quantifier arm condition (which hoists
+    /// statements) needs no shape here at all.
     /// </summary>
     private ValuePresence MatchPresence(
         MatchExpr match, Node subject, Node? pending, string? entityName) {
-        var values = match.Arms.Select(a => a.Value).Append(match.Else).ToList();
-        var presences = values.Select(value => PresenceIn(value, subject, null, entityName)).ToList();
-        if (presences.All(p => p.Guard is null))
-            return Combine(pending, null);
-
-        var throughHop = presences.Any(p => p.ThroughHop);
-        Node? guard = null;
-        Node? notYet = null;
-        for (var i = 0; i < match.Arms.Count; i++) {
-            var condition = MatchCondition(match.Arms[i].Condition, subject, pending, entityName);
-            var selected = notYet is null ? condition : And(notYet, condition);
-            var contribution = presences[i].Guard is { } armGuard ? And(selected, armGuard) : selected;
-            guard = guard is null ? contribution : Or(guard, contribution);
-            notYet = notYet is null ? Not(condition) : And(notYet, Not(condition));
-        }
-
-        var otherwise = notYet is null ? new Constant(true) : notYet;
-        if (presences[^1].Guard is { } elseGuard)
-            otherwise = And(otherwise, elseGuard);
-        guard = guard is null ? otherwise : Or(guard, otherwise);
-        return Combine(pending, guard, throughHop);
-    }
-
-    /// <summary>
-    /// An arm condition lowered against the same subject as the match, so the guard's branch selection is the
-    /// chain's. A condition that hoists statements (a quantifier) cannot ride in a guard; fail closed rather than
-    /// answer presence from a shape the guard cannot express.
-    /// </summary>
-    private Node MatchCondition(
-        DomainExpression condition, Node subject, Node? pending, string? entityName) {
-        var lowered = LowerAgainstEntity(entityName, condition, subject, condition: true, subjectPresence: pending);
-        if (lowered.Statements.Count == 0)
-            return lowered.Value;
-        throw new NotSupportedException(
-            "A 'match' arm condition that hoists statements cannot decide whether a value read through an " +
-            "unlinked optional hop is present; guard the arm value with an 'if' instead.");
+        var throughHop = match.Arms.Select(a => a.Value).Append(match.Else)
+            .Any(value => PresenceIn(value, subject, null, entityName).ThroughHop);
+        return _matchResults.TryGetValue(match, out var result)
+            ? Combine(pending, new NotEqual(result, new Constant(null!)), throughHop)
+            : Combine(pending, null, throughHop);
     }
 
     private ValuePresence PropertyPresence(

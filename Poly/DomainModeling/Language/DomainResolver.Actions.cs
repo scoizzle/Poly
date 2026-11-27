@@ -71,6 +71,7 @@ public sealed partial class DomainResolver {
                 ParseIdentifierList();
             }
             else {
+                var requireToken = Current;
                 Advance(); // consume 'require'
                 bool negated = false;
                 if (Current.Kind == TokenKind.Not) {
@@ -79,7 +80,7 @@ public sealed partial class DomainResolver {
                 }
                 var policies = ParseIdentifierList();
                 foreach (var p in policies) {
-                    _pendingRequires.Add(new PendingRequire(actionName, stageName, p, negated));
+                    _pendingRequires.Add(new PendingRequire(actionName, stageName, p, negated, requireToken));
                 }
             }
         }

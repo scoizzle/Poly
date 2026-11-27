@@ -2,6 +2,7 @@ using Poly.DomainModeling.Ontology;
 
 using Add = Poly.DomainModeling.Ontology.Add;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
@@ -110,6 +111,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             // Number, Int, and Int64 widen onto Decimal at the assign site only.
             if (right.DomainName is "Decimal" && IsIntegralTypeName(left.DomainName))
                 return true;
+            // R5, #491: a Decimal stored into an integral type rounds the fraction away. The owner's ruling
+            // allows it only when analysis proves the rounded value safe; that proof is T-12's open question
+            // (2026-11-11-domain-type-model-and-numeric-rules.md, R5), so the T-08 baseline refuses it. An
+            // arithmetic result or a sum carries the definition and no domain name (D1), so the name compare
+            // below cannot see it; the definitions' own words can.
+            if (IsDecimalWord(left) && IsIntegralWord(right))
+                return false;
             if (left.DomainName is { } ln && right.DomainName is { } rn)
                 return string.Equals(CanonicalName(ln), CanonicalName(rn), StringComparison.Ordinal);
             return true;
@@ -152,6 +160,16 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private static bool IsIntegralTypeName(string? typeName) =>
         typeName is "Number" or "Int" or "Int64";
+
+    /// <summary>
+    /// A type whose domain word is <c>Decimal</c> — the definition's word, not its declared name, so a
+    /// Decimal arithmetic result or sum (no domain name) is seen too.
+    /// </summary>
+    private static bool IsDecimalWord(ExprType type) => DomainTypeSystem.WordOf(type.Definition) is "Decimal";
+
+    /// <summary>A type whose domain word is integral (<c>Number</c> ≡ <c>Int64</c>, or <c>Int32</c>) — see <see cref="IsDecimalWord"/>.</summary>
+    private static bool IsIntegralWord(ExprType type) =>
+        DomainTypeSystem.WordOf(type.Definition) is "Number" or "Int64" or "Int32";
 
     private static string? CanonicalName(string? typeName) => typeName switch {
         "String" => "Text",
@@ -231,6 +249,12 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             case RelationshipNavigation or OwnedAccess when noEntity:
             case AnyExpr or AllExpr or NoneExpr or CountExpr or SumExpr when noEntity:
                 return "there is no entity here to read a relationship from (a function body has only its parameters)";
+            // #649: `n Days` reads as a path (`n`, then a hop `Days`); the author meant an amount and a unit.
+            case RelationshipNavigation { RelationshipName: var head, TargetProperty: PropertyAccess { Name: var unit } }
+                when Poly.DomainModeling.Libraries.Temporal.DurationUnits.IsUnit(unit)
+                     && (props?.ContainsKey(head) == true || parameters?.ContainsKey(head) == true):
+                return $"a duration amount is a number literal ('3 {unit}'), and '{head}' is a name; "
+                       + $"a Date or DateTime property or parameter takes a whole day count directly, as '<date> + {head}'";
             case RelationshipNavigation:
                 return "the path does not reach a property through to-one relationships";
             case OwnedAccess:
@@ -238,7 +262,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             case SumExpr:
             case AnyExpr or AllExpr or NoneExpr or CountExpr:
                 return "its relationship does not resolve to an entity";
-            case Add or Subtract or Multiply or Divide:
+            case Add or Subtract or Multiply or Divide or Modulo:
                 var operands = expr.Children.OfType<DomainExpression>()
                     .Select(o => InferType(context, o, props, parameters, enumTypes)).ToList();
                 return operands.All(IsTyped)
@@ -248,6 +272,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return "an arm value has no type";
             case FunctionCall call:
                 return FunctionAnalysis.Find(context, call.Name) is null
+                    && BuiltinFunctions.Find(context.GetTypeLookup()?.Domain, call.Name) is null
                     ? $"'{call.Name}' is not a declared function with a return type"
                     : "its return type cannot be modeled";
             default:

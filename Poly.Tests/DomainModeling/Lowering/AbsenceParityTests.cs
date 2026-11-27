@@ -794,6 +794,65 @@ public class AbsenceParityTests {
             .Because("null is the absence of a value; no host turns it into \"\"");
     }
 
+    /// <summary>
+    /// #929: an absent optional Text is null, on every read. Assigning it copies the
+    /// absence; the simulator used to coerce the null bag value to <c>""</c> and store an
+    /// empty string where the generated C# stores absent.
+    /// </summary>
+    [Test]
+    public async Task Assign_WhenAbsentOptionalTextCopiedToOptionalText_StoresAbsentOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Thing: entity {
+              OptTxt: Text optional
+              T: Text optional
+              Copy: action { assign T to OptTxt }
+            }
+            """, "ParityAbsentOptionalTextAssign")
+            .AssertAgree(side => {
+                side.Create("Thing");
+                side.Invoke("Copy");
+            });
+
+        await Assert.That(outcomes[1].Success).IsTrue()
+            .Because($"step failed: {outcomes[1].ExceptionType} {outcomes[1].Message}");
+        await Assert.That(outcomes[1].State["T"]).IsNull()
+            .Because("null is the absence of a value; no host turns it into \"\"");
+    }
+
+    /// <summary>
+    /// #517: a null test reads an absent optional Text as absent. The simulator used to
+    /// read the null bag value as <c>""</c>, so <c>is not null</c>, <c>exists</c> and
+    /// <c>!= null</c> were true and <c>is null</c> false for a value never set.
+    /// </summary>
+    [Test]
+    public async Task Policies_WhenOptionalTextIsAbsent_SeeNullOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Thing: entity {
+              Note: Text optional
+              NotNull: policy { Note is not null }
+              IsNull: policy { Note is null }
+              Exists: policy { Note exists }
+              NotEqual: policy { Note != null }
+            }
+            """, "ParityAbsentOptionalTextNullTests")
+            .AssertAgree(side => {
+                side.Create("Thing");
+                side.EvaluatePolicy("NotNull");
+                side.EvaluatePolicy("IsNull");
+                side.EvaluatePolicy("Exists");
+                side.EvaluatePolicy("NotEqual");
+            });
+
+        var answers = outcomes.Skip(1)
+            .Select(o => o.State[o.Step["policy ".Length..]] ?? "(none)")
+            .ToList();
+        await Assert.That(answers)
+            .IsEquivalentTo(["False", "True", "False", "False"])
+            .Because("an absent Text is null: NotNull false, IsNull true, Exists false, != null false");
+    }
+
     [Test]
     public async Task Create_RequiredTextLengthZeroToN_AcceptsEmpty() {
         var outcomes = await ParityScenario.FromDsl("""

@@ -4,7 +4,9 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
@@ -69,6 +71,7 @@ public sealed partial class DomainDslPrinter {
                 or Poly.DomainModeling.Ontology.Subtract
                 or Poly.DomainModeling.Ontology.Multiply
                 or Poly.DomainModeling.Ontology.Divide
+                or Poly.DomainModeling.Ontology.Modulo
                 or Poly.DomainModeling.Ontology.Not
                 ? $"not ({Run(_printer, n.Operand)})"
                 : $"not {Run(_printer, n.Operand)}";
@@ -84,6 +87,19 @@ public sealed partial class DomainDslPrinter {
 
         protected override string Divide(Divide d) =>
             $"({Run(_printer, d.Left)} / {Run(_printer, d.Right)})";
+
+        /// <summary>
+        /// <c>-x</c>. Every binary operator prints its own parentheses (<c>(1 + 2)</c>), so only a nested
+        /// negation needs another pair: <c>-(-3)</c>. Everything else prints bare: <c>-3</c>, <c>-Balance</c>,
+        /// <c>-Add(1, 2)</c>, <c>-(1 + 2)</c>.
+        /// </summary>
+        protected override string Negate(Negate n) =>
+            n.Operand is Poly.DomainModeling.Ontology.Negate
+                ? $"-({Run(_printer, n.Operand)})"
+                : $"-{Run(_printer, n.Operand)}";
+
+        protected override string Modulo(Modulo m) =>
+            $"({Run(_printer, m.Left)} % {Run(_printer, m.Right)})";
 
         protected override string Exists(Exists e) =>
             $"{Run(_printer, e.Target)} exists";

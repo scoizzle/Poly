@@ -75,6 +75,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             ProvableGuards.Validate(context, domain, entity);
         });
 
+        ValidateInvokeCycles(context, domain);
         ValidateObservedFlows(context, domain);
         ObservedFlowChecks.ReportUnusedAllowances(context, domain);
     }

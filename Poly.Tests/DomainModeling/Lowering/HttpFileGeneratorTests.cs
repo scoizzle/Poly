@@ -1,3 +1,4 @@
+using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
@@ -72,6 +73,31 @@ public class HttpFileGeneratorTests {
         await Assert.That(Member(http, "DayId")).IsNotEqualTo("\"example\"");
     }
 
+    /// <summary>#940: an entity argument's sample value is the target's key, with the JSON kind its DTO member binds: the
+    /// same value the target's create sample posts for it. A Number key is a number, a Text key a quoted literal, and a
+    /// shadow key has no value a client could know (P-12), so the route's id example stands.</summary>
+    [Test]
+    public async Task ActionSample_EntityArgument_CarriesTheTargetsKeyAsItsJsonKind() {
+        var http = Render(ParseDomain("""
+            domain Uni
+            Course: entity { Seq: Number unique  Name: Text }
+            Tutor: entity { Email: Text unique }
+            Member: entity { Label: Text }
+            Student: entity {
+              Email: Text unique
+              Join: action (course: Course) { }
+              Meet: action (tutor: Tutor) { }
+              Pass: action (member: Member) { }
+            }
+            """));
+
+        static string Member(string text, string name) =>
+            System.Text.RegularExpressions.Regex.Match(text, "\"" + name + "\": ([^,\r\n]+)").Groups[1].Value;
+        await Assert.That(Member(http, "CourseId")).IsEqualTo("0").Because(http);
+        await Assert.That(Member(http, "TutorId")).IsEqualTo("\"example-email\"").Because(http);
+        await Assert.That(Member(http, "MemberId")).IsEqualTo("1").Because(http);
+    }
+
     [Test]
     public async Task ValueTypeParam_EmitsJsonObject() {
         var http = Render(ParseDomain("""
@@ -140,6 +166,95 @@ public class HttpFileGeneratorTests {
         await Assert.That(http).Contains("\"City\"");
         await Assert.That(http).Contains("\"Region\"");
         await Assert.That(http.Contains("\"city\"")).IsFalse();
+    }
+
+    /// <summary>#596: a sample request the domain itself rejects teaches the reader nothing. Every value the
+    /// create sample posts for a constrained property must satisfy that property's declared range, length and
+    /// pattern, so the sample a new user sends first answers 201, not 400.</summary>
+    [Test]
+    public async Task CreateSample_SatisfiesTheDomainsOwnConstraints_Issue596() {
+        var domain = ParseDomain("""
+            domain Inventory
+            Category: enum { Tools, Toys, Food }
+            Product: entity {
+              Sku: Text unique length(3, 12) pattern("^[A-Z0-9]+$")
+              Name: Text length(1, 50)
+              Price: Number range(0, 10000)
+              Stock: Number range(0, 100000) default(0)
+              Cat: Category default(Tools)
+              Note: Text optional length(0, 100)
+            }
+            Customer: entity {
+              Email: Text unique length(5, 80) pattern("^[^@]+@[^@]+$")
+              Name: Text length(1, 50)
+              orders: many Order
+            }
+            Order: entity {
+              Qty: Number range(1, 100)
+              Total: Number range(0, 1000000)
+              Reject: action (Why: Text) { }
+            }
+            """);
+        var http = Render(domain).Replace("\r\n", "\n");
+
+        var checkedValues = 0;
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            var body = CreateSampleBody(http, entity);
+            if (body is null) continue;
+            foreach (var prop in entity.Properties) {
+                if (!body.TryGetValue(prop.Name, out var json)) continue;
+                checkedValues++;
+                await AssertSatisfies(prop, json, $"{entity.Name}.{prop.Name} in\n{http}");
+            }
+        }
+
+        // The sample set above carries four constrained scalars plus a pattern on two of them; if the
+        // parse misses the bodies, the loop would pass vacuously.
+        await Assert.That(checkedValues).IsGreaterThanOrEqualTo(6);
+    }
+
+    private static Dictionary<string, string>? CreateSampleBody(string http, Entity entity) {
+        var header = $"### Create a new {DomainTypeMapping.ToCamelCase(entity.Name)}";
+        var start = http.IndexOf(header + "\n", StringComparison.Ordinal);
+        if (start < 0) return null;
+        var open = http.IndexOf("\n{\n", start, StringComparison.Ordinal);
+        if (open < 0) return null;
+        var close = http.IndexOf("\n}\n", open, StringComparison.Ordinal);
+        if (close < 0) return null;
+        var members = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in http[(open + 3)..close].Split('\n', StringSplitOptions.RemoveEmptyEntries)) {
+            var colon = line.IndexOf("\": ", StringComparison.Ordinal);
+            if (colon < 0) continue;
+            var name = line[..colon].Trim().TrimStart('"');
+            var value = line[(colon + 3)..].Trim().TrimEnd(',');
+            members[name] = value;
+        }
+        return members;
+    }
+
+    private static async Task AssertSatisfies(Property prop, string json, string because) {
+        foreach (var constraint in prop.Constraints) {
+            switch (constraint) {
+                case RangeConstraint range: {
+                        var value = decimal.Parse(json, System.Globalization.CultureInfo.InvariantCulture);
+                        if (range.Minimum is { } min)
+                            await Assert.That(value).IsGreaterThanOrEqualTo(Convert.ToDecimal(min, System.Globalization.CultureInfo.InvariantCulture)).Because(because);
+                        if (range.Maximum is { } max)
+                            await Assert.That(value).IsLessThanOrEqualTo(Convert.ToDecimal(max, System.Globalization.CultureInfo.InvariantCulture)).Because(because);
+                        break;
+                    }
+                case LengthConstraint length: {
+                        var text = json.Trim('"');
+                        await Assert.That(text.Length).IsGreaterThanOrEqualTo(length.MinLength).Because(because);
+                        await Assert.That(text.Length).IsLessThanOrEqualTo(length.MaxLength).Because(because);
+                        break;
+                    }
+                case PatternConstraint pattern:
+                    await Assert.That(System.Text.RegularExpressions.Regex.IsMatch(json.Trim('"'), pattern.Pattern))
+                        .IsTrue().Because($"{because}: {json} vs {pattern.Pattern}");
+                    break;
+            }
+        }
     }
 
     private static int CountOf(string text, string value) {

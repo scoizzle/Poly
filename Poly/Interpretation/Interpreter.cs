@@ -215,12 +215,39 @@ public static class Interpreter {
     /// can set state properties (e.g. <c>MaxLoopIterations</c>) and
     /// call <c>state.SetArgs(...)</c> to seed arguments.
     /// </summary>
-    public static ExecutionResult Execute(VmProgram program, Action<VmState> configure) {
-        var state = new VmState(program);
+    public static ExecutionResult Execute(VmProgram program, Action<VmState> configure) =>
+        Execute(program, configure, valueStackSlots: 256);
+
+    /// <inheritdoc cref="Execute(VmProgram, Action{VmState})"/>
+    /// <param name="valueStackSlots">Slots the value stack starts with, for a program whose call chain a host
+    /// knows is deep. A live frame caches the backing array, so the buffer is sized before execution rather
+    /// than grown under it.</param>
+    public static ExecutionResult Execute(
+        VmProgram program, Action<VmState> configure, int valueStackSlots) {
+        var state = new VmState(program, valueStackSlots);
         configure(state);
         state.Status = InterpreterStatus.Running;
-        state.Program.Delegate(state);
+        RunDelegate(state);
         return new ExecutionResult(state, InterpretResult(state));
+    }
+
+    /// <summary>
+    /// Runs the compiled delegate and restores the entry frame state once if it throws. A throw that leaves the
+    /// program is restored here, at the one entry point: a catch-and-rethrow in every call frame
+    /// (<see cref="VmCall"/>) made an unwind cost thousands of bytes per live level, so a depth refusal thrown deep
+    /// in an invoke chain overflowed the stack it was protecting (#1115). A throw that a guest catch handles is
+    /// restored by that emitted catch handler instead.
+    /// </summary>
+    internal static void RunDelegate(VmState state) {
+        try {
+            state.Program.Delegate(state);
+        }
+        catch {
+            state.FramePos = 0;
+            state.ClosureHandle = 0;
+            state.Stack.Reset();
+            throw;
+        }
     }
 
     // ── Shared implementation ─────────────────────────────────────
@@ -230,7 +257,7 @@ public static class Interpreter {
     /// created). Internal — tests and resumption scenarios only.
     /// </summary>
     internal static void Execute(VmState state) {
-        state.Program.Delegate(state);
+        RunDelegate(state);
     }
 
     /// <summary>
@@ -241,7 +268,7 @@ public static class Interpreter {
     internal static InterpreterResult Resume(VmState state, params IEnumerable<object?> args) {
         state.Status = InterpreterStatus.Resuming;
         state.SetArgs(args);
-        state.Program.Delegate(state);
+        RunDelegate(state);
         return InterpretResult(state);
     }
 
@@ -265,8 +292,17 @@ public static class Interpreter {
             return InterpreterResult.Void;
 
         if (rootKind == PrimValueKind.StackScalar) {
-            if (clr == typeof(double) || clr == typeof(float))
+            // The word is not the number for two shapes: a single-precision value stores a double's IEEE bits of the
+            // float, and an unsigned 64-bit value stores its bitcast. Answer the type the program states, which is the
+            // CLR value C# computes; every other word is the number itself.
+            if (clr == typeof(double))
                 return InterpreterResult.FromValue(BitConverter.Int64BitsToDouble(raw));
+            if (clr == typeof(float))
+                return InterpreterResult.FromValue((float)BitConverter.Int64BitsToDouble(raw));
+            if (clr == typeof(ulong))
+                return InterpreterResult.FromValue(unchecked((ulong)raw));
+            if (clr == typeof(nuint))
+                return InterpreterResult.FromValue(unchecked((nuint)(ulong)raw));
             // A temporal word is the value, not the bits. DateTime.FromBinary keeps Kind.
             if (clr is not null && LocalType.Of(clr) is LocalType.TemporalLocal { IsWord: true } temporal)
                 return InterpreterResult.FromValue(temporal.Read(raw));

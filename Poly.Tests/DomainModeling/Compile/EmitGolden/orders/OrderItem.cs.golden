@@ -18,6 +18,11 @@ internal class OrderItem : Poly.Runtime.IActionScoped
     public string Sku { get; private set; } = default!;
     public long Qty { get; private set; }
     public Order? Order { get; private set; }
+    internal void AttachOrder(Order child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Order = child;
+    }
     internal static DomainResult<OrderItem> Create(string? sku = default, long? qty = default, Order? order = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -70,13 +75,17 @@ internal class OrderItem : Poly.Runtime.IActionScoped
             return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Required("'order' is required.", "OrderItem.order"));
         }
         var __order = order;
-        var created = new OrderItem(__sku, __qty, __order);
-        Poly.Runtime.ActionScope.Create(created, "OrderItem");
+        var __created = new OrderItem(__sku, __qty, __order);
+        Poly.Runtime.ActionScope.Create(__created, "OrderItem");
         if (order != null)
         {
-            order.AttachItems(created);
+            var __attach = order.AttachItems(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<OrderItem>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<OrderItem>.Success(created);
+        return DomainResult<OrderItem>.Success(__created);
     }
     public object __Snapshot()
     {

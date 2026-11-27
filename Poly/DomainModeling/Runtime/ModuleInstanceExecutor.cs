@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
@@ -36,9 +37,28 @@ public sealed partial class ModuleInstanceExecutor {
     private readonly Dictionary<object, ModuleInstance> _byBag = new(System.Collections.Generic.ReferenceEqualityComparer.Instance);
     private readonly List<ModuleInstance> _order = [];
     private readonly Dictionary<(string Entity, string Name), CompiledBody> _compiled = new();
+    private int _compiles;
+
+    /// <summary>
+    /// The tree a parameterised method's body binds to, per lowered method node. Binding builds a
+    /// fresh tree, and <see cref="Compile"/> hits its cache on the body reference: binding per call
+    /// made every parameterised invoke re-analyze and re-compile (#793). A re-lowered module hands
+    /// out new method nodes, so this drops with the compile cache.
+    /// </summary>
+    private readonly Dictionary<MethodDefinitionNode, MethodDefinitionNode> _bound =
+        new(System.Collections.Generic.ReferenceEqualityComparer.Instance);
     private readonly List<IDictionary<string, object?>> _born = [];
 
     private sealed record CompiledBody(Node Body, VmProgram Program, IReadOnlyList<Parameter> Parameters);
+
+    /// <summary>
+    /// Slots the simulator's value stack starts with. A live VM frame caches its backing array, so a legal invoke
+    /// chain's frames have to fit before execution rather than grow the array under the frames already running.
+    /// One link costs about seven slots, so this carries a chain of roughly five hundred and eighty actions —
+    /// seventeen times the 34 links #1115 reported. The depth guard refuses a chain past the buffer with the
+    /// typed failure, and never aborts the process.
+    /// </summary>
+    private const int SimulatorValueStackSlots = 4096;
 
     public ModuleInstanceExecutor(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -98,6 +118,14 @@ public sealed partial class ModuleInstanceExecutor {
     internal Node? CompiledBodyFor(string entityName, string methodName) {
         lock (_gate)
             return _compiled.TryGetValue((entityName, methodName), out var compiled) ? compiled.Body : null;
+    }
+
+    /// <summary>
+    /// How many method bodies this executor has analyzed and compiled. Lets a test hold the
+    /// per-(entity, action) cache to one compile without timing the invoke.
+    /// </summary>
+    internal int CompileCount {
+        get { lock (_gate) return _compiles; }
     }
 
     /// <summary>The session's storage port: the one every module call receives.</summary>
@@ -345,6 +373,7 @@ public sealed partial class ModuleInstanceExecutor {
         _module = [.. module.Select(BindParameterBodies)];
         (_types, _declarations) = BuildTypes(_module);
         _compiled.Clear();
+        _bound.Clear();
     }
 
     private List<KeyValuePair<DomainToCSharpExporter.SubscriptionInfo, string>> HandlerNames() {
@@ -401,15 +430,29 @@ public sealed partial class ModuleInstanceExecutor {
     // ── module access ─────────────────────────────────────────────────────────
 
     private Entity RequireEntity(string entityName) =>
-        _domain.Types.OfType<Entity>()
-            .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
-        ?? throw new HostException($"Entity '{entityName}' not found in domain '{_domain.Name}'.");
+        _analysis.TryGetEntity(_domain, entityName, out var entity) && entity is not null
+            ? entity
+            : throw new HostException($"Entity '{entityName}' not found in domain '{_domain.Name}'.");
 
-    private Action? FindAction(string entityName, string actionName) {
-        var entity = RequireEntity(entityName);
-        return entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
-            .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+    /// <summary>
+    /// The copy the module dispatches (#945): the current stage's own action wins, then the
+    /// entity's, as <see cref="DomainAnalysis.FindAction"/> rules and the lowered dispatch
+    /// agrees. A name declared only in another stage still names a method, so the module
+    /// answers with its stage failure; that representative supplies only the parameter list,
+    /// which lowering holds identical across every copy of a name.
+    /// </summary>
+    private Action? FindAction(ModuleInstance target, string actionName) {
+        var entity = RequireEntity(target.EntityName);
+        return DomainAnalysis.FindAction(entity, actionName, CurrentStageOf(entity, target))
+            ?? DomainAnalysis.FindAnyNamedAction(entity, actionName);
     }
+
+    /// <summary>The bag's stage, or the entity's initial stage while the module has not
+    /// written one — the same reading the instance tools present.</summary>
+    private static string? CurrentStageOf(Entity entity, ModuleInstance instance) =>
+        instance.Bag.TryGetValue("CurrentStage", out var stage) && stage is not null
+            ? Convert.ToString(stage, System.Globalization.CultureInfo.InvariantCulture)
+            : entity.InitialStage()?.Name;
 
     private MethodDefinitionNode? FindMethod(string entityName, string methodName, bool isStatic) {
         var module = RuntimeAnalysisCache.GetOrLower(_domain);
@@ -426,15 +469,18 @@ public sealed partial class ModuleInstanceExecutor {
         return null;
     }
 
-    private static MethodDefinitionNode BindOne(string entityName, MethodDefinitionNode method) {
+    private MethodDefinitionNode BindOne(string entityName, MethodDefinitionNode method) {
         if (method.Body is null || (method.Parameters?.Count ?? 0) == 0)
             return method;
+        if (_bound.TryGetValue(method, out var bound))
+            return bound;
         try {
-            return method with { Body = ModuleMethodBinding.BindTypedParameters(entityName, method).Tree };
+            bound = method with { Body = ModuleMethodBinding.BindTypedParameters(entityName, method).Tree };
         }
         catch (InvalidOperationException) {
-            return method;
+            bound = method;
         }
+        return _bound[method] = bound;
     }
 
     private object? Run(string entityName, MethodDefinitionNode method, object? self, object?[] args) {
@@ -445,7 +491,11 @@ public sealed partial class ModuleInstanceExecutor {
         var setArgs = new object?[1 + args.Length];
         setArgs[0] = self;
         args.CopyTo(setArgs, 1);
-        using var exec = Interpreter.Execute(compiled.Program, s => s.SetArgs(setArgs));
+        // A nested VM call recurses on the CLR stack, so an invoke chain's run depth — like its compile depth — is
+        // carried by the compiler doors' parse stack: a legal chain of hundreds of actions fits there, and the
+        // value stack's depth guard refuses one past the buffer with a typed failure, never an abort (#1115).
+        using var exec = DslLimits.RunOnParseStack(
+            () => Interpreter.Execute(compiled.Program, s => s.SetArgs(setArgs), SimulatorValueStackSlots));
         CaptureBorn(exec.State.Heap);
         return exec.Result.Value;
     }
@@ -454,6 +504,18 @@ public sealed partial class ModuleInstanceExecutor {
         string entityName, string name, Node body, IReadOnlyList<Parameter> parameters) {
         if (_compiled.TryGetValue((entityName, name), out var cached) && ReferenceEquals(cached.Body, body))
             return cached;
+        // The ABI emitter compiles an invoked action's body into the caller's frame, so compile depth grows
+        // with the length of an invoke chain: 34 legal links aborted the process on a default stack (#1115).
+        // The pass runs on the compiler doors' parse stack, as the analysis, lowering and print passes do
+        // (DslLimits.RunOnParseStack), and the emitter probes what is left so a chain too deep for that
+        // stack is a typed failure, never an abort.
+        var compiled = DslLimits.RunOnParseStack(() => CompileOnThisThread(entityName, body, parameters));
+        _compiles++;
+        return _compiled[(entityName, name)] = compiled;
+    }
+
+    private CompiledBody CompileOnThisThread(
+        string entityName, Node body, IReadOnlyList<Parameter> parameters) {
         var entityType = _declarations.GetTypeDefinition(entityName)
             ?? throw new InvalidOperationException(
                 $"Type '{entityName}' is missing from the module declarations.");
@@ -465,7 +527,7 @@ public sealed partial class ModuleInstanceExecutor {
         var program = parameters.Count == 0
             ? Interpreter.Compile(body, analysis)
             : Interpreter.Compile(body, analysis, parameters);
-        return _compiled[(entityName, name)] = new CompiledBody(body, program, parameters);
+        return new CompiledBody(body, program, parameters);
     }
 
     /// <summary>

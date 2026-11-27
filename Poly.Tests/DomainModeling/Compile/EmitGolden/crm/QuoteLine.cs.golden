@@ -20,6 +20,16 @@ internal class QuoteLine : Poly.Runtime.IActionScoped
     public decimal UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Quote? Quote { get; private set; }
+    internal void AttachProduct(Product child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Product = child;
+    }
+    internal void AttachQuote(Quote child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Quote = child;
+    }
     internal static DomainResult<QuoteLine> Create(long? qty = default, decimal? unitPrice = default, Product? product = default, Quote? quote = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -81,13 +91,17 @@ internal class QuoteLine : Poly.Runtime.IActionScoped
             return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Required("'quote' is required.", "QuoteLine.quote"));
         }
         var __quote = quote;
-        var created = new QuoteLine(__qty, __unitPrice, __product, __quote);
-        Poly.Runtime.ActionScope.Create(created, "QuoteLine");
+        var __created = new QuoteLine(__qty, __unitPrice, __product, __quote);
+        Poly.Runtime.ActionScope.Create(__created, "QuoteLine");
         if (quote != null)
         {
-            quote.AttachLines(created);
+            var __attach = quote.AttachLines(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<QuoteLine>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<QuoteLine>.Success(created);
+        return DomainResult<QuoteLine>.Success(__created);
     }
     public object __Snapshot()
     {

@@ -4,7 +4,9 @@ using Poly.Introspection.CommonLanguageRuntime;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
@@ -88,8 +90,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             && Family(InferType(context, add.Left, props, parameters, enumTypes)) is TypeFamily.Text
             && Family(InferType(context, add.Right, props, parameters, enumTypes)) is TypeFamily.Text)
             return TextFamily;
-        if (expr is Add or Subtract or Multiply or Divide)
+        if (expr is Add or Subtract or Multiply or Divide or Modulo)
             return InferArithmetic(context, expr, props, parameters, enumTypes);
+        if (expr is Negate negate)
+            return InferNegate(context, negate, props, parameters, enumTypes);
 
         return expr switch {
             PropertyAccess pa => ResolvePropertyType(pa.Name, props, parameters) is { } pt
@@ -116,9 +120,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 .AsOptional(!IsNavigationToCondition(navigation)),
             OwnedAccess owned => InferOwned(context, owned, props, enumTypes).AsOptional(),
             MatchExpr match => InferMatch(context, match, props, parameters, enumTypes, hint: null),
-            FunctionCall call => FunctionAnalysis.Find(context, call.Name) is { } function
-                ? ResolveName(context, function.ReturnType.TypeName, enumTypes)
-                : ExprType.Unresolved,
+            FunctionCall call => InferCall(context, call, props, parameters, enumTypes),
             _ => ExprType.Unresolved,
         };
     }
@@ -132,7 +134,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// </summary>
     private sealed class EntityScope : Dictionary<string, string> {
         public EntityScope(Entity entity)
-            : base(entity.Properties.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal), StringComparer.Ordinal) {
+            // A property declared twice is a positioned DMSTR001 the structural pass reports; keep the
+            // last declaration here so this pass reaches it instead of throwing on the repeated key.
+            : base(entity.Properties
+                .GroupBy(p => p.Name, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Last().Type.TypeName, StringComparer.Ordinal), StringComparer.Ordinal) {
             EntityName = entity.Name;
             Binders = new Dictionary<string, string>(StringComparer.Ordinal);
             Optional = entity.Properties.Where(p => !EntityStructureAnalyzer.IsRequired(p))
@@ -203,6 +209,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 Add => Introspection.OperatorKind.Add,
                 Subtract => Introspection.OperatorKind.Subtract,
                 Multiply => Introspection.OperatorKind.Multiply,
+                Modulo => Introspection.OperatorKind.Modulo,
                 _ => Introspection.OperatorKind.Divide,
             };
             return context.TypeSystem.Operator(kind, left.Definition!, right.Definition) is { } resolution
@@ -210,6 +217,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 : ExprType.Unresolved;
         }
         if (expr is Add or Subtract && IsDate(left) && IsNumeric(right))
+            return left with { DomainName = null, Optional = absent };
+        // #654: DateTime ± a Duration value keeps the DateTime (the Duration is a TimeSpan on the C# surface).
+        if (expr is Add or Subtract && IsDate(left) && Family(right) is TypeFamily.Duration)
             return left with { DomainName = null, Optional = absent };
         // A date difference of one granularity is a duration (the shape rule stays in WalkExpression: T-10b).
         if (expr is Subtract && IsDate(left) && IsDate(right) && !MixedDateGranularity(left, right))
@@ -387,6 +397,24 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return result;
         }
         return ExprType.Unresolved;
+    }
+
+    /// <summary>
+    /// Unary minus is the platform's unary operator for the operand's type: the result type the type system
+    /// resolves is kept with no domain name (as arithmetic results are), and an operand with no operator stays
+    /// Unresolved so the consuming site records it (DMSEM006). A nullable operand lifts, as C# does.
+    /// </summary>
+    private ExprType InferNegate(
+        AnalysisContext context, Negate negate,
+        Dictionary<string, string>? props, Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes) {
+        var operand = InferType(context, negate.Operand, props, parameters, enumTypes);
+        if (operand.Definition is not { } definition)
+            return ExprType.Unresolved;
+        return context.TypeSystem.Operator(Introspection.OperatorKind.UnaryMinus, definition, right: null)?.ResultTypeDefinition
+            is { } result
+            ? new ExprType(result, Optional: false, DomainName: null).AsOptional(operand.Optional)
+            : ExprType.Unresolved;
     }
 
     /// <summary>

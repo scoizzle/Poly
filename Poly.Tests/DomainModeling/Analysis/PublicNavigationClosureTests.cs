@@ -219,11 +219,11 @@ public sealed class PublicNavigationClosureTests {
         await Assert.That(result.Succeeded).IsTrue();
     }
 
-    // F2 (fix round 1): a ManyToMany navigation from a public entity to an internal one is not expressible in the
-    // DSL (model API only) and the pack's explicit mapping cannot prove a skip navigation over a non-public member, so it
-    // fails closed under DMCON019, positioned on the navigation. A one-to-many navigation stays legal.
+    // L-22d (#807): the navigation prints internal on a public owner (`DomainAccess.NavigationAccess`), so a
+    // many-to-many to an internal entity exposes nothing of that entity's shape. The one-to-many case above is
+    // accepted for the same reason, and this shape is the same fact.
     [Test]
-    public async Task Analyze_WhenPublicEntityHasManyToManyNavToInternalEntity_ReportsDMCON019OnTheNavigation() {
+    public async Task Analyze_WhenPublicEntityHasManyToManyNavToInternalEntity_IsNotReported() {
         var item = new Entity("Item", [], [], [], []);
         var order = new Entity("Order", [], [], [], []) with { Visibility = Visibility.Public };
         var navigation = new Relationship(
@@ -231,14 +231,13 @@ public sealed class PublicNavigationClosureTests {
             RelationshipCardinality.ManyToMany, []);
         var domain = DomainTestFactory.Create("T", [item, order], [navigation]);
 
-        var errors = DomainModelAnalyzer.Analyze(domain).Diagnostics
-            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == "DMCON019")
-            .ToList();
-
-        await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(errors[0].Node is Relationship { Name: "items" }).IsTrue();
-        await Assert.That(errors[0].Message).Contains("many-to-many");
+        await Assert.That(DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Count(d => d.Code == "DMCON019")).IsEqualTo(0);
     }
+
+    // L-22d (#807): the many-to-many arm of DMCON019 is gone. The shape that replaces it — accepted, and mapped as
+    // an EF skip navigation — is Analyze_WhenPublicEntityHasManyToManyNavToInternalEntity_IsNotReported above, and
+    // ManyToManySkipNavigationTests proves the mapping and the booted model.
 
     [Test]
     public async Task Analyze_WhenInternalEntityHasManyToManyNavToInternalEntity_IsNotReported() {

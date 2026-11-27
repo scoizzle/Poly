@@ -4,6 +4,7 @@ using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using OperatorKind = Poly.Introspection.OperatorKind;
@@ -537,6 +538,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 StampBinary(context, div, OperatorKind.Divide, div.Left, div.Right, props, parameters, enumTypes);
                 CheckNumericArithmetic(context, div, div.Left, div.Right, props, parameters, enumTypes);
                 return;
+            case Negate negate:
+                CheckNegate(context, negate, props, parameters, enumTypes);
+                WalkExpression(context, negate.Operand, props, parameters, enumTypes, walked);
+                return;
+            case Modulo mod:
+                StampBinary(context, mod, OperatorKind.Modulo, mod.Left, mod.Right, props, parameters, enumTypes);
+                CheckNumericArithmetic(context, mod, mod.Left, mod.Right, props, parameters, enumTypes);
+                return;
             case Not not:
                 var operand = InferType(context, not.Operand, props, parameters, enumTypes);
                 if (!IsTyped(operand))
@@ -626,6 +635,21 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// <see cref="TypedExpressionMetadata"/> with <see cref="ExprType.Optional"/> set; lowering reads it
     /// (<c>DomainExpressionLoweringPass.RouteCondition</c>), and these are the only positions that set it.
     /// </summary>
+    /// <summary>
+    /// Unary minus (<c>-x</c>): the operand is a Number or a Decimal (one family; a Decimal keeps its own type
+    /// through the platform's operator). Anything else is refused, naming the type it wrote — a duration included,
+    /// because Duration arithmetic is #550's. An operand the analyzer cannot type is DMSEM006's.
+    /// </summary>
+    private void CheckNegate(
+        AnalysisContext context, Negate negate,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        var operand = InferType(context, negate.Operand, props, parameters, enumTypes);
+        if (!IsTyped(operand))
+            RequireTyped(context, negate.Operand, operand, negate, props, parameters, enumTypes);
+        else if (Family(operand) is not TypeFamily.Number)
+            Report(context, negate, $"unary '-' requires a Number or Decimal operand (got '{Describe(operand)}')");
+    }
+
     private static void StampOptionalBoolean(AnalysisContext context, DomainExpression expr, ExprType type) {
         if (!type.Optional || Family(type) is not TypeFamily.Boolean) return;
         var stamped = context.GetMetadata<TypedExpressionMetadata>(expr);
@@ -706,16 +730,25 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// The first operand, down the <c>+ - * /</c> spine of <paramref name="value"/>, that is a <c>match</c> that may be absent
-    /// (T-09a). Over an optional target the sum is absent when it is, on every host; into a required target the C# compiler
-    /// rejects a <c>long?</c> (CS0266) and the VM and <c>polyc</c> refuse it, so analysis refuses it at the match.
+    /// The first operand, down the <c>+ - * / %</c> or unary-minus spine of <paramref name="value"/>, that is a
+    /// <c>match</c> that may be absent (T-09a). Over an optional target the sum is absent when it is, on every host;
+    /// into a required target the C# compiler rejects a <c>long?</c> (CS0266) and the VM and <c>polyc</c> refuse it,
+    /// so analysis refuses it at the match.
     /// </summary>
     private MatchExpr? AbsentMatchOperand(
         AnalysisContext context, DomainExpression value,
         Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
-        if (value is not (Add or Subtract or Multiply or Divide)) return null;
-        foreach (var operand in value.Children.OfType<DomainExpression>()) {
-            if (RewriteLibraryIdent(operand) is MatchExpr match && InferType(context, match, props, parameters, enumTypes).Optional)
+        value = RewriteLibraryIdent(value);
+        if (value is Negate negate) {
+            var operand = RewriteLibraryIdent(negate.Operand);
+            if (operand is MatchExpr negated && InferType(context, negated, props, parameters, enumTypes).Optional)
+                return negated;
+            return AbsentMatchOperand(context, operand, props, parameters, enumTypes);
+        }
+        if (value is not (Add or Subtract or Multiply or Divide or Modulo)) return null;
+        foreach (var child in value.Children.OfType<DomainExpression>()) {
+            var operand = RewriteLibraryIdent(child);
+            if (operand is MatchExpr match && InferType(context, match, props, parameters, enumTypes).Optional)
                 return match;
             if (AbsentMatchOperand(context, operand, props, parameters, enumTypes) is { } inner)
                 return inner;
@@ -745,7 +778,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 WarnIntegerDivisions(context, value, model, props, parameters, enumTypes);
             return;
         }
-        if (expr is not (Add or Subtract or Multiply or Divide))
+        if (expr is not (Add or Subtract or Multiply or Divide or Modulo or Negate))
             return;
         if (expr is Divide divide
             && model.KindOf(InferType(context, divide.Left, props, parameters, enumTypes)) is NumericKind.Integer64

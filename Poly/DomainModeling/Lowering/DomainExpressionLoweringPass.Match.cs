@@ -10,6 +10,14 @@ namespace Poly.DomainModeling.Lowering;
 
 public sealed partial class DomainExpressionLoweringPass {
     /// <summary>
+    /// The result local of each absent-able <c>match</c> (#936): the chain fills it with the selected arm's value
+    /// and leaves it absent, so a consumer asks this local's own null test instead of rebuilding the arm
+    /// conditions. Keyed by node identity; the entry is written when <see cref="LowerMatch"/> builds the chain,
+    /// before any consumer asks (each consumer lowers the value first).
+    /// </summary>
+    private readonly Dictionary<MatchExpr, Node> _matchResults = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
     /// <c>match</c> (#409) lowers to a right-nested <see cref="SN.Conditional"/> chain with the
     /// <c>else</c> value innermost, so simulation and printed C# share one conditional. Statements
     /// hoisted by an arm (quantifier loops) are read-only and run before the chain.
@@ -38,6 +46,13 @@ public sealed partial class DomainExpressionLoweringPass {
             .Select((a, i) => (Condition: RouteCondition(a.Condition), Value: Arm(a.Value, target, typing.ArmTypes[i], toDecimal, slot)))
             .ToList();
         var otherwise = Arm(m.Else, target, typing.ArmTypes[^1], toDecimal, slot);
+        // An arm value that reads through an unlinked hop is absent (#936): the arm's own presence guard decides
+        // whether the value is read at all, so the chain never dereferences a missing hop. The chain leaves the
+        // result local absent when the selected arm is absent, which is the presence a consumer of the match asks
+        // for (#936): no condition is evaluated a second time.
+        var presences = m.Arms.Select(a => PresenceOf(a.Value, _currentSubject))
+            .Append(PresenceOf(m.Else, _currentSubject))
+            .ToList();
         if (slot is not null) {
             var result = _names.Next("match");
             // A nested match that can be absent fills its own local with statements of its own: they run inside the branch of the arm
@@ -46,13 +61,23 @@ public sealed partial class DomainExpressionLoweringPass {
                 arm is MatchExpr inner && _analysis.GetMetadata<MatchTypingMetadata>(inner) is { Unified.Optional: true };
             LoweredExpression Hoisted(LoweredExpression lowered, DomainExpression arm) =>
                 Lazy(arm) ? lowered with { Statements = [] } : lowered;
-            Node Take(LoweredExpression lowered, DomainExpression arm) =>
-                new Block([.. Lazy(arm) ? lowered.Statements : [], new Assignment(result, lowered.Value)]);
-            Node chain = Take(otherwise, m.Else);
+            Node Take(LoweredExpression lowered, DomainExpression arm, ValuePresence presence) {
+                if (Lazy(arm)) {
+                    // The inner chain runs inside this branch and fills its own local, so this arm's presence is that local's
+                    // own null test, read after the chain. The subject's presence, when there is one, guards the whole branch
+                    // because the arm values read the subject.
+                    Node taken = new Block([.. lowered.Statements, new Assignment(result, lowered.Value)]);
+                    return _subjectPresence is { } subjectGuard ? new IfStatement(subjectGuard, taken) : taken;
+                }
+                Node present = new Block([new Assignment(result, lowered.Value)]);
+                return presence.Guard is { } guard ? new IfStatement(guard, present) : present;
+            }
+            Node chain = Take(otherwise, m.Else, presences[^1]);
             for (var i = arms.Count - 1; i >= 0; i--)
-                chain = new IfStatement(arms[i].Condition.Value, Take(arms[i].Value, m.Arms[i].Value), new Block([chain]));
+                chain = new IfStatement(arms[i].Condition.Value, Take(arms[i].Value, m.Arms[i].Value, presences[i]), new Block([chain]));
             var parts = LoweredExpression.Combine(
                 [.. arms.SelectMany((a, i) => new[] { a.Condition, Hoisted(a.Value, m.Arms[i].Value) }), Hoisted(otherwise, m.Else)], result);
+            _matchResults[m] = result;
             return new LoweredExpression(
                 [.. parts.Statements, new Assignment(result, new SN.TypeCast(new Constant(null), slot)), chain], [.. parts.Variables, result], result);
         }

@@ -16,6 +16,16 @@ internal class CampaignMember : Poly.Runtime.IActionScoped
     }
     public Contact? Contact { get; private set; }
     public Campaign? Campaign { get; private set; }
+    internal void AttachContact(Contact child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Contact = child;
+    }
+    internal void AttachCampaign(Campaign child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Campaign = child;
+    }
     internal static DomainResult<CampaignMember> Create(Contact? contact = default, Campaign? campaign = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -51,13 +61,17 @@ internal class CampaignMember : Poly.Runtime.IActionScoped
             return DomainResult<CampaignMember>.Failure(Poly.Runtime.DomainFailure.Required("'campaign' is required.", "CampaignMember.campaign"));
         }
         var __campaign = campaign;
-        var created = new CampaignMember(__contact, __campaign);
-        Poly.Runtime.ActionScope.Create(created, "CampaignMember");
+        var __created = new CampaignMember(__contact, __campaign);
+        Poly.Runtime.ActionScope.Create(__created, "CampaignMember");
         if (campaign != null)
         {
-            campaign.AttachMembers(created);
+            var __attach = campaign.AttachMembers(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<CampaignMember>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<CampaignMember>.Success(created);
+        return DomainResult<CampaignMember>.Success(__created);
     }
     public object __Snapshot()
     {

@@ -55,12 +55,11 @@ public sealed partial class MinimalApiGenerator {
 /// name). The route parent of a nested action is the root's back-reference node, <c>this.&lt;BackReference&gt;</c>.</summary>
 internal sealed record ActionReads(string Entity, string Action, IReadOnlyList<ReadRoot> Roots) {
     /// <summary>
-    /// Over HTTP a subscriber registry (<c>_…Subscribers</c>) holds only the subscribers registered during this request:
-    /// the host never re-registers subscribers after it loads an entity (#560), but a <c>create in</c> registers the
-    /// owner in the new child's registry (<c>Attach{Nav}</c>, <c>Create</c>), and a notify in the same action then runs
-    /// that owner's <c>when</c> handler. So the walk follows the handler for every subscriber registered during the walk,
-    /// and a registry nothing registered into reads nothing. When #560 re-registers stored subscribers after a load this
-    /// becomes false, and the walk refuses iterating a stored entity's registry instead.
+    /// Since #560 the host calls the module's own <c>InitializeSubscriptions</c> after loading an aggregate, so a stored
+    /// subscriber is registered exactly as <c>Create</c> registered it. This walk still models a registry as holding only
+    /// what it saw registered during the action, so a restored handler's reads are not part of the tree; a handler that
+    /// reads a navigation the route did not load is under-modelled. #560's S2 removes the assumption: the walk derives a
+    /// stored registry's contents from the subscriber's inverse and refuses the one it cannot follow.
     /// </summary>
     internal static bool SubscribersEmptyOverHttp => true;
 
@@ -112,7 +111,7 @@ internal sealed class ActionReadsWalker {
     private static readonly (NodeKindClass Class, Type[] Kinds)[] KindTable = [
         (NodeKindClass.ScalarOnly, [
             typeof(Ast.Nodes.Add), typeof(Ast.Nodes.Subtract), typeof(Ast.Nodes.Multiply), typeof(Ast.Nodes.Divide),
-            typeof(Modulo), typeof(UnaryMinus), typeof(Ast.Nodes.And), typeof(Ast.Nodes.Or), typeof(Ast.Nodes.Not),
+            typeof(Ast.Nodes.Modulo), typeof(UnaryMinus), typeof(Ast.Nodes.And), typeof(Ast.Nodes.Or), typeof(Ast.Nodes.Not),
             typeof(Equal), typeof(NotEqual), typeof(GreaterThan), typeof(GreaterThanOrEqual), typeof(LessThan),
             typeof(LessThanOrEqual), typeof(BitwiseAnd), typeof(BitwiseOr), typeof(BitwiseXor), typeof(BitwiseNot),
             typeof(ShiftLeft), typeof(ShiftRight), typeof(PopCount), typeof(InterpolatedString), typeof(TypeIs),
@@ -549,6 +548,8 @@ internal sealed class ActionReadsWalker {
 
     private static string? BackingField(PropertyDefinitionNode property) => property.Getter?.Body switch {
         Member { Value: ThisReference, MemberName: var name } => name,
+        // A collection navigation prints a copy getter over its backing field (#556, #541).
+        New { Arguments: [Member { Value: ThisReference, MemberName: var name }] } => name,
         Return { Value: Member { Value: ThisReference, MemberName: var name } } => name,
         Block { Nodes: [Return { Value: Member { Value: ThisReference, MemberName: var name } }] } => name,
         _ => null,

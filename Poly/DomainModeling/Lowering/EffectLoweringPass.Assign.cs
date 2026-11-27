@@ -38,6 +38,20 @@ public sealed partial class EffectLoweringPass {
             ? assignProp.Name
             : null;
 
+        // A value read through an unlinked optional hop is absent (#936): an optional target stores absent,
+        // a required target fails the same Required the assign guard gives a null value. The value is read
+        // only on the present branch, so an unlinked hop is never dereferenced.
+        var presence = _expressionPass.PresenceOf(a.Value, Subject);
+        var requiredTarget = assignProp is not null && EntityStructureAnalyzer.IsRequired(assignProp);
+        var optionalMatch = ContainsOptionalMatch(a.Value);
+        // A match over an absent-able arm lowers to an optional local; the guard above proves it has a value,
+        // so the present branch writes the target's own type (the word the printed module declares).
+        if (requiredTarget && presence.Guard is not null && optionalMatch)
+            value = value with {
+                Value = new TypeCast(value.Value,
+                    DomainToCSharpExporter.MapDomainTypeRef(assignProp!.Type, _domain, _analysis))
+            };
+
         var needsConstraintWrap = assignProp is not null
             && HasAssignableConstraints(assignProp)
             && !SatisfiesAssignConstraints(assignProp, value.Value)
@@ -50,8 +64,31 @@ public sealed partial class EffectLoweringPass {
                 value.Value,
                 uniqueName,
                 _expressionPass.MayBeAbsent(a.Value, name => _binderEntities?.GetValueOrDefault(name)));
+
+        if (presence.Guard is not null && (presence.ThroughHop || (requiredTarget && optionalMatch))) {
+            Node absent = requiredTarget
+                ? AssignConstraintFailure(ConstraintCheckWriter.FailureSpec(
+                    ConstraintCheckWriter.RequiredCheck(assignProp!.Name, new Constant(null)),
+                    _entity.Name, assignProp.Name))
+                // The absent value is the slot's own null, never the word 0 a bare null constant is in a
+                // value-type slot: an optional Number target stores absent, as the printed C# does.
+                : new Assignment(target.Value, assignProp is null
+                    ? new Constant(null)
+                    : TargetTypeAdapter.Adapt(new Constant(null), assignProp.Type, _context));
+            assignment = new IfStatement(presence.Guard, new Block([assignment]), new Block([absent]));
+        }
+
         return LoweredExpression.Before([target, value], assignment);
     }
+    /// <summary>
+    /// True when <paramref name="value"/> is, or contains, a <c>match</c> whose analysed type can be absent. Such a
+    /// match lowers to an optional local, so a required assign target needs the present value's own type on the
+    /// guarded branch (the guard proves the local has a value).
+    /// </summary>
+    private bool ContainsOptionalMatch(DomainExpression value) =>
+        (value is MatchExpr match && _analysis.GetMetadata<MatchTypingMetadata>(match) is { Unified.Optional: true })
+        || value.Children.OfType<DomainExpression>().Any(ContainsOptionalMatch);
+
     /// <summary>
     /// True when a constant/enum-member RHS provably satisfies every emit-time
     /// constraint on the property, so the assignment needs no fail-before-mutate

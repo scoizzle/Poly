@@ -16,50 +16,72 @@ public sealed partial class DomainToCSharpExporter {
     /// </summary>
     private static void EmitStagePolicyGuards(
         Action action, Entity entity, string? policyStageName, string? stageEnumTypeName,
-        List<Node> nodes, Func<FailureLowering.Spec, Node> failureReturn) {
-        void EmitOne(Policy policy) {
-            if (PolicyGuardFacts.SuppressesStageGate(action, policy))
+        List<Node> nodes, Func<FailureLowering.Spec, Node> failureReturn) =>
+        nodes.AddRange(StagePolicyGuards(action, entity, policyStageName, stageEnumTypeName,
+            subject: new ThisReference(), messageSuffix: null, failureReturn));
+
+    /// <summary>
+    /// The stage <c>require</c> checks for one context, ready to prepend (an action's gate), to insert
+    /// before an action's final return (the post-check, #518/#577: a stage requirement is an INVARIANT,
+    /// so the body must keep it true, not only meet it on entry), or to insert after <c>Create</c>'s
+    /// initial values and entry (#576). <paramref name="subject"/> owns the policies: <c>this</c> for an
+    /// action, the created local for <c>Create</c>. <paramref name="messageSuffix"/> tells a refusing check
+    /// apart from its caller's. A stage-scoped context checks its stage unconditionally; an entity-level
+    /// one checks while <c>CurrentStage</c> is that stage, so an action or entry that transitioned away
+    /// is judged by the stage it landed in.
+    /// </summary>
+    private static List<Node> StagePolicyGuards(
+        Action? action, Entity entity, string? policyStageName, string? stageEnumTypeName,
+        Node subject, Func<Stage, string>? messageSuffix, Func<FailureLowering.Spec, Node> failureReturn) {
+        var name = action?.Name ?? "Create";
+        var checks = new List<Node>();
+        void EmitOne(Policy policy, Stage stage, List<Node> into) {
+            if (action is not null && PolicyGuardFacts.SuppressesStageGate(action, policy))
+                return;
+            // #545: the action's own `require P` already emitted this gate above, so the stage copy is dead
+            // (the first guard returned). Same-name `not_P` and `P` are different checks and both stay. Only the
+            // gate (no message suffix): the re-check after the body (#518/#577) is the invariant, not a duplicate.
+            if (messageSuffix is null && action is not null
+                && action.Policies.Any(p => string.Equals(p.Name, policy.Name, StringComparison.Ordinal)))
                 return;
             var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
             var realName = negated ? policy.Name[4..] : policy.Name;
-            Node call = new Invoke(new Member(new ThisReference(), realName));
-            nodes.Add(new IfStatement(
+            Node call = new Invoke(new Member(subject, realName));
+            into.Add(new IfStatement(
                 negated ? call : new Syntactic.Not(call),
                 new Block([failureReturn(new FailureLowering.Spec(
                     DomainFailureKind.Policy,
-                    new Constant($"'{action.Name}' blocked by policy '{realName}'."),
-                    $"{entity.Name}.{action.Name}", realName))])));
+                    new Constant($"'{name}' blocked by policy '{realName}'." + (messageSuffix?.Invoke(stage) ?? "")),
+                    $"{entity.Name}.{name}", realName))])));
         }
 
         if (policyStageName is not null) {
             var stage = entity.Stages.FirstOrDefault(s =>
                 string.Equals(s.Name, policyStageName, StringComparison.Ordinal));
             if (stage is null)
-                return;
+                return checks;
             foreach (var policy in stage.Policies)
-                EmitOne(policy);
-            return;
+                EmitOne(policy, stage, checks);
+            return checks;
         }
 
         if (stageEnumTypeName is null)
-            return;
+            return checks;
         foreach (var stage in entity.Stages) {
             if (stage.Policies.Count == 0)
                 continue;
-            var checks = new List<Node>();
-            var outer = nodes;
-            nodes = checks;
+            var stageChecks = new List<Node>();
             foreach (var policy in stage.Policies)
-                EmitOne(policy);
-            nodes = outer;
-            if (checks.Count == 0)
+                EmitOne(policy, stage, stageChecks);
+            if (stageChecks.Count == 0)
                 continue;
-            nodes.Add(new IfStatement(
+            checks.Add(new IfStatement(
                 new Equal(
-                    new Member(new ThisReference(), "CurrentStage"),
+                    new Member(subject, "CurrentStage"),
                     new Member(new NamedTypeReference(stageEnumTypeName), stage.Name)),
-                new Block(checks)));
+                new Block(stageChecks)));
         }
+        return checks;
     }
 
     /// <summary>
@@ -113,6 +135,10 @@ public sealed partial class DomainToCSharpExporter {
         var nodes = new List<Node>();
         var locals = new List<Node>();
 
+        // A value-type payload is checked where it enters the action (#612/#571): the same
+        // ConstraintCheckWriter checks a create runs, so both hosts refuse the same members.
+        nodes.AddRange(ValuePayloadGuardWriter.Guards(entity, action, domain, analysis, actionResultType));
+
         // Loop-guard backstop shares NoteAutomaticStage with the simulator.
         if (EffectHelpers.HasAutomaticTransitions(entity))
             nodes.Add(new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain")));
@@ -137,12 +163,10 @@ public sealed partial class DomainToCSharpExporter {
         // Emit require guard clauses. Named entity policies are predicates, not
         // always-on invariants — they gate an action only when the action `require`s
         // them (FieldService AtCapacity must not block ClockIn / GoOffDuty).
-        // Path-prefix hops in a required policy: fail-closed DomainResult.Failure
-        // before the bool call (same message as singular cross-entity invoke) so
-        // unlinked never escapes via coalesce-throw / InvalidOperationException.
+        // A policy that reads an unlinked optional hop is false (#936), so the refusal
+        // is Policy: the policy body is absence-safe, and no pre-guard answers Required
+        // for a read that has a documented absent value.
         foreach (var policy in action.Policies) {
-            EmitPathPrefixRequireGuards(policy.Expression, action, entity, domain, nodes, FailureReturn);
-
             if (policy.Name.StartsWith("not_", StringComparison.Ordinal)) {
                 var realName = policy.Name.Substring(4);
                 var guardCall = new Invoke(
@@ -234,7 +258,7 @@ public sealed partial class DomainToCSharpExporter {
                              or Syntactic.Member or Syntactic.Constant
                              or Syntactic.New or Syntactic.UnaryMinus
                              or Syntactic.Not or Syntactic.Add or Syntactic.Subtract
-                             or Syntactic.Multiply or Syntactic.Divide) {
+                             or Syntactic.Multiply or Syntactic.Divide or Syntactic.Modulo) {
                         nodes[lastIdx] = new Return(
                             new Invoke(
                                 new Member(actionResultType, "Success"),
@@ -262,52 +286,22 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
-        // Block is a sequence; an empty action body is an empty block.
-        return new Block(nodes, locals);
-    }
-
-    /// <summary>
-    /// For each to-one path-prefix hop in a require policy expression, emit
-    /// <c>if (this.Rel == null) return DomainResult.Failure(DomainFailure.Required("'Action' requires a linked 'rel'…", "Entity.rel"))</c>
-    /// before the policy bool is called. Multi-hop guards each hop in order;
-    /// the entity clause names the subject entity of that hop.
-    /// </summary>
-    private static void EmitPathPrefixRequireGuards(
-        DomainExpression expression,
-        Action action,
-        Entity entity,
-        Domain domain,
-        List<Node> nodes,
-        Func<FailureLowering.Spec, Node> failureReturn) {
-        WalkPathPrefixRequireGuards(
-            expression, new ThisReference(), action, entity.Name, domain, nodes, failureReturn);
-    }
-
-    private static void WalkPathPrefixRequireGuards(
-        DomainExpression expression,
-        Node subject,
-        Action action,
-        string subjectEntityName,
-        Domain domain,
-        List<Node> nodes,
-        Func<FailureLowering.Spec, Node> failureReturn) {
-        if (expression is RelationshipNavigation rn) {
-            var navMember = new Member(subject, ToPascalCase(rn.RelationshipName));
-            nodes.Add(new IfStatement(
-                new Equal(navMember, new Constant(null!)),
-                new Block([failureReturn(new FailureLowering.Spec(
-                    DomainFailureKind.Required,
-                    new Constant($"'{action.Name}' requires a linked '{rn.RelationshipName}' on entity '{subjectEntityName}'."),
-                    $"{subjectEntityName}.{rn.RelationshipName}"))])));
-            var nextEntity = ResolveNavTargetEntityName(subjectEntityName, rn.RelationshipName, domain)
-                ?? subjectEntityName;
-            WalkPathPrefixRequireGuards(
-                rn.TargetProperty, navMember, action, nextEntity, domain, nodes, failureReturn);
-            return;
+        // #576/#577/#518: a stage `require` is an invariant, so the same checks run again after the
+        // effects: an action that stayed in its stage may not falsify its requirement (the failure
+        // rolls the body back). They go before the final return — the success path only — and are
+        // stage-guarded, so an action that transitioned away is judged by the stage it landed in.
+        // A body that ends in its own return or a throw cannot reach them, so nothing is inserted.
+        if (nodes.Count > 0 && nodes[^1] is Return) {
+            var postStageName = stageEnumTypeName is null
+                ? policyStageName ?? sourceStageName ?? entity.InitialStage()?.Name
+                : null;
+            nodes.InsertRange(nodes.Count - 1, StagePolicyGuards(
+                action, entity, postStageName, stageEnumTypeName, subject: new ThisReference(),
+                messageSuffix: stage => $" It would leave stage '{stage.Name}' invalid.",
+                failureReturn: FailureReturn));
         }
 
-        foreach (var child in expression.Children.OfType<DomainExpression>())
-            WalkPathPrefixRequireGuards(
-                child, subject, action, subjectEntityName, domain, nodes, failureReturn);
+        // Block is a sequence; an empty action body is an empty block.
+        return new Block(nodes, locals);
     }
 }

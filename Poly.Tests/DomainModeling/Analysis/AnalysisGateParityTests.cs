@@ -379,6 +379,7 @@ public class AnalysisGateParityTests {
         Part: entity {
           Due: Date
           Stamp: DateTime
+          Len: Duration
         }
         Item: entity {
           A: Number
@@ -437,7 +438,8 @@ public class AnalysisGateParityTests {
     [Arguments("Date + a calendar literal (unchanged)", "Go: action { assign OutD to Due + 2 Months }", null, "")]
     [Arguments("Time + a literal (unchanged)", "Go: action { assign OutM to Opens + 2 Hours }", null, "")]
     [Arguments("Time - a literal (unchanged)", "Go: action { assign OutM to Opens - 30 Minutes }", null, "")]
-    [Arguments("a negative duration literal does not parse", "Go: action { assign Len to -5 Minutes }", null, "Parse error")]
+    // #501 moved the refusal from the parser to the analysis: unary minus parses, and a duration operand is refused.
+    [Arguments("a negated duration literal is refused", "Go: action { assign Len to -5 Minutes }", null, "unary '-' requires a Number or Decimal operand")]
     [Arguments("DateTime - DateTime", "Go: action { assign Gap to Stamp - Stamp2 }", null, "")]
     [Arguments("Date - Date (R6)", "Go: action { assign Gap to Due2 - Due }", null, "")]
     [Arguments("Date - Date in a policy (R6)", "Go: policy { (Due - Due2) == (Due - Due2) }", null, "")]
@@ -452,15 +454,19 @@ public class AnalysisGateParityTests {
     [Arguments("optional DateTime - DateTime", "Go: action { assign Gap to OptStamp - Stamp }", null, "optional")]
     [Arguments("DateTime - optional DateTime", "Go: action { assign Gap to Stamp - OptStamp }", null, "optional")]
     [Arguments("optional Date + literal in a policy", "Go: policy { OptDue + 1 Days > Today }", null, "optional")]
-    // R5 (OQ-7): a Duration value is F-11's
-    [Arguments("DateTime + Duration value", "Go: action { assign OutT to Stamp + Len }", null, "F-11")]
-    [Arguments("DateTime - Duration value", "Go: action { assign OutT to Stamp - Len }", null, "F-11")]
-    [Arguments("Date + Duration value", "Go: action { assign OutD to Due + Len }", null, "F-11")]
-    [Arguments("Date - Duration value", "Go: action { assign OutD to Due - Len }", null, "F-11")]
-    [Arguments("DateTime + a difference", "Go: action { assign OutT to Stamp + (Stamp2 - Stamp) }", null, "F-11")]
-    [Arguments("DateTime parameter + Duration parameter", "Go: action (s: DateTime, l: Duration) { assign OutT to s + l }", """{"s":"2026-01-01T00:00:00Z","l":"01:00:00"}""", "F-11")]
-    [Arguments("Now + Duration value", "Go: action { assign OutT to Now + Len }", null, "F-11")]
-    [Arguments("Today + Duration value", "Go: action { assign OutD to Today + Len }", null, "F-11")]
+    // R5 (OQ-7): a Duration value runs on a DateTime left (#654: the Duration is a TimeSpan on the C# surface);
+    // a Date left has no TimeSpan addition, so it still fails closed naming the operand.
+    [Arguments("DateTime + Duration value", "Go: action { assign OutT to Stamp + Len }", null, "")]
+    [Arguments("DateTime - Duration value", "Go: action { assign OutT to Stamp - Len }", null, "")]
+    [Arguments("Date + Duration value", "Go: action { assign OutD to Due + Len }", null, "a Date plus or minus a Duration")]
+    [Arguments("Date - Duration value", "Go: action { assign OutD to Due - Len }", null, "a Date plus or minus a Duration")]
+    [Arguments("DateTime + a difference", "Go: action { assign OutT to Stamp + (Stamp2 - Stamp) }", null, "")]
+    [Arguments("DateTime parameter + Duration parameter", "Go: action (s: DateTime, l: Duration) { assign OutT to s + l }", """{"s":"2026-01-01T00:00:00Z","l":"01:00:00"}""", "")]
+    [Arguments("Now + Duration value", "Go: action { assign OutT to Now + Len }", null, "")]
+    [Arguments("Today + Duration value", "Go: action { assign OutD to Today + Len }", null, "a Date plus or minus a Duration")]
+    [Arguments("optional DateTime + Duration value", "Go: action { assign OutT to OptStamp + Len }", null, "optional")]
+    [Arguments("optional DateTime - Duration value", "Go: action { assign OutT to OptStamp - Len }", null, "optional")]
+    [Arguments("a Duration value read through a link", "Go: action { assign OutT to Stamp + part Len }", null, "Duration offset operand must be")]
     // R4 (owner ruling 2026-11-13): every Decimal day count is refused. Date + Decimal ran and silently dropped the
     // fraction; DateTime + Decimal and the non-property lefts failed on a host.
     [Arguments("Date + Decimal property", "Go: action { assign OutD to Due + D }", null, "Decimal day count")]
@@ -537,7 +543,7 @@ public class AnalysisGateParityTests {
     [Arguments("a required Duration through a to-one link", "Go: policy { advisor Len > 1 Hours }", "", false)]
     [Arguments("an optional Duration through a to-one link", "Go: policy { advisor Gap > 1 Hours }", "", true)]
     [Arguments("the duration on the left", "Go: policy { 1 Hours < advisor Gap }", "", true)]
-    [Arguments("a Date offset read through a link", "Go: action { assign OutD to advisor Due + 3 Days }", "F-11", false)]
+    [Arguments("a Date offset read through a link", "Go: action { assign OutD to advisor Due + 3 Days }", "a date offset by a Duration value is supported only on a date property", false)]
     public async Task OptionalDurationThroughALink_RunsLifted_OffsetStaysRefused(string row, string members, string refusal, bool expected) {
         var dsl = $$"""
             domain T
@@ -681,11 +687,11 @@ public class AnalysisGateParityTests {
     /// <summary>
     /// An optional Duration reached through a to-one link, with the link present and the leaf less, equal and greater than the
     /// bare duration and absent: both hosts answer C#'s lifted comparison, in both operand orders. With the link ABSENT
-    /// (<c>advisor</c> unlinked) the lowering ANDs a null guard per to-one hop, so the whole comparison is false for every
-    /// operator, <c>!=</c> included: that differs from an absent LEAF (where <c>!=</c> is true), and is pinned as the hosts answer.
+    /// (<c>advisor</c> unlinked) the read is absent (#936), so the comparison answers the same rule as an absent leaf:
+    /// <c>!=</c> is true and every other operator false, in both operand orders.
     /// </summary>
     [Test]
-    public async Task OptionalDurationThroughALink_BothHostsAnswerCSharp_UnlinkedHopIsFalse() {
+    public async Task OptionalDurationThroughALink_BothHostsAnswerTheAbsentRule() {
         var policies = Ops.SelectMany((op, i) => new[] { $"P{i * 2}: policy {{ advisor Gap {op} 1 Hours }}", $"P{i * 2 + 1}: policy {{ 1 Hours {op} advisor Gap }}" });
         var dsl = $$"""
             domain T
@@ -709,9 +715,11 @@ public class AnalysisGateParityTests {
                 });
                 for (var i = 0; i < Ops.Length * 2; i++) {
                     var op = Ops[i / 2];
-                    var expected = linked && (i % 2 == 0
-                        ? Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps.Lifted(op, gap, one)
-                        : Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps.Lifted(op, one, gap));
+                    var expected = linked
+                        ? (i % 2 == 0
+                            ? Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps.Lifted(op, gap, one)
+                            : Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps.Lifted(op, one, gap))
+                        : op == "!=";
                     await Assert.That(outcomes[i + 2].State["P" + i]).IsEqualTo(expected.ToString())
                         .Because($"advisor Gap {op} 1 Hours (order {i % 2}) gap={gap?.ToString() ?? "absent"} linked={linked}");
                 }
@@ -990,6 +998,27 @@ public class AnalysisGateParityTests {
         }
         await Assert.That(result.Analysis).IsFalse().Because(result.ToString());
         await Assert.That(result.AnalysisSummary).Contains(refusal).Because(result.ToString());
+    }
+
+    /// <summary>
+    /// Re-probed on the base after negation became arithmetic (#1033): <c>-(match { … })</c> over a match that may be
+    /// absent analysed clean, and the printed C# did not compile (CS0266, <c>long?</c> into <c>long</c>). Negation is
+    /// the same arithmetic spine as <c>+ - * / %</c>, so analysis refuses it at the match and no door prints it.
+    /// </summary>
+    [Test]
+    public async Task NegatedAbsentMatchIntoRequiredNumber_IsRefusedAtAnalysis_NotPrintedAsCS0266() {
+        const string dsl = """
+            domain T
+            Flag: entity {
+              On: Boolean default(true)
+              N: Number default(0)
+              Go: action { assign N to -(match { On -> 1, else -> null }) }
+            }
+            """;
+        var result = GateParity.Check(dsl, SimStep.Create("Flag", """{"On":true}""", "f"));
+
+        await Assert.That(result.Analysis).IsFalse().Because(result.ToString());
+        await Assert.That(result.Holds).IsTrue().Because(result.ToString());
     }
 
     private static (Domain Domain, SumExpr Sum) SumDomain() {

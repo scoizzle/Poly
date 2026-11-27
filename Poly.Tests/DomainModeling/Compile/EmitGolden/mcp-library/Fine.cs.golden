@@ -96,9 +96,9 @@ internal class Fine : Poly.Runtime.IActionScoped
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Fine.Reason"));
         }
         var __reason = reason;
-        var created = new Fine(__amount, __reason);
-        Poly.Runtime.ActionScope.Create(created, "Fine");
-        return DomainResult<Fine>.Success(created);
+        var __created = new Fine(__amount, __reason);
+        Poly.Runtime.ActionScope.Create(__created, "Fine");
+        return DomainResult<Fine>.Success(__created);
     }
     public object __Snapshot()
     {

@@ -5,8 +5,8 @@
 # Exits 0 when the export compiles with 0 errors and 0 warnings: a generated
 # warning is an export bug, so it fails the gate. A domain that `uses http` is
 # compiled and every emitted file is built as a host.
-# The non-http path (probe-check) is a bare Roslyn compile without analyzers, so it
-# fails on compiler warnings only; CA* warnings appear only on the http dotnet build (#469).
+# The non-http path compiles the export as a library referencing Poly.Runtime and EF Core
+# (#1011), so both paths are a dotnet build with TreatWarningsAsErrors.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$(pwd -P)"
@@ -14,7 +14,9 @@ REPO="$(pwd -P)"
 PROBE="${1:?usage: scripts/run-probe.sh docs/probes/<name>.poly}"
 [ -f "$PROBE" ] || { echo "probe not found: $PROBE" >&2; exit 1; }
 
-TMP="$(mktemp -d)"
+# Resolved like REPO: on macOS mktemp gives /var/..., a symlink to /private/var, and MSBuild
+# then computes project-to-project paths that do not exist.
+TMP="$(cd "$(mktemp -d)" && pwd -P)"
 trap 'rm -rf "$TMP"' EXIT
 
 # polyc seeds only the doors a document lists, so the http branch supplies the
@@ -77,10 +79,29 @@ else
   echo "== Exporting $PROBE =="
   dotnet run --project src/polyc/polyc.csproj -c Release -- build "$PROBE" --out "$TMP/out"
 
-  FILES=()
-  while IFS= read -r file; do FILES+=("$file"); done < <(find "$TMP/out" -name '*.cs' | sort)
-  [ "${#FILES[@]}" -gt 0 ] || { echo "no .cs files produced" >&2; exit 1; }
+  OUTDIR="$(find "$TMP/out" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+  [ -n "$OUTDIR" ] || { echo "no export directory produced" >&2; exit 1; }
+  [ -n "$(find "$OUTDIR" -name '*.cs' -print -quit)" ] || { echo "no .cs files produced" >&2; exit 1; }
 
-  echo "== Compile-check =="
-  dotnet run --project scripts/probe-check/probe-check.csproj -- "${FILES[@]}"
+  # The printed module needs Poly.Runtime (DomainResult, DomainFailure, IStoragePort) and
+  # polyc also prints the domain's EF DbContext, so the export is compiled as a library
+  # that references both, the way a consumer of the export would (#1011).
+  cat > "$OUTDIR/ProbeModule.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
+    <ProjectReference Include="$REPO/Poly.Runtime/Poly.Runtime.csproj" />
+  </ItemGroup>
+</Project>
+EOF
+
+  echo "== Compile-check (every emitted file) =="
+  dotnet build "$OUTDIR/ProbeModule.csproj" --nologo -v q
+  echo "errors: 0, warnings: 0"
 fi

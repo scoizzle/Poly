@@ -991,7 +991,6 @@ public partial class MinimalApiGeneratorTests {
             "docs/missions/evolve-2026-10-13/billing.poly",
             "docs/missions/evolve-2026-10-13/claims.poly",
             "docs/missions/evolve-2026-10-13/disputes.poly",
-            "docs/missions/evolve-2026-10-13/library.poly",
             "docs/missions/evolve-2026-10-13/university-http.poly",
             "docs/missions/evolve-2026-10-13/university.poly",
             "docs/probes/dogfood/nested-invoke-type-mismatch.poly",

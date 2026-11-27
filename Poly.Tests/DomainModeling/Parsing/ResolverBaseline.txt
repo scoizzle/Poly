@@ -11,7 +11,7 @@ S	Core.PropertyName.name	str	R	domain A\nV: value { "A": Number }\n	ERR Expected
 S	Core.PropertyName.error	mis-number	R	domain A\nV: value { 5: Number }\n	ERR Expected property name, got '5' @2:12
 S	Core.PropertyName.error	str	R	domain A\nV: value { "Amount": Number }\n	ERR Expected property name, got 'Amount' @2:12
 S	Core.PropertyName.error	mis-punct	R	domain A\nV: value { -> }\n	ERR Expected property name, got '->' @2:12
-S	Core.PropertyName.error	mis-keyword	R	domain A\nV: value { entity: Text }\n	ERR Expected property name, got 'entity' @2:12
+S	Core.PropertyName.error	mis-keyword	R	domain A\nV: value { entity: Text }\n	ERR 'entity' is a reserved word and cannot name a property; rename it (e.g. 'Entity' or a synonym). @2:12
 S	Core.PropertyName.error	mis-initializer	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    create Kid { "Qty": 1 }\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected property name, got 'Qty' @7:18
 S	Core.RequiredWord	ok	R	domain A\nX: entity {\n  N: Text required\n}\n	ERR 'required' is not a constraint. A property is required unless it is marked 'optional'. @3:11
 S	Core.RequiredWord	name	R	domain A\nX: entity {\n  required: Text\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPropertyToEntityChange(EntityName="X",Property=Property(Children=[],Constraints=[],Facets=[],Name="required",Type=DomainTypeReference(Children=[],TypeName="Text"))) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="required")])
@@ -55,12 +55,12 @@ S	Constraints.bound.text	arabic-indic	R	domain A\nX: entity {\n  N: Number range
 S	Constraints.bound.text	value-member	R	domain A\nV: value { N: Number range(1, 9) }\n	OK SetDomainNameChange(Name="A") ; AddValueTypeChange(Name="V",Properties=[Property(Children=[RangeConstraint(Children=[],Intervals=null,Maximum=Int64:9,Minimum=Int64:1)],Constraints=[RangeConstraint(Children=[],Intervals=null,Maximum=Int64:9,Minimum=Int64:1)],Facets=[],Name="N",Type=DomainTypeReference(Children=[],TypeName="Number"))],Visibility=Visibility.Internal)
 S	Constraints.bound.text	str	R	domain A\nX: entity {\n  N: Number range("5", 9)\n}\n	ERR Expected RParen, got '5' (StringLiteral) @3:19
 S	Constraints.bound.text	mis-ident	R	domain A\nX: entity {\n  N: Number range(x, 9)\n}\n	ERR Expected RParen, got 'x' (Identifier) @3:19
-S	Effects.unsupported.check	ok	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    actor\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR FormatException: 'actor' is not supported in Phase 1a
-S	Effects.unsupported.check	case	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    Schedule\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR FormatException: 'Schedule' is not supported in Phase 1a
+S	Effects.unsupported.check	ok	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    actor\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR 'actor' is not supported in Phase 1a @7:5
+S	Effects.unsupported.check	case	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    Schedule\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR 'Schedule' is not supported in Phase 1a @7:5
 S	Effects.unsupported.check	name	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    Kids\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected effect (transition, assign, create, link, unlink, invoke, for, if), got 'Kids' @7:5
 S	Effects.unsupported.check	str	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    "actor"\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected effect (transition, assign, create, link, unlink, invoke, for, if), got 'actor' @7:5
-S	Effects.unsupported.message	ok	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    PARALLEL\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR FormatException: 'PARALLEL' is not supported in Phase 1a
-S	Effects.unsupported.message	function	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    function\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR FormatException: 'function' is not supported in Phase 1a
+S	Effects.unsupported.message	ok	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    PARALLEL\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR 'PARALLEL' is not supported in Phase 1a @7:5
+S	Effects.unsupported.message	function	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    function\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR 'function' is not supported in Phase 1a @7:5
 S	Effects.unsupported.message	str	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    "PARALLEL"\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected effect (transition, assign, create, link, unlink, invoke, for, if), got 'PARALLEL' @7:5
 S	Effects.expected	mis-number	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    5\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected effect (transition, assign, create, link, unlink, invoke, for, if), got '5' @7:5
 S	Effects.expected	mis-string	R	domain A\nX: entity {\n  N: Number\n  Kids: many Kid\n  Done: stage { }\n  Go: action {\n    "a\\"b"\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected effect (transition, assign, create, link, unlink, invoke, for, if), got 'a"b' @7:5
@@ -153,9 +153,9 @@ S	Entities.typed-line.primitive	unknown-int	R	domain A\nX: entity {\n  Id: Int\n
 S	Entities.typed-line.primitive	temporal	R	domain A\nuses temporal\nX: entity {\n  Due: Date optional\n}\n	OK SetDomainNameChange(Name="A") ; AddDomainExtensionChange(ExtensionId="temporal") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPropertyToEntityChange(EntityName="X",Property=Property(Children=[],Constraints=[],Facets=[],Name="Due",Type=DomainTypeReference(Children=[],TypeName="Date"))) ; AddConstraintToPropertyChange(Constraint=OptionalConstraint(Children=[]),EntityName="X",PropertyName="Due") ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="Due")])
 S	Entities.typed-line.primitive	nav	R	domain A\nX: entity {\n  Owner: Y\n}\nY: entity { }\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Navigation,Name="Owner")]) ; AddEntityChange(InitialProperties=[],Name="Y",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="Y",MemberOrder=[]) ; AddRelationshipChange(Cardinality=RelationshipCardinality.OneToOne,Inverse=null,IsOptional=false,Name="Owner",Properties=[],Source=DomainTypeReference(Children=[],TypeName="X"),SourceOwnsTarget=false,Target=DomainTypeReference(Children=[],TypeName="Y"))
 S	Entities.typed-line.primitive	unknown	R	domain A\nX: entity {\n  Owner: Nope\n}\n	ERR Property 'Owner' is declared with type 'Nope', which is neither an entity in this domain nor a value type (Binary, Boolean, Date, DateTime, Decimal, Duration, Number, Text, Time, Uuid). A value keyword such as 'Guid' or 'Now' is only valid inside an expression (e.g. `default(Guid)`). To reference another domain, declare that entity. @3:10
-S	Entities.typed-line.unsupported	ok	R	domain A\nX: entity {\n  Who: actor\n}\n	ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Who')
-S	Entities.typed-line.unsupported	case	R	domain A\nX: entity {\n  Who: Schedule\n}\n	ERR FormatException: 'Schedule' is not supported in Phase 1a (used as type for 'Who')
-S	Entities.typed-line.unsupported	function	R	domain A\nX: entity {\n  Who: function\n}\n	ERR FormatException: 'function' is not supported in Phase 1a (used as type for 'Who')
+S	Entities.typed-line.unsupported	ok	R	domain A\nX: entity {\n  Who: actor\n}\n	ERR 'actor' is not supported in Phase 1a (used as type for 'Who') @3:8
+S	Entities.typed-line.unsupported	case	R	domain A\nX: entity {\n  Who: Schedule\n}\n	ERR 'Schedule' is not supported in Phase 1a (used as type for 'Who') @3:8
+S	Entities.typed-line.unsupported	function	R	domain A\nX: entity {\n  Who: function\n}\n	ERR 'function' is not supported in Phase 1a (used as type for 'Who') @3:8
 S	Entities.primitive-name.name	ok	R	domain A\nX: entity {\n  Number: Text\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPropertyToEntityChange(EntityName="X",Property=Property(Children=[],Constraints=[],Facets=[],Name="Number",Type=DomainTypeReference(Children=[],TypeName="Text"))) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="Number")])
 S	Entities.primitive-name.name	text	R	domain A\nX: entity {\n  Text: Number optional\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPropertyToEntityChange(EntityName="X",Property=Property(Children=[],Constraints=[],Facets=[],Name="Text",Type=DomainTypeReference(Children=[],TypeName="Number"))) ; AddConstraintToPropertyChange(Constraint=OptionalConstraint(Children=[]),EntityName="X",PropertyName="Text") ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="Text")])
 S	Entities.primitive-name.name	boolean	R	domain A\nX: entity {\n  Boolean: Boolean\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPropertyToEntityChange(EntityName="X",Property=Property(Children=[],Constraints=[],Facets=[],Name="Boolean",Type=DomainTypeReference(Children=[],TypeName="Boolean"))) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="Boolean")])
@@ -174,7 +174,7 @@ S	Entities.primitive-name.named-type	ok	R	domain A\nX: entity {\n  Text: Decimal
 S	Entities.primitive-name.named-type	temporal	R	domain A\nuses temporal\nX: entity {\n  Number: Date\n}\n	OK SetDomainNameChange(Name="A") ; AddDomainExtensionChange(ExtensionId="temporal") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPropertyToEntityChange(EntityName="X",Property=Property(Children=[],Constraints=[],Facets=[],Name="Number",Type=DomainTypeReference(Children=[],TypeName="Date"))) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="Number")])
 S	Entities.primitive-name.named-type	mis-primitive	R	domain A\nX: entity {\n  Text: Text\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPropertyToEntityChange(EntityName="X",Property=Property(Children=[],Constraints=[],Facets=[],Name="Text",Type=DomainTypeReference(Children=[],TypeName="Text"))) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="Text")])
 S	Entities.fallback.name	ok	R	domain A\nX: entity {\n  Go: { }\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddActionChange(EntityName="X",Name="Go",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Action,Name="Go")])
-S	Entities.fallback.name	when	R	domain A\nX: entity {\n  Kids: many Kid\n  Go: when Kids Done { }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected LBrace, got 'Done' (Identifier) @4:17
+S	Entities.fallback.name	when	R	domain A\nX: entity {\n  Kids: many Kid\n  Go: when Kids Done { }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR 'action when Stage' is not supported: an action's stage is its placement. Put 'Go' inside the stage body, as in 'Stage: stage { Go: action { \u2026 } }'. @4:7
 S	Entities.fallback.name	require	R	domain A\nX: entity {\n  P: policy { true }\n  Go: require P { }\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPolicyToEntityChange(EntityName="X",Policy=Policy(Children=[Literal(Children=[],Col=Int32:0,Line=Int32:0,TypeHint=null,Value=true)],Expression=Literal(Children=[],Col=Int32:0,Line=Int32:0,TypeHint=null,Value=true),Name="P")) ; AddActionChange(EntityName="X",Name="Go",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Policy,Name="P"),EntityMemberRef(Kind=EntityMemberKind.Action,Name="Go")]) ; AddPolicyToActionChange(ActionName="Go",EntityName="X",Policy=Policy(Children=[Literal(Children=[],Col=Int32:0,Line=Int32:0,TypeHint=null,Value=true)],Expression=Literal(Children=[],Col=Int32:0,Line=Int32:0,TypeHint=null,Value=true),Name="P"),StageName=null)
 S	Entities.fallback.name	unicode	R	domain A\nX: entity {\n  \u540D\u524D: { }\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddActionChange(EntityName="X",Name="\\u540D\\u524D",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Action,Name="\\u540D\\u524D")])
 S	Entities.fallback.name	str	R	domain A\nX: entity {\n  "Go": { }\n}\n	ERR Expected property, stage, action, or policy, got 'Go' @3:3
@@ -183,7 +183,7 @@ S	Entities.fallback.unsupported	str-case	R	domain A\nX: entity {\n  Go: "FUNCTIO
 S	Entities.fallback.unsupported	str-other	R	domain A\nX: entity {\n  Go: "Text"\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:7
 S	Entities.fallback.unsupported	mis-number	R	domain A\nX: entity {\n  Go: 5\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:7
 S	Entities.fallback.unsupported	mis-punct	R	domain A\nX: entity {\n  Go: ->\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:7
-S	Entities.fallback.unsupported	mis-keyword	R	domain A\nX: entity {\n  Go: for\n}\n	ERR FormatException: 'for' is not supported in Phase 1a (used as type for 'Go')
+S	Entities.fallback.unsupported	mis-keyword	R	domain A\nX: entity {\n  Go: for\n}\n	ERR 'for' is not supported in Phase 1a (used as type for 'Go') @3:7
 S	Entities.fallback.unsupported	mis-eof	R	domain A\nX: entity {\n  Go:	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:6
 S	Entities.body.error	mis-number	R	domain A\nX: entity {\n  5\n}\n	ERR Expected property, stage, action, or policy, got '5' @3:3
 S	Entities.body.error	mis-string	R	domain A\nX: entity {\n  "x"\n}\n	ERR Expected property, stage, action, or policy, got 'x' @3:3
@@ -222,8 +222,8 @@ S	Entities.annotation.separator	mis-number	R	domain A\nX: entity {\n  N: Text la
 S	Entities.annotation.separator	mis-ident	R	domain A\nX: entity {\n  N: Text label("a" b)\n}\n	ERR Expected ',' or ')' in annotation 'label(...)', got 'b' @3:21
 S	Entities.annotation.separator	mis-eof	R	domain A\nX: entity {\n  N: Text label("a"	ERR Expected ',' or ')' in annotation 'label(...)', got '' @3:20
 S	Relationships.navline.text	ok	R	domain A\nX: entity {\n  Owner: Y\n}\nY: entity { }\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Navigation,Name="Owner")]) ; AddEntityChange(InitialProperties=[],Name="Y",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="Y",MemberOrder=[]) ; AddRelationshipChange(Cardinality=RelationshipCardinality.OneToOne,Inverse=null,IsOptional=false,Name="Owner",Properties=[],Source=DomainTypeReference(Children=[],TypeName="X"),SourceOwnsTarget=false,Target=DomainTypeReference(Children=[],TypeName="Y"))
-S	Relationships.navline.text	unsupported	R	domain A\nX: entity {\n  Owner: actor\n}\n	ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Owner')
-S	Relationships.navline.text	case	R	domain A\nX: entity {\n  Owner: PARALLEL\n}\n	ERR FormatException: 'PARALLEL' is not supported in Phase 1a (used as type for 'Owner')
+S	Relationships.navline.text	unsupported	R	domain A\nX: entity {\n  Owner: actor\n}\n	ERR 'actor' is not supported in Phase 1a (used as type for 'Owner') @3:10
+S	Relationships.navline.text	case	R	domain A\nX: entity {\n  Owner: PARALLEL\n}\n	ERR 'PARALLEL' is not supported in Phase 1a (used as type for 'Owner') @3:10
 S	Relationships.navline.text	unknown-target	R	domain A\nX: entity {\n  Owner: Ghost\n}\n	ERR Property 'Owner' is declared with type 'Ghost', which is neither an entity in this domain nor a value type (Binary, Boolean, Date, DateTime, Decimal, Duration, Number, Text, Time, Uuid). A value keyword such as 'Guid' or 'Now' is only valid inside an expression (e.g. `default(Guid)`). To reference another domain, declare that entity. @3:10
 S	Relationships.navline.text	str	R	domain A\nX: entity {\n  Owner: "Y"\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Owner:' @3:10
 S	Relationships.navline.primitive-hint	ok	R	domain A\nX: entity {\n  Owners: many Text\n}\n	ERR Navigation property 'Owners' requires an entity type as target: 'Text' is a primitive type, not an entity. Use a primitive property declaration instead. @3:16
@@ -267,13 +267,13 @@ S	TopLevel.marked.error	ok-entity	R	domain A\npublic entity E { N: Text }\n	OK S
 S	TopLevel.marked.error	ok-value	R	domain A\npublic value V { N: Text }\n	OK SetDomainNameChange(Name="A") ; AddValueTypeChange(Name="V",Properties=[Property(Children=[],Constraints=[],Facets=[],Name="N",Type=DomainTypeReference(Children=[],TypeName="Text"))],Visibility=Visibility.Public)
 S	TopLevel.rejection.name	mis-number	R	domain A\nX: 5\n	ERR Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X' @2:1
 S	TopLevel.rejection.name	mis-string	R	domain A\nX: "entity"\n	ERR Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X' @2:1
-S	TopLevel.rejection.unsupported	ok	R	domain A\nX: actor\n	ERR FormatException: 'actor' is not supported in Phase 1a (use 'entity' instead)
-S	TopLevel.rejection.unsupported	case	R	domain A\nX: Function { }\n	ERR FormatException: 'Function' is not supported in Phase 1a (use 'entity' instead)
+S	TopLevel.rejection.unsupported	ok	R	domain A\nX: actor\n	ERR 'actor' is not supported in Phase 1a (use 'entity' instead) @2:4
+S	TopLevel.rejection.unsupported	case	R	domain A\nX: Function { }\n	ERR 'Function' is not supported in Phase 1a (use 'entity' instead) @2:4
 S	TopLevel.rejection.unsupported	str	R	domain A\nX: "actor"\n	ERR Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X' @2:1
-S	TopLevel.rejection.unsupported-message	ok	R	domain A\nX: schedule { }\n	ERR FormatException: 'schedule' is not supported in Phase 1a (use 'entity' instead)
+S	TopLevel.rejection.unsupported-message	ok	R	domain A\nX: schedule { }\n	ERR 'schedule' is not supported in Phase 1a (use 'entity' instead) @2:4
 S	TopLevel.rejection.unsupported-message	str	R	domain A\nX: "schedule" { }\n	ERR Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X' @2:1
-S	TopLevel.rejection.inheritance	ok	R	domain A\nX: Base entity { }\n	ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported. Define 'Base' properties directly on 'X'.
-S	TopLevel.rejection.inheritance-define	unicode	R	domain A\nX: Gr\u00F6\u00DFe entity { }\n	ERR FormatException: Entity inheritance ('X: Gr\u00F6\u00DFe entity') is no longer supported. Define 'Gr\u00F6\u00DFe' properties directly on 'X'.
+S	TopLevel.rejection.inheritance	ok	R	domain A\nX: Base entity { }\n	ERR Entity inheritance ('X: Base entity') is no longer supported. Define 'Base' properties directly on 'X'. @2:4
+S	TopLevel.rejection.inheritance-define	unicode	R	domain A\nX: Gr\u00F6\u00DFe entity { }\n	ERR Entity inheritance ('X: Gr\u00F6\u00DFe entity') is no longer supported. Define 'Gr\u00F6\u00DFe' properties directly on 'X'. @2:4
 S	TopLevel.rejection.inheritance-define	mis-number	R	domain A\nX: 5 entity { }\n	ERR Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X' @2:1
 S	TopLevel.rejection.inheritance	str	R	domain A\nX: "Base" entity { }\n	ERR Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X' @2:1
 S	TopLevel.rejection.expected	mis-ident	R	domain A\nX Y\n	ERR Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X' @2:1
@@ -465,9 +465,9 @@ S	Edit.top-kind	bind	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u
 S	Edit.top-kind	mis-number	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"T: 5"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:6,Op="add",Path="T")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:6,Index=Int32:0,StartLine=Int32:6)],Text="domain A\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000A\\u000AT: 5\\u000AS: enum { A, B }\\u000A")
 S	Edit.top-kind	case	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"T: Enum { A }"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:6,Op="add",Path="T")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:6,Index=Int32:0,StartLine=Int32:6)],Text="domain A\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000A\\u000AT: Enum { A }\\u000AS: enum { A, B }\\u000A")
 S	Edit.top-kind	uses	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"uses temporal"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:2,Op="add",Path="uses:temporal")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:2,Index=Int32:0,StartLine=Int32:2)],Text="domain A\\u000Auses temporal\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000AS: enum { A, B }\\u000A")
-S	Compiler.extension	unknown	C	domain A\nuses nope\nX: entity { }\n	OK CompileDiagnostic(Code="DSL0002",Column=Int32:6,EndColumn=Int32:10,EndLine=Int32:2,File="baseline.poly",IsError=true,IsWarning=false,Line=Int32:2,Message="Unknown domain extension 'nope'. Record only ids this catalog can resolve.",Path="",Placed=true,Severity="error")
-S	Compiler.extension	unknown-second	C	domain A\nuses temporal\nuses nope\nX: entity { }\n	OK CompileDiagnostic(Code="DSL0002",Column=Int32:6,EndColumn=Int32:10,EndLine=Int32:3,File="baseline.poly",IsError=true,IsWarning=false,Line=Int32:3,Message="Unknown domain extension 'nope'. Record only ids this catalog can resolve.",Path="",Placed=true,Severity="error")
-S	Compiler.extension	str-later	C	domain A\nuses nope\nX: entity { }\nuses "nope"\n	OK CompileDiagnostic(Code="DSL0002",Column=Int32:6,EndColumn=Int32:10,EndLine=Int32:2,File="baseline.poly",IsError=true,IsWarning=false,Line=Int32:2,Message="Unknown domain extension 'nope'. Record only ids this catalog can resolve.",Path="",Placed=true,Severity="error")
+S	Compiler.extension	unknown	C	domain A\nuses nope\nX: entity { }\n	OK CompileDiagnostic(Code="DSL0002",Column=Int32:6,EndColumn=Int32:10,EndLine=Int32:2,File="baseline.poly",IsError=true,IsWarning=false,Line=Int32:2,Message="Unknown domain extension 'nope'. Known ids: http, persistence, posix, sqlite, sqlserver, storage, temporal.",Path="",Placed=true,Severity="error")
+S	Compiler.extension	unknown-second	C	domain A\nuses temporal\nuses nope\nX: entity { }\n	OK CompileDiagnostic(Code="DSL0002",Column=Int32:6,EndColumn=Int32:10,EndLine=Int32:3,File="baseline.poly",IsError=true,IsWarning=false,Line=Int32:3,Message="Unknown domain extension 'nope'. Known ids: http, persistence, posix, sqlite, sqlserver, storage, temporal.",Path="",Placed=true,Severity="error")
+S	Compiler.extension	str-later	C	domain A\nuses nope\nX: entity { }\nuses "nope"\n	OK CompileDiagnostic(Code="DSL0002",Column=Int32:6,EndColumn=Int32:10,EndLine=Int32:2,File="baseline.poly",IsError=true,IsWarning=false,Line=Int32:2,Message="Unknown domain extension 'nope'. Known ids: http, persistence, posix, sqlite, sqlserver, storage, temporal.",Path="",Placed=true,Severity="error")
 S	Compiler.extension	ok	C	domain A\nuses temporal\nX: entity { Due: Date }\n	OK CompileDiagnostic(Code="DMAS001",Column=Int32:1,EndColumn=Int32:2,EndLine=Int32:3,File="baseline.poly",IsError=false,IsWarning=false,Line=Int32:3,Message="Entity 'X' has 1 property but no stages defined. Consider declaring lifecycle stages to model state transitions, e.g. 'Draft: stage { ... }'.",Path="A/X",Placed=true,Severity="hint")
 D	warehouse	5FF0C41D6AA5A5EA	80
 M	warehouse	0	SetDomainNameChange	4E254EB88A8A
@@ -2327,7 +2327,7 @@ N	entities	24	LParen	68F7B68BB78CA8F7
 N	entities	25	Identifier	9B702A7EC5FCB2BB
 N	entities	26	RParen	831C6CCEC04B4695
 N	entities	27	LBrace	DDF53E7EB90B3AC2
-N	entities	28	Identifier	B959270710940C6C
+N	entities	28	Identifier	A2684E2451D835DD
 N	entities	29	Colon	B6D69E85D4370D60
 N	entities	30	Text	ECFD10F3DE03E9C8
 N	entities	31	Length	4C97E8F1D748AEBB
@@ -2340,7 +2340,7 @@ N	entities	37	Pattern	B044615F04DD4D96
 N	entities	38	LParen	23DE7754C95238B3
 N	entities	39	StringLiteral	7C244C28DA9BC31C
 N	entities	40	RParen	5B44090C9A9E65E8
-N	entities	41	Identifier	3FD2FF43B24B585B
+N	entities	41	Identifier	94927DC2DD4EC7E6
 N	entities	42	Colon	3E7CDF42809FD1B0
 N	entities	43	NumberType	4DDFE6CE44E3A51B
 N	entities	44	Range	F2FDEAD363E4B5FB
@@ -2354,13 +2354,13 @@ N	entities	51	Equals	3EC4B35139091A7B
 N	entities	52	LParen	89695062AE7E2A13
 N	entities	53	Number	0DBBAE6282908837
 N	entities	54	RParen	6ED558F30A767400
-N	entities	55	NumberType	1D31BC5972ED27E2
+N	entities	55	NumberType	B36958F5327C633A
 N	entities	56	Colon	1C00B9BEAE85ED24
 N	entities	57	Text	995082186751DB79
-N	entities	58	Identifier	6446B14B726F4C30
+N	entities	58	Identifier	975D343B0020F74A
 N	entities	59	Colon	978E3AEFFB874965
 N	entities	60	Identifier	62BFD878FA5C5B85
-N	entities	61	Identifier	3BB3E8E3CEA87C8C
+N	entities	61	Identifier	08338D1351EEF0CB
 N	entities	62	Colon	155DA753E5EC9A94
 N	entities	63	Identifier	F7654BDBC16F8E8E
 N	entities	64	Optional	F501D312FE3DD11F
@@ -2368,7 +2368,7 @@ N	entities	65	Identifier	7551AC47326E59CB
 N	entities	66	LParen	04E1CF3942C9D8AA
 N	entities	67	StringLiteral	F6A5856AD2F476A8
 N	entities	68	RParen	45C4574D9A112A5E
-N	entities	69	Identifier	F88E2B8168997379
+N	entities	69	Identifier	651B9395CBD1AE4C
 N	entities	70	Colon	6A34653CD7184926
 N	entities	71	Many	9554BDB94091ACD0
 N	entities	72	Identifier	54C85C5AD5C40BC1
@@ -2379,7 +2379,7 @@ N	entities	76	Identifier	4D683F4A63979B1D
 N	entities	77	Colon	D745D0F411ACBC0E
 N	entities	78	Entity	E5EE403356A2950A
 N	entities	79	LBrace	D8087AC65AE7FAF1
-N	entities	80	Identifier	1A477BDECF8DCB85
+N	entities	80	Identifier	362043DED18905EF
 N	entities	81	Colon	AEF02E6E0CDDBC5A
 N	entities	82	Identifier	C9BF8F7672AB55B4
 N	entities	83	RBrace	03D0E1463CDBDF77
@@ -2393,11 +2393,11 @@ N	stages	6	LParen	5377934FEA9EFD10
 N	stages	7	Identifier	65199BD93DE9941D
 N	stages	8	RParen	BAE9B2930104E816
 N	stages	9	LBrace	A41F9238B8444A38
-N	stages	10	Identifier	83FB9F155D51DC7B
+N	stages	10	Identifier	DC0FFA803B4140E0
 N	stages	11	Colon	6D0A35BFF2C85021
 N	stages	12	Many	0E5D4608F8F3413E
 N	stages	13	Identifier	F7810D7AB058EAA0
-N	stages	14	Identifier	5C3B186BCAB99841
+N	stages	14	Identifier	0428F871028F4F14
 N	stages	15	Colon	AEAD1995AA8D8A2A
 N	stages	16	Stage	7A0194158B56B97A
 N	stages	17	Require	77176F5FE1E15E80
@@ -2428,15 +2428,15 @@ N	stages	41	To	26BAE7C9080D10C5
 N	stages	42	Identifier	9363433FE9AA53BE
 N	stages	43	RBrace	5E16D7E572D665F9
 N	stages	44	RBrace	DDE3420B92849670
-N	stages	45	Identifier	5EF6F543B0EE1223
+N	stages	45	Identifier	8846BF3E565CED68
 N	stages	46	Colon	65D493E9A5414B31
 N	stages	47	Stage	A73C2D92FD70D312
 N	stages	48	LBrace	BB6657D6A094B46F
 N	stages	49	RBrace	43F99349C83C1D50
-N	stages	50	Identifier	E295ED70EEB9CA61
+N	stages	50	Identifier	C274F984E371B9C5
 N	stages	51	Colon	80E2DCCB489D7E4A
 N	stages	52	NumberType	DF3C81960397FACB
-N	stages	53	Identifier	49909AB8C2C24995
+N	stages	53	Identifier	3F3C38B7B9605BDF
 N	stages	54	Colon	3F342BE9852CECAD
 N	stages	55	Policy	DBD377BDEB303370
 N	stages	56	LBrace	FB1640D50D7EFE6B
@@ -2449,7 +2449,7 @@ N	stages	62	Identifier	DC9259A22A1B9B63
 N	stages	63	Colon	531B6C12A56401DB
 N	stages	64	Entity	7375198944859E32
 N	stages	65	LBrace	E621DEB9E78F54D8
-N	stages	66	Identifier	0A9D8205607C39AB
+N	stages	66	Identifier	0898E3BD03958C1A
 N	stages	67	Colon	3112DEDA8BD357D2
 N	stages	68	Stage	E74C285B960297FC
 N	stages	69	LBrace	5AAE32D209001F82
@@ -2461,14 +2461,14 @@ N	effects	2	Identifier	2B647341FF51252A
 N	effects	3	Colon	DC7B215B0A584CD7
 N	effects	4	Entity	3AF3F4C3AEEC85A8
 N	effects	5	LBrace	92908A377D2CFA5B
-N	effects	6	Identifier	E9DEB6FB0B6FA3F2
+N	effects	6	Identifier	3E7DF21DC71F00DF
 N	effects	7	Colon	12E898906A3B23E0
 N	effects	8	NumberType	F5290F430A352FDB
-N	effects	9	Identifier	C2EEB7515CE94D9E
+N	effects	9	Identifier	72F517CA27A0DA1A
 N	effects	10	Colon	CCAE3A767E7F77BF
 N	effects	11	Many	E698E405CD580A87
 N	effects	12	Identifier	1189D72A6E3F048A
-N	effects	13	Identifier	BE233F2F4EDCD2FF
+N	effects	13	Identifier	2A3EAC71F39BBBC0
 N	effects	14	Colon	0492949DC3153B50
 N	effects	15	Action	8EC484D753659A44
 N	effects	16	LParen	F684982F9D6B29FA
@@ -2495,7 +2495,7 @@ N	effects	36	Create	C4D16F641A9242B9
 N	effects	37	In	C09019C8465BD93C
 N	effects	38	Identifier	C6E15C07C590C01B
 N	effects	39	LBrace	5B3FFFB79991A7A1
-N	effects	40	Identifier	B44458ACA94D1C15
+N	effects	40	Identifier	9F14DD33B839E8C8
 N	effects	41	Colon	AA8EF14EC015442C
 N	effects	42	Number	7941AFECFE25C2D4
 N	effects	43	RBrace	832A7AC4CAA7F091
@@ -2533,14 +2533,14 @@ N	effects	74	RParen	7894FD4273BD4105
 N	effects	75	Create	F13ED3AEB50C6E6C
 N	effects	76	Identifier	24F87FC7097F99CA
 N	effects	77	LBrace	51DD5D0635CD713E
-N	effects	78	Identifier	75FF31A7F9DB127B
+N	effects	78	Identifier	08D2E3870F6632B0
 N	effects	79	Colon	259FFEFEB9A9CD31
 N	effects	80	StringLiteral	44A648405711D303
 N	effects	81	RBrace	FC2F319A018AD83B
 N	effects	82	Invoke	BCCBA3CF4A122264
 N	effects	83	Identifier	A688A726BED4E76D
 N	effects	84	RBrace	E18247A6527FBB58
-N	effects	85	Identifier	70C0F4945AEC84F5
+N	effects	85	Identifier	FF5F7A2CDEEE4AA9
 N	effects	86	Colon	45D6AF3D04686785
 N	effects	87	Action	5E84F6031F100E10
 N	effects	88	LBrace	177309B3F344B1BC
@@ -2550,10 +2550,10 @@ N	effects	91	Identifier	D89ABF5C68589882
 N	effects	92	Colon	30683908FCB76B37
 N	effects	93	Entity	B3B0EC667E71FEA3
 N	effects	94	LBrace	1AD5E962723FB403
-N	effects	95	Identifier	D1A9EA9CAF3AE8C2
+N	effects	95	Identifier	74DA39904DAAD8D0
 N	effects	96	Colon	00FA684742EA467B
 N	effects	97	NumberType	11825CAA79B60619
-N	effects	98	Identifier	6EBBC62F8CF7697C
+N	effects	98	Identifier	3058999B2F1275B0
 N	effects	99	Colon	0A2CC07A15399205
 N	effects	100	Policy	4CD2E324E90FB3E0
 N	effects	101	LBrace	3BD9D6C86B0CD44C
@@ -2561,7 +2561,7 @@ N	effects	102	Identifier	38768B0213C95950
 N	effects	103	Gt	62ED36CB1F0F0DFD
 N	effects	104	Number	5E3D05814CF36930
 N	effects	105	RBrace	09EFCD8CC3E5C499
-N	effects	106	Identifier	A46CA53204E5734D
+N	effects	106	Identifier	D5C219B5321A7530
 N	effects	107	Colon	D9860ACC648A3310
 N	effects	108	Action	EDB5BA29F62A2EB9
 N	effects	109	LParen	E07424FD0D6C8E5F
@@ -2591,10 +2591,10 @@ N	toplevel	15	Identifier	A71A0DDF84132E90
 N	toplevel	16	Colon	995228A5D1D86F45
 N	toplevel	17	Identifier	23D435B0A96ADC21
 N	toplevel	18	LBrace	C75FD173F78A9B3B
-N	toplevel	19	Identifier	941BB6D5571AAD42
+N	toplevel	19	Identifier	191D7ED6696536CC
 N	toplevel	20	Colon	2675F74724A8D434
 N	toplevel	21	Text	87BDFF5F8EFABE8C
-N	toplevel	22	Identifier	AA04196B22DCF8B2
+N	toplevel	22	Identifier	208DDF3A7E8F667B
 N	toplevel	23	Colon	30C37794E6F143BE
 N	toplevel	24	NumberType	83132A4D6CC20AEC
 N	toplevel	25	RBrace	B8E5992676A4AAFD
@@ -2602,7 +2602,7 @@ N	toplevel	26	Public	F740EB703A6A56E7
 N	toplevel	27	Identifier	5976775C3C1BD2A9
 N	toplevel	28	Identifier	4A717705BC20E074
 N	toplevel	29	LBrace	EC733A8CB2C866DD
-N	toplevel	30	Identifier	4F723E5D29493BAD
+N	toplevel	30	Identifier	12FFF6A8A6DB837E
 N	toplevel	31	Colon	722ED93EC394CC0B
 N	toplevel	32	BooleanType	2ADA9B99FF538F6A
 N	toplevel	33	RBrace	530176B845869A3D
@@ -2617,7 +2617,7 @@ N	toplevel	41	Identifier	5F37F853E0CFA80B
 N	toplevel	42	Colon	529D17D250C78E79
 N	toplevel	43	Identifier	F20E1AD93E016252
 N	toplevel	44	LBrace	A760425BF1F87CEE
-N	toplevel	45	Identifier	B11591DA753AFE16
+N	toplevel	45	Identifier	A8BB40FCAD482F68
 N	toplevel	46	Colon	F245819757464B85
 N	toplevel	47	Text	3FA42DAB0842C910
 N	toplevel	48	RBrace	AFA609F7AC697066
@@ -2636,7 +2636,7 @@ N	toplevel	60	Public	3A914D8884D0E711
 N	toplevel	61	Entity	C299C334634F8CEA
 N	toplevel	62	Identifier	F156ACC1B5751A9B
 N	toplevel	63	LBrace	FEEA550A63420F4C
-N	toplevel	64	Identifier	6DDE9BC5D7943628
+N	toplevel	64	Identifier	4115A4CF19CE7CFA
 N	toplevel	65	Colon	EC19E9F38BB9D3D2
 N	toplevel	66	Action	F58291AEB7CD35A7
 N	toplevel	67	LParen	05ADDCF6CB315E2A
@@ -2668,14 +2668,14 @@ N	expressions	4	Identifier	4BFCBC89521F87D7
 N	expressions	5	Colon	ABDC117495DD41D3
 N	expressions	6	Entity	43EAAFC6BF831EB3
 N	expressions	7	LBrace	8C7725B06F3F1D3B
-N	expressions	8	Identifier	1EAE6D60A8544B54
+N	expressions	8	Identifier	2CDB3E02991B5864
 N	expressions	9	Colon	EC579EA627716225
 N	expressions	10	Identifier	6788D2199827E006
-N	expressions	11	Identifier	5CBAC0D053493F6E
+N	expressions	11	Identifier	FA69B44AFEE25F56
 N	expressions	12	Colon	BBCB76B7704CD860
 N	expressions	13	Many	69875685C19D0C4C
 N	expressions	14	Identifier	76203E5C2272F191
-N	expressions	15	Identifier	BE13931E4478E750
+N	expressions	15	Identifier	3279288423DBEC7B
 N	expressions	16	Colon	F79C662B1C9DCB6F
 N	expressions	17	Policy	A7654DD20C0B17CE
 N	expressions	18	LBrace	96F6C22CEE724433
@@ -2691,7 +2691,7 @@ N	expressions	27	Identifier	1CF503A16562C3E9
 N	expressions	28	Gt	A622704F0725D585
 N	expressions	29	Number	0976D0E0318BEEC8
 N	expressions	30	RBrace	C43CBC04440A9530
-N	expressions	31	Identifier	15C7418EED5DB25A
+N	expressions	31	Identifier	0CB327E2BBD9C878
 N	expressions	32	Colon	8D560D1C4D774097
 N	expressions	33	Policy	974586CF0B403ED2
 N	expressions	34	LBrace	702689239CEAC0A5
@@ -2708,7 +2708,7 @@ N	expressions	44	Identifier	54D810D760284EEB
 N	expressions	45	Gt	00D5CF889D119760
 N	expressions	46	Number	04D4C71DA3054B25
 N	expressions	47	RBrace	D1AF93F65C951EB0
-N	expressions	48	Identifier	587873C53291B82D
+N	expressions	48	Identifier	6EDBF7839D9A65D6
 N	expressions	49	Colon	651E47DE8DB7B9B1
 N	expressions	50	Policy	632DBF6B28D49F33
 N	expressions	51	LBrace	DE543209C092F0DF
@@ -2729,7 +2729,7 @@ N	expressions	65	Identifier	F173E6C81EB34551
 N	expressions	66	Colon	58BAAEBA6BD2E92D
 N	expressions	67	Entity	105AECE60CF9CA0E
 N	expressions	68	LBrace	838A3EE114ADB6BD
-N	expressions	69	Identifier	922340B15F8EEBC9
+N	expressions	69	Identifier	7B7F3D24CD903662
 N	expressions	70	Colon	051C7483312ED398
 N	expressions	71	NumberType	FF6E810F6FB2882D
 N	expressions	72	RBrace	69D627D1943433E6

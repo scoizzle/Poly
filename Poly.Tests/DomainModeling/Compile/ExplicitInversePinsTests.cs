@@ -128,8 +128,11 @@ public sealed class ExplicitInversePinsTests {
             var link2 = exec.Link("sources", second, source);
             outcomes.Add($"first={link1.Succeeded}/{link1.Change};second={link2.Succeeded}/{link2.Change}");
         }
-        await Assert.That(outcomes[0]).IsEqualTo(outcomes[1]);
+        // As shipped the part names no owner (no navigation back), so nothing records who owns it and a second
+        // owner is still accepted (the guide's Known wrong, #585). With the navigation back, the first link sets
+        // it (#572) and the second owner is refused with a Link failure (#585).
         await Assert.That(outcomes[0]).IsEqualTo("first=True/Linked;second=True/Linked");
+        await Assert.That(outcomes[1]).IsEqualTo("first=True/Linked;second=False/");
     }
 
     [Test]

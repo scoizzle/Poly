@@ -38,8 +38,10 @@ public static class PolyMcpHost {
                 .AddCallToolFilter(EnvelopeTextFilter.Filter));
 
         // v2 is the only surface: seven outcome tools. The old operation adapters remain
-        // internal to PolySurfaceTools and are not registered as MCP tools.
-        mcp.WithTools<PolySurfaceTools>();
+        // internal to PolySurfaceTools and are not registered as MCP tools. The tools are built
+        // by the one factory so the published schema — `steps` takes an array or its JSON
+        // text — is the same one the tests exercise.
+        mcp.WithTools(PolySurfaceTools.McpTools());
 
         var app = builder.Build();
 

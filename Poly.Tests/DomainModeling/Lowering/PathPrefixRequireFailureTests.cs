@@ -8,7 +8,9 @@ using Poly.Interpretation.CSharp;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
-/// Item 1: path-prefix under require → DomainResult.Failure (not throw).
+/// A path-prefix read under <c>require</c> is absence-safe and answers the guide's optional-value rule (#936):
+/// a policy that reads an unlinked hop is false, so the action is refused with <c>Policy</c> (never a throw,
+/// never <c>Required</c>), and the same policy under <c>require not</c> is true, so the action runs.
 /// </summary>
 public class PathPrefixRequireFailureTests {
     [Test]
@@ -44,7 +46,8 @@ public class PathPrefixRequireFailureTests {
         await Assert.That(threw).IsFalse();
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("requires a linked 'room'");
+        await Assert.That(result.Error).Contains("blocked by policy 'RoomFree'");
+        await Assert.That(result.Failure!.Kind).IsEqualTo(DomainFailureKind.Policy);
         await Assert.That(result.FailedGuards).Contains("RoomFree");
     }
 
@@ -71,15 +74,15 @@ public class PathPrefixRequireFailureTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains(
-            "DomainResult.Failure(Poly.Runtime.DomainFailure.Required(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\", \"Reservation.room\"))");
+            "DomainResult.Failure(Poly.Runtime.DomainFailure.Policy(\"'CheckIn' blocked by policy 'RoomFree'.\", \"Reservation.CheckIn\", \"RoomFree\"))");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
         await Assert.That(cs).Contains("this.Room!");
     }
 
 
     [Test]
-    public async Task Confirm_RequireNot_UnlinkedSection_FailsClosed_DoesNotThrow() {
-        // F1: require not + unlinked must not invert soft-false to allow the action.
+    public async Task Confirm_RequireNot_UnlinkedSection_Runs() {
+        // #936: `not (absent >= 1)` is true, as `not (OptDue < Today)` is true while the optional date is absent.
         var (domain, _) = Evolve("""
             domain EnrollSlice
             Section: entity {
@@ -110,9 +113,9 @@ public class PathPrefixRequireFailureTests {
 
         await Assert.That(threw).IsFalse();
         await Assert.That(result).IsNotNull();
-        await Assert.That(result!.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("requires a linked 'section'");
-        await Assert.That(result.FailedGuards).Contains("not_SectionFull");
+        await Assert.That(result!.Succeeded).IsTrue()
+            .Because(result.Error ?? "");
+        await Assert.That(ModuleReads.Stage(en)).IsEqualTo("Confirmed");
     }
 
 
@@ -136,7 +139,8 @@ public class PathPrefixRequireFailureTests {
         var issue = exec.Create((issueE).Name, new Dictionary<string, object?>()).Instance!;
         var result = exec.Invoke(issue, "Escalate");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("requires a linked 'reporter'");
+        await Assert.That(result.Error).Contains("blocked by policy 'FromBlueTeam'");
+        await Assert.That(result.Failure!.Kind).IsEqualTo(DomainFailureKind.Policy);
         await Assert.That(result.FailedGuards).Contains("FromBlueTeam");
     }
 
@@ -161,8 +165,8 @@ public class PathPrefixRequireFailureTests {
     }
 
     [Test]
-    public async Task EmptyBody_RequireNot_Unlinked_FailsClosed() {
-        // F9 + F1 sibling: empty require not + unlinked path-prefix.
+    public async Task EmptyBody_RequireNot_Unlinked_Runs() {
+        // #936: an empty body still runs the require gates; `not (absent >= 1)` is true.
         var (domain, _) = Evolve("""
             domain EmptyRequireNot
             Section: entity {
@@ -178,9 +182,7 @@ public class PathPrefixRequireFailureTests {
         var enrollE = domain.Types.OfType<Entity>().First(e => e.Name == "Enrollment");
         var en = exec.Create((enrollE).Name, new Dictionary<string, object?>()).Instance!;
         var result = exec.Invoke(en, "Confirm");
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("requires a linked 'section'");
-        await Assert.That(result.FailedGuards).Contains("not_SectionFull");
+        await Assert.That(result.Succeeded).IsTrue().Because(result.Error ?? "");
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {

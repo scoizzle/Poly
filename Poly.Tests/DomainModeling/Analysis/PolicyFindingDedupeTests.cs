@@ -16,7 +16,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// per analysis run: the model is still rejected with the same severity, position and message.
 /// </summary>
 public class PolicyFindingDedupeTests {
-    private const string SelfRelationship = "Quantifier on self-relationship";
+    private const string UnknownQuantifier = "Quantifier references relationship 'ghosts'";
 
     private static EvolutionResult Parse(string dsl) {
         var changes = new PolyDslParser(dsl).Parse();
@@ -35,14 +35,19 @@ public class PolicyFindingDedupeTests {
             .Where(d => d.Code == code && d.Message.Contains(message, StringComparison.Ordinal))
             .ToList();
 
-    /// <summary>The verbatim #483 shape: a self-relationship read by an entity policy a action requires.</summary>
+    /// <summary>
+    /// The #483 shape: one entity policy a action requires, so the same expression object is reachable twice. The
+    /// quantifier names a relationship that does not exist, which is a DMSEM005 no matter how often the walk reaches
+    /// it; <c>reports</c> is a real collection nothing writes, so the DMREL002 warning is in play too. (#482 made the
+    /// self-relationship quantifier legal, so this fixture no longer uses one.)
+    /// </summary>
     private static string SelfReferential(string requires) => $$"""
         domain Org
 
         Employee: entity {
           Name: Text
           reports: many Employee
-          NoReports: policy { none reports where Name == "x" }
+          NoReports: policy { count reports > 0 and none ghosts where Name == "x" }
           {{requires}}
         }
         """;
@@ -53,7 +58,7 @@ public class PolicyFindingDedupeTests {
     public async Task RequireReferencedPolicy_ReportsDMSEM005Once() {
         var r = Parse(SelfReferential("Fire: action require NoReports { }"));
 
-        var errors = Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, SelfRelationship);
+        var errors = Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, UnknownQuantifier);
         await Assert.That(r.Succeeded).IsFalse();
         await Assert.That(errors.Count).IsEqualTo(1);
         await Assert.That(errors[0].Severity).IsEqualTo(Poly.Analysis.DiagnosticSeverity.Error);
@@ -74,7 +79,7 @@ public class PolicyFindingDedupeTests {
     public async Task RequireNotPolicy_ReportsEachCodeOnce() {
         var r = Parse(SelfReferential("Fire: action require not NoReports { }"));
 
-        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, SelfRelationship).Count)
+        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, UnknownQuantifier).Count)
             .IsEqualTo(1);
         await Assert.That(Findings(r, DomainModelDiagnosticCodes.UnwrittenRelationship, "'Employee.reports'").Count)
             .IsEqualTo(1);
@@ -88,12 +93,12 @@ public class PolicyFindingDedupeTests {
             Employee: entity {
               Name: Text
               reports: many Employee
-              NoReports: policy { none reports where Name == "x" }
+              NoReports: policy { count reports > 0 and none ghosts where Name == "x" }
               Open: stage require NoReports { }
             }
             """);
 
-        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, SelfRelationship).Count)
+        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, UnknownQuantifier).Count)
             .IsEqualTo(1);
         await Assert.That(Findings(r, DomainModelDiagnosticCodes.UnwrittenRelationship, "'Employee.reports'").Count)
             .IsEqualTo(1);
@@ -106,7 +111,7 @@ public class PolicyFindingDedupeTests {
             File: action require NoReports { }
             """));
 
-        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, SelfRelationship).Count)
+        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, UnknownQuantifier).Count)
             .IsEqualTo(1);
         await Assert.That(Findings(r, DomainModelDiagnosticCodes.UnwrittenRelationship, "'Employee.reports'").Count)
             .IsEqualTo(1);
@@ -122,11 +127,11 @@ public class PolicyFindingDedupeTests {
             Employee: entity {
               Name: Text
               reports: many Employee
-              NoReports: policy { none reports where Name == "x" }
+              NoReports: policy { count reports > 0 and none ghosts where Name == "x" }
             }
             """);
 
-        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, SelfRelationship).Count)
+        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, UnknownQuantifier).Count)
             .IsEqualTo(1);
         await Assert.That(Findings(r, DomainModelDiagnosticCodes.UnwrittenRelationship, "'Employee.reports'").Count)
             .IsEqualTo(1);
@@ -141,12 +146,12 @@ public class PolicyFindingDedupeTests {
             Employee: entity {
               Name: Text
               reports: many Employee
-              A: policy { none reports where Name == "x" }
-              B: policy { none reports where Name == "x" }
+              A: policy { count reports > 0 and none ghosts where Name == "x" }
+              B: policy { count reports > 0 and none ghosts where Name == "x" }
             }
             """);
 
-        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, SelfRelationship).Count)
+        await Assert.That(Findings(r, DomainModelDiagnosticCodes.SemanticReferenceResolution, UnknownQuantifier).Count)
             .IsEqualTo(2);
         await Assert.That(Findings(r, DomainModelDiagnosticCodes.UnwrittenRelationship, "'Employee.reports'").Count)
             .IsEqualTo(2);
@@ -204,9 +209,9 @@ public class PolicyFindingDedupeTests {
         var first = evolution.ApplyAndAnalyze(changes, session: session);
         var second = evolution.ApplyAndAnalyze(changes, session: session);
 
-        await Assert.That(Findings(first.Analysis, DomainModelDiagnosticCodes.SemanticReferenceResolution, SelfRelationship).Count)
+        await Assert.That(Findings(first.Analysis, DomainModelDiagnosticCodes.SemanticReferenceResolution, UnknownQuantifier).Count)
             .IsEqualTo(1);
-        await Assert.That(Findings(second.Analysis, DomainModelDiagnosticCodes.SemanticReferenceResolution, SelfRelationship).Count)
+        await Assert.That(Findings(second.Analysis, DomainModelDiagnosticCodes.SemanticReferenceResolution, UnknownQuantifier).Count)
             .IsEqualTo(1);
     }
 
@@ -220,7 +225,7 @@ public class PolicyFindingDedupeTests {
             Employee: entity {
               Name: Text
               reports: many Employee
-              NoReports: policy { none reports where Name == "x" }
+              NoReports: policy { count reports > 0 and none ghosts where Name == "x" }
               Other: policy { Missing == 1 }
               Fire: action require NoReports { }
             }
@@ -230,7 +235,7 @@ public class PolicyFindingDedupeTests {
             .Where(d => d.Code == DomainModelDiagnosticCodes.SemanticReferenceResolution)
             .ToList();
         await Assert.That(errors.Count).IsEqualTo(2);
-        await Assert.That(errors.Count(d => d.Message.Contains(SelfRelationship, StringComparison.Ordinal)))
+        await Assert.That(errors.Count(d => d.Message.Contains(UnknownQuantifier, StringComparison.Ordinal)))
             .IsEqualTo(1);
         await Assert.That(errors.Count(d => d.Message.Contains("Policy references property 'Missing'", StringComparison.Ordinal)))
             .IsEqualTo(1);
@@ -249,7 +254,7 @@ public class PolicyFindingDedupeTests {
         await Assert.That(response.Ok).IsFalse();
         var errors = response.Findings
             .Where(f => f.Code == DomainModelDiagnosticCodes.SemanticReferenceResolution
-                && f.Message.Contains(SelfRelationship, StringComparison.Ordinal))
+                && f.Message.Contains(UnknownQuantifier, StringComparison.Ordinal))
             .ToList();
         await Assert.That(errors.Count).IsEqualTo(1);
         var warnings = response.Findings

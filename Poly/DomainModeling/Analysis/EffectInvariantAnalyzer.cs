@@ -1,9 +1,12 @@
+using Poly.Analysis;
 using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
@@ -501,9 +504,36 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             case Multiply mul:
                 return EvalArithmetic(mul, mul.Left, mul.Right,
                     operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
+            case Negate negate:
+                return EvalUnary(negate, negate.Operand,
+                    operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
+            case FunctionCall call:
+                return EvalCall(call, operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain), domain);
+            case Divide divide:
+                return EvalArithmetic(divide, divide.Left, divide.Right,
+                    operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
+            case MatchExpr match:
+                return EvalMatch(match, operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
             default:
                 return AbstractValue.Unknown;
         }
+    }
+
+    /// <summary>
+    /// A built-in numeric call's abstract value (#547): only with a domain, so a declared function of the same
+    /// name is known to win (<see cref="BuiltinFunctions.Find(Domain?, string)"/>), and only where
+    /// <see cref="IntervalTransfers.TransferCall"/> has a sound row. No usable range is Unknown, never a guess.
+    /// </summary>
+    private static AbstractValue EvalCall(
+        FunctionCall call, Func<DomainExpression, AbstractValue> evalOperand, Domain? domain) {
+        if (domain is null
+            || BuiltinFunctions.Find(domain, call.Name) is not { } builtin
+            || call.Arguments.Count != builtin.Parameters.Count)
+            return AbstractValue.Unknown;
+        var operands = call.Arguments.Select(argument => evalOperand(argument).NumericRange).ToList();
+        return IntervalTransfers.TransferCall(builtin.Function, operands)?.ToRangeConstraint() is { } range
+            ? AbstractValue.From([range])
+            : AbstractValue.Unknown;
     }
 
     private static readonly IReadOnlyDictionary<string, AbstractValue> EmptyEnv =
@@ -545,6 +575,33 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             : AbstractValue.Unknown;
     }
 
+    /// <summary>
+    /// The one unary-arithmetic evaluator: the operand's interval goes through <see cref="IntervalTransfers"/>
+    /// (a negated range is the swapped, sign-flipped range); an operand with no range, or a node with no
+    /// row, is Unknown — never a guess.
+    /// </summary>
+    private static AbstractValue EvalUnary(
+        DomainExpression node, DomainExpression operand, Func<DomainExpression, AbstractValue> evalOperand) =>
+        IntervalTransfers.Transfer(node, [evalOperand(operand).NumericRange])?.ToRangeConstraint() is { } range
+            ? AbstractValue.From([range])
+            : AbstractValue.Unknown;
+
+    /// <summary>
+    /// A <c>match</c>'s interval (#608, #1040): the hull of the values it can produce, which is its
+    /// arms and its required <c>else</c>. An arm with no interval — an unbounded read, a call — leaves
+    /// the whole match unknown rather than guessing; an arm the analysis cannot reach still widens the
+    /// hull, which is sound. The arms' conditions do not narrow it: a wider hull is never a false proof.
+    /// </summary>
+    private static AbstractValue EvalMatch(MatchExpr match, Func<DomainExpression, AbstractValue> eval) {
+        ValueRange? hull = null;
+        foreach (var arm in match.Arms.Select(a => a.Value).Append(match.Else)) {
+            if (eval(arm).NumericRange is not { } range) return AbstractValue.Unknown;
+            hull = hull is null ? range : hull.Join(range);
+            if (hull is null) return AbstractValue.Unknown;
+        }
+        return hull?.ToRangeConstraint() is { } constraint ? AbstractValue.From([constraint]) : AbstractValue.Unknown;
+    }
+
     /// <summary>A literal's numeric value exactly, or null when it is not a number or has no exact form.</summary>
     private static decimal? DeclaredBound(object? value) => ExactNumber.TryFrom(value)?.ToDecimal();
 
@@ -567,6 +624,9 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
         HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain,
         string? currentStage, DomainGuardAxes axes) {
+        // A self-invoke steps the callee's body here (ApplyInvoke), so this walk's depth follows an invoke
+        // chain (#1115): a chain deeper than the thread's stack is a typed failure, never an abort.
+        ExecutionStack.Ensure();
         foreach (var effect in effects) {
             switch (effect) {
                 case AssignEffect { Target: PropertyAccess target } assign: {
@@ -868,6 +928,17 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
             case Multiply mul:
                 return EvalArithmetic(mul, mul.Left, mul.Right,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
+            case Negate negate:
+                return EvalUnary(negate, negate.Operand,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
+            case Divide divide:
+                return EvalArithmetic(divide, divide.Left, divide.Right,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
+            case MatchExpr match:
+                // A match in a binding evaluates its arms in the BINDING's scope: falling through to
+                // Eval would resolve a binder-rooted read against the caller's same-named navigation.
+                return EvalMatch(match,
                     operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
         }
         return Eval(expr, caller, action, env, paramEnv, domain: domain);

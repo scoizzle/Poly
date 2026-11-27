@@ -119,7 +119,8 @@ public sealed partial class DomainToCSharpExporter {
     private static void AddSubscriptionRegistry(
         List<SubscriptionInfo>? targetSubs, string? stageEnumTypeName,
         IReadOnlyDictionary<SubscriptionInfo, string>? handlerNames,
-        List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
+        List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods,
+        bool defersCreationNotifications) {
         // ── Target entity: subscription registry ──────────────────
         // One registry field + register method per (relationship, stage, subscriber)
         // triple; the notify method calls EVERY subscription's handler for that
@@ -150,7 +151,7 @@ public sealed partial class DomainToCSharpExporter {
                 // The body must use this parameter, not a same-named copy: a copy
                 // has no type, so the VM cannot place the argument. The registry is the target's state, so it is
                 // touched first (L-03c): a subscriber created in the action registers on an existing target.
-                var existing = new Variable("existing");
+                var existing = new Variable("__existing");
                 var subscriber = new Parameter(paramName, srcType);
                 var registerBody = new Block([
                     TouchThis(),
@@ -187,6 +188,7 @@ public sealed partial class DomainToCSharpExporter {
             // (source, relationship, stage) registry. Two subscribers on the same
             // target stage (Student + Section on Enrollment.Dropped) used to emit
             // duplicate _droppedSubscribers / NotifyDroppedSubscribers members.
+            var replayStages = new List<(string Stage, bool NeedsPrevious)>();
             foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
                 // Nullable: a create-in lands the child in its initial stage with no prior
                 // stage, so the caller passes null. `when all` guards read it as
@@ -197,6 +199,11 @@ public sealed partial class DomainToCSharpExporter {
                     new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
                 var notifyNodes = new List<Node>();
                 var names = new LocalNames();
+                if (defersCreationNotifications) {
+                    // #630: a create-time entry raises this before its creator has linked the child.
+                    notifyNodes.Add(DeferredStageNotificationCheck(stageGroup.Key));
+                    replayStages.Add((stageGroup.Key, needsPrevious));
+                }
                 foreach (var infos in stageGroup) {
                     var fieldName = SubscriberRegistryFieldName(infos[0]);
                     var handlerLocals = new List<Node>();
@@ -211,7 +218,7 @@ public sealed partial class DomainToCSharpExporter {
                         var handlerResult = names.Next("handlerResult");
                         handlerLocals.Add(handlerResult);
                         notifyCalls.Add(new Assignment(handlerResult, new Invoke(
-                            new Member(new Variable("sub"), handlerNames![info]),
+                            new Member(new Variable("__sub"), handlerNames![info]),
                             [.. args])));
                         notifyCalls.Add(new IfStatement(
                             new Syntactic.Not(new Member(handlerResult, "IsSuccess")),
@@ -222,7 +229,7 @@ public sealed partial class DomainToCSharpExporter {
                             new Member(new ThisReference(), fieldName),
                             new Constant(null)),
                         new ForEachLoop(
-                            new Variable("sub"),
+                            new Variable("__sub"),
                             new Member(new ThisReference(), fieldName),
                             new Block(notifyCalls, handlerLocals))));
                 }
@@ -245,12 +252,15 @@ public sealed partial class DomainToCSharpExporter {
                     AccessModifier: AccessModifier.Internal
                 ));
             }
+            if (defersCreationNotifications)
+                AddDeferredStageNotifications(replayStages, stageEnumTypeName!, fields, methods);
         }
     }
 
     /// <summary>
-    /// <c>InitializeSubscriptions</c> — for post-load subscription wiring. Called as
-    /// by <c>Create</c> after the initial entry, so all state is set and a failed entry registers nothing.
+    /// <c>InitializeSubscriptions</c> — the one registration path: <c>Create</c> calls it after the initial entry, so all
+    /// state is set and a failed entry registers nothing, and the host calls it after a load (#560) so persisted
+    /// subscriptions are restored. Internal, not private: the generated host is another type in the same assembly.
     /// </summary>
     private static void AddSubscriptionInitializer(
         List<SubscriptionInfo>? subscriberSubs, List<MethodDefinitionNode> methods) {
@@ -263,7 +273,7 @@ public sealed partial class DomainToCSharpExporter {
                     "InitializeSubscriptions",
                     new TypeReference("void"),
                     Body: new Block(initBody),
-                    AccessModifier: AccessModifier.Private
+                    AccessModifier: AccessModifier.Internal
                 ));
             }
         }

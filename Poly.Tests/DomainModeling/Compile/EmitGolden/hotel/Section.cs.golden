@@ -22,6 +22,11 @@ internal class Section : Poly.Runtime.IActionScoped
     public decimal DayRate { get; private set; }
     public bool Occupied { get; private set; }
     public Hall? Hall { get; private set; }
+    internal void AttachHall(Hall child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Hall = child;
+    }
     internal DomainResult Occupy()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -52,10 +57,6 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Occupy' blocked by policy 'CanBook'.", "Section.Occupy", "CanBook"));
         }
-        if (this.Hall == null)
-        {
-            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Occupy' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
-        }
         if (!this.ParentFree())
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Occupy' blocked by policy 'ParentFree'.", "Section.Occupy", "ParentFree"));
@@ -65,10 +66,10 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Occupy' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
         }
-        var invoke0 = this.Hall.MarkChildBusy();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Hall.MarkChildBusy();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("Section.Occupy"));
+            return DomainResult.Failure(__invoke0.Error!.At("Section.Occupy"));
         }
         return DomainResult.Success();
     }
@@ -107,16 +108,16 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Vacate' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
         }
-        var invoke0 = this.Hall.ClearChildBusy();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Hall.ClearChildBusy();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("Section.Vacate"));
+            return DomainResult.Failure(__invoke0.Error!.At("Section.Vacate"));
         }
         return DomainResult.Success();
     }
     public bool IsVacant() => !this.Occupied;
     public bool IsOccupied() => this.Occupied;
-    public bool ParentFree() => this.Hall != null && (!this.Hall!.Occupied && !this.Hall!.Offline);
+    public bool ParentFree() => this.Hall != null && !this.Hall!.Occupied && (this.Hall != null && !this.Hall!.Offline);
     public bool CanBook() => !this.Occupied;
     internal static DomainResult<Section> Create(string? name = default, long? capacity = default, decimal? dayRate = default, bool? occupied = default, Hall? hall = default)
     {
@@ -188,13 +189,17 @@ internal class Section : Poly.Runtime.IActionScoped
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'hall' is required.", "Section.hall"));
         }
         var __hall = hall;
-        var created = new Section(__name, __capacity, __dayRate, __occupied, __hall);
-        Poly.Runtime.ActionScope.Create(created, "Section");
+        var __created = new Section(__name, __capacity, __dayRate, __occupied, __hall);
+        Poly.Runtime.ActionScope.Create(__created, "Section");
         if (hall != null)
         {
-            hall.AttachSections(created);
+            var __attach = hall.AttachSections(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Section>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Section>.Success(created);
+        return DomainResult<Section>.Success(__created);
     }
     public object __Snapshot()
     {

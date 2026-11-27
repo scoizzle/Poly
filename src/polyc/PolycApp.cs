@@ -102,9 +102,20 @@ internal static class PolycApp {
             foreach (var line in DiagnosticFormat.TextLines(all, options.Verbosity))
                 stdout.WriteLine(line);
             if (options.Command == "build" && errors == 0)
-                stdout.WriteLine($"polyc: wrote {written.Count} file(s).");
+                stdout.WriteLine($"polyc: wrote {written.Count} file(s).{CompileDependencies(written)}");
         }
         return errors > 0 || (options.WarnAsError && warnings > 0) ? 1 : 0;
+    }
+
+    /// <summary>
+    /// The assembly references the written C# needs (#490), claimed only when C# was written; an
+    /// artifact-only build writes reports, not code.
+    /// </summary>
+    private static string CompileDependencies(IReadOnlyList<string> written) {
+        var csharp = written.Where(path => path.EndsWith(".cs", StringComparison.Ordinal)).ToList();
+        return csharp.Count == 0
+            ? ""
+            : $" Compile them against {CSharpHostDependencies.Requirement(csharp)}.";
     }
 
     /// <summary>Plans every write before any happens. Returns false after recording an error.</summary>

@@ -19,12 +19,14 @@ internal class Patient : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public IReadOnlyList<Visit> Visits
     {
-        get => this._visits;
+        get => new List<Visit>(this._visits);
     }
-    internal void AttachVisits(Visit child)
+    internal DomainResult AttachVisits(Visit child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._visits.Add(child);
+        child.AttachPatient(this);
+        return DomainResult.Success();
     }
     internal DomainResult CheckInAll()
     {
@@ -52,16 +54,16 @@ internal class Patient : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfCheckInAll()
     {
-        foreach (var target0 in this.Visits)
+        foreach (var __target0 in this.Visits)
         {
-            if (target0.CurrentStage != VisitStage.Scheduled)
+            if (__target0.CurrentStage != VisitStage.Scheduled)
             {
                 continue;
             }
-            var result1 = target0.CheckIn();
-            if (!result1.IsSuccess)
+            var __result1 = __target0.CheckIn();
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Patient.CheckInAll"));
+                return DomainResult.Failure(__result1.Error!.At("Patient.CheckInAll"));
             }
         }
         return DomainResult.Success();
@@ -96,9 +98,30 @@ internal class Patient : Poly.Runtime.IActionScoped
             return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patient.Name"));
         }
         var __name = name;
-        var created = new Patient(__name, visits);
-        Poly.Runtime.ActionScope.Create(created, "Patient");
-        return DomainResult<Patient>.Success(created);
+        if (visits != null)
+        {
+            foreach (var __visitsElement in visits)
+            {
+                if (__visitsElement == null)
+                {
+                    return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Required("'visits' contains a null element.", "Patient.visits"));
+                }
+            }
+        }
+        var __created = new Patient(__name, visits);
+        Poly.Runtime.ActionScope.Create(__created, "Patient");
+        if (visits != null)
+        {
+            foreach (var __child in visits)
+            {
+                if (__child.Patient != null && __child.Patient != __created)
+                {
+                    return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'visits': the child's 'patient' is already set to another owner.", "Patient.visits"));
+                }
+                __child.AttachPatient(__created);
+            }
+        }
+        return DomainResult<Patient>.Success(__created);
     }
     public object __Snapshot()
     {

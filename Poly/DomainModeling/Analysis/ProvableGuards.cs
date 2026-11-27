@@ -4,6 +4,7 @@ using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
@@ -365,7 +366,7 @@ internal static class ProvableGuards {
                     ? action?.Parameters.Any(p => p.Name == name) == true
                     : entity.Properties.Any(p => p.Name == name);
                 return !known || (IsNullable(key, action, entity) && !facts.Has(key));
-            case Add or Subtract or Multiply or Divide or Comparison or And or Or or Not
+            case Add or Subtract or Multiply or Divide or Modulo or Comparison or And or Or or Not
                 or Exists or NotExists or CountExpr or AnyExpr or AllExpr or NoneExpr or SumExpr:
                 return false;
             default:

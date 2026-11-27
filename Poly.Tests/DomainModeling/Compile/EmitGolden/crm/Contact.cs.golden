@@ -26,6 +26,11 @@ internal class Contact : Poly.Runtime.IActionScoped
     public string Email { get; private set; } = default!;
     public Account? Account { get; private set; }
     public ContactStage CurrentStage { get; private set; }
+    internal void AttachAccount(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Account = child;
+    }
     internal DomainResult Retire()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -140,16 +145,20 @@ internal class Contact : Poly.Runtime.IActionScoped
         {
             return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Contact'.", "Contact.Email"));
         }
-        var created = new Contact(__name, __email, __account);
-        Poly.Runtime.ActionScope.Create(created, "Contact");
+        var __created = new Contact(__name, __email, __account);
+        Poly.Runtime.ActionScope.Create(__created, "Contact");
         if (account != null)
         {
-            account.AttachContacts(created);
+            var __attach = account.AttachContacts(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Contact>.Failure(__attach.Error!);
+            }
         }
         db.Record("Contact", "Email", __email);
-        return DomainResult<Contact>.Success(created);
+        return DomainResult<Contact>.Success(__created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

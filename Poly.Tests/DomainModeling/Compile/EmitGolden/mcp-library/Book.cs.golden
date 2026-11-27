@@ -66,12 +66,12 @@ internal class Book : Poly.Runtime.IActionScoped
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Isbn' value is already used on another 'Book'.", "Book.Isbn"));
         }
-        var created = new Book(__title, __isbn, __copies);
-        Poly.Runtime.ActionScope.Create(created, "Book");
+        var __created = new Book(__title, __isbn, __copies);
+        Poly.Runtime.ActionScope.Create(__created, "Book");
         db.Record("Book", "Isbn", __isbn);
-        return DomainResult<Book>.Success(created);
+        return DomainResult<Book>.Success(__created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

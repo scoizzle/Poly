@@ -37,9 +37,19 @@ internal sealed record SnippetShape(int Declarations, SnippetFault? Fault);
 /// stages; action, policy, enum, value and contract bodies are opaque.
 /// </summary>
 public sealed class DslOutline {
-    private DslOutline(IReadOnlyList<OutlineNode> roots) => Roots = roots;
+    private DslOutline(IReadOnlyList<OutlineNode> roots, IReadOnlyList<OutlineNode> declarations) {
+        Roots = roots;
+        Declarations = declarations;
+    }
 
     public IReadOnlyList<OutlineNode> Roots { get; }
+
+    /// <summary>
+    /// Top-level declarations that are not edit-addressable members: a <c>function</c>, which has no block and
+    /// is not a path target. Each node spans its <c>function</c> keyword, so a finding on the declaration has a
+    /// position. They are not in <see cref="Roots"/>, so the edit surface and its sampler are unchanged.
+    /// </summary>
+    public IReadOnlyList<OutlineNode> Declarations { get; }
 
     public static DslOutline Build(string text) {
         var tokens = new List<DslToken>();
@@ -53,7 +63,36 @@ public sealed class DslOutline {
         }
 
         var builder = new Builder(text, tokens);
-        return new DslOutline(builder.BuildDocument());
+        var roots = builder.BuildDocument();
+        return new DslOutline(roots, builder.Declarations);
+    }
+
+    /// <summary>
+    /// Finds the node for a domain element path (<c>Domain/Entity/Member…</c>). The outline spells
+    /// paths with dots and the domain with slashes, so this walks by name segment and never
+    /// compares the two spellings. Returns null when not even the first segment after the domain
+    /// name is found.
+    /// </summary>
+    public OutlineNode? Locate(string domainPath) {
+        ArgumentNullException.ThrowIfNull(domainPath);
+        var segments = domainPath.Split('/');
+        IReadOnlyList<OutlineNode> level = Roots;
+        OutlineNode? found = null;
+        foreach (var segment in segments.Skip(1)) {
+            var next = level.FirstOrDefault(n =>
+                string.Equals(n.Name, segment, StringComparison.Ordinal)
+                && n.Kind is not ("domain" or "uses"));
+            if (next is null) {
+                // A top-level declaration the edit outline does not address (a `function`): its keyword still gives
+                // a finding on it a position. Only tried for the first segment after the domain.
+                if (found is null && Declarations.FirstOrDefault(n => string.Equals(n.Name, segment, StringComparison.Ordinal)) is { } declaration)
+                    return declaration;
+                break;
+            }
+            found = next;
+            level = next.Children;
+        }
+        return found;
     }
 
     /// <summary>
@@ -142,6 +181,9 @@ public sealed class DslOutline {
         private readonly int[] _match = MatchBraces(tokens);
         private readonly HashSet<string> _topKinds = ["entity", "enum", "value", "contract", "bind"];
 
+        /// <summary>Top-level declarations outside the edit surface; <see cref="BuildDocument"/> records them here.</summary>
+        public List<OutlineNode> Declarations { get; } = [];
+
         public IReadOnlyList<OutlineNode> BuildDocument() {
             var nodes = new List<OutlineNode>();
             var i = 0;
@@ -170,6 +212,14 @@ public sealed class DslOutline {
 
                 if (IsNameColon(i)) {
                     i = TopLevel(i, nodes);
+                    continue;
+                }
+
+                if (TryTopLevelStart(i, out var topKind, out _) && topKind == "function" && i + 1 < tokens.Count) {
+                    // A function has an expression body, not a block, so it is no edit target; its keyword is
+                    // recorded instead. The scan continues at the keyword, so every other node is unchanged.
+                    Declarations.Add(Make("function", Label(tokens[i + 1]), Label(tokens[i + 1]), i, i, false, -1, -1, []));
+                    i++;
                     continue;
                 }
 

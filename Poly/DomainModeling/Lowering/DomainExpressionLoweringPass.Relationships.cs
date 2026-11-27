@@ -34,23 +34,36 @@ public sealed partial class DomainExpressionLoweringPass {
                 "Use any/all quantifiers for collections.");
         }
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
-        var leaf = LowerAgainstEntity(
+        if (IsPathPrefixPredicate(rn.TargetProperty)) {
+            // A navigation to a condition reads its subject through the hop, so the subject is absent when
+            // the hop is unlinked (#936). The condition answers that absence itself: a comparison's `!=` is
+            // true, an ordering false, `is null` true. No `hop != null &&` wrapper, which would answer false
+            // for every operator. Statements (a quantifier leaf) keep the fail-closed shape: false while unlinked.
+            var hopGuard = new NotEqual(relMember, new Constant(null));
+            Node hopPresence = _subjectPresence is null
+                ? hopGuard
+                : new SN.And(_subjectPresence, hopGuard);
+            var condition = LowerAgainstEntity(
+                ResolveRelationshipTarget(rn.RelationshipName),
+                rn.TargetProperty,
+                new NullForgiving(relMember),
+                condition: true,
+                subjectPresence: hopPresence);
+            if (condition.Statements.Count == 0)
+                return condition;
+            var t = _names.Next("t");
+            var thenBlock = new Block(
+                [.. condition.Statements, new Assignment(t, condition.Value)],
+                condition.Variables);
+            return new LoweredExpression(
+                [new Assignment(t, new Constant(false)), new IfStatement(hopPresence, thenBlock)],
+                [t],
+                t);
+        }
+        return LowerAgainstEntity(
             ResolveRelationshipTarget(rn.RelationshipName),
             rn.TargetProperty,
             new NullForgiving(relMember));
-        if (!IsPathPrefixPredicate(rn.TargetProperty))
-            return leaf;
-        var exists = new NotEqual(relMember, new Constant(null));
-        if (leaf.Statements.Count == 0)
-            return leaf with { Value = new SN.And(exists, leaf.Value) };
-        var t = _names.Next("t");
-        var thenBlock = new Block(
-            [.. leaf.Statements, new Assignment(t, leaf.Value)],
-            leaf.Variables);
-        return new LoweredExpression(
-            [new Assignment(t, new Constant(false)), new IfStatement(exists, thenBlock)],
-            [t],
-            t);
     }
 
     private static bool ContainsRelationshipNavigation(DomainExpression expr) =>

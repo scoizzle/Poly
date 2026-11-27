@@ -108,10 +108,38 @@ public partial class MinimalApiGeneratorTests {
             """);
 
         await Assert.That(host).Contains("await db.Entry(course).Reference(e => e.Region).LoadAsync();");
-        // Loaded after the 404 check and before the call, on a non-null target only.
-        await Assert.That(host.IndexOf("StatusProblem(404, \"Not Found\", \"Course not found\")", StringComparison.Ordinal))
-            .IsLessThan(host.IndexOf("await db.Entry(course).Reference(e => e.Region)", StringComparison.Ordinal));
-        await Assert.That(host.IndexOf("await db.Entry(course).Reference(e => e.Region)", StringComparison.Ordinal))
-            .IsLessThan(host.IndexOf("Chain.Section.Create(", StringComparison.Ordinal));
+        // Within the create route the load sits after its 404 check and before the call, on a non-null target only. The
+        // route is sliced out first: the same load now also appears in a GET handler, which is a different statement.
+        var create = HandlerOf(host, "MapPost", "/api/sections");
+        await Assert.That(create.IndexOf("StatusProblem(404, \"Not Found\", \"Course not found\")", StringComparison.Ordinal))
+            .IsLessThan(create.IndexOf("await db.Entry(course).Reference(e => e.Region)", StringComparison.Ordinal));
+        await Assert.That(create.IndexOf("await db.Entry(course).Reference(e => e.Region)", StringComparison.Ordinal))
+            .IsLessThan(create.IndexOf("Chain.Section.Create(", StringComparison.Ordinal));
+    }
+
+    /// <summary>#592: the '/' guard reads a create DTO member, and an optional unique key is not one. Emitting
+    /// <c>dto.Tag</c> for it would not compile.</summary>
+    [Test]
+    public async Task CreateRoute_OptionalUniqueTextKey_HasNoSlashGuardMember() {
+        var host = RenderHost("""
+            domain Lab
+            Slot: entity { Name: Text  Tag: Text unique optional }
+            """);
+
+        await Assert.That(host).Contains("app.MapPost(\"/api/slots\"");
+        await Assert.That(host).DoesNotContain("dto.Tag.Contains(\"/\")");
+    }
+
+    /// <summary>#592: a required unique Text key is a DTO member, so its create refuses a '/' before the save.</summary>
+    [Test]
+    public async Task CreateRoute_RequiredUniqueTextKey_RefusesSlashBeforeTheSave() {
+        var host = RenderHost("""
+            domain Lab
+            Slot: entity { Name: Text  Tag: Text unique }
+            """);
+
+        await Assert.That(host).Contains("if (dto.Tag != null && dto.Tag.Contains(\"/\"))");
+        await Assert.That(host.IndexOf("dto.Tag.Contains(\"/\")", StringComparison.Ordinal))
+            .IsLessThan(host.IndexOf("Lab.Slot.Create(", StringComparison.Ordinal));
     }
 }

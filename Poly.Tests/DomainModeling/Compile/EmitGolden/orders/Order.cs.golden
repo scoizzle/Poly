@@ -37,13 +37,20 @@ internal class Order : Poly.Runtime.IActionScoped
     public Customer? Customer { get; private set; }
     public IReadOnlyList<OrderItem> Items
     {
-        get => this._items;
+        get => new List<OrderItem>(this._items);
     }
     public OrderStage CurrentStage { get; private set; }
-    internal void AttachItems(OrderItem child)
+    internal void AttachCustomer(Customer child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Customer = child;
+    }
+    internal DomainResult AttachItems(OrderItem child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._items.Add(child);
+        child.AttachOrder(this);
+        return DomainResult.Success();
     }
     internal DomainResult Cancel(string reason)
     {
@@ -71,16 +78,16 @@ internal class Order : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfCancel(string reason)
     {
-        var assignValue0 = reason;
-        if (assignValue0 == null)
+        var __assignValue0 = reason;
+        if (__assignValue0 == null)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'CancelReason' is required.", "Order.CancelReason"));
         }
-        if (assignValue0.Length > 200L)
+        if (__assignValue0.Length > 200L)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Length("'CancelReason' must be at most 200 characters.", "Order.CancelReason"));
         }
-        this.CancelReason = assignValue0;
+        this.CancelReason = __assignValue0;
         this.CurrentStage = OrderStage.Cancelled;
         this.State = OrderState.Cancelled;
         return DomainResult.Success();
@@ -111,16 +118,16 @@ internal class Order : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfApplyDiscount(long amount)
     {
-        var assignValue0 = amount;
-        if (assignValue0 < 0m)
+        var __assignValue0 = amount;
+        if (__assignValue0 < 0m)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Discount' must be >= 0.", "Order.Discount"));
         }
-        if (assignValue0 > 100m)
+        if (__assignValue0 > 100m)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Discount' must be <= 100.", "Order.Discount"));
         }
-        this.Discount = assignValue0;
+        this.Discount = __assignValue0;
         return DomainResult.Success();
     }
     internal DomainResult Pay()
@@ -253,6 +260,16 @@ internal class Order : Poly.Runtime.IActionScoped
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'customer' is required.", "Order.customer"));
         }
         var __customer = customer;
+        if (items != null)
+        {
+            foreach (var __itemsElement in items)
+            {
+                if (__itemsElement == null)
+                {
+                    return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'items' contains a null element.", "Order.items"));
+                }
+            }
+        }
         if (cancelReason == null)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'CancelReason' is required.", "Order.CancelReason"));
@@ -262,13 +279,28 @@ internal class Order : Poly.Runtime.IActionScoped
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Length("'CancelReason' must be at most 200 characters.", "Order.CancelReason"));
         }
-        var created = new Order(__total, __discount, __state, __customer, items, __cancelReason);
-        Poly.Runtime.ActionScope.Create(created, "Order");
+        var __created = new Order(__total, __discount, __state, __customer, items, __cancelReason);
+        Poly.Runtime.ActionScope.Create(__created, "Order");
         if (customer != null)
         {
-            customer.AttachOrders(created);
+            var __attach = customer.AttachOrders(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Order>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Order>.Success(created);
+        if (items != null)
+        {
+            foreach (var __child in items)
+            {
+                if (__child.Order != null && __child.Order != __created)
+                {
+                    return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'items': the child's 'order' is already set to another owner.", "Order.items"));
+                }
+                __child.AttachOrder(__created);
+            }
+        }
+        return DomainResult<Order>.Success(__created);
     }
     public object __Snapshot()
     {

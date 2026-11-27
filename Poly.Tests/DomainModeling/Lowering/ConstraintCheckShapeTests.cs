@@ -22,7 +22,7 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Person", "Name", "name");
 
         // L-08b (owner ruling): required means non-null for every type; "" is a value.
-        await Assert.That(cs).Contains("if (assignValue0 == null)");
+        await Assert.That(cs).Contains("if (__assignValue0 == null)");
         await Assert.That(cs).DoesNotContain("IsNullOrEmpty");
         await Assert.That(cs).Contains("\"'Name' is required.\"");
     }
@@ -44,7 +44,22 @@ public class ConstraintCheckShapeTests {
     }
 
     [Test]
-    public async Task Assign_PatternGuard_KeepsNullConjunct() {
+    public async Task Assign_OptionalPatternGuard_KeepsNullConjunct() {
+        var (domain, _) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Tag: entity {
+              Code: Text pattern("^[A-Z]{3}$") optional
+              Relabel: action (code: Text) { assign Code to code }
+            }
+            """);
+        var cs = PrintAssign(domain, "Tag", "Code", "code");
+
+        await Assert.That(cs).Contains(
+            "if (__assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(__assignValue0, \"^[A-Z]{3}\\\\z\"))");
+    }
+
+    [Test]
+    public async Task Assign_RequiredPatternGuard_HasNoDeadNullConjunct() {
         var (domain, _) = EvolvedDomain.FromDsl("""
             domain Lab
             Tag: entity {
@@ -54,8 +69,11 @@ public class ConstraintCheckShapeTests {
             """);
         var cs = PrintAssign(domain, "Tag", "Code", "code");
 
+        // #546: the Required guard above already returned, so a `!= null` conjunct here is dead —
+        // and it left the value maybe-null for the assignment after it (CS8601 in a strict build).
         await Assert.That(cs).Contains(
-            "if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
+            "if (!System.Text.RegularExpressions.Regex.IsMatch(__assignValue0, \"^[A-Z]{3}\\\\z\"))");
+        await Assert.That(cs).DoesNotContain("!= null &&");
     }
 
     [Test]
@@ -70,9 +88,9 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Note", "Body", "body");
 
         // L-08b: an empty string is a value, so the group is guarded by `!= null` only.
-        await Assert.That(cs).Contains("if (assignValue0 != null)");
-        await Assert.That(cs).Contains("assignValue0.Length < 7L");
-        await Assert.That(cs).Contains("assignValue0.Length > 20L");
+        await Assert.That(cs).Contains("if (__assignValue0 != null)");
+        await Assert.That(cs).Contains("__assignValue0.Length < 7L");
+        await Assert.That(cs).Contains("__assignValue0.Length > 20L");
     }
 
     [Test]
@@ -86,8 +104,8 @@ public class ConstraintCheckShapeTests {
             """);
         var cs = PrintAssign(domain, "Note", "Body", "body");
 
-        await Assert.That(cs).Contains("if (assignValue0.Length < 7L)");
-        await Assert.That(cs.Contains("if (!System.String.IsNullOrEmpty(assignValue0))")).IsFalse();
+        await Assert.That(cs).Contains("if (__assignValue0.Length < 7L)");
+        await Assert.That(cs.Contains("if (!System.String.IsNullOrEmpty(__assignValue0))")).IsFalse();
     }
 
     [Test]
@@ -202,6 +220,50 @@ public class ConstraintCheckShapeTests {
             """);
         var escapedCreate = PrintCreate(escaped, escapedAnalysis, "Escaped");
         await Assert.That(escapedCreate).Contains("\"^[A-Z]+\\\\$\"");
+    }
+
+    // #545: at the old HEAD the Required guard printed `string.IsNullOrEmpty(name)`, which made the
+    // length-min guard below it dead. Required is non-null only now (L-08b), so "" is a value and the
+    // min check must stay reachable.
+    [Test]
+    public async Task Create_RequiredTextWithMinLength_MinCheckStaysReachable() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Person: entity {
+              Name: Text length(1, 80)
+            }
+            """);
+        var create = PrintCreate(domain, analysis, "Person");
+
+        await Assert.That(create).Contains("if (name == null)");
+        await Assert.That(create).Contains("if (__name.Length < 1L)");
+        await Assert.That(create).DoesNotContain("IsNullOrEmpty");
+
+        var sim = ModuleExec.For(domain).Create("Person", new Dictionary<string, object?> { ["Name"] = "" });
+        await Assert.That(sim.Succeeded).IsFalse();
+        await Assert.That(sim.Error).IsEqualTo("'Name' must be at least 1 characters.");
+    }
+
+    // #545: `(object)kind == null` boxed a non-nullable enum and was always false. The guard tests the
+    // `Kind?` create argument instead, which a caller can omit.
+    [Test]
+    public async Task Create_RequiredEnum_NullTestIsOnTheNullableArgument_NotBoxed() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Kind: enum { A, B }
+            Tag: entity {
+              Choice: Kind
+            }
+            """);
+        var create = PrintCreate(domain, analysis, "Tag");
+
+        await Assert.That(create).Contains("if (choice == null)");
+        await Assert.That(create).DoesNotContain("(object)");
+        await Assert.That(create).Contains("(Kind)choice");
+
+        var sim = ModuleExec.For(domain).Create("Tag", new Dictionary<string, object?>());
+        await Assert.That(sim.Succeeded).IsFalse();
+        await Assert.That(sim.Error).IsEqualTo("'Choice' is required.");
     }
 
     private static string PrintCreate(Domain domain, AnalysisResult analysis, string entityName) {

@@ -18,14 +18,14 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
     protected override object GraphRoot(object entity) => ((ModuleInstance)entity).Bag;
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
-        // A singular navigation is a Create parameter, as on the printed side (Tr.Create(tracks: paper)),
-        // so the lowered body attaches to the parent's inverse collection; collections and other links
-        // are linked after the create.
-        bool IsSingularNavigation(string name) => model.Navigations.Any(n =>
-            string.Equals(n.Name, name, StringComparison.Ordinal)
-            && n.Cardinality is RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne);
+        // Every navigation value is a Create argument, as on the printed side (Tr.Create(tracks: paper),
+        // Tr.Create(loans: kids)): a singular is the child's to-one, a collection the parent's field.
+        // The factory wires both sides of each pair (#572). Only a navigation the factory does not
+        // declare falls back to a link after the create.
+        bool IsNavigation(string name) => model.Navigations.Any(n =>
+            string.Equals(n.Name, name, StringComparison.Ordinal));
         var passedAsParameter = values
-            .Where(v => v.Value is ModuleInstance && IsSingularNavigation(v.Name))
+            .Where(v => LinksOf(v.Value) is not null && IsNavigation(v.Name))
             .Select(v => v.Name).ToHashSet(StringComparer.Ordinal);
         var properties = values.Where(v => LinksOf(v.Value) is null || passedAsParameter.Contains(v.Name))
             .ToDictionary(v => v.Name, v => v.Value is ModuleInstance linked ? linked.Id : v.Value, StringComparer.Ordinal);
@@ -41,10 +41,13 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
         }
         // The factory only takes parameters it declares. A scenario may still pass a
         // property the entry effects own; the printed constructor accepts it, the
-        // module factory does not. Drop those keys and create again.
+        // module factory does not. Drop those keys and create again: the message names the
+        // property either way (`Unknown property 'X'`, or the entry-assigned 'X').
         while (!outcome.Succeeded && outcome.Error is { } err) {
-            var unknown = System.Text.RegularExpressions.Regex.Match(
-                err, "Unknown property '([^']+)'");
+            var unknown = System.Text.RegularExpressions.Regex.Match(err, "Unknown property '([^']+)'");
+            if (!unknown.Success)
+                unknown = System.Text.RegularExpressions.Regex.Match(
+                    err, "Property '([^']+)' for entity '[^']+' is set by the entry effect");
             if (!unknown.Success || !properties.Remove(unknown.Groups[1].Value))
                 break;
             outcome = _exec.Create(model.Name, properties);
@@ -58,8 +61,15 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
             var links = LinksOf(value);
             if (links is null || passedAsParameter.Contains(name))
                 continue;
-            foreach (var target in links)
-                _exec.Link(name, instance, target);
+            foreach (var target in links) {
+                var linked = _exec.Link(name, instance, target);
+                // The printed factory returns a failure for a create argument it refuses, so a link
+                // the host refuses makes this create fail rather than half-wire the aggregate (#572).
+                if (!linked.Succeeded) {
+                    LastFailure = linked.Failure;
+                    return (false, linked.Error, null);
+                }
+            }
         }
         return (true, null, instance);
     }
@@ -185,15 +195,18 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
 
     protected override object? EvaluateCore(string policy) => Method(policy).Invoke(Current, null);
 
-    /// <summary>The printed inverse of a create-in: <c>Attach&lt;Nav&gt;(child)</c>, internal, void.</summary>
+    /// <summary>The printed inverse of a create-in: <c>Attach&lt;Nav&gt;(child)</c>, internal, returning the result.</summary>
     protected override StepResult LinkCore(string relationship, object?[] targets) {
         var name = "Attach" + char.ToUpperInvariant(relationship[0]) + relationship[1..];
         var method = Current.GetType()
             .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             .FirstOrDefault(m => m.Name == name && m.GetParameters().Length == 1)
             ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no '{name}'.");
-        foreach (var target in targets)
-            method.Invoke(Current, [target]);
+        foreach (var target in targets) {
+            var outcome = Unpack(method.Invoke(Current, [target])!);
+            if (!outcome.Success)
+                return outcome;
+        }
         return (true, null, null);
     }
 
@@ -239,6 +252,12 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         if (value is null || target.IsInstanceOfType(value))
             return value;
         var enumType = Nullable.GetUnderlyingType(target) ?? target;
+        if (enumType == typeof(decimal) && value is long or int or double or float)
+            return Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
+        if (enumType == typeof(long) && value is int)
+            return (long)(int)value;
+        if (enumType == typeof(int) && value is long l && l is >= int.MinValue and <= int.MaxValue)
+            return (int)l;
         if (enumType.IsEnum) {
             // A defined member name parses. A non-member lands as an undefined member so the
             // module's own member guard runs, the way a hand-written caller passing an
@@ -258,7 +277,7 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         foreach (var (name, field) in fields) {
             var prop = target.GetProperty(name, AnyInstance)
                 ?? throw new ArgumentException($"'{target.Name}' has no property '{name}'.");
-            prop.SetValue(instance, field);
+            prop.SetValue(instance, Materialize(field, prop.PropertyType));
         }
         return instance;
     }

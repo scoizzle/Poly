@@ -234,6 +234,23 @@ public sealed class CSharpExportCompileTests {
 
     // L-22b: the navigation prints internal (the surface stays closed), the pack maps it explicitly, and the whole
     // host compiles with warnings as errors. A8 pins the F2 consequence: Create and Create{Nav} are internal too.
+    // #913: a `Time` property prints `TimeOnly`, which is the file's only System type when the document has no
+    // Date, DateTime, TimeSpan or Guid property — so the `using System;` inference has to list TimeOnly too.
+    [Test]
+    public async Task Export_WhenTimeIsTheOnlySystemType_EmitsUsingSystemAndCompiles() {
+        var e = Export("""
+            domain Slot
+            Meeting: entity {
+              Starts: Time
+            }
+            """);
+
+        var meeting = e.Files.Single(f => string.Equals(f.FileName, "Meeting.cs", StringComparison.Ordinal)).Source;
+        await Assert.That(meeting).Contains("TimeOnly");
+        await Assert.That(meeting).Contains("using System;");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
     [Test]
     public async Task Export_WhenPublicEntityHasManyNavToInternalEntity_NavigationIsInternalAndMappedAndCompiles() {
         var e = ExportHost("""
@@ -259,7 +276,32 @@ public sealed class CSharpExportCompileTests {
         var db = DbContextText(e);
         await Assert.That(db).Contains("b.HasMany(e => e.Lines).WithOne()");
         await Assert.That(db.IndexOf("HasMany(", StringComparison.Ordinal))
-            .IsLessThan(db.IndexOf("FindNavigation(nameof(Order.Lines))", StringComparison.Ordinal));
+            .IsLessThan(db.IndexOf("FindNavigation(\"Lines\")", StringComparison.Ordinal));
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    // #1012: inside a class deriving from DbContext, `nameof(Entry.Children)` binds Entry to the inherited method
+    // DbContext.Entry<TEntity>(TEntity) (CS0119). The navigation's entity is spelled `<namespace>.<name>` there, as
+    // every other host file spells a generated domain type.
+    [Test]
+    public async Task ExportHost_EntityNamedLikeADbContextMember_QualifiesTheNameofAndCompiles() {
+        var e = ExportHost("""
+            domain Filesystem
+            uses sqlite
+            uses http
+
+            Entry: entity {
+              Name: Text unique
+              Size: Number range(0, )
+              children: many owned Entry
+              Directory: stage {
+                Put: action (child: Text) { create in children { Name: child Size: 0 } }
+              }
+              File: stage { }
+            }
+            """);
+
+        await Assert.That(DbContextText(e)).Contains("FindNavigation(\"Children\")");
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 

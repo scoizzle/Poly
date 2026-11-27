@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Poly.Interpretation.Vm;
 
 /// <summary>
@@ -10,6 +12,12 @@ namespace Poly.Interpretation.Vm;
 /// Runtime calls (<see cref="Invoke"/>) and emitted function bodies agree on this
 /// layout: <c>FramePos</c> is the first argument slot, a parameter is read at
 /// <c>FramePos + index</c>, and the result is written to <c>slots[FramePos]</c>.
+/// A call that returns restores the frame state; a throw that leaves the program is
+/// restored once at <see cref="Interpreter"/>'s entry point, and one a guest catch
+/// handles is restored by the emitted catch handler. A
+/// catch-and-rethrow in this frame would make a deep unwind cost thousands of bytes
+/// per live level, so the refusal thrown for a chain too deep could overflow the very
+/// stack it protects (#1115).
 /// </remarks>
 internal static class VmCall {
     /// <summary>Previous FP and saved SP precede the argument slots.</summary>
@@ -91,9 +99,19 @@ internal static class VmCall {
 
     /// <summary>Run <paramref name="function"/> in a new frame and return the result
     /// it wrote at <c>slots[FramePointer]</c>. Restores the frame pointer, closure,
-    /// and stack pointer even when the body throws.</summary>
+    /// and stack pointer when the body returns. A throw that leaves the program is
+    /// restored once at <see cref="Interpreter"/>'s entry point; one a guest catch
+    /// handles is restored by that emitted catch handler.</summary>
     public static long Invoke(
         VmState state, Action<VmState> function, ReadOnlySpan<long> args, int closureHandle = 0) {
+        // A nested call recurses on the CLR stack, so an invoke chain's depth is bounded by what the calling
+        // thread has left. A frame's slots cannot grow the backing array here: every live frame caches the
+        // array it was entered with. The calling host sizes the stack for the chain up front (VmState's
+        // value-stack slots), and the extent check below is the depth guard. The probe is a second, best-effort
+        // check — its remaining-stack estimate is smaller than some compiled frames — so a recursion, or a
+        // chain past the buffer, is the typed failure, never the process abort a stack overflow is (#1115).
+        if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+            throw new InvalidOperationException("VM: value stack overflow.");
         var stack = state.Stack;
         int callSp = stack.StackPointer;
         int need = callSp + Extent(args.Length);
@@ -112,18 +130,11 @@ internal static class VmCall {
         int framePos = FramePointer(callSp);
         state.FramePos = framePos;
         state.ClosureHandle = closureHandle;
-        // A catch-and-rethrow rather than try/finally: the restore then runs inline on the
-        // normal path, which is the only path a hot loop takes. A finally is emitted as a
-        // funclet call even when nothing threw — a second prologue and epilogue per frame.
-        try {
-            function(state);
-        }
-        catch {
-            state.FramePos = savedFp;
-            state.ClosureHandle = savedClosure;
-            stack.SetStackPointer(callSp);
-            throw;
-        }
+        // No catch here. A catch-and-rethrow at every live frame makes an unwind cost thousands of bytes per level,
+        // so a depth refusal thrown 1,365 links deep aborted the stack it was protecting on linux/amd64 (#1115);
+        // a throw that leaves the program is restored at the entry point instead, and one a guest catch handles is
+        // restored by that emitted catch handler.
+        function(state);
         long result = slots[framePos];
         state.FramePos = savedFp;
         state.ClosureHandle = savedClosure;

@@ -2,6 +2,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
@@ -26,10 +27,15 @@ public sealed partial class DbContextGenerator {
         // b.ToTable("TableName") — or with verified-range CHECK constraints via the modern
         // ToTable(tableBuilder => …) API (HasCheckConstraint on EntityTypeBuilder is obsolete).
         // Checks are emitted only when the invariant analysis PROVED no effect can produce an
-        // out-of-range value, so the DB constraints are sound.
+        // out-of-range value, so the DB constraints are sound. A declared length is its own CHECK
+        // (#563): Create and assign guard every write, so the DB can state it too.
         var checks = store.Columns
             .Where(c => c.IsRangeVerified && c.VerifiedRange is { } vr && (vr.Min is not null || vr.Max is not null))
-            .Select(c => (Name: $"CK_{c.ColumnName}", Sql: CheckSql(c.ColumnName, c.VerifiedRange!)))
+            .Select(c => (Name: $"CK_{c.ColumnName}", Sql: CheckSql(c)))
+            .Concat(store.Columns
+                .Select(c => (Name: $"CK_{c.ColumnName}_length", Sql: LengthCheckSql(c)))
+                .Where(c => c.Sql is not null)
+                .Select(c => (c.Name, Sql: c.Sql!)))
             .ToList();
         if (checks.Count == 0) {
             bodyNodes.Add(new Invoke(
@@ -64,7 +70,28 @@ public sealed partial class DbContextGenerator {
             new Constant(shadowKey)
         ));
 
+        // Optimistic concurrency (#626, #653): every stored entity carries an integer token the host bumps before a
+        // modifying save, so a read-modify-write that lost the race updates no row and answers 409 instead of
+        // overwriting one. A shadow column, never a CLR member: the entity and its DTO keep their shape. The default
+        // lets a row written outside this context (raw SQL, another writer) start at the same token as one inserted here.
+        var versionColumn = new Invoke(
+            new Member(bParam, "Property"),
+            new Constant(VersionPropertyName())) {
+            TypeArguments = [TypeReference.To(typeof(long))]
+        };
+        var concurrencyToken = new Invoke(new Member(versionColumn, "IsConcurrencyToken"));
+        bodyNodes.Add(new Invoke(new Member(concurrencyToken, "HasDefaultValue"), new Constant(0L)));
+
         // Column configurations
+        // A unique text column whose mapped type is unbounded cannot be an index key on the provider that
+        // declares it (SQL Server: nvarchar(max) → error 1919). Refuse the schema at generation, with what to
+        // write, rather than emit DDL the database rejects — and never invent a length the model does not
+        // state (#627).
+        foreach (var unbounded in store.Columns.Where(IsUnindexableUniqueText))
+            throw new InvalidOperationException(
+                $"Column '{entity.Name}.{unbounded.Name}' is unique but has no length: a {unbounded.ColumnType} column "
+                + "cannot be a unique index key on this provider. Give the property a length, for example length(1, 255).");
+
         foreach (var col in store.Columns)
             bodyNodes.Add(BuildColumnConfigNode(bParam, col));
 
@@ -83,8 +110,8 @@ public sealed partial class DbContextGenerator {
 
         // Collection navigations: set backing field access mode
         foreach (var nav in store.CollectionNavigations) {
-            // b.Metadata.FindNavigation(nameof(Entity.NavProp))!.SetPropertyAccessMode(PropertyAccessMode.Field)
-            bodyNodes.Add(BuildNavigationConfigNode(bParam, nav, entity.Name));
+            // b.Metadata.FindNavigation("NavProp")!.SetPropertyAccessMode(PropertyAccessMode.Field)
+            bodyNodes.Add(BuildNavigationConfigNode(bParam, nav));
         }
 
         // modelBuilder.Entity<EntityName>(b => { ... })
@@ -152,9 +179,21 @@ public sealed partial class DbContextGenerator {
             == AccessModifier.Internal;
 
     /// <summary>
+    /// True when the explicit mapping below writes <c>WithMany</c> for a collection end, so EF reads the
+    /// navigation as a skip navigation over a join table: a many-to-many (paired or not), or two collection ends.
+    /// <see cref="BuildNavigationConfigNode"/> asks the same question, because <c>FindNavigation</c> never sees a
+    /// skip navigation (#807).
+    /// </summary>
+    private static bool MapsAsSkipNavigation(StorageNavigation nav) =>
+        nav.IsCollection
+        && (nav.InverseIsCollection
+            || (nav.InversePropertyName is null && nav.Source.Cardinality == RelationshipCardinality.ManyToMany));
+
+    /// <summary>
     /// <c>b.HasMany(e =&gt; e.Nav).WithOne(i =&gt; i.Inverse)</c> or <c>b.HasOne(e =&gt; e.Nav).WithMany()</c>: the
     /// inverse is the one analysis resolved (<see cref="StorageNavigation.InversePropertyName"/>); none means
-    /// a one-directional navigation (a bare <c>WithOne()</c> / <c>WithMany()</c>).
+    /// a one-directional navigation (a bare <c>WithOne()</c> / <c>WithMany()</c>). An unpaired many-to-many is
+    /// <c>WithMany()</c>: <c>WithOne()</c> would store a one-to-many (#807).
     /// </summary>
     private Node BuildExplicitNavigationMapping(Parameter bParam, StorageNavigation nav) {
         var eParam = new Parameter("e");
@@ -162,9 +201,9 @@ public sealed partial class DbContextGenerator {
             new Member(bParam, nav.IsCollection ? "HasMany" : "HasOne"),
             new Lambda([eParam], new Member(eParam, nav.PropertyName)));
 
-        var inverseIsCollection = nav.InverseIsCollection;
         // The many side of a one-to-many is entered with WithOne; the one side of a many-to-one with WithMany.
-        var withMany = nav.IsCollection ? inverseIsCollection : nav.InversePropertyName is null || inverseIsCollection;
+        var withMany = MapsAsSkipNavigation(nav)
+            || (!nav.IsCollection && (nav.InversePropertyName is null || nav.InverseIsCollection));
 
         var withArgs = new List<Node>();
         if (nav.InversePropertyName is { } inversePropertyName) {
@@ -175,21 +214,21 @@ public sealed partial class DbContextGenerator {
         return new Invoke(new Member(navigation, withMany ? "WithMany" : "WithOne"), [.. withArgs]);
     }
 
-    private static Node BuildNavigationConfigNode(Parameter bParam, StorageNavigation nav, string entityName) {
-        // b.Metadata.FindNavigation(nameof(Entity.NavProp))!.SetPropertyAccessMode(PropertyAccessMode.Field)
-        // Issue 8: nameof must receive a Member expression, not a string Constant
-        var nameofCall = new Invoke(
-            new TypeReference("nameof"),
-            new Member(new NamedTypeReference(entityName), nav.PropertyName));
+    private static Node BuildNavigationConfigNode(Parameter bParam, StorageNavigation nav) {
+        // b.Metadata.FindNavigation("NavProp")!.SetPropertyAccessMode(PropertyAccessMode.Field)
+        // The name is a string, not `nameof(Entity.NavProp)`: a nameof argument is an expression, where a bare
+        // domain type binds to an inherited DbContext member first (an entity named `Entry` to
+        // DbContext.Entry<TEntity>, CS0119, #1012) and a namespace-qualified one binds to the entity when it is
+        // named like its domain (`Library.Library`). A string names the CLR property and cannot be shadowed.
+        // A skip navigation (many-to-many) is not a navigation: FindNavigation returns null for it (#807).
+        var findNavigation = new Invoke(
+            new Member(new Member(bParam, "Metadata"),
+                MapsAsSkipNavigation(nav) ? "FindSkipNavigation" : "FindNavigation"),
+            new Constant(nav.PropertyName));
 
         return new Invoke(
             new Member(
-                new NullForgiving(
-                    new Invoke(
-                        new Member(new Member(bParam, "Metadata"), "FindNavigation"),
-                        nameofCall
-                    )
-                ),
+                new NullForgiving(findNavigation),
                 "SetPropertyAccessMode"
             ),
             new Member(new TypeReference("PropertyAccessMode"), "Field")
@@ -205,9 +244,40 @@ public sealed partial class DbContextGenerator {
             ? Pluralize(entity.Name)
             : store.TableName;
 
-    private static string ShadowKeyName(Entity entity, StorageEntity store) {
+    /// <summary>The shadow key's EF property name, shared with the create route's <c>Location</c> (#589).</summary>
+    internal static string ShadowKeyName(Entity entity, StorageEntity store) {
         var taken = entity.Properties.Any(p => p.Name == "Id")
             || store.Columns.Any(c => c.Name == "Id");
         return taken ? "PolyId" : "Id";
+    }
+
+    /// <summary>A <c>unique</c> Text column whose provider type is unbounded (<c>nvarchar(max)</c>): no such
+    /// provider can use it as an index key, so the schema is refused at generation (#627).</summary>
+    private static bool IsUnindexableUniqueText(StorageColumn col) =>
+        col.IsUnique
+        && col.MaxLength is null
+        && col.DomainType is "Text" or "String"
+        && col.ColumnType.EndsWith("(max)", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The shadow column the optimistic-concurrency token lives in: <c>Version</c>, or the first <c>PolyVersion</c>,
+    /// <c>PolyVersion2</c>, … that neither a property of any entity nor any mapped column already uses. One name for
+    /// the whole context, so the save-time bump can name one property; a domain property that happened to be called
+    /// <c>Version</c> keeps its own value instead of silently becoming the token (#626, #653).
+    /// </summary>
+    private string VersionPropertyName() {
+        var taken = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entity in _entities) {
+            foreach (var property in entity.Properties)
+                taken.Add(property.Name);
+            foreach (var column in GetStorageEntity(entity).Columns)
+                taken.Add(column.Name);
+        }
+        if (!taken.Contains(VersionProperty))
+            return VersionProperty;
+        var name = "Poly" + VersionProperty;
+        for (var n = 2; taken.Contains(name); n++)
+            name = "Poly" + VersionProperty + n;
+        return name;
     }
 }

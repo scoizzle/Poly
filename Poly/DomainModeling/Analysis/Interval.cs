@@ -122,6 +122,13 @@ public sealed record ValueRange(decimal? Min, decimal? Max) {
         return new ValueRange(min, max).OrNull();
     }
 
+    /// <summary>The interval of the negation: the endpoints swap and change sign, so
+    /// <c>[-3, 2]</c> becomes <c>[-2, 3]</c>. An open endpoint stays open (a negated ±∞ is unbounded),
+    /// and a range open on both sides carries no information. Decimal's range is symmetric, so a negated
+    /// endpoint is always representable.</summary>
+    internal ValueRange? Negate() =>
+        new ValueRange(Max is { } max ? -max : null, Min is { } min ? -min : null).OrNull();
+
     /// <summary>The same interval as a <see cref="RangeConstraint"/>, or null when both endpoints are open
     /// (which carries no information, never a <c>range(−∞, +∞)</c>).</summary>
     internal RangeConstraint? ToRangeConstraint() =>
@@ -131,7 +138,8 @@ public sealed record ValueRange(decimal? Min, decimal? Max) {
     private bool IsZero => Min == 0m && Max == 0m;
 
     /// <summary>No range at all: both endpoints open carries no information, so callers see unknown.</summary>
-    private ValueRange? OrNull() => Min is null && Max is null ? null : this;
+    /// <summary>Null when both endpoints are open (the range carries no information), else this range.</summary>
+    internal ValueRange? OrNull() => Min is null && Max is null ? null : this;
 
     /// <summary>One result endpoint of an exact sum or difference: absent when an operand endpoint is
     /// open or the exact result does not fit a decimal.</summary>

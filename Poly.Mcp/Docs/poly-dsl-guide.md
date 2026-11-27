@@ -16,8 +16,22 @@
 > (`stageName`, `preconditions`, `properties[].min/max`, `postconditions`) copied from the
 > analyzer's range/precondition facts; absent when the analysis published none. Only an
 > `Entity.Action` select carries a witness; a stage-qualified `Entity.Stage.Action` select does not.
+> `poly_check` with an `expression` proves one DSL fragment against the workspace's own model: the
+> declared `function`s and `enum`s are in scope, and a bound property keeps its declared type, so
+> `Level is Senior` reads the enum member while an undeclared name is typed by its literal. Every
+> property the fragment reads needs a value in `bindings`; a name it reads with no binding fails
+> closed and names it. An expression that reads no property needs no `bindings`
+> (`Within(5, 1, 10)`).
+> A `select` that names no element is `ok:false` with `ELEMENT_NOT_FOUND`, the same answer
+> `poly_inspect` gives, so a typo cannot read as an undecided proof.
+> `poly_export` inlines an artifact up to 4 KB; a larger one is written to the OS temp directory as
+> `poly-<workspace>-<format>-<sha16>.<ext>` and returned as `{path, bytes, sha256}`. Identical content
+> reuses the same file, and `poly_workspace(op:"close")` removes the files the workspace wrote.
 > Each result's text block is a prose summary (outcome, `workspace:` handle, findings, `next:`
 > calls, flattened data); the full envelope is in `structuredContent`.
+> `poly_check` findings carry the source `line`/`column` when the stored document's outline reaches
+> the element, the same position `poly_define` reports; `data.hints` lists the hints the summary
+> counts (`data.hintCount` is the total, up to 20 are listed).
 
 ---
 
@@ -94,17 +108,17 @@ Patron: entity {
 }
 ```
 
-**Note (back-reference materialization):** the runtime link is a store edge — it
-drives path-prefix reads, quantifiers, and subscriptions from the source. The
-**C# export auto-wires the child's back-reference**: the singular navigation the
-collection's `via` names (or whose `via` names it), else the only one on the target that
-points back (e.g. `borrower` on `Loan` → `Patron`). `Create{Nav}` passes `this` and the
-back-ref is not a constructor parameter. When the back-ref is a collection, it stays an
-unset constructor parameter. Two or more singular navigations back to the source with no
-`via` pairing is a **DMREL005** analysis error, so that shape never reaches export. To-one
-navigation bindings in `create in` initializers are **legal**
-(e.g. `create in loans { book: book }`) — the binding flows into the child's
-value bag / constructor parameter like a scalar initializer.
+**Note (back-reference materialization):** the runtime link is a store edge — it drives
+path-prefix reads, quantifiers, and subscriptions from the source. The **C# export
+auto-wires the child's back-reference**: the singular navigation the collection's `via`
+names (or whose `via` names it), else the only one on the target that points back
+(`borrower` on `Loan` → `Patron`); `Create{Nav}` passes `this`, so it is not a constructor
+parameter, and a collection back-ref stays unset. Two or more singular navigations back
+with no `via` pairing is **DMREL005**. To-one bindings in `create in` initializers are
+**legal** (`create in loans { book: book }`) and flow in like a scalar. **A supplied
+collection argument wires the pair the other way (#572):** `Patron.Create(loans: kids)`
+sets each child's paired to-one (`kid.Borrower`) and refuses a child already paired with
+a different owner (a Link failure) instead of re-pointing it.
 
 **Required coverage (DMEFF011):** every property **without** `optional` on the
 created entity must be provided in the `create` / `create in` initializers, unless it has
@@ -212,7 +226,7 @@ Every valid `.poly` document starts with a domain name. Optional `uses` lines li
 `[storage, persistence]` when none are listed; a non-empty list replaces it, so a `unique`
 property needs `persistence` or a vendor library there — nothing adds it for you, and any other list is
 `DMLIB001` at define time (`polyc`, `poly_define`, `apply_dsl`). Temporal stays implicit; unknown or duplicate ids fail closed.
-`uses <id>` loads the library's export package, never a sibling `.poly`. A package boundary
+`uses <id>` loads the library's export package, never a sibling `.poly`. `sqlite` and `sqlserver` are the vendor libraries the catalog resolves; `uses mysql` is `DSL0002` with the reason, not an unknown id (`Poly.Packs.MySql` ships, but no host provider arm loads it). A package boundary
 pins the surface with `uses billing 2024-11-20`; a `contract` block covers what no library contributes.
 
 A package may declare the host targets it is for (target ids such as `posix`); the host passes
@@ -257,7 +271,7 @@ A policy compares an enum property to a member name: `Outcome == Pending` and
 Named records without identity or lifecycle. A value type is a **contract payload or
 action parameter** — it has no storage representation and cannot be a stored entity
 property. Analysis fails closed on a property typed as one. `public` is optional and
-omitted by default (`public value Money { … }`). Generated C# honours it (see **Visibility in generated C#** under entities): an unmarked value type prints `internal`. A generated value type is a C# record whose properties are `init`-only (`{ get; init; }`): a caller builds one with an object initializer or `with`, and assigning a property after construction does not compile, so a setter can be removed later without breaking a caller.
+omitted by default (`public value Money { … }`). Generated C# honours it (see **Visibility in generated C#** under entities): an unmarked value type prints `internal`. A generated value type is a C# record whose properties are `init`-only (`{ get; init; }`): a caller builds one with an object initializer or `with`, and assigning a property after construction does not compile, so a setter can be removed later without breaking a caller. A value-type payload's constraints and a null payload are refused at the action boundary on both hosts. A value type used as a payload must not contain itself, directly or through other value types (`Link: value { Next: Link }`, or `A: value { B: B }` with `B: value { A: A }`): analysis refuses the cyclic payload (`DMSTR011`) on the parameter, because its member constraints cannot be checked recursively. Break the cycle.
 
 <!-- poly-verify: invalid:DMSTR006 wrapper:top-default -->
 ```poly
@@ -354,9 +368,11 @@ key-clause = "key" "(" member ("," member)* ")"
 
 `public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
 
+**Reserved names.** A property name must be an identifier, and a lowercase DSL keyword is not one: `from`, `to`, `entity`, `stage`, `action`, `policy`, `when`, `one`, `many`, `owned`, `in`, `create`, `link`, `unlink`, `public`, and the other keywords lex as keywords. A keyword in member position is a positioned parse error that names the word and the rename — `'from' is a reserved word and cannot name a property; rename it (e.g. 'From' or a synonym)` — at the word, in an entity body, a value-type body or a `create` initializer. The capitalized spelling (`From`, `To`) is an ordinary identifier, as is `Src`/`Dst` or `Origin`/`Destination`; the keyword rule is case-sensitive. The primitive type keywords are the exception: `Text`, `Number` and `Boolean` are legal property names when the type is primitive (`Number: Text`).
+
 An exported signature must be closed. A `public` action's parameter and result types, and a `public` value type's field types, must themselves be `public`; primitives and enum payloads are always available, and a used contract's value types are already on that contract's surface. Analysis reports **`DMCON002`** and names the internal type. The fix is to mark the type `public`, not to add an exception.
 
-**Visibility in generated C#.** Only a `public` entity, value type or action prints `public`; every unmarked one prints `internal`, so a domain with no `public` mark has no public surface and a consumer in another assembly needs the mark. Enums carry no mark and stay public, and a stage enum follows its entity. A public entity's properties and policies stay public, and a member that would name an internal type is `internal`; so is its `Create` when the entity has a navigation to an internal entity (a later slice, L-22c, adds a public factory). An internal entity's `Create` is `internal` too. `Create{Nav}` is always `internal`, on a public entity as well: a caller in another assembly creates a child by calling the declaring action, never `Create{Nav}` directly; a to-many with no action that creates into it is populated from another assembly by passing already-built children to the static `Create`, which takes the collection. A stage-dispatched action is one method that is `public` if any stage variant is public; a public stage group is rejected (`DMCON002`, on the offending copy) when any of its copies returns an internal entity. The generated DbContext is `internal` when any entity is internal, and a generated DTO is `internal` when its entity or any domain type it names is. A public entity may navigate to an internal entity: the navigation prints `internal` (the public surface stays closed) and the pack maps it explicitly, so the entity's JSON omits it. A nested route reads it only when the target is an aggregate child (owned, or one with a required back-reference); otherwise the target is a root, listed at its own route. Such an entity is built by its host, EF and actions, not by a caller in another assembly. A two-way one-to-one (owned or not) to an internal entity builds and boots (#791, row P-18). **`DMCON019`** covers two shapes only reachable through the model API: a public entity with an entity-typed property of an internal entity (persistence ignores it) and a public entity with a many-to-many navigation to an internal entity (the pack cannot map it soundly).
+**Visibility in generated C#.** Only a `public` entity, value type or action prints `public`; every unmarked one prints `internal`, so a domain with no `public` mark has no public surface and a consumer in another assembly needs the mark. Enums carry no mark and stay public, and a stage enum follows its entity. A public entity's properties and policies stay public, and a member that would name an internal type is `internal`; so is its `Create` when the entity has a navigation to an internal entity (a later slice, L-22c, adds a public factory). An internal entity's `Create` is `internal` too. `Create{Nav}` is always `internal`, on a public entity as well: a caller in another assembly creates a child by calling the declaring action, never `Create{Nav}` directly; a to-many with no action that creates into it is populated from another assembly by passing already-built children to the static `Create`, which takes the collection. A stage-dispatched action is one method that is `public` if any stage variant is public; a public stage group is rejected (`DMCON002`, on the offending copy) when any of its copies returns an internal entity. The generated DbContext is `internal` when any entity is internal, and a generated DTO is `internal` when its entity or any domain type it names is. A public entity may navigate to an internal entity: the navigation prints `internal` (the public surface stays closed) and the pack maps it explicitly, so the entity's JSON omits it. A nested route reads it only when the target is an aggregate child (owned, or one with a required back-reference); otherwise the target is a root, listed at its own route. Such an entity is built by its host, EF and actions, not by a caller in another assembly. A two-way one-to-one (owned or not) to an internal entity builds and boots (#791, row P-18). A many-to-many navigation to an internal entity is mapped as an EF skip navigation over a join table (`HasMany(...).WithMany(...)`, #807, row L-22d), so it boots and round-trips both sides. **`DMCON019`** covers the one shape still open: a public entity with an entity-typed property of an internal entity (persistence ignores it).
 
 <!-- poly-verify: valid -->
 ```poly
@@ -381,11 +397,11 @@ public entity Order {
 | Equality | `equals(value)` | `Status: Text equals("Active")` |
 | Default | `default(value)` | `Status: MemberStatus default(Active)` |
 
-`Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`.
+`Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`. A `Decimal` *expression* cannot be stored in `Number` either (`assign N to N + D`): the fraction would be rounded away, so analysis refuses it — see the expression section below.
 
 A number literal is ASCII digits `0-9` with at most one `.` between digits: no sign, exponent or digit separator, and a non-ASCII digit such as `٣` is a positioned error. It is held exactly or it is a positioned error that states the limit: at most 28 digits after the point and no larger than `79228162514264337593543950335` (less with digits after the point). Nothing is rounded. Leading zeros and trailing fraction zeros are free (`007`, `1.0`). `length(...)` bounds and duration amounts are whole numbers written without a decimal point (`length(1.0)` and `1.0 Days` are errors), from 0 to `2147483647` and from 0 to `9223372036854775807`.
 
-`range` bounds are exact at parse and in the assign guard: a `Number` bound is a `long`, a `Decimal` or any other non-Number-family bound is a `decimal`, and no bound is a `double`. A `Number` bound outside the `long` range (for example `9223372036854775808`) is a positioned parse error, not a silent widening, and the exported DSL and the generated validation messages keep the declared bound text. The generated data-annotation attribute is still `[Range(double, double)]` for integral members, so a `long` bound beyond `int` is rounded in that attribute only; decimal members use `[Range(typeof(decimal), "min", "max")]` (the integral attribute is a follow-up). Analysis-time bound arithmetic is still `double` and moves to an exact representation in a later slice.
+`range` bounds are exact at parse and in the assign guard: a `Number` bound is a `long`, a `Decimal` or any other non-Number-family bound is a `decimal`, and no bound is a `double`. A `Number` bound outside the `long` range (for example `9223372036854775808`) is a positioned parse error, not a silent widening, and the exported DSL and the generated validation messages keep the declared bound text. The generated data-annotation attribute keeps the bound exact too: an integral bound within `int` uses `[Range(min, max)]`, and `Decimal` or a `long` bound beyond `int` uses `[Range(typeof(decimal), "min", "max")]` or `[Range(typeof(long), "min", "max")]`. Analysis-time bound arithmetic is still `double` and moves to an exact representation in a later slice.
 
 Properties can reference enum types by name as their type, and use `default(MemberName)`
 to set a default value:
@@ -444,6 +460,8 @@ in a condition (`if`, an `and`/`or`/`not` operand, a `for … where`, a `match` 
 
 A property without `optional` rejects a missing (null) value when it is written, for every
 type. An empty string is a value: refusing it is the job of `length(1, …)` (a `Length` failure).
+An unset optional Text reads as `null`, never as `""`: `is null` is true and `exists` is false
+on every host, and a copy of it into another optional Text stays absent.
 The word `required` is not a constraint. Writing it is a positioned parse error:
 a property is required unless it is marked `optional`.
 
@@ -558,7 +576,10 @@ Cardinality: `one` (default, can be omitted), `many`.
 (`holder: Holder via tickets optional`). A required to-one must be bound when the entity is
 created (DMEFF011 above), and creating it with a null navigation fails with a Required
 failure on every host. A collection is never required, so `optional` on `many` is a
-positioned parse error. An **owned single part must be written `optional`**
+positioned parse error; its *elements* are still checked, and `Create` refuses a null element in
+a `many` argument with a Required failure (`'legs' contains a null element.`, `elementPath`
+`Shipment.legs`), so a policy that counts the collection (`count legs > 0`) is not satisfied by a
+null and no null reaches the stored list. An **owned single part must be written `optional`**
 (`hq: owned Address optional`): it is filled by `create in` after its owner exists, so it can
 never be required at create; a bare `hq: owned Address` is a positioned parse error. Use a
 policy (`policy { hq exists }`) to require it at a later stage. A bare navigation to the
@@ -593,6 +614,16 @@ existing instance of the target, or an earlier step's alias
 may be. An unknown id, an instance of another entity, a collection navigation or a value that
 is not an id fails on the navigation (`Lead.account`). JSON Schema, SHACL and MCP describe do
 not show requiredness of a navigation yet.
+
+**A create wires both sides of a pair.** Every navigation argument of a generated
+`Create` is paired with its inverse: a **singular** argument attaches the new instance to
+the peer's paired navigation (`Order.Create(customer: ann)` adds the order to `ann.Orders`;
+`Profile.Create(owner: ann)` sets `ann.Profile`, not only the collection case), and a
+**collection** argument sets each child's paired to-one (`Patron.Create(loans: kids)` sets
+`kid.Borrower`) — see §0.3. A collection argument holding a child whose paired to-one
+already names another owner fails the create with a Link failure rather than re-pointing
+the child. Pairing is ambiguous when two navigations back to the source qualify: then
+neither side is wired, the same answer the create-in fill gives.
 Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because a bare `x: T` also reads back as one-to-one but fails closed when `T` is a Phase 1a keyword (`actor`, `schedule`, `parallel`, `for`, `function`; matched case-insensitively); `one T` is unambiguous.
 
 **Which entity is the root.** A collection nav (`children: many Child`) means the
@@ -610,8 +641,14 @@ endpoints.
 
 **Owned targets keep their owner.** `unlink_instances` refuses to drop the last
 inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
-owned target must keep its owner." Non-owned links stay minimum zero, and removing
-the owner instance entirely is not an unlink, so it is exempt from the minimum.
+owned target must keep its owner." Non-owned links stay minimum zero. No shipped
+surface removes an instance: the effects are `transition`, `assign`, `create`,
+`create in`, `invoke`, `for` and `if`, and the generated HTTP host maps only GET
+and POST. The minimum is therefore checked when unlinking, and an owned target
+cannot be released from its owner.
+An instance cannot own itself: linking an instance to itself over an `owned` navigation is
+refused ("Cannot link '<rel>': an instance cannot own itself."). A cycle through other
+instances (`a` owns `b`, `b` owns `a`) is not refused, and a non-owning self-link is legal.
 
 **An owned entity has exactly one owner navigation** (`DMSTR010`). Two `owned`
 navigations to one entity type are an analysis error, whether they sit on different
@@ -641,7 +678,13 @@ A self-owning navigation (`Node.children: many owned Node`) is one owner edge an
 legal, but a container that owns a recursive type (`Folder.items: many owned Item` plus
 `Item.children: many owned Item`) gives `Item` two owner navigations and is rejected;
 make `Item.children` a plain reference, or declare the tree node as its own type.
-This is a type-level check only: a second owner *instance* is not refused yet.
+This is a type-level check only. A second owner *instance* is refused when the part names
+its owner — the part's own navigation back (`Order.customer`) is what the generated C# and
+the simulator both read, so putting a part that already names another owner into an owner's
+collection answers a `Link` failure: "Cannot add a link on 'orders': the owned 'Order'
+already has an owner ('Customer'), so another 'Customer' cannot own it." A part whose type
+declares no navigation back records no owner, so nothing refuses a second one yet (see
+*Known wrong*).
 
 **Ownership never closes a loop between different entities** (`DMDEP002`). Two or
 more different entity types that own each other through `owned` navigations are an
@@ -705,7 +748,12 @@ two sides contradict (the named navigation points elsewhere, declares a differen
 inverse, is the navigation itself, both ends are owned, an owned navigation is paired with a
 collection inverse, or two navigations on one entity claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
 cardinality class pair with a side that declares none. `create in` reads the declared
-inverse to pick the back-reference it fills; nothing else dispatches from it yet. `via <name>` is legal on an owned
+inverse to pick the back-reference it fills, and a create argument reads it to pick the peer
+navigation it wires: the one `via` names, or the one that declares `via` back. With neither
+declaration the pairing is the only navigation of the target's type — and on a
+self-relationship, where every navigation targets that type, only when nothing else points
+back: `referrer: Person` beside `friends: many Person` leaves `referrer` paired with nothing
+rather than guessed into `friends` (#584). Nothing else dispatches from `via` yet. `via <name>` is legal on an owned
 navigation too — that is how the back-reference names its owner, and only one side of a
 pair may own it. A member may still be named `via` (`via: Text`, `via(x: Text): action { }`): the
 clause starts whenever `via` is followed by anything other than `:` or `(`, so `via 123`
@@ -736,6 +784,18 @@ every action that can run in the stage must keep it true. Policies are defined o
 inside the stage. A `require` that proves a property present (`Note is not null`) also clears
 copies of that optional property into a required one (DMEFF014) in the stage's actions; an action
 that can assign null to it is DMEFF015.
+
+The invariant is enforced on the state after an action as well as before it: the lowered action
+re-checks its stage's `require` before returning success, so an action that would falsify the
+requirement fails with a `Policy` failure and its writes roll back. A write inside its
+declared range is invisible to Analyze, so this check — not a diagnostic — is what catches it. An
+action that transitions away is judged by the stage it lands in.
+The requirement holds at creation too: the factory sets the initial values, runs the initial stage's
+`entry`, then checks that stage's `require` policies. Values that falsify one are refused with a
+`Policy` failure — `'Create' blocked by policy 'NotCleared'. It would leave stage 'Open' invalid.`,
+on the element path `Entity.Create`, guarded by the policy — and nothing is created or registered.
+So an instance never starts in a stage its own values falsify (#576); a requirement the `entry`
+establishes is satisfied, and a stage the instance is not in is not the one `Create` is judged by.
 
 <!-- poly-verify: fragment:entity wrapper:entity-stage-require -->
 ```poly
@@ -768,15 +828,24 @@ transition. Entity-level actions, entity-level `when` handlers and a `for` body 
 source stage, so a transition there must match every exit-block target. A transition that follows
 another transition, an `invoke`, a `create`, a `create in`, a `for … invoke` or a branch holding a
 transition counts as leaving whatever stage the instance may then be in, so it must match every
-exit-block target too. The rule is conservative: guards are not analysed (every existing transition
-counts, including one under an `if`), and an `invoke` before a hop makes it dynamic even when the
-callee is pure. Making the exit-block transition target the same stage as the hop passes the rule,
-and that transition is redundant: the hop owns the landing, so the target's entry effects and
+exit-block target too. Guard analysis is one provable exclusion: when an entity-level action
+requires a policy whose negation the stage requires (`Go: action require InB` beside
+`A: stage require not InB`), the lowered body refuses the action before any effect runs, so it
+cannot leave that stage and does not count against the stage's exit-block target. Every other
+transition counts, including one under an `if` the analysis cannot decide, and two policies that
+contradict each other without naming one another (`Mode is "b"` against `Mode is "c"`) are not
+analysed either, so that document is still refused: the rule stays conservative wherever the
+guard is not a policy and its own negation. An `invoke` before a hop makes it dynamic even when
+the callee is pure. Making the exit-block transition target the same stage as the hop passes the
+rule, and that transition is redundant: the hop owns the landing, so the target's entry effects and
 subscriber notify run once, and the effects after the transition in the exit block still run before
 the landing.
 
-`invoke`, `create`, `create in` and `for … invoke` are action-only (§9): each one in an exit block is
-rejected with `DMEFF018`, positioned on the effect. Move it into an action.
+An entry block admits `invoke`, `create`, `create in` and `for … invoke` (§9): the entry effects run
+where the instance is created or lands, and both hosts execute them. An exit block rejects the same
+effects with `DMEFF018`, positioned on the effect: the exit block inlines into every hop that leaves
+the stage, so a callee or a create could transition the instance behind the exit-block target check.
+Move exit-block work into an action.
 
 <!-- poly-verify: invalid:DMEFF017 -->
 ```poly
@@ -977,7 +1046,8 @@ Statements may nest at most 64 levels: the level of an `if` or `for` is the numb
 is one level below the rung before it (it is a nested `if`). A statement at level 65 is a positioned
 parse error (`DSL0001`, "statement nesting exceeds the limit of 64") on its `if` or `for` keyword,
 not a crash, however deep the input goes. Like the expression limit, it is a parse limit, not a
-stack guarantee for the steps after the parse.
+stack guarantee for the steps after the parse (see *Expressions*, where the compiler's own stack
+and the typed failure for one that is still too small are described).
 
 ### Invoke
 
@@ -1022,8 +1092,9 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
   after the `for`. The DMREL002 analysis warning below still reports a collection no code
   writes. (Why the rule changed: `docs/decisions/2026-10-17-for-zero-records-is-a-no-op.md`.)
 - **Some predicates are rejected at analysis:** a `for` predicate policy that reads a
-  path-prefix hop is rejected ("reads a path-prefix hop"): an unlinked hop simulates false
-  but the export dereferences null. One that tests `exists` on a property (not a
+  path-prefix hop is rejected ("reads a path-prefix hop"). A hop read answers absent since
+  #936, so the refusal is now conservative rather than a host difference; the `for` form has
+  no cross-host pin of its own yet, so it stays refused. One that tests `exists` on a property (not a
   relationship) is rejected ("tests 'exists' on a property") wherever every quantifier
   on the way to it resolves: on the record itself, or on a related record inside an
   `any`/`all`/`none`/`count` body. Simulate and export disagree on whether an unset
@@ -1071,7 +1142,17 @@ for items as item where item in Active
     invoke item.Mark()                       # fan-out, stage-filtered
 ```
 
-Nested invoke depth is limited (max 16); recursive cycles fail loud.
+A recursive invoke is not supported: any invoke cycle is a `DMEFF021` analysis error, guarded or
+not (#1101). That covers a self-invoke, `Ping: invoke Pong` + `Pong: invoke Ping`, a cycle across a
+relationship (`invoke order.Go` back from a line), the `for … invoke` fan-out, and a stage `entry`
+that invokes the stage's own action which transitions back into that stage. Each copy of an action
+— the entity-level copy and each stage's copy — is its own node, so a same-named copy that never
+re-enters its own stage path is not a cycle. The reason is that the printed C# has no invoke depth
+guard, so a recursion that runs deep overflows the process while the simulator stops it cleanly. A
+cycle of transitions alone is `DMEFF013`'s rule, and a `when` subscription is not an edge (the
+notify dispatch has its own depth guard). A handler still counts after a transition into a stage
+it watches: lowering runs those handlers before the body's next effect, so one that can move the
+publisher's instance widens the stage set, and the `invoke` after the transition may re-enter.
 
 ### Require Gates
 
@@ -1108,12 +1189,15 @@ target enters a matching stage. Omit it for the default **`Each`**:
 | Keyword | Semantics |
 |---------|-----------|
 | *(omitted)* = **`Each`** | Fires effects for **every** matching transition (per-element; the default and the pre-p4 behavior) |
-| `any` | Fires **once** when **at least one** linked related entity is in a matching stage |
+| `any` | Fires on **each** matching transition while **at least one** linked related entity is in a matching stage |
 | `all` | Fires **once** when **every** linked related entity is in a matching stage |
 
 - `any`/`all` (and `Each`) all evaluate the **set state after the transition** —
   they do not fire "every peer bag at once". `all` only fires once the whole linked
   set is in a matching stage; until then transitions into the stage are ignored.
+- The triggering transition is itself in a watched stage, so `any` over one stage fires
+  on every transition into it, like `Each`; over several stages it fires while any linked
+  entity is in any of them. `all` is the only quantifier that waits for the whole set.
 - `any`/`all` on a **singular** relationship (OneToOne / ManyToOne) are
   **rejected at analysis time** (error `DMSS003` — `SubscriptionContractMismatch`).
   The quantifier is meaningless there; omit it (`Each`) or change cardinality.
@@ -1153,13 +1237,22 @@ collection relationship is read by a subscription or a `for` loop while nothing 
 domain writes it. The loop itself is then a no-op (zero records); the warning, not a
 runtime failure, is the signal.
 
+**A create-time entry reports every stage it entered.** The child is related to nobody
+while its initial stage's `entry` runs, so nothing fires then; `create in` links the child
+first and only then reports, in entry order, the initial stage and each stage that entry
+`transition`ed into. A parent watching `items Ready` therefore fires when the child reaches
+`Ready` inside its own entry, and a parent watching both `items Start` and `items Ready`
+fires `Start` then `Ready`. A failing handler there fails the `create in` and rolls it
+back like any other handler failure.
+
 | Placement | Active when | Optional `as name` |
 |-----------|-------------|--------------------|
 | **Stage-scoped** (`when` inside a stage body) | Only while the subscriber is **in that stage** | Yes — same peer rules |
 | **Entity-level** (`when` on the entity, outside stages) | **Always-active** (any subscriber stage) | Yes — same peer rules |
 
-Store notify runs stage-scoped handlers first, then entity-level. Both placements use the
-same effect-binding fail-closed checks.
+Store notify runs entity-level handlers first, then stage-scoped ones. A stage-scoped handler
+checks the subscriber's stage when it runs, so an entity-level handler that moves the subscriber
+out of that stage suppresses it. Both placements use the same effect-binding fail-closed checks.
 
 Two `when`s in the same scope (entity level, or one stage) with the same relationship,
 quantifier, peer binder and stage set warn **`DMSS006`**. Nothing is removed: both run, in
@@ -1195,8 +1288,12 @@ entity-level `when`.
 - **Reserved binder names:** the binder becomes the generated handler's parameter, and the
   handler body calls `Poly.Runtime…`, `System.…` and `DomainResult.Success()`, so a binder
   named `Poly`, `System` or `DomainResult`, or one starting with `__`, is rejected with
-  `DMSTR009`, the rule action parameters follow. `for Rel as name` and `for name in Rel`
-  binders are not affected: they lower to a generated local.
+  `DMSTR009`, the rule action parameters follow. A binder — and equally an entity member —
+  named exactly like any **generated stage enum** of the domain (`OrderStage`, including
+  another entity's) is rejected with the same code: the handler and the constructor read
+  `<Entity>Stage.<Stage>` from expression position, where such a name binds the parameter or
+  member instead of the type. `for Rel as name` and `for name in Rel` binders are not
+  affected: they lower to a generated local.
 - **C# export:** the export consumes the analysis-published subscription dispatch plan
   (the same metadata the runtime uses) and emits a handler per subscription, named by
   quantifier: `WhenAny`/`WhenAll`/`WhenEach{Target}{Stage}`. Peer-dependent
@@ -1263,7 +1360,7 @@ peer) rolls that change back too, as the interpreter does.
 
 ## 8. Policies
 
-Policies are named boolean guard expressions attached to an entity.
+Policies are named boolean guard expressions attached to an entity. The body is always inline: `P: policy { <expression> }`. `P: policy external` is not a form — a policy has no external provider — and the parser refuses it at `external` with `'policy external' is not supported. Write the policy body inline: P: policy { <expression> }.`
 
 <!-- poly-verify: fragment:entity wrapper:policy-facts -->
 ```poly
@@ -1283,17 +1380,28 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 | Level | Operators | Example |
 |-------|-----------|---------|
 | Primary | `Number`, `"string"`, `true`, `false`, `null`, `(expr)`, property name | `42`, `"hello"`, `true`, `Name` |
+| `-` | Prefix unary, binds tighter than `*` and `/` | `-3`, `-Balance`, `-(Total + 1)` |
+| Arithmetic (multiply) | `*`, `/`, `%`, left-assoc | `Net / Count`, `N % 7` |
+| Arithmetic (add) | `+`, `-`, left-assoc | `Net + Fee`, `Net - Fee` |
 | Comparison | `==`, `!=`, `>`, `>=`, `<`, `<=`, `is`, `is not` | `Age >= 18`, `Status is "active"` |
 | `not` | Prefix unary | `not Suspended` |
 | `and` | Binary, left-assoc | `Age >= 18 and Status is "active"` |
 | `or` | Binary, left-assoc | `Total > 0 or Rush is true` |
+
+`%` is the remainder operator, with C#'s rule: the result takes the sign of the dividend, so a dividend of
+`0 - 10` with a divisor of 7 gives `-3`. It is defined for `Number` and `Decimal`. `Number` `/` is integer
+division, so `%` is how a rule gets a remainder (a cents split, an every-Nth check). A zero divisor is not
+diagnosed for `%` or for `/` yet (#502).
 
 An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
 comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
 adds N - 1, and so does a path of N words (`a b c` is one navigation per word after the first).
 Deeper input is a positioned parse error, not a crash, and the parser enforces the limit without
 depending on the host's stack size. That is a guarantee about parsing only: the steps after the
-parse (analysis, compile, export) still walk the tree and need enough stack for it.
+parse (analysis, compile, export) still walk the tree and need enough stack for it. The compiler
+runs those steps on a stack of its own, so a legal document compiles from any caller thread; a
+direct `session.Lower` or `DomainDslPrinter` walk on a thread too small for the tree fails with
+`DSL0004` naming the stack, never a process abort.
 Statements have their own limit of 64 levels (§6).
 
 Valid expressions:
@@ -1305,6 +1413,11 @@ not Suspended
 (Total > 0) or Rush is true
 Status is "active"
 ```
+
+Unary minus negates a `Number` or a `Decimal` expression: `-3`, `-Balance`, `-(Total + 1)`, `-2 * 3` (which is
+`(-2) * 3`, because the prefix binds tighter than `*`). A `Decimal` operand keeps `Decimal` as its type, so
+`-0.25` is a `Decimal`. Negating anything else is DMSEM003 naming the operand's type: `-Label` on a `Text`
+property, or a `Duration`, whose arithmetic is not supported yet.
 
 Ordering (`<`, `>`, `<=`, `>=`) is defined for `Number`, `Decimal`, `Date`, `Time`, `DateTime`, `Duration` and `Uuid`
 (an optional operand and a `match` result of those types included; an absent optional operand orders false). Ordering `Text`, `Boolean`, an enum, an entity,
@@ -1322,6 +1435,14 @@ function's return, a function argument and an invoke or fan-out argument, along 
 into the arm values of a `match` (each arm is converted to the match's type, so `match { c -> 7 / 2, else -> 1.5 }`
 stores 3 for that arm). Like every analysis warning, it is not yet suppressible by an allowance (row T-08).
 
+The other direction is refused, not rounded: a `Decimal` value cannot be stored in a `Number` property, parameter or
+return. `assign N to N + D` (with `N: Number` and `D: Decimal`) is DMSEM003, `cannot assign 'Decimal' to 'Number'`,
+because the fraction would be rounded away (`3 + 0.5` would store 4). Store it in a `Decimal`, or compute it as a
+`Number`. The rule holds at every door — an `assign`, a `create` initializer, a function or action argument and a
+`default(...)`. A `Number` value widens onto a `Decimal` target, so `assign Total to N + M` into a `Decimal` is fine.
+Ruling Q6 allows a proven-safe rounding instead; that proof does not exist yet (row T-12), so nothing is rounded
+silently.
+
 #### Subject-First Related Reads (Q1′)
 
 Policies and assign RHS can **read** data from related entities using subject-first syntax.
@@ -1334,6 +1455,30 @@ Cross-entity **writes** via assign are **banned** — only local entity properti
 | Presence | `assignee exists` | `Exists(PropertyAccess)` — **store outbound-link presence** for relationship names |
 | Absence | `not certificate exists` | `Not(Exists(...))` / `NotExists` — store-aware when target is a relationship |
 | Multi-predicate | `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation` with `And` body |
+
+**An unlinked `optional` navigation reads as absent.** `advisor Score` where `advisor` is declared `optional`
+and the instance has no advisor is the same absent value an omitted `optional` property has, and every position
+treats it that way (#936):
+
+- a comparison answers the optional-value rule above: `advisor Score > 1` and `advisor Score is 1` are false,
+  `advisor Score is not 1` and `advisor Name is not "Pat"` are **true**, and `advisor Due is null` is true while
+  `advisor Due is not null` is false — the last two are how an absent read is tested;
+- a policy, an action `require` or a stage `require` that reads it is false, so the action is refused with `Policy`
+  (`400` over HTTP), and the same predicate under `require not` is **true**, as `not (OptDue < Today)` is true
+  while the optional date is absent;
+- an `assign` into an `optional` target stores absent (`assign Note to advisor Name` leaves `Note` null); into a
+  required target it fails `Required` (`'Target' is required.`) and changes nothing;
+- a `match` whose **selected** arm reads it is absent, exactly as that read is outside the `match`, while an arm
+  that does not read the hop is present (`match { Flag -> advisor Score, else -> 1 }` is `1` while the advisor is
+  unlinked, and `Required` into a required target when `Flag` is true);
+- an `invoke Rel.Action` on an unlinked link stays a `Required` refusal: there is no instance to run the action on,
+  and a silent no-op would skip an effect the document asked for.
+
+`exists` follows the same rule: `exists advisor mentor` is false while `advisor` or `mentor` is unlinked, and
+`not exists advisor mentor` is true. One host gap remains: an absent value assigned into an `optional` **Number**
+target is `0` in the simulator and null in the printed module (an absent `Text` target agrees), listed under
+*Known wrong*.
+
 
 <!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
@@ -1366,7 +1511,8 @@ and a property of the related entity binds to the **parameter**.
 numeric property (`Number` or `Decimal`) on the related entity, over the related set, in `Prop`'s own type:
 a `Decimal` sum is an exact decimal (`sum accounts Balance == 3.0`). A non-numeric `Prop` is `DMSEM005`
 wherever the `sum` appears: a policy, an assign, a comparison, a create initializer. `sum Rel where …` and `sum Rel (expression)` are **not** forms — only a bare property name
-follows the relationship.
+follows the relationship. `first` and `filter` are not forms either: `first Rel where …`, `count filter Rel where …`, and an expression after a quantifier
+(`sum Rel (expr)`) are positioned parse errors at the word that name the supported spelling (`'first' is not supported; use 'any', 'all', 'none', or 'count' with 'where'`).
 `any`/`all`/`none` produce booleans. A body after `where` is checked against the related entity: its names
 are that entity's properties (and the action's parameters), and it must be Boolean, so
 `any lines where Qty == "x"` is `DMSEM003`.
@@ -1403,7 +1549,10 @@ OrderTotal: policy { sum lines Price == 150 }
 ```
 
 **Analysis rules:** relationship must be OneToMany from the source; body properties validated
-against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejected (DMEFF007).
+against the target entity; reverse-side / ManyToMany / OneToOne rejected (`DMSEM005`). A
+self-relationship (`reports: many Employee`) is read like any other collection: the quantifier
+walks the instance's own collection, one level, and does not descend into the children's
+collections unless the document writes a nested quantifier.
 
 #### Temporal Clock Dates (`Now`, `Today`, durations)
 
@@ -1431,10 +1580,11 @@ Replenished: policy { DueDate + 14 Days > ExpiryDate }
 
 | `DateExpr ± N <unit>` | Offset a date/time by a duration | `Now`, `Today`, or a Date/DateTime/Time property on the left |
 | `DateProp ± count` | Offset a Date or DateTime by a whole day count (`Due + n`) | the left is a Date or DateTime property or action parameter; the count is a Number, never a Decimal |
+| `DateTimeProp ± DurationProp` | Offset a DateTime by a Duration value (`StartsAt + Length`) | the left is a DateTime property, parameter or `Now`; the Duration is a property, a parameter or a date difference (`Stamp + (Finished - Started)`). Lowers to `DateTime.Add`/`Subtract(TimeSpan)` on every door. A Date left is refused (it has no `TimeSpan` addition) |
 | `DateProp - DateProp` | The difference, a Duration (`Finished - Started`) | two Date or two DateTime properties or parameters; assign it to a Duration property or compare it with a Duration |
 | `assign Len to 30 Minutes`, `Len > 1 Hours` | A bare duration as a Duration value | assigned to a `Duration` property or compared with one, as a `default(...)` is; Months and Years have no fixed length and are rejected |
 
-Clock-resolution units (`Milliseconds`/`ms`, `Seconds`, `Minutes`, `Hours`) apply to `Now`, `DateTime`, and `Time`. Calendar units (`Days`, `Weeks`, `Months`, `Years`) apply to `Now`, `Today`, `Date`, and `DateTime`. `Date`/`Today` + hours (or finer) is rejected at analysis; `Time` + days (or coarser) is rejected.
+Clock-resolution units (`Milliseconds`/`ms`, `Seconds`, `Minutes`, `Hours`) apply to `Now`, `DateTime`, and `Time`. Calendar units (`Days`, `Weeks`, `Months`, `Years`) apply to `Now`, `Today`, `Date`, and `DateTime`. `Date`/`Today` + hours (or finer) is rejected at analysis; `Time` + days (or coarser) is rejected. A calendar count must fit in a 32-bit int (`Dt + 30 Years` is fine, `Dt + 4294967297 Years` is a `DMSEM003` error): the offset lowers to an int day/month/year count, and no date holds more.
 
 **Fail-closed (parse):** unknown units (`12 fortnights`) are a **parse error** — never a
 vacuous `DateOperation` and never a dropped unit. A bare `Number + Days` with no temporal left
@@ -1449,12 +1599,15 @@ Product sessions load Temporal implicitly at Load. A raw `SessionBuilder` that n
 
 **Refused at analysis, so no door runs a different answer:** a Decimal day count of any kind (`Due + 1.5`,
 `Due + Days` with a Decimal `Days`, on a Date or a DateTime): use a whole Number count or a unit literal such as
-`36 Hours`; a date plus or minus a Duration *value* (`Due + Len`: not supported yet, F-11, #550); a count offset whose left
-is not a date property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
+`36 Hours`; a **Date** plus or minus a Duration *value* (`Due + Len` on a `Date` property: a Date has no `TimeSpan`
+addition, so write the property as `DateTime`); a Duration offset whose left or Duration operand is a path, an owned
+member, a `match` or a call (`part Due + Len`, `Start + part Len`: read it into a property first); an optional Duration
+operand and an optional DateTime left (an absent value has nothing to add); a count offset whose left is not a date
+property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
 `default(Now + 7 Days)` (a date operation has no default lowering: use `default(Now)` or `default(Today)`); and a bare
 duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration one too long for a `TimeSpan` is rejected. An `optional` Date, DateTime, Time or Duration compared with a required value of the same type (`OptDue < Today`, `OptLen > 1 Hours`) is C#'s lifted comparison on every door: an absent operand makes `<`, `<=`, `>`, `>=` and `==` false and `!=` true.
 
-So a policy such as `OptDue >= Opened` used as an action's `require` is false while `OptDue` is absent, and the action is refused; `not (OptDue < Today)` is true while it is absent; and two optional values that are both absent are `==` but neither `<=` nor `>=`. To accept an absent value write `OptDue is null or OptDue >= Opened`; to demand a present one write `OptDue is not null and OptDue >= Opened`. (There is no entity-level constraint expression: a policy is the form that carries one, and a stage `require` is not checked when an instance is created, #576.)
+So a policy such as `OptDue >= Opened` used as an action's `require` is false while `OptDue` is absent, and the action is refused; `not (OptDue < Today)` is true while it is absent; and two optional values that are both absent are `==` but neither `<=` nor `>=`. To accept an absent value write `OptDue is null or OptDue >= Opened`; to demand a present one write `OptDue is not null and OptDue >= Opened`. (There is no entity-level constraint expression: a policy is the form that carries one, and a stage `require` is checked when the instance is created as well as by the actions that run in the stage.)
 
 <!-- poly-verify: valid -->
 ```poly
@@ -1480,9 +1633,14 @@ Offsets (`Now - 12 Days`) author, lower, and execute as `Add*` on that clock val
 Adding a duration to a *required* Date or DateTime that was never set fails with `'PropertyName' is not set` and does not change the instance. An offset or a difference on an `optional` date or date-time is rejected at analysis (#648): the property may be unset, and no door computes with an absent date.
 Compare a `Date` with `Today` and a `DateTime` with `Now`. A mixed comparison (`Date < Now`,
 `DateTime < Today`) is rejected at analysis.
+A `DateTime` ordering (`<`, `<=`, `>`, `>=`) compares instants, not clock fields: a value whose `Kind` is `Local` is
+read as its UTC instant (`ToUniversalTime()`), and a `Utc` or `Unspecified` value is read as its clock time — the one
+clock `Now` reads. So a .NET caller may pass `DateTime.Now`, or a value parsed without a marker, and the policy answers
+for the instant it names. An `optional` DateTime is still ordered only when it is present.
 
-**Explicitly NOT shipped:** `schedule at` / `at <time>`, business days, and timezone (TZ)
-handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ conversion.
+**Explicitly NOT shipped:** `schedule at` / `at <time>`, business days, and named time zones are out of scope — no
+`at 9am`, no business-day arithmetic, no `TimeZoneInfo` conversion. A `DateTime` still compares as its UTC instant,
+above, because `Kind` marks the value rather than naming a zone the domain models.
 
 **Rules:**
 - `Rel Prop` on `many` relationships is invalid (use `any Rel where …` — Q3′ shipped). Cardinality validation is enforced at domain analysis time; the parser accepts the syntax but the analysis pipeline will reject it when relationship metadata is available.
@@ -1491,10 +1649,10 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 - Cross-entity writes (nav path as assign target) are banned.
 - **Path-prefix / owned / quantifier / Rel exists** require session instances + links when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
 
-  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same session instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against the linked instances. **Fail closed:** missing `instanceId`, instance, or domain metadata. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `oracle_expression` is a fragment probe on a synthetic bag — not named-policy evaluate.
+  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same session instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against the linked instances. **Fail closed:** missing `instanceId`, instance, or domain metadata. Empty links: a path-prefix read is absent, so its comparison answers the optional rule (#936, section 10); `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `poly_check` with an `expression` is a fragment probe against the model's declared functions and enums, with each property it reads bound in `bindings` — not named-policy evaluate, and with no linked instances a relationship path still fails closed.
 
 **Shipped in the current product surface:**
-- Arithmetic (`+`, `-`, `*`, `/`) in expressions
+- Arithmetic (`+`, `-`, `*`, `/`, `%`) in expressions
 - Conditional effects (`if (expr) { effects } else { effects }`) — exists / path-prefix / quantifiers in the condition lower the same way as in policies
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; fan-out via the `for` form — one mode, no `any`/`all`/`each` quantifier)
 - Action parameters (`actionName: action (param: Type, ...)`)
@@ -1518,17 +1676,26 @@ diverging:
   create factory and any action that assigns the property take an `IStoragePort db`
   parameter and return `Unique constraint violated` before the write — the guard is the
   module's, not a separate export-only stub. This is the same body a source that writes
-  `uses persistence` prints. A non-empty `uses` list replaces the implicit set
+  `uses persistence` prints. `poly_export csharp` returns the whole module as **one**
+  compilation unit (one banner, one `#nullable enable`, the merged `using` set, one file-scoped
+  `namespace`), so saving it as a single `.cs` file compiles; `fileCount`/`files` name the
+  per-entity files `polyc build` writes instead. A non-empty `uses` list replaces the implicit set
   `[storage, persistence]`, so a `unique` property needs `persistence` or a vendor library in
-  that list. Authoring is where the rule bites: a document that lists `uses storage` or
+  that list. A vendor library is persistence for its database: listing `persistence` beside one
+  (`uses persistence` with `uses sqlite`) loads the vendor only. Authoring is where the rule bites: a document that lists `uses storage` or
   `uses http` and nothing else is `DMLIB001` at define time, in `polyc` and in every MCP
   authoring call, instead of silently losing the constraint. The MCP execution overlay
   (`McpSessionStore.EnsureExecution`) still adds `persistence`; with the rule in place it adds
-  no `unique` guard the document did not ask for, and its removal is C-08's. The printed `EnsureUnique` member
-  is a residual with no caller: it refuses with "A unique assign needs the storage port." The EF model uses a
-  synthetic integer `Id` key. Every `unique` property, including a second one on the
-  same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session
-  storage port and at the database.
+  no `unique` guard the document did not ask for, and its removal is C-08's. The module declares
+  no public uniqueness member: `Create` carries the port guard and an assign carries the same
+  guard inline. A private `EnsureUnique` remains because the lowered assign shape names it before
+  the storage library rewrites that call; it is unreachable from any printed module (a `unique`
+  with no storage library is DMLIB001, and the rewrite replaces every call) and it fails closed
+  rather than accepting a duplicate. The EF model uses a synthetic integer `Id` key. Every
+  `unique` property, including a second one on the same entity, is `HasIndex(...).IsUnique()`.
+  Duplicate values fail loud at the session storage port and at the database.
+  An absent `optional` `unique` value is not a key: `Create` neither checks nor records it, so any
+  number of instances may omit it.
 - **`Now`/`Today`/`Guid` are authorable in `default(...)`, assign RHS, and policy bodies**
   (with the temporal library, default in MCP `apply_dsl`). Policy/VM evaluation of `Now`/`Today`
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a
@@ -1586,10 +1753,14 @@ diverging:
   `invoke`, a `create` or a `create in` on its path: that assign is judged by the action's
   other `require` gates and every policy of its stage, as before `require not` narrowed.
 - **Silence means verified (Q4)** — with one exception: a call-chain postcondition whose
-  value range is not known (below). A write analysis cannot
-  decide — a bare property or parameter with no bound, an operator the
-  interval flow does not model (`/`, a call, `match`), or a constraint kind with no flow
-  decision — is a **`DMCS003` warning** naming the write, the property and the constraint.
+  value range is not known (below). An interval comes from a literal, a ranged property or
+  parameter (narrowed by a `require` gate, an `if`, or a stage policy), `+`, `-`, `*` and
+  `/` (a quotient only when the divisor's whole range excludes 0; #502 owns the zero case),
+  a `match` (the hull of its arms and its required `else`, only when every one has an
+  interval), and a Text's length (below). A write analysis cannot
+  decide — a bare property or parameter with no bound, a call, a `%`, a relationship leaf,
+  a division by a range that includes 0, a `match` with an unbounded arm, or a constraint
+  kind with no flow decision — is a **`DMCS003` warning** naming the write, the property and the constraint.
   So with
   `A: Number range(0, 10)` and `B: Number range(5, 20)`, `assign A to B` warns
   (`DMEFF008`, "can fall outside"), and `assign A to U + 1` with an unbounded `U` warns
@@ -1610,10 +1781,15 @@ diverging:
   against the declared ranges, as is a create outside an action body.
   `range(...)`, `length(...)`, `pattern(...)` and `equals(...)` are the kinds the runtime enforces
   on a write, and the kinds decided against a computed value on an `assign` or an initializer.
-  A `length` is proven only when the value's own `length(...)` lies inside the target's
-  (a copy of a shorter-bounded Text property); a `pattern` or `equals` only when the value carries
-  the identical declared one. Anything else is unverified: `S + "xx"`, a Text with no
-  such bound, a different pattern. A literal assigned directly is still checked outright and is an
+  A `length` is decided against the value's **length interval**: a Text's own `length(...)`
+  (a Text with none is `[0, +∞)`), `+` with a literal or another bounded Text (the two lengths
+  added), or a `match` over such values. A copy or a concatenation that lies inside the target's
+  length is verified; one that does not is a `DMEFF008` warning naming the interval
+  (`[3, 5] can fall outside length(1, 3)`) — never an error yet, because row V-08 owns the error
+  side of a length. A `pattern` or `equals` is proven only when the value carries
+  the identical declared one. Anything else is unverified: a Text whose length the walk cannot
+  name (a relationship leaf, a call), a different pattern. A literal assigned directly is still
+  checked outright and is an
   error when it fails. Excluded: `unique` (it depends on stored state, not the written value, so a
   proof about one write cannot cover it), `required` (`DMEFF014` owns it) and enum membership
   (the type check owns it). The **call chain** decides
@@ -1687,7 +1863,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires instances + link** at `evaluate_policy` |
 | Nested multi-hop path-prefix | ✅ | ✅ **shipped** (to-one hops) | `loan book Title is "Classic"`; many-middle requires `any`/`all` quantifiers |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; foreach over the collection in simulate and export. |
-| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 2 > 10` |
+| Arithmetic (`+`, `-`, `*`, `/`, `%`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total % 7 is 0` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 | `match { cond -> value, …, else -> value }` | ✅ | ✅ **shipped** (#409) | Expression-level branching; see below. |
 
@@ -1722,7 +1898,8 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
   are seen, overlapping ranges are the author's problem. A bare name that is no property, parameter or
   enum member is an error (**DMMAT004**).
 - Malformed forms (`match { }`, an arm with no `->`, an empty condition or value, a stray or trailing
-  `,`) fail with a positioned parse error.
+  `,`) fail with a positioned parse error at the token that faults, and a `DMMAT00x` finding is
+  positioned on the `match` keyword; the message never restates the position.
 - Lowers to a nested conditional; simulation and printed C# agree. Arms are lazy in the result
   (only the chosen value is selected), but a quantifier inside an arm is evaluated up front.
 - Not shipped: matching on a scrutinee (`match X { "a" -> … }`), patterns, and constant-folding of
@@ -1734,13 +1911,13 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 |--------|---------------|
 | `transition to Stage` | action, entry, exit |
 | `assign Prop to expr` | action, entry, exit |
-| `create Type { ... }` | action |
-| `create in Rel { ... }` | action |
-| `invoke Action` / `invoke Rel.Action` | action (self; OneToOne source-only; fail-closed DMEFF007; depth-limited) |
-| `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
+| `create Type { ... }` | action, entry |
+| `create in Rel { ... }` | action, entry |
+| `invoke Action` / `invoke Rel.Action` | action, entry (self; OneToOne source-only; fail-closed DMEFF007; depth-limited) |
+| `for Rel as name [where policy \| where in stage] invoke name.Action` | action, entry (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). The action-only effects above are rejected in an exit block (`DMEFF018`). A `create` or `create in` initializer may not supply a property the new instance's entry chain may assign (`DMEFF019`; see Entry/Exit Effects).
+A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). An entry block admits the effects above; an exit block rejects `create`, `create in`, `invoke` and `for … invoke` (`DMEFF018`). A `create` or `create in` initializer may not supply a property the new instance's entry chain may assign (`DMEFF019`; see Entry/Exit Effects).
 
 **Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4).
 
@@ -1773,6 +1950,17 @@ Board: entity {
 | `event.Prop` / `event Prop` in `when` bodies | Use optional peer binder: `when Rel Stage as name { … name Prop … }` |
 
 ## 11. Additional Features
+
+### Export outputs and their dependencies
+
+`poly_export` returns one artifact: `dsl`, `json-schema`, `csharp`, `markdown`, `html`,
+`json-ld`, or `shacl`. `csharp` prints the compiled module as one or more source files, and
+the success summary names what the project that compiles them needs: a `Poly.Runtime`
+reference for `DomainResult`, `DomainFailure` and `IStoragePort`, and, when the export
+includes a generated `<Domain>DbContext.cs`, `Microsoft.EntityFrameworkCore`. `polyc build`
+prints the same requirement after its file count in text output. An export over 4 KB is
+written to a temp file and returned as `{path, bytes, sha256}`; `inline: true` returns the
+text.
 
 ### `uses` Contract Contributions
 
@@ -1884,14 +2072,51 @@ function Square(a: Number): Number = a * a
   error.
 - A call evaluates to the function's declared return type. Simulation and printed C# agree:
   lowering binds each argument to the parameter and lowers the body there.
+- A call is inlined where it is written; generated C# has no method for the function, so a C#
+  caller cannot call it by name. The body is lowered at the call site, so the printed code and
+  the simulator still agree.
 - Fail-closed diagnostics (all errors): `DMFUN001` unknown function, `DMFUN002` wrong number of
   arguments, `DMFUN003` argument type not assignable to the parameter type, `DMFUN004`
   recursion (direct or through other functions), `DMFUN005` impure body, `DMFUN006` body vs
   return type, `DMFUN007` duplicate name, `DMFUN008` call in a position lowering cannot place
   (the `default(…)` of a property — assign the call in an action or entry effect instead). A
-  call result of the wrong type for its use is the ordinary `DMSEM003`.
+  call result of the wrong type for its use is the ordinary `DMSEM003`. A finding about the
+  declaration itself (`DMFUN004`-`DMFUN007`, and the `DMSEM006` of a return type that names no
+  type) is positioned on the `function` keyword; a finding about a call is positioned on the call.
 - **Recursion is rejected**, not supported: a body is one expression with no base case, so a
   recursive function never terminates, and lowering would expand it without end.
+
+#### Built-in numeric functions (#547)
+
+Six numeric functions are built in, so a `Decimal` can be rounded to cents without a declaration:
+
+| Call | Meaning | Result |
+|------|---------|--------|
+| `Round(value, digits)` | round to `digits` places, midpoint **away from zero** (the money rule, never to even) | the operand's type |
+| `Abs(value)` | absolute value | the operand's type |
+| `Min(left, right)` | the smaller operand | the operands' common type |
+| `Max(left, right)` | the larger operand | the operands' common type |
+| `Floor(value)` | the largest whole value at or below | the operand's type |
+| `Ceiling(value)` | the smallest whole value at or above | the operand's type |
+
+`Round(Balance * 0.015, 2)` rounds a computed fee to cents and assigns it to a `Decimal`;
+`Round(1.005, 2)` is `1.01` and `Round(-1.005, 2)` is `-1.01` (banker's rounding would give
+`1.00` and is not used). `Min(Balance, Fee) - Abs(Net)` composes with arithmetic, and the
+interval analysis knows `Abs` is never negative and takes the hull of `Min`/`Max` operands;
+`Round`'s result range is not modelled.
+
+- Each call lowers to one `System.Math` call (`Round`, `Abs`, `Min`, `Max`, `Floor`,
+  `Ceiling`), so the simulator, the printed C#, `polyc check` and the generated host agree.
+- `digits` is a whole `Number` from `0` to `28`. `2` and `2.0` are both whole; `2.5` is refused.
+- Every argument is a present numeric value: `Number`, `Int32`, `Float` or `Decimal`. `Min` and
+  `Max` need two operands with a common type (`Decimal` with `Float` has none).
+- A whole value (`Number`, `Int32`) needs no call for `Round`, `Floor` or `Ceiling`: it is
+  already whole, so the call is that value.
+- These names are not reserved. A `function` declared with the same name wins, exactly as it
+  does over a contract endpoint, and its body runs.
+- Fail-closed: wrong arity is `DMFUN002`; a non-numeric, absent or `Float32` argument, a
+  fractional or out-of-range `digits`, or `Min`/`Max` operands with no common type is
+  `DMSEM003` at the argument.
 
 Not yet part of the surface (later slices of #406): functions on `value` types and `require`
 guards, operator overloads, lowering a function to its own tree artifact with an invoke id,
@@ -1943,8 +2168,9 @@ attributes below. What reaches the database:
 |------------|---------------------|
 | `unique` | `HasIndex(x => x.Prop).IsUnique()` on every unique property. The primary key is a synthetic `int` `Id`, not the unique column. |
 | `range` | `HasCheckConstraint` only when invariant analysis verified every writer stays inside the range. An unverified range is not a CHECK. |
-| `length(min, max)` | `HasMaxLength(max)` only. The minimum is not a CHECK. |
-| `pattern` | No SQL projection. The pattern is still enforced when the VM writes the value. |
+| `length(min, max)` | `HasMaxLength(max)` plus a `CK_<column>_length` CHECK. The minimum is checked on the value's UTF-8 byte length and the maximum on SQLite's character count, so the database never refuses a value `Create` accepts (it may accept a few that `Create` refuses). |
+| `pattern` | No SQL projection: SQLite has no regular expressions. The pattern is still enforced when the VM writes the value. |
+| `default(...)` | `HasDefaultValue(...)` for a literal or an enum member. A runtime default (`Now`, `Today`, `Guid`) has no database default. |
 | no `optional` | `IsRequired()` for reference-typed columns. |
 | a required link (a to-one not declared `optional`) | A `NOT NULL` foreign key (`IsRequired()` on the relationship). An `optional` link keeps a nullable key (`IsRequired(false)`). |
 | delete behaviour | Deleting an owner cascades to its `owned` parts (`OnDelete(Cascade)`); any other required link restricts (`OnDelete(Restrict)`: the principal cannot be deleted while a dependent references it); an optional link is unchanged (`ClientSetNull`). An owned single part with no back-navigation keeps its key on the owner and is unchanged. A shape the analysis cannot decide (a many-to-many) keeps EF's convention. |
@@ -1954,15 +2180,45 @@ There is no `DELETE` route and no delete effect in the DSL, so delete behaviour 
 uses the generated DbContext directly. A database file created before this change has a different schema
 (nullable keys, no delete action) and must be recreated.
 
+**Why a declared `range` sometimes has no `CHECK`.** The CHECK is built from the
+declared range, so it is emitted only when every writer is proven to stay inside it; the proof is
+an interval, not a guess, and an unproven writer drops the whole CHECK (fail closed: a CHECK the
+domain could legitimately trip is worse than no CHECK). On `Capacity: Number range(0, 100000)`,
+`assign Capacity to 5` is the point `[5, 5]` and `assign Capacity to Capacity * 1` is
+`[0, 100000]` — both inside, so `CK_capacity` is emitted. `assign Capacity to Capacity + 1` is
+`[1, 100001]`, one past the declared maximum; `polyc` warns `DMEFF008: Assigned expression value
+range [1, 100001] can fall outside constraint range(0, 100000) on property 'Capacity'.` and the
+column gets no CHECK at all. Two consequences: the assign is still guarded when it runs
+(`'Capacity' must be <= 100000.` refuses the write), so the domain itself never stores an
+out-of-range value; and a writer that bypasses the domain — direct SQL, another client — is not
+refused by the database. An open bound keeps the CHECK (`range(0)` with the same `+ 1` proves
+`[1, ∞)` inside `[0, ∞)` and emits `capacity >= 0`), and so does any writer whose interval fits;
+a wider declared maximum does not help `X + 1`, because the write interval moves with it and
+still clears the top. `DMCS003` is the same verdict when the write has no computable interval
+at all (`assign Capacity to amount`).
+
+**A `Decimal` range on SQLite.** SQLite has no exact decimal store, so a `Decimal` column is `TEXT`, the
+only form there that keeps every digit. SQLite compares a `TEXT` column to a numeric literal as text
+(`'9' > '1000000'`), so the CHECK compares the value numerically instead: the column and both bounds are REALs
+— `CAST(column AS REAL) >= 0.0 AND CAST(column AS REAL) <= 1000000.0` — and SQLite parses the bound the way it
+casts the value. Both sides are then the same correctly-rounded double, and rounding is monotone, so a value
+inside the declared range is never refused. A whole-number bound above 2^53 is printed with a `.0` for exactly
+that reason: an INTEGER literal is compared exactly, without rounding, and would refuse the value at the bound.
+The CHECK is a floor that never contradicts `Create`, which stays the guard: a value that differs from a bound
+beyond REAL's 15–17 significant digits can pass it, and `Create` still refuses that value in the domain. It is not
+a type check: text that is not a number casts to `0.0` and passes a range that contains 0 (only a write outside the
+module can put it there; `Create` never does).
+
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport emits them as DTO validation attributes (metadata on the contract;
 the module enforces the same envelopes the domain declares):
 
 - `range(min, max)` on a `Number` property → `[Range(min, max)]` on the create DTO and on
   any **action DTO parameter** the value is directly assigned into
-  (`assign Stock to amount` ⇒ `[Range(0, 1000)]` on `amount`). The numeric range uses the
-  analysis-**verified** envelope when the invariant analysis proved no effect can exceed
-  it; otherwise the declared range.
+  (`assign Stock to amount` ⇒ `[Range(0, 1000)]` on `amount`), or
+  `[Range(typeof(long), "min", "max")]` when a bound does not fit `int`. The numeric range
+  uses the analysis-**verified** envelope when the invariant analysis proved no effect can
+  exceed it; otherwise the declared range.
 - `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
 - `pattern(regex)` → `[RegularExpression(regex)]`.
 - no `optional` → `[Required]` (reference-typed properties). Every
@@ -2012,13 +2268,28 @@ A stage failure (an action the current stage does not offer) conflicts with the 
 policy failure (a `require` guard that does not hold) is `422`: the request is well-formed and a rule refused it. It
 is not authorisation, so it is not `403`.
 
+**Concurrent actions.** An action route is a read-modify-write of one aggregate, so the host saves with optimistic
+concurrency: every stored row carries an integer version the host bumps before a modifying save (a shadow column, not
+a JSON member). A save whose row changed after this request read it updates no row, and the request answers `409` with
+title `Conflict` and a detail naming the entity and the route's key. The client retries. The host never retries for
+you, because a retry would re-run the action's guards against the state it just changed, so two concurrent actions on
+one aggregate give one `200` and the rest `409` — the host's `Conflict`, or the module's own `Stage` when the winner
+already left the stage — never a lost update and never a second transition.
+
 ### HTTP route keys (`uses http`)
 
 A `201 Created` response's `Location` is the route plus the row's natural key as one escaped path segment
 (`Uri.EscapeDataString`; non-text keys are formatted culture-invariantly, a Date key as `2026-01-05`), so a key
-with a space, `?`, `#` or a non-ASCII letter reads back at that `Location`. **Known gap:** a key containing `/`
-gets the escaped `Location` but the route cannot read it back, because ASP.NET does not turn `%2F` into `/` in a
-route value.
+with a space, `?`, `#` or a non-ASCII letter reads back at that `Location`. A key containing `/` is refused at a
+root create with `400` and a message, because ASP.NET does not turn `%2F` into `/` in a route value, so no
+`Location` could read it back. An entity created inside a parent action (`create in`) still stores its key, and
+that detail route cannot read a `/` key back (F-13).
+An entity with no natural key has a shadow key EF assigns on save: its create answers `201` with the
+same shape of `Location` (`/api/orders/1`), read back from the tracked entry (#589), so the per-id routes are
+reachable from the response even though that `id` is not in the JSON body (see *Known wrong*).
+A `Binary` property cannot be the route key (the first `unique` property): the route cannot bind it
+from a path segment, so the host **refuses the domain when the app is generated** (`polyc` exits non-zero, naming
+the entity and the property). Give the entity a Text, Number, Uuid or Date `unique` property to be its key.
 
 ### HTTP actions: what the host loads (`uses http`)
 
@@ -2035,6 +2306,19 @@ Limits. A handler that watches a **stored** entity's later transition does not f
 simulator: the host never wires an entity's subscribers after loading it, so an action's `when` effects on another entity
 run in a generated app only for subscribers registered in the same request. An action the generator cannot follow is
 **refused when the app is generated** (`polyc` exits non-zero, naming the action), never served with less than it reads: an action the generator cannot follow, for example a `when` handler chain that keeps registering subscribers (a handler that creates a child which registers the same owner again). Create routes (the POST of a root) read no stored link.
+
+### HTTP reads: what a `GET` returns (`uses http`)
+
+A `GET` that returns an entity returns it with its declared navigations **loaded, one level**: every collection and every
+single link, whether or not anything reads them. That holds on a detail route, for each row of a list route, and for each
+item of a nested collection route, so a child created through its parent's action is in the parent's body instead of an
+empty array (#594); it is the same navigation state the simulator's `get` names for an instance. Deeper levels are not
+loaded: a link reached through one of those navigations answers with its own scalars, and its own navigations are
+whatever EF fixed up. A reference that repeats a row already written in the same body is written once and `null` where it
+repeats — the host sets `ReferenceHandler.IgnoreCycles` — so a body never loops and the response never fails; on
+`/api/orders/{code}/lines` an item's `order` carries the owner and the owner's `lines` reads `null`. An entity with no
+navigation keeps its one-expression handler (`async (db) => await db.Books.ToListAsync()`). The shape of a navigation in
+the body is still **not stable** (section 14).
 
 ## 12. Dual Authoring Path
 
@@ -2099,6 +2383,11 @@ it as `@ref`. Builtin type keywords (`string`, `int`) stay keywords when they ar
 re-sending it. Pass exactly one of `poly` or `edit`. The ops splice your own stored text, so
 comments, order and formatting survive; the result runs through the same analysis gate and
 revision bump as a whole-document define. A rejected edit changes nothing.
+
+A successful apply — `poly` or `edit` — replaces the lowered module, so the workspace's simulated
+instances are cleared even when the edit cannot affect them. The result says so: the summary ends
+with `N simulated instance(s) cleared.` and `data.instancesCleared` carries the count (absent when
+none were). `apply:false` and a rejected edit clear nothing and say nothing was cleared.
 
 | Op | Fields | Effect |
 |---|---|---|
@@ -2184,12 +2473,18 @@ What an author or a client may rely on in this release, what may still change, a
 ### Stable
 
 - **The DSL** as this guide documents it.
+- **An invoke chain nested at most 256 actions deep**: the simulator compiles each invoked body into its caller's
+  frame. The depth is a cheap early refusal for a plain chain; a chain's real cost is stack, so the compile also
+  budgets the parse thread's stack and refuses a deeply nested chain sooner with the same typed failure. A wide
+  fan-out (one action invoking hundreds of others, or a broad tree) shares one depth and is not refused. Every
+  refusal says the chain is too deep and to shorten it, never aborting the process (a legal 200-link plain chain runs).
 - **The JSON body of an entity**: its declared scalars (camel-cased member names) and, when the entity has stages,
-  `currentStage`.
+  `currentStage`. A `Binary` member is base64, System.Text.Json's own `byte[]` encoding (#905).
 - **The HTTP failure shape**: a failure the domain raises is ProblemDetails whose `title` is the failure kind (see
   *HTTP failures*, section 11). The statuses are `400` for `Required`, `Range`, `Length`, `Pattern`, `Enum`,
-  `Arithmetic`, `Argument` and `Constraint`; `409` for `Stage`, `Link`, `Unique` and `Conflict` (nothing raises
-  `Conflict` yet); `422` for `Policy`; `500` for `Cascade`; and `404` with title `Not Found` for an unknown id. A body
+  `Arithmetic`, `Argument` and `Constraint`; `409` for `Stage`, `Link`, `Unique` and `Conflict` (a save that lost a
+  concurrent update is `Conflict`; two concurrent creates of one key give one `201` and `409 Unique` for the rest, from
+  the unique index); `422` for `Policy`; `500` for `Cascade`; and `404` with title `Not Found` for an unknown id. A body
   the host's JSON binder refuses (a wrong JSON type, an unknown enum string, a JSON `null` for an action argument) is
   a `400` with an empty body, not ProblemDetails (see *Known wrong*).
 
@@ -2234,13 +2529,6 @@ What the id does not cover, and what that costs:
 
 ### Known wrong
 
-- **Two creates with the same unique value, at once** (every host with a unique index): one answers `500` instead of
-  `409 Unique`, because the unique index refuses the second save after the host's check has passed. Removed by P-09.
-- **A read through a to-one link that is not linked** (both hosts) answers differently by position. A guard, a policy
-  read or an `invoke` refuses the action with `Required` (`400` over HTTP). A comparison through the unlinked hop is
-  false for every operator, `!=` and `is not` included, whereas an absent value at the end of a set link makes `!=`
-  true. An `assign` from it fails: the simulator reports `Member 'Score' requires a non-null instance`, and over HTTP
-  the generated C# throws and the host answers `500`. Removed by #936.
 - **`==` on a value type** (simulator): it compares the JSON text of an argument payload, so equal values with their
   fields in another order, or `2` against `2.0` in a `Decimal` field, are unequal there; the generated C# is right.
   Removed by X-06.
@@ -2252,49 +2540,41 @@ What the id does not cover, and what that costs:
   Returned.
 - **The library demo's `Overdue` stage** has no transition into it (DMSS007), so `when loans Overdue` cannot fire on any
   host. This is a defect of the demo document, not of a host; the document's author removes it.
-- **Links and ids in a `GET`** (generated app): a link comes back null or unloaded, and a `many` collection comes back
-  empty although it has members (#594). An entity without a natural key has no `id` in its JSON body, and its create
-  answers `200` with no `Location` (P-12).
+- **No `id` in a `GET` for an entity without a natural key** (generated app): such an entity has no `id` in its JSON
+  body, so a list names no value to `GET` by; its create answers `201` with a `Location` that does name the row (#589),
+  and publishing the `id` as a body member is P-12.
 - **An action called with `{}`, or with a `null` Number or Boolean argument** (simulator and HTTP): it stores `0` or
   `false`. Over HTTP an explicit JSON `null` is a `400` with an empty body. Removed by X-05.
 - **Overloads, `M(decimal?)` declared before `M(long?)`** (C# surface only): an `int` argument binds `decimal?` where C#
   binds `long?`. Removed by #847.
-- **A natural key containing `/`** (HTTP): the create succeeds, but no route reaches the row, and the `Location` of key
-  `a/b` reaches a different row whose key is literally `a%2Fb`. Removed by P-12 and F-13.
+- **A natural key containing `/`** (HTTP): a root create answers `400` with a message instead of storing a row whose
+  `Location` no route can read back, because ASP.NET leaves `%2F` encoded in a route value. That 400 is the permanent
+  shape for a root create. Every other key is `Uri.EscapeDataString`-escaped in its `Location` and reads back. An entity
+  created inside a parent action, or a key set by an action `assign`, still takes the module's own semantics: the row is
+  stored and its detail route cannot read a `/` key back (removed by F-13).
 - **Optional and defaulted properties in a create body** (HTTP): they are ignored, because the create DTO carries the
   required scalars only; the simulator accepts them (P-11). A wrong JSON type, or an unknown enum string for a required
   enum, answers `400` with an empty body (P-14).
-- **An optional unique key** (generated app): a `Text unique optional` property on an entity with a required scalar
-  stops the host at boot, and every create on a `Date unique optional` key answers `409`, the first included (#611).
-- **A `Binary` property**: analysis accepts it and every host then fails with `Type with name 'Binary' not found`
-  (#905).
-- **A stored `DateTime` in a `GET`** (generated app) comes back without its `Z`: the clock time is right, the UTC
-  marker is lost through SQLite. Removed by #937.
-- **Names**: a property named `Created` (#927) and an action named `Add` on an entity that has a `many` link and a
-  `unique` property (#934) fail to build. A domain named like a C# keyword is refused, and a domain named `DateTime`
+- **Names**: an action named `Add` on an entity that has a `many` link and a `unique` property (#934) fails to
+  build. A domain named like a C# keyword is refused, and a domain named `DateTime`
   that declares a `DateTime` property does not compile (CS0118) (E-10).
-- **Assigning an absent optional Text**: the simulator stores `""`, the generated C# stores `null` (#929).
-- **A stage `require` at create**: it is not checked when an instance is created (#576, L-17).
 - **`assign Qty to Dec * 2`** (a Number target, a Decimal operand): analysis accepts it and the generated C# does not
   compile (T-07).
-- **A `Decimal` with a `range`** (SQLite host): it is stored as TEXT with a CHECK, so a valid create can fail: a `POST`
-  of crm `Product` (`ListPrice: Decimal range(0, 100000000)`) and of hotel `RoomType` answers `500` (#559, row P-05).
 - **An entity with no required scalar** (generated app): the host does not compile (`ItemDto` could not be found), for
   an entity of only optional properties and for one of only defaulted properties (P-11; #588, #641).
 - **An entity whose required link targets an entity with no natural key** (generated app) has no `POST` route, so it
   cannot be created over HTTP: saas `Account`, whose required `subscription` targets an entity with a shadow `id`, is
   one. The same holds when a required scalar of the entity is named `<Link>Id`, which clashes with the link's body
   member (P-11, P-12).
-- **An action whose entity argument has a numeric (shadow) key** answers `500` over HTTP: university `Student.Enroll`,
-  hotel `Guest.BookHall` and `Guest.BookSection`, logistics `Courier.Assign` (#940).
 - **An owned single part with no back-navigation** (`hq: owned Address optional`) is orphaned when its owner is deleted;
   owned parts reached by a collection or a back-navigation cascade. The behaviour is unchanged in this release (L-15).
+- **An owned part whose type declares no navigation back** (`orders: many owned Order` with no `Order.customer` on the
+  target): nothing records who owns it, so a second owner's link or create is accepted on both hosts (#585). Declare the
+  navigation back and the part names its owner, which turns a second owner into a `Link` failure.
 - **Only SQLite** is checked at startup, and only SQLite was probed for delete behaviour (`OnDelete(Restrict)` on a
   required link, cascade on owned parts).
 - **An action the generator cannot follow**, such as a `when` handler chain that keeps registering subscribers, is
   refused when the app is generated, not served (#560).
-- **`poly_export csharp`** prints one file-scoped `namespace` line per entity and enum for a domain with more than one,
-  so its single-file output does not compile (CS1529, CS8954); the host files are unaffected (theme E, #685).
 - **Enum members and stage names** are stored as integers by declaration order: inserting, reordering or removing one
   re-labels stored rows with no error (see *Databases*). No check exists in this release, and no row removes it: there
   are no migrations.
@@ -2304,3 +2584,40 @@ What the id does not cover, and what that costs:
   defines the comparison (T-21b).
 - **`poly_check`** answers `unknown` for every write it did not verify, and an action parameter cannot carry a
   constraint (F-08), so a parameter written to a bounded property is always `unknown`.
+
+## 15. Simulating a scenario
+
+`poly_simulate` runs an ordered list of steps against the current workspace and returns one trace
+entry per step. `steps` is a JSON array of objects; every object carries `op` plus only that op's
+own keys. Any other key is a failed step naming the valid ones — the tool never drops a misspelled
+key and runs a different scenario.
+
+| `op` | required keys | optional keys |
+|------|---------------|---------------|
+| `create` | `entity` | `properties` (JSON object of property values), `as` (alias for later steps) |
+| `link` | `sourceInstanceId`, `relationship`, `targetInstanceId` | — |
+| `unlink` | `sourceInstanceId`, `relationship`, `targetInstanceId` | — |
+| `invoke` | `instanceId`, `action` | `args` (JSON object of action parameter values) |
+| `evaluate` | `entity`, `policy`, `instanceId` | — |
+| `get` | `instanceId` | — |
+| `list` | — | `entity` (filter to one entity) |
+
+An `instanceId`, `sourceInstanceId` or `targetInstanceId` takes a 32-hex instance id from an earlier
+step, or the `as` alias an earlier `create` gave that instance:
+
+```json
+[{"op":"create","entity":"Account","properties":{"Name":"Acme"},"as":"acme"},
+ {"op":"create","entity":"Order","properties":{"Total":42},"as":"o"},
+ {"op":"invoke","instanceId":"o","action":"Submit"},
+ {"op":"get","instanceId":"acme"}]
+```
+
+A create's `properties` may name a singular navigation whose value is an instance id or an alias
+(`{"account":"acme"}`). Wrong-typed
+values fail the step: the property coercions (`Date`, `DateTime`, `Time`, `Duration`, `Guid`,
+`Decimal`) and the declared `range`/`length`/`pattern` constraints are the create's own.
+
+A step failure does not fail the call: `ok` is true when the scenario ran, `data.trace` carries
+`ok:false` and the message on the failing step, earlier steps stay committed, and `stopOnError`
+(default true) ends the run there. `reset: true` clears existing instances first; a successful
+`poly_define` clears them too (see section 12).

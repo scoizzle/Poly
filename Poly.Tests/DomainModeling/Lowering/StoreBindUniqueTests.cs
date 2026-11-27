@@ -50,12 +50,41 @@ public class StoreBindUniqueTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Permit> Create(");
-        await Assert.That(create).Contains("var created = new Permit(");
+        await Assert.That(create).Contains("var __created = new Permit(");
         await Assert.That(create).DoesNotContain("CheckUnique");
         await Assert.That(cs).DoesNotContain("DomainInstanceStore");
         await Assert.That(cs).DoesNotContain("PrintedCollision");
         await Assert.That(cs).DoesNotContain("PrintedRecord");
         await Assert.That(cs).Contains("EnsureUnique(string propertyName");
+    }
+
+    /// <summary>
+    /// #524: the printed module exposes no <c>EnsureUnique</c> stub. It is dead — the storage library
+    /// rewrites every unique assign onto the port, and a document whose <c>uses</c> names no library
+    /// that compiles <c>unique</c> is DMLIB001 — so it prints private, not as API a caller can reach.
+    /// What a caller does get is the create guard, and that guard is the port's.
+    /// </summary>
+    [Test]
+    public async Task Export_UniqueProperty_ExposesNoEnsureUniqueStub() {
+        var session = ParitySessions.Create();
+        var changes = new PolyDslParser("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique
+              Relabel: action (plate: Text) { assign Plate to plate }
+            }
+            """, session).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(changes, session: session);
+        if (!evolved.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", evolved.Analysis.Diagnostics
+                .Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message)));
+        var cs = new CSharpGenerator().Generate(session.Lower(evolved.Root!, evolved.Analysis));
+
+        await Assert.That(cs).DoesNotContain("public DomainResult EnsureUnique");
+        await Assert.That(cs).Contains("private DomainResult EnsureUnique(string propertyName");
+        await Assert.That(cs).Contains("ExistsWithPlate(");
+        await Assert.That(cs).Contains("db.Exists(\"Permit\", \"Plate\", plate)");
     }
 
     [Test]

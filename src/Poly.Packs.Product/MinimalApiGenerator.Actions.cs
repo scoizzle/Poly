@@ -29,6 +29,7 @@ public sealed partial class MinimalApiGenerator {
             IReadOnlySet<string> parentLoaded = new HashSet<string>();
 
             string actionRoute;
+            string routeKeyName;
             List<Parameter> actionParams = [];
             List<Node> preActionNodes = [];
 
@@ -45,6 +46,7 @@ public sealed partial class MinimalApiGenerator {
                 actionRoute = isCollection
                     ? $"{parentRoute}/{{{childKeyParam}}}/{ToCamelCase(ia.Name).ToLowerInvariant()}"
                     : $"{parentRoute}/{ToCamelCase(ia.Name).ToLowerInvariant()}";
+                routeKeyName = isCollection ? childKeyParam : pKeyName;
                 actionParams.Add(new Parameter(pKeyName, ClrTypeNode(pKeyType)));
                 if (isCollection)
                     actionParams.Add(new Parameter(childKeyParam, ClrTypeNode(keyType)));
@@ -89,6 +91,7 @@ public sealed partial class MinimalApiGenerator {
             else {
                 var baseRoute = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
                 actionRoute = $"{baseRoute}/{{{keyName}}}/{ToCamelCase(ia.Name).ToLowerInvariant()}";
+                routeKeyName = keyName;
                 actionParams.Add(new Parameter(keyName, ClrTypeNode(keyType)));
                 if (ia.Parameters.Count > 0)
                     actionParams.Add(new Parameter("dto", new TypeReference(GetActionDtoName(entity, ia.Name))));
@@ -123,6 +126,15 @@ public sealed partial class MinimalApiGenerator {
             if (thisReads.FirstOrDefault(n => n.Navigation == backReference) is { } parentReads)
                 AppendReadLoads(preActionNodes, "parentEntity", parentReads.Children, parentLoaded, locals);
 
+            // #560: a subscription is a function of persisted state. The module's own registration path
+            // (InitializeSubscriptions, the one Create calls) runs after the loads, on each instance whose
+            // collections this route loaded, so a stored subscriber is registered exactly as it was on create.
+            // Reusing the module's path keeps the inverse and the per-stage grouping in one place.
+            if (parentCtx is { } subscriptionParent && HasSubscriptionInitializer(subscriptionParent.Parent))
+                preActionNodes.Add(new Invoke(new Member(new Variable("parentEntity"), "InitializeSubscriptions")));
+            if (HasSubscriptionInitializer(entity))
+                preActionNodes.Add(new Invoke(new Member(new Variable("entity"), "InitializeSubscriptions")));
+
             // ── Try body: entity-ref lookups + invoke + result switch ──
             var tryBody = new List<Node>();
             var invokeArgs = new List<Node>();
@@ -131,10 +143,16 @@ public sealed partial class MinimalApiGenerator {
                 if (param.IsEntityRef) {
                     // Two parameters of one entity type each get their own local: the first keeps the type's name.
                     var lv = FreshLocal(locals, ToCamelCase(param.DomainType));
-                    tryBody.Add(Init(lv, LoadByRouteKey(
-                        Pluralize(param.DomainType),
-                        _storageLookup[param.DomainType],
-                        new Member(new Variable("dto"), ActionDtoPropertyName(param)))));
+                    // An absent key is no target, as the create route treats a missing link: a shadow key's
+                    // `FindAsync(null)` throws, and a natural key's null finds nothing either way.
+                    Node given = new Member(new Variable("dto"), ActionDtoPropertyName(param));
+                    tryBody.Add(Init(lv, new Conditional(
+                        new Equal(given, new Constant(null!)),
+                        new Constant(null!),
+                        LoadByRouteKey(
+                            Pluralize(param.DomainType),
+                            _storageLookup[param.DomainType],
+                            given))));
                     tryBody.Add(new IfStatement(new Equal(new Variable(lv), new Constant(null!)),
                         new Block(new Return(ProblemResponse(404, "Not Found", $"{param.DomainType} not found")))));
                     if (reads?.Roots.FirstOrDefault(r => r.Name == param.Name) is { } parameterReads) {
@@ -153,21 +171,39 @@ public sealed partial class MinimalApiGenerator {
                     ? new Invoke(new Member(new Variable("entity"), ia.Name), [.. invokeArgs])
                     : new Invoke(new Member(new Variable("entity"), ia.Name))));
 
-            // Success commits; a failure returns before any save, so the context discards its pending changes.
+            // Success commits. BumpVersions is the optimistic-concurrency step (#626, #653): every row this request
+            // modified, and the aggregate's own row, gains a token, so the save is a compare-and-set and two requests
+            // cannot both transition the stage or both add one. A save that lost that race updates no row and raises
+            // DbUpdateConcurrencyException, answered below as 409 Conflict. A failure returns before any save, so the
+            // context discards its pending changes.
             var commit = new Await(new Invoke(new Member(new TypeReference("db"), "SaveChangesAsync")));
             var failure = new Block(DomainFailureReturn(new Variable("result")));
             if (ia.IsVoid) {
                 tryBody.Add(new IfStatement(
                     new Member(new Variable("result"), "IsSuccess"),
-                    new Block(commit, new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Constant("ok")))),
+                    new Block(BumpVersionsCall(), commit, new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Constant("ok")))),
                     failure));
             }
             else {
                 tryBody.Add(new IfStatement(
                     new Member(new Variable("result"), "IsSuccess"),
-                    new Block(commit, new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Member(new Variable("result"), "Value")))),
+                    new Block(BumpVersionsCall(), commit, new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Member(new Variable("result"), "Value")))),
                     failure));
             }
+
+            // Catch: a save that lost the race is the module's 409 Conflict, naming the entity and the route's key, and
+            // the client retries. It precedes the catch-all (a DbUpdateConcurrencyException is an Exception); the host
+            // never retries itself, because a retry would re-run the action's guards against the state it just changed.
+            var conflictCatch = new CatchClause(
+                new NamedTypeReference("DbUpdateConcurrencyException"),
+                null,
+                new Block(new Return(new Invoke(
+                    new Variable("Problem"),
+                    new Invoke(
+                        new Member(new NamedTypeReference("Poly.Runtime.DomainFailure"), "Conflict"),
+                        new InterpolatedString(
+                            [$"Concurrency conflict on '{entity.Name}' '", "': the row changed after this request read it, so the request was not applied; retry it."],
+                            [new Variable(routeKeyName)]))))));
 
             // Catch: logs the exception, then a ProblemDetails 500 with no exception text.
             var catchBody = new Block(
@@ -178,7 +214,7 @@ public sealed partial class MinimalApiGenerator {
             var bodyNodes = new List<Node>(preActionNodes);
             bodyNodes.Add(new TryCatchFinally(
                 Stmts(tryBody),
-                CatchClauses: [new CatchClause(new NamedTypeReference("Exception"), "ex", catchBody)]));
+                CatchClauses: [conflictCatch, new CatchClause(new NamedTypeReference("Exception"), "ex", catchBody)]));
 
             statements.Add(new Invoke(
                 new Member(new TypeReference(AppVar), "MapPost"),
@@ -237,6 +273,10 @@ public sealed partial class MinimalApiGenerator {
                     + $"'{root.Name}', which matches no parameter of the route.");
         }
     }
+
+    /// <summary><c>db.BumpVersions(entity);</c>: the optimistic-concurrency step before an action's save (#626, #653).</summary>
+    private static Node BumpVersionsCall() =>
+        new Invoke(new Member(new TypeReference("db"), "BumpVersions"), new Variable("entity"));
 
     /// <summary><c>await db.Entry(x).Collection(e =&gt; e.Nav).LoadAsync();</c></summary>
     private static Node LoadCollection(string entityVariable, string navigation) {

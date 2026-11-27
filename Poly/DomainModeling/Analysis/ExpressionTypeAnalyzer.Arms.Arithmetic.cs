@@ -2,7 +2,7 @@ using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Analysis;
 
-// Arithmetic arms: CheckArithmetic (Add/Subtract) and CheckNumericArithmetic (Multiply/Divide); the Date - Date case stays inline in core's WalkExpression case Subtract.
+// Arithmetic arms: CheckArithmetic (Add/Subtract) and CheckNumericArithmetic (Multiply/Divide/Modulo); the Date - Date case stays inline in core's WalkExpression case Subtract.
 
 internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private void CheckArithmetic(
@@ -21,7 +21,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (IsTyped(leftType) && IsTyped(rightType)
             && !(IsNumeric(leftType) && IsNumeric(rightType))
             && !(allowTextConcat && Family(leftType) is TypeFamily.Text && Family(rightType) is TypeFamily.Text)
-            && !CheckTemporalOffset(context, node, left, leftType, rightType, props, parameters))
+            && !CheckTemporalOffset(context, node, left, leftType, right, rightType, props, parameters))
             Report(context, left,
                 $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
         WalkExpression(context, left, props, parameters, enumTypes);

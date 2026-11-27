@@ -83,13 +83,40 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// </summary>
     private bool CheckTemporalOffset(
         AnalysisContext context, DomainExpression node, DomainExpression left, ExprType leftType,
-        ExprType rightType, Dictionary<string, string> props, Dictionary<string, string>? parameters) {
+        DomainExpression right, ExprType rightType,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters) {
         if (!IsDate(leftType))
             return false;
         if (Family(rightType) is TypeFamily.Duration) {
-            Report(context, node,
-                "a date plus or minus a Duration value is not supported yet (F-11, #550); " +
-                "offset by a literal such as 'Due + 3 Days' or by a whole Number count");
+            // #654: DateTime has a TimeSpan addition, so the value lowers to DateTime.Add/Subtract and every host
+            // runs it. Every shape the lowering cannot name fails closed here naming the operand instead.
+            if (OptionalOperand(context, left, leftType, props, parameters)) {
+                Report(context, node, OptionalDateMessage(left));
+                return true;
+            }
+            if (!IsDurationOffsetOperand(left)) {
+                Report(context, node,
+                    "a date offset by a Duration value is supported only on a date property, a parameter or Now " +
+                    $"(got '{PrintedText(context, node)}')");
+                return true;
+            }
+            if (IsDateOnly(leftType)) {
+                Report(context, node,
+                    $"a Date plus or minus a Duration value is not supported (got '{PrintedText(context, node)}'): " +
+                    "a Date has no TimeSpan addition; use a DateTime property or a whole Number day count");
+                return true;
+            }
+            if (OptionalOperand(context, right, rightType, props, parameters)) {
+                Report(context, node,
+                    $"an offset by the optional Duration '{OperandName(context, right)}' is not supported: " +
+                    "an absent Duration has no value to add");
+                return true;
+            }
+            if (!IsDurationOffsetOperand(right)) {
+                Report(context, node,
+                    "a Duration offset operand must be a Duration property, a parameter or a date difference " +
+                    $"(got '{PrintedText(context, right)}')");
+            }
             return true;
         }
         if (!IsNumeric(rightType))
@@ -112,6 +139,21 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// fraction on a Date and failed on a host everywhere else.
     /// </summary>
     private static bool IsRefusedCount(ExprType countType) => DomainTypeSystem.WordOf(countType.Definition) is "Decimal";
+
+    /// <summary>
+    /// The operands the Duration lowering names (<c>DateTime.Add(TimeSpan)</c>): a property, a parameter, a clock node,
+    /// a date difference or a nested offset. A path through a relationship, an owned member, a match or a call has no
+    /// lowering the temporal handlers can reach, so it fails closed here rather than at a host (#654).
+    /// </summary>
+    private static bool IsDurationOffsetOperand(DomainExpression operand) =>
+        operand is not (RelationshipNavigation or OwnedAccess or MatchExpr or FunctionCall);
+
+    /// <summary>The operand's name for a refusal message.</summary>
+    private static string OperandName(AnalysisContext context, DomainExpression operand) => operand switch {
+        PropertyAccess pa => pa.Name,
+        ParameterAccess pa => pa.Name,
+        _ => PrintedText(context, operand),
+    };
 
     /// <summary>R3 (#648): the operands of a date difference may not be optional; neither door computes with an unset date.</summary>
     private void CheckDateDifferenceOperands(

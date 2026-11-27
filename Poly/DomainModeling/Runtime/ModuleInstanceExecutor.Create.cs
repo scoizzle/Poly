@@ -1,3 +1,6 @@
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.Vm.Abi;
 using Poly.Runtime;
 
 namespace Poly.DomainModeling.Runtime;
@@ -46,11 +49,37 @@ public sealed partial class ModuleInstanceExecutor {
                     args[i] = CoerceValue(slotType, property?.Type.TypeName, raw, label, namedTypeFailure: supplied);
                 }
                 foreach (var key in values.Keys) {
-                    if (!known.Contains(key))
-                        throw new HostException($"Unknown property '{key}' for entity '{entityName}'.");
+                    if (known.Contains(key))
+                        continue;
+                    // A property the initial stage's entry assigns has no Create slot (the constructor's
+                    // entry effects own it), so naming it "unknown" is false: it is declared (#636).
+                    var declared = entity.Properties.FirstOrDefault(p =>
+                        string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase));
+                    var initialStage = entity.InitialStage();
+                    if (declared is not null && initialStage is not null
+                        && EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity).Contains(declared.Name))
+                        throw new HostException(
+                            $"Property '{declared.Name}' for entity '{entityName}' is set by the entry effect of "
+                            + $"initial stage '{initialStage.Name}', so it cannot be supplied at create; omit it.");
+                    throw new HostException($"Unknown property '{key}' for entity '{entityName}'.");
                 }
 
-                if (Run(entityName, create, self: null, args) is not IDomainResult result)
+                object? ran;
+                try {
+                    ran = Run(entityName, create, self: null, args);
+                }
+                catch (InsufficientExecutionStackException) {
+                    // #1115: the initial entry's invoke chain outran the compile thread's stack before the emitter's
+                    // counted limit stopped it, or the run outran the value stack. A typed failure, never an abort.
+                    throw new HostException(
+                        $"Create on '{entityName}' has an invoke chain too deep for the simulator to compile or run. "
+                        + "Nothing was created; shorten the chain.");
+                }
+                catch (AbiEmitter.InvokeChainTooDeepException ex) {
+                    // #1115: the emitter's counted inline depth refused the chain. Its message already names the limit.
+                    throw new HostException(ex.Message);
+                }
+                if (ran is not IDomainResult result)
                     throw new InvalidOperationException($"Create on '{entityName}' did not return a DomainResult.");
                 if (!result.IsSuccess)
                     return ModuleOutcome.Fail(result.Error

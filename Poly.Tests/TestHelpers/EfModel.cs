@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
 using Poly.Compile;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Ontology;
 using Poly.Packs.Product;
 
 namespace Poly.Tests.TestHelpers;
@@ -76,8 +78,30 @@ public sealed class EfModel : IDisposable {
             throw new InvalidOperationException(
                 "polyc refused the fixture: " + string.Join("; ", result.Diagnostics.Where(d => d.IsError).Select(d => d.Message)));
         }
+        return Build(result.Files);
+    }
 
-        var trees = result.Files
+    /// <summary>
+    /// The same in-process model for a domain a test builds through the model API, which is the only way a
+    /// many-to-many navigation exists (the DSL cannot write one). The session is the product catalog's, so the
+    /// emitted files are the ones polyc produces for a document with the same <c>uses</c>; the domain's
+    /// <see cref="Domain.Extensions"/> name them.
+    /// </summary>
+    public static EfModel Create(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var session = DomainSession.Create(
+            domain.Extensions, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring));
+        var bound = domain with { Extensions = session.Extensions };
+        var result = PolyCompiler.Produce(session, bound, session.Analyze(bound));
+        if (!result.Succeeded) {
+            throw new InvalidOperationException(
+                "polyc refused the fixture: " + string.Join("; ", result.Diagnostics.Where(d => d.IsError).Select(d => d.Message)));
+        }
+        return Build(result.Files);
+    }
+
+    private static EfModel Build(IReadOnlyList<(string FileName, string Source)> files) {
+        var trees = files
             // The host (Program.cs) needs the ASP.NET Core shared framework, which the test process does not load;
             // the entities and the DbContext are all the EF model needs.
             .Where(f => f.FileName.EndsWith(".cs", StringComparison.Ordinal) && f.FileName != "Program.cs")

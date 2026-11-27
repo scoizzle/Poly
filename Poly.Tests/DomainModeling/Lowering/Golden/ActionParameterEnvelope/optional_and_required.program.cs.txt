@@ -23,7 +23,11 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<TDbCtx>();
-    await SeedAsync(db);
+    await db.Database.EnsureCreatedAsync();
+    if (builder.Configuration.GetValue<bool>("SeedDemoData"))
+    {
+        await SeedAsync(db);
+    }
 }
 
 app.MapGet("/api/notes", async (TDbCtx db) => await db.Notes.ToListAsync());
@@ -31,14 +35,15 @@ app.MapGet("/api/notes", async (TDbCtx db) => await db.Notes.ToListAsync());
 app.MapGet("/api/notes/{id}", async (int id, TDbCtx db) => (await db.Notes.FindAsync(id) is T.Note note ? Results.Ok(note) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/notes", async (NoteDto dto, TDbCtx db) => {
-    var noteResult = T.Note.Create(dto.Body, null);
+    var noteResult = T.Note.Create(dto.Body, dto.Memo);
     if (!noteResult.IsSuccess)
     {
         return Problem(noteResult.Error!);
     }
     db.Notes.Add(noteResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(noteResult.Value);
+    var createdId = db.Entry(noteResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/notes/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), noteResult.Value);
 });
 
 app.MapPost("/api/notes/{id}/setbody", async (int id, SetBodyDto dto, TDbCtx db) => {
@@ -52,6 +57,7 @@ app.MapPost("/api/notes/{id}/setbody", async (int id, SetBodyDto dto, TDbCtx db)
         var result = entity.SetBody(dto.V);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -59,6 +65,10 @@ app.MapPost("/api/notes/{id}/setbody", async (int id, SetBodyDto dto, TDbCtx db)
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Note' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -78,6 +88,7 @@ app.MapPost("/api/notes/{id}/setmemo", async (int id, SetMemoDto dto, TDbCtx db)
         var result = entity.SetMemo(dto.V);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -85,6 +96,10 @@ app.MapPost("/api/notes/{id}/setmemo", async (int id, SetMemoDto dto, TDbCtx db)
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Note' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -140,6 +155,7 @@ internal record NoteDto
 {
     [Required]
     public string? Body { get; init; }
+    public string? Memo { get; init; }
 }
 
 internal record SetBodyDto

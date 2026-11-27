@@ -18,7 +18,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public IReadOnlyList<Fine> Fines
     {
-        get => this._fines;
+        get => new List<Fine>(this._fines);
     }
     internal DomainResult<Fine> CreateFines(long? amount = default, string? reason = default)
     {
@@ -46,18 +46,20 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     private DomainResult<Fine> __BodyOfCreateFines(long? amount, string? reason)
     {
-        var fineResult = Fine.Create(amount, reason, this);
-        if (!fineResult.IsSuccess)
+        var __fineResult = Fine.Create(amount, reason, this);
+        if (!__fineResult.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(fineResult.Error!);
+            return DomainResult<Fine>.Failure(__fineResult.Error!);
         }
-        var fine = fineResult.Value;
-        return DomainResult<Fine>.Success(fine);
+        var __fine = __fineResult.Value;
+        return DomainResult<Fine>.Success(__fine);
     }
-    internal void AttachFines(Fine child)
+    internal DomainResult AttachFines(Fine child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
+        child.AttachPatron(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Fine> AssessByType()
     {
@@ -85,13 +87,13 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     private DomainResult<Fine> __BodyOfAssessByType()
     {
-        var create0 = Fine.Create(5L, "TypeCreate");
-        if (!create0.IsSuccess)
+        var __create0 = Fine.Create(5L, "TypeCreate");
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(create0.Error!.At("Patron.AssessByType"));
+            return DomainResult<Fine>.Failure(__create0.Error!.At("Patron.AssessByType"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Fine>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Fine>.Success(__created1);
     }
     internal DomainResult<Fine> AssessByRel()
     {
@@ -119,13 +121,13 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     private DomainResult<Fine> __BodyOfAssessByRel()
     {
-        var create0 = this.CreateFines(7L, "CreateIn");
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateFines(7L, "CreateIn");
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(create0.Error!.At("Patron.AssessByRel"));
+            return DomainResult<Fine>.Failure(__create0.Error!.At("Patron.AssessByRel"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Fine>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Fine>.Success(__created1);
     }
     public bool HasFines() => this.Fines.Count != 0;
     public bool HasFineCount() => this.Fines.Count > 0;
@@ -160,9 +162,30 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
         var __name = name;
-        var created = new Patron(__name, fines);
-        Poly.Runtime.ActionScope.Create(created, "Patron");
-        return DomainResult<Patron>.Success(created);
+        if (fines != null)
+        {
+            foreach (var __finesElement in fines)
+            {
+                if (__finesElement == null)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'fines' contains a null element.", "Patron.fines"));
+                }
+            }
+        }
+        var __created = new Patron(__name, fines);
+        Poly.Runtime.ActionScope.Create(__created, "Patron");
+        if (fines != null)
+        {
+            foreach (var __child in fines)
+            {
+                if (__child.Patron != null && __child.Patron != __created)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'fines': the child's 'patron' is already set to another owner.", "Patron.fines"));
+                }
+                __child.AttachPatron(__created);
+            }
+        }
+        return DomainResult<Patron>.Success(__created);
     }
     public object __Snapshot()
     {

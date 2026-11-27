@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Syntactic = Poly.Ast.Nodes;
@@ -109,8 +110,9 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         var bodyNodes = new List<Node>();
-        var localResult = new Variable($"{ToCamelCase(targetTypeName)}Result");
-        var local = new Variable(ToCamelCase(targetTypeName));
+        var localResult = new Variable($"__{ToCamelCase(targetTypeName)}Result");
+        var local = new Variable($"__{ToCamelCase(targetTypeName)}");
+        var locals = new List<Node> { localResult, local };
 
         bodyNodes.Add(new Assignment(localResult,
             new Invoke(
@@ -129,10 +131,17 @@ public sealed partial class DomainToCSharpExporter {
 
         // Target.Create already Attaches via singular nav args (including auto-wired
         // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
-        // _field.Add / Register* / peer Attach when Create wired this collection.
-        var (wiredInverse, _) = FindInverseCollectionInfo(entity, targetTypeName);
-        var createWiredThisCollection = filledName is not null
-            && fieldName is not null
+        // _field.Add / Register* / peer Attach when Create wired this collection. Use the
+        // factory's own pairing rule (CreateInWiring.Inverse), so an ambiguous pair skips
+        // both the factory attach and this Add, never one of them.
+        var filledNav = filledName is null
+            ? null
+            : targetEntity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, filledName, StringComparison.Ordinal));
+        var wiredInverse = filledNav is null
+            ? null
+            : CreateInWiring.Inverse(targetEntity, filledNav, entity);
+        var createWiredThisCollection = fieldName is not null
             && wiredInverse is not null
             && string.Equals(wiredInverse.Name, rel.Name, StringComparison.Ordinal);
 
@@ -148,13 +157,19 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), pascalName),
                     local));
 
-                // A singular create-in links `this` into the target's unique inverse
-                // collection (e.g. local.AttachItems(this)); ambiguous/no inverse is a no-op.
-                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name).Unique;
+                // A singular create-in links `this` into the target's paired collection
+                // (e.g. local.AttachItems(this)); ambiguous/no pair is a no-op. The attach returns a
+                // result (an owned part may name another owner, #585), so a refusal fails the create-in.
+                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name, rel).Unique;
                 if (inverse is not null) {
-                    bodyNodes.Add(new Invoke(
+                    var attach = new Variable("__attach");
+                    locals.Add(attach);
+                    bodyNodes.Add(new Assignment(attach, new Invoke(
                         new Member(local, $"Attach{ToPascalCase(inverse.Name)}"),
-                        [new ThisReference()]));
+                        [new ThisReference()])));
+                    bodyNodes.Add(new IfStatement(
+                        new Syntactic.Not(new Member(attach, "IsSuccess")),
+                        new Block([FailureLowering.Propagate(createResultType, attach)])));
                 }
             }
 
@@ -186,11 +201,30 @@ public sealed partial class DomainToCSharpExporter {
                 var needsPrevious = StageGroupNeedsPrevious(targetEntity, initialStage, domain);
                 // A handler failure fails the create-in: the dispatcher returns it, this method returns it
                 // as its own result with no caller prefix (the child's failure above is passed the same way).
-                // `__notify` is reserved, so a target property named Notify cannot collide with it.
-                notifyResult = new Variable("__notify");
+                // `__notify` is reserved; FreshLocal moves it off the instance local if the target is named Notify.
+                notifyResult = FreshLocal("__notify", [localResult, local]);
+                locals.Add(notifyResult);
                 bodyNodes.Add(new Assignment(notifyResult, new Invoke(
                     new Member(local, $"Notify{initialStage}Subscribers"),
                     needsPrevious ? [new Constant(null)] : [])));
+                bodyNodes.Add(new IfStatement(
+                    new Syntactic.Not(new Member(notifyResult, "IsSuccess")),
+                    new Block([FailureLowering.Propagate(createResultType, notifyResult)])));
+            }
+
+            // #630: the child's initial entry ran before this collection link and these registrations, so the
+            // transitions it raised were recorded on the child instead of delivered. Replay them now, in entry
+            // order, after the initial stage's own notification (the child entered it first). This relationship
+            // is one this create-in registers, so the target wrote its record and its replay
+            // (DefersCreationNotifications).
+            if (subscriberSubs is { Count: > 0 }
+                && subscriberSubs.Any(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))) {
+                if (notifyResult is null) {
+                    notifyResult = new Variable("__notify");
+                    locals.Add(notifyResult);
+                }
+                bodyNodes.Add(new Assignment(notifyResult, new Invoke(
+                    new Member(local, ReplayStageNotificationsMethodName))));
                 bodyNodes.Add(new IfStatement(
                     new Syntactic.Not(new Member(notifyResult, "IsSuccess")),
                     new Block([FailureLowering.Propagate(createResultType, notifyResult)])));
@@ -209,7 +243,7 @@ public sealed partial class DomainToCSharpExporter {
         AddScopedActionMethods(methods, methodName,
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             methodParams,
-            new Block(bodyNodes, notifyResult is null ? [localResult, local] : [localResult, local, notifyResult]),
+            new Block(bodyNodes, locals),
             AccessModifier.Internal);
     }
 
@@ -271,6 +305,20 @@ public sealed partial class DomainToCSharpExporter {
     /// and default have run. <c>__</c> is a reserved prefix, so it cannot shadow a parameter.
     /// </summary>
     internal static string EffectiveLocalName(string slotName) => "__" + ToCamelCase(slotName);
+
+    /// <summary>
+    /// A lowered local's variable, moved off the names <paramref name="taken"/> already holds in the method. An
+    /// effective-value local is <see cref="EffectiveLocalName"/> of a slot, so a property named <c>Created</c> owns
+    /// <c>__created</c> in the bare <c>Create</c>: the instance local takes <c>__created_2</c> beside it. Parameters
+    /// need no entry here — author names may not begin <c>__</c> (DMSTR009), so they never reach this space.
+    /// </summary>
+    private static Variable FreshLocal(string name, IEnumerable<Node> taken) {
+        var used = new HashSet<string>(taken.OfType<Variable>().Select(static variable => variable.Name), StringComparer.Ordinal);
+        var candidate = name;
+        for (var suffix = 2; !used.Add(candidate); suffix++)
+            candidate = $"{name}_{suffix}";
+        return new Variable(candidate);
+    }
 
     /// <summary>
     /// The node a create-time check reads for <paramref name="property"/> in the lowered
@@ -350,6 +398,8 @@ public sealed partial class DomainToCSharpExporter {
         var prop = slot.Shape == CreateSlotShape.Scalar
             ? entity.Properties.First(p => string.Equals(p.Name, slot.Name, StringComparison.Ordinal))
             : null;
+        if (slot.Shape == CreateSlotShape.Collection)
+            checks.Add(NullElementGuard(entity, slot));
         Node value = parameter;
         if (slot.Kind == CreateSlotKind.Required)
             checks.Add(Guard(ConstraintCheckWriter.RequiredSlotCheck(slot, parameter)));
@@ -374,6 +424,28 @@ public sealed partial class DomainToCSharpExporter {
                      value, nullableValue: slot.Kind == CreateSlotKind.Optional, includeRequired: false))
             checks.Add(Guard(check));
         return value;
+    }
+
+    /// <summary>
+    /// A <c>many</c> create argument's elements (#564): a null element is refused as <c>Required</c> on the collection, so a
+    /// policy that counts the collection cannot be satisfied by a null and no null reaches the stored list, where the next
+    /// read of an element would throw. It runs in the lowered <c>Create</c>, so the printed class and the interpreter refuse
+    /// the same call; an omitted collection is null itself and is skipped (the constructor coalesces it to an empty list).
+    /// </summary>
+    private static Node NullElementGuard(Entity entity, CreateSlot slot) {
+        var resultType = new NamedTypeReference("DomainResult",
+            TypeArguments: [new NamedTypeReference(entity.Name)]);
+        var collection = new Variable(ToCamelCase(slot.Name));
+        var element = new Variable($"__{ToCamelCase(slot.Name)}Element");
+        var refusal = new IfStatement(
+            new Equal(element, new Constant(null)),
+            new Block([FailureLowering.Return(resultType, new FailureLowering.Spec(
+                DomainFailureKind.Required,
+                new Constant($"'{slot.Name}' contains a null element."),
+                $"{entity.Name}.{slot.Name}"))]));
+        return new IfStatement(
+            new NotEqual(collection, new Constant(null)),
+            new Block([new ForEachLoop(element, collection, new Block([refusal]))]));
     }
 
     /// <summary>
@@ -424,6 +496,9 @@ public sealed partial class DomainToCSharpExporter {
         List<SubscriptionInfo>? subscriberSubs,
         List<MethodDefinitionNode> methods) {
         // ── Private constructor + public static Create factory ─────
+        // #630: one fact, read here (the entry's record window) and by AddSubscriptionRegistry (the record, its
+        // queue and the replay): this entity is a watched subscription target, so a create-time entry notifies.
+        var defersCreationNotifications = DefersCreationNotifications(esm, postTransitionNotifyStages);
         // Every entity publishes Create, including one with no slots, so
         // a type-name call resolves. No slots and no stages still emit a
         // single private parameterless constructor (CS0111).
@@ -476,10 +551,23 @@ public sealed partial class DomainToCSharpExporter {
                 var entryNodes = new List<Node>();
                 entryPass.AppendInlinedStageEffects(initialStage.OnEntryEffects, entryNodes);
                 if (entryNodes.Count > 0) {
+                    var entryBody = new List<Node> { TouchThis() };
+                    Node effects = new Block(entryNodes);
+                    if (defersCreationNotifications) {
+                        // #630: the window in which a watched stage's notify is recorded instead of delivered. The
+                        // create-in that made this instance links it and replays the record; `finally` closes the
+                        // window even when an effect returns early, so a later transition on a failed instance is
+                        // never recorded (the instance is discarded either way).
+                        var deferring = new Member(new ThisReference(), DeferringStageNotificationsFieldName);
+                        entryBody.Add(new Assignment(deferring, new Constant(true)));
+                        effects = new TryCatchFinally(new Block(entryNodes),
+                            FinallyBlock: new Assignment(deferring, new Constant(false)));
+                    }
+                    entryBody.Add(effects);
                     entryMethod = new MethodDefinitionNode(
                         EnterInitialStageMethodName,
                         new NamedTypeReference("DomainResult"),
-                        Body: WithSuccessTail(new Block([TouchThis(), .. entryNodes])),
+                        Body: WithSuccessTail(new Block(entryBody)),
                         AccessModifier: AccessModifier.Private);
                     methods.Add(entryMethod);
                 }
@@ -518,7 +606,7 @@ public sealed partial class DomainToCSharpExporter {
         // ctor to-one only. Null peer is a no-op.
         var createSuccessNodes = new List<Node>();
         createSuccessNodes.AddRange(constraintChecks);
-        var createdLocal = new Variable("created");
+        var createdLocal = FreshLocal("__created", slotLocals);
         var createLocals = new List<Node>(slotLocals) { createdLocal };
         createSuccessNodes.Add(new Assignment(
             createdLocal,
@@ -530,15 +618,26 @@ public sealed partial class DomainToCSharpExporter {
         createSuccessNodes.Add(ActionScopeCall("Create", createdLocal, new Constant(entity.Name)));
 
         // The initial entry runs before the instance is attached or registered anywhere, and its failure is returned
-        // as-is: a failed create leaves the instance in no collection and no registry. `__entry` cannot collide with a
-        // parameter (a property named Entry prints as `entry`; `__` is a reserved prefix).
+        // as-is: a failed create leaves the instance in no collection and no registry. `__entry` is reserved, and
+        // FreshLocal moves it off a property named Entry, whose effective value is `__entry`.
         if (entryMethod is not null) {
-            var entryResult = new Variable("__entry");
+            var entryResult = FreshLocal("__entry", createLocals);
             createLocals.Add(entryResult);
             createSuccessNodes.Add(new Assignment(entryResult, new Invoke(new Member(createdLocal, EnterInitialStageMethodName))));
             createSuccessNodes.Add(new IfStatement(
                 new Syntactic.Not(new Member(entryResult, "IsSuccess")),
                 new Block([FailureLowering.Propagate(createResultType, entryResult)])));
+        }
+
+        // #576: a stage `require` is an invariant, so the new instance is judged by the stage it lands in. After the
+        // initial values and the initial stage's entry (which may transition), that stage's requirements are checked
+        // on the created instance; the failure rolls the create back, so nothing is registered, attached or notified.
+        if (esm.HasStages) {
+            createSuccessNodes.AddRange(StagePolicyGuards(
+                action: null, entity, policyStageName: null, stageEnumTypeName,
+                subject: createdLocal,
+                messageSuffix: stage => $" It would leave stage '{stage.Name}' invalid.",
+                failureReturn: spec => FailureLowering.Return(createResultType, spec)));
         }
 
         // InitializeSubscriptions registers the new instance in its peers' registries, so it runs after the entry
@@ -566,23 +665,95 @@ public sealed partial class DomainToCSharpExporter {
                 peerEntity = domain.Types.OfType<Entity>()
                     .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
 
-            // Unique collection inverse on the peer (FindInverseCollectionInfo).
-            // count == 0: OneToOne / no
-            // collection — ctor already set the to-one. count > 1: skip Attach
-            // (named create-in CreateNav fallback Add). count == 1: Attach*.
-            var inverse = peerEntity is not null
-                ? FindInverseCollectionInfo(peerEntity, entity.Name).Unique
+            // The navigation's paired inverse on the peer (CreateInWiring.Inverse), collection or
+            // singular: the factory wires the other side of every supplied argument (#587). No pair
+            // (or an ambiguous one) leaves the ctor's to-one only.
+            var navRel = entity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, navParam.Name, StringComparison.Ordinal));
+            var inverse = navRel is not null && peerEntity is not null
+                ? CreateInWiring.Inverse(entity, navRel, peerEntity)
                 : null;
 
             if (inverse is null)
                 continue;
 
+            // A singular inverse's attach only sets the peer's to-one and returns nothing (#587).
+            if (!CreateInWiring.IsCollection(inverse)) {
+                createSuccessNodes.Add(new IfStatement(
+                    new NotEqual(paramRef, new Constant(null)),
+                    new Block([new Invoke(
+                        new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
+                        [createdLocal])])));
+                continue;
+            }
+
+            // A collection's attach returns a result: an owned part that already names another owner is
+            // refused there (#585), so the factory returns that failure instead of a half-wired
+            // aggregate. The local lives in the guard's block: its first assignment types it.
+            var attach = new Variable("__attach");
             createSuccessNodes.Add(new IfStatement(
                 new NotEqual(paramRef, new Constant(null)),
                 new Block([
-                    new Invoke(
+                    new Assignment(attach, new Invoke(
                         new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
-                        [createdLocal])
+                        [createdLocal])),
+                    new IfStatement(
+                        new Syntactic.Not(new Member(attach, "IsSuccess")),
+                        new Block([FailureLowering.Propagate(createResultType, attach)]))
+                ], [attach])));
+        }
+
+        // A supplied collection argument wires the other side of the pair too (#572): the
+        // factory's collection field holding the children is only half of it. Each child's
+        // paired to-one (CreateInWiring.Inverse) is set through its own Attach; a child already
+        // bound to another owner is refused, never silently re-pointed, so the previous owner's
+        // collection cannot keep a child it no longer owns.
+        foreach (var collectionSlot in esm.CreateSlots.Where(s => s.Shape == CreateSlotShape.Collection)) {
+            var paramName = ToCamelCase(collectionSlot.Name);
+            // The signature parameter, not a same-named copy (the reference loop's reason).
+            var paramRef = createParams.FirstOrDefault(p =>
+                string.Equals(p.Name, paramName, StringComparison.Ordinal));
+            if (paramRef is null)
+                continue;
+            Entity? elementEntity = null;
+            if (lookup is not null
+                && lookup.Types.TryGetValue(collectionSlot.Type.TypeName, out var resolvedElement)
+                && resolvedElement is Entity re)
+                elementEntity = re;
+            else
+                elementEntity = domain.Types.OfType<Entity>()
+                    .FirstOrDefault(e => string.Equals(e.Name, collectionSlot.Type.TypeName, StringComparison.Ordinal));
+            var collectionNav = entity.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, collectionSlot.Name, StringComparison.Ordinal));
+            if (elementEntity is null || collectionNav is null)
+                continue;
+
+            // Only a singular inverse is the factory's to set: a collection inverse is the other
+            // collection of a many-to-many, and each side is linked where the caller links it.
+            var childInverse = CreateInWiring.Inverse(entity, collectionNav, elementEntity);
+            if (childInverse is null || CreateInWiring.IsCollection(childInverse))
+                continue;
+
+            var child = new Variable("__child");
+            createSuccessNodes.Add(new IfStatement(
+                new NotEqual(paramRef, new Constant(null)),
+                new Block([
+                    new ForEachLoop(child, paramRef, new Block([
+                        new IfStatement(
+                            new Syntactic.And(
+                                new NotEqual(new Member(child, ToPascalCase(childInverse.Name)), new Constant(null)),
+                                new NotEqual(new Member(child, ToPascalCase(childInverse.Name)), createdLocal)),
+                            new Block([
+                                FailureLowering.Return(createResultType, new FailureLowering.Spec(
+                                    DomainFailureKind.Link,
+                                    new Constant(Relationship.InverseOwnerViolationMessage(
+                                        collectionNav.Name, childInverse.Name)),
+                                    $"{entity.Name}.{collectionNav.Name}"))
+                            ])),
+                        new Invoke(
+                            new Member(child, $"Attach{ToPascalCase(childInverse.Name)}"),
+                            [createdLocal])
+                    ]))
                 ])));
         }
 

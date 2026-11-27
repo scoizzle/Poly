@@ -169,9 +169,12 @@ public sealed class PackDoorParityTests {
             var id = key.Split('|')[0];
             var idTokens = Enumerable.Range(1, tokens.Count - 1).Where(i => tokens[i - 1].Kind == DslTokenKind.Uses).Select(i => tokens[i]).ToList();
 
-            if (ResolverErrorSiteScanner.Capture(text) is GrammarException g && g.Detail.Contains($"'{id}'", StringComparison.Ordinal)
-                && (g.Line, g.Column) != (idTokens[0].Line, idTokens[0].Col))
-                failures.Add($"{key}: resolver positions its refusal at {g.Line}:{g.Column}, the id token is at {idTokens[0].Line}:{idTokens[0].Col}");
+            if (ResolverErrorSiteScanner.Capture(text) is GrammarException g && g.Detail.Contains($"'{id}'", StringComparison.Ordinal)) {
+                // A duplicate is placed on the second occurrence; every other id finding on the first.
+                var expectedId = g.Detail.Contains("more than once", StringComparison.Ordinal) ? idTokens[1] : idTokens[0];
+                if ((g.Line, g.Column) != (expectedId.Line, expectedId.Col))
+                    failures.Add($"{key}: resolver positions its refusal at {g.Line}:{g.Column}, the id token is at {expectedId.Line}:{expectedId.Col}");
+            }
 
             _compiler ??= new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring));
             foreach (var d in _compiler.Analyze(text, "pack.poly").Diagnostics.Where(d => d.IsError && d.Message.Contains($"'{id}'", StringComparison.Ordinal))) {
@@ -198,11 +201,10 @@ public sealed class PackDoorParityTests {
 
     /// <summary>
     /// The resolver column of a pack-door cell that is known wrong. An unknown id surfaces as a raw <c>InvalidOperationException</c> with no
-    /// position (G-29 positions it); a duplicate id is an unpositioned <c>FormatException</c> thrown by the header reader (#872, G-29 positions it; the compiler re-derives its position by rescanning the tokens). Both are stale-checked.
+    /// position (G-29 positions it). A duplicate id is now the header reader's positioned <c>GrammarException</c> and is no longer tagged (#872).
     /// </summary>
     internal static readonly (string Key, string Fixer, string Fragment)[] KnownWrong = [
         .. Forms.Where(f => f.Form != "duplicate").Select(f => ($"P:zz|{f.Form}", "G-29", "InvalidOperationException @0:0 off=-1 len=0 :: Unknown domain extension 'zz'. Record only ids this catalog can resolve.")),
-        .. Ids.Select(id => ($"P:{id}|duplicate", "G-29", $"FormatException @0:0 off=-1 len=0 :: Domain lists extension '{id}' more than once.")),
     ];
 
     [Test]

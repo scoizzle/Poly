@@ -23,7 +23,11 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<TDbCtx>();
-    await SeedAsync(db);
+    await db.Database.EnsureCreatedAsync();
+    if (builder.Configuration.GetValue<bool>("SeedDemoData"))
+    {
+        await SeedAsync(db);
+    }
 }
 
 app.MapGet("/api/pairs", async (TDbCtx db) => await db.Pairs.ToListAsync());
@@ -38,7 +42,8 @@ app.MapPost("/api/pairs", async (PairDto dto, TDbCtx db) => {
     }
     db.Pairs.Add(pairResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(pairResult.Value);
+    var createdId = db.Entry(pairResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/pairs/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), pairResult.Value);
 });
 
 app.MapPost("/api/pairs/{id}/both", async (int id, BothDto dto, TDbCtx db) => {
@@ -52,6 +57,7 @@ app.MapPost("/api/pairs/{id}/both", async (int id, BothDto dto, TDbCtx db) => {
         var result = entity.Both(dto.V);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -59,6 +65,10 @@ app.MapPost("/api/pairs/{id}/both", async (int id, BothDto dto, TDbCtx db) => {
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Pair' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -78,6 +88,7 @@ app.MapPost("/api/pairs/{id}/conflict", async (int id, ConflictDto dto, TDbCtx d
         var result = entity.Conflict(dto.S);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -85,6 +96,10 @@ app.MapPost("/api/pairs/{id}/conflict", async (int id, ConflictDto dto, TDbCtx d
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Pair' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {

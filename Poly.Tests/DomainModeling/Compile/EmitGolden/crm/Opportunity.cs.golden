@@ -25,6 +25,8 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     private List<Account>? _accountOpportunitiesWonSubscribers;
     private List<Account>? _accountOpportunitiesProposeSubscribers;
     private List<Account>? _accountOpportunitiesLostSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private Opportunity() { }
     private Opportunity(string title, decimal amount, DateOnly closeBy, Account? account, Contact? contact, IEnumerable<Activity>? activities, IEnumerable<Line>? lines, IEnumerable<Quote>? quotes)
@@ -47,17 +49,27 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     public Contact? Contact { get; private set; }
     public IReadOnlyList<Activity> Activities
     {
-        get => this._activities;
+        get => new List<Activity>(this._activities);
     }
     public IReadOnlyList<Line> Lines
     {
-        get => this._lines;
+        get => new List<Line>(this._lines);
     }
     public IReadOnlyList<Quote> Quotes
     {
-        get => this._quotes;
+        get => new List<Quote>(this._quotes);
     }
     public OpportunityStage CurrentStage { get; private set; }
+    internal void AttachAccount(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Account = child;
+    }
+    internal void AttachContact(Contact child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Contact = child;
+    }
     internal DomainResult<Activity> CreateActivities(string? subject = default, DateOnly? dueOn = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -84,18 +96,20 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     private DomainResult<Activity> __BodyOfCreateActivities(string? subject, DateOnly? dueOn)
     {
-        var activityResult = Activity.Create(subject, dueOn, this);
-        if (!activityResult.IsSuccess)
+        var __activityResult = Activity.Create(subject, dueOn, this);
+        if (!__activityResult.IsSuccess)
         {
-            return DomainResult<Activity>.Failure(activityResult.Error!);
+            return DomainResult<Activity>.Failure(__activityResult.Error!);
         }
-        var activity = activityResult.Value;
-        return DomainResult<Activity>.Success(activity);
+        var __activity = __activityResult.Value;
+        return DomainResult<Activity>.Success(__activity);
     }
-    internal void AttachActivities(Activity child)
+    internal DomainResult AttachActivities(Activity child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._activities.Add(child);
+        child.AttachOpportunity(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Line> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
@@ -123,18 +137,20 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     private DomainResult<Line> __BodyOfCreateLines(long? qty, decimal? unitPrice, Product? product)
     {
-        var lineResult = Line.Create(qty, unitPrice, product, this);
-        if (!lineResult.IsSuccess)
+        var __lineResult = Line.Create(qty, unitPrice, product, this);
+        if (!__lineResult.IsSuccess)
         {
-            return DomainResult<Line>.Failure(lineResult.Error!);
+            return DomainResult<Line>.Failure(__lineResult.Error!);
         }
-        var line = lineResult.Value;
-        return DomainResult<Line>.Success(line);
+        var __line = __lineResult.Value;
+        return DomainResult<Line>.Success(__line);
     }
-    internal void AttachLines(Line child)
+    internal DomainResult AttachLines(Line child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
+        child.AttachOpportunity(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Quote> CreateQuotes(string? title = default, decimal? amount = default)
     {
@@ -162,18 +178,20 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     private DomainResult<Quote> __BodyOfCreateQuotes(string? title, decimal? amount)
     {
-        var quoteResult = Quote.Create(title, amount, this, new List<QuoteLine>());
-        if (!quoteResult.IsSuccess)
+        var __quoteResult = Quote.Create(title, amount, this, new List<QuoteLine>());
+        if (!__quoteResult.IsSuccess)
         {
-            return DomainResult<Quote>.Failure(quoteResult.Error!);
+            return DomainResult<Quote>.Failure(__quoteResult.Error!);
         }
-        var quote = quoteResult.Value;
-        return DomainResult<Quote>.Success(quote);
+        var __quote = __quoteResult.Value;
+        return DomainResult<Quote>.Success(__quote);
     }
-    internal void AttachQuotes(Quote child)
+    internal DomainResult AttachQuotes(Quote child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._quotes.Add(child);
+        child.AttachOpportunity(this);
+        return DomainResult.Success();
     }
     internal DomainResult CompleteOpenWork()
     {
@@ -201,16 +219,16 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfCompleteOpenWork()
     {
-        foreach (var target0 in this.Activities)
+        foreach (var __target0 in this.Activities)
         {
-            if (target0.CurrentStage != ActivityStage.Open)
+            if (__target0.CurrentStage != ActivityStage.Open)
             {
                 continue;
             }
-            var result1 = target0.Complete();
-            if (!result1.IsSuccess)
+            var __result1 = __target0.Complete();
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Opportunity.CompleteOpenWork"));
+                return DomainResult.Failure(__result1.Error!.At("Opportunity.CompleteOpenWork"));
             }
         }
         return DomainResult.Success();
@@ -247,10 +265,10 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         this.CurrentStage = OpportunityStage.Propose;
         this.Probability = 40L;
-        var notify0 = this.NotifyProposeSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyProposeSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Opportunity.Propose"));
+            return DomainResult.Failure(__notify0.Error!.At("Opportunity.Propose"));
         }
         return DomainResult.Success();
     }
@@ -284,10 +302,10 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             this.CurrentStage = OpportunityStage.Lost;
             this.Probability = 0L;
-            var notify0 = this.NotifyLostSubscribers();
-            if (!notify0.IsSuccess)
+            var __notify0 = this.NotifyLostSubscribers();
+            if (!__notify0.IsSuccess)
             {
-                return DomainResult.Failure(notify0.Error!.At("Opportunity.Lose"));
+                return DomainResult.Failure(__notify0.Error!.At("Opportunity.Lose"));
             }
             return DomainResult.Success();
         }
@@ -321,13 +339,13 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     {
         if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
-            var create0 = this.CreateActivities(subject);
-            if (!create0.IsSuccess)
+            var __create0 = this.CreateActivities(subject);
+            if (!__create0.IsSuccess)
             {
-                return DomainResult<Activity>.Failure(create0.Error!.At("Opportunity.Log"));
+                return DomainResult<Activity>.Failure(__create0.Error!.At("Opportunity.Log"));
             }
-            var created1 = create0.Value;
-            return DomainResult<Activity>.Success(created1);
+            var __created1 = __create0.Value;
+            return DomainResult<Activity>.Success(__created1);
         }
         return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Stage("'Log' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.Log"));
     }
@@ -359,23 +377,23 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     {
         if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
-            var assignValue0 = this.Amount + qty * sku.ListPrice;
-            if (assignValue0 < 0m)
+            var __assignValue0 = this.Amount + qty * sku.ListPrice;
+            if (__assignValue0 < 0m)
             {
                 return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Opportunity.Amount"));
             }
-            if (assignValue0 > 100000000m)
+            if (__assignValue0 > 100000000m)
             {
                 return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Opportunity.Amount"));
             }
-            this.Amount = assignValue0;
-            var create1 = this.CreateLines(qty, sku.ListPrice, sku);
-            if (!create1.IsSuccess)
+            this.Amount = __assignValue0;
+            var __create1 = this.CreateLines(qty, sku.ListPrice, sku);
+            if (!__create1.IsSuccess)
             {
-                return DomainResult<Line>.Failure(create1.Error!.At("Opportunity.AddLine"));
+                return DomainResult<Line>.Failure(__create1.Error!.At("Opportunity.AddLine"));
             }
-            var created2 = create1.Value;
-            return DomainResult<Line>.Success(created2);
+            var __created2 = __create1.Value;
+            return DomainResult<Line>.Success(__created2);
         }
         return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Stage("'AddLine' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.AddLine"));
     }
@@ -409,13 +427,13 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Stage("'QuoteDeal' requires stage 'Qualify' on entity 'Opportunity'.", "Opportunity.QuoteDeal", "Qualify"));
         }
-        var create0 = this.CreateQuotes(this.Title, 0L);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateQuotes(this.Title, 0L);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Quote>.Failure(create0.Error!.At("Opportunity.QuoteDeal"));
+            return DomainResult<Quote>.Failure(__create0.Error!.At("Opportunity.QuoteDeal"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Quote>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Quote>.Success(__created1);
     }
     internal DomainResult Commit()
     {
@@ -487,10 +505,10 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         this.CurrentStage = OpportunityStage.Won;
         this.Probability = 100L;
-        var notify0 = this.NotifyWonSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyWonSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Opportunity.Win"));
+            return DomainResult.Failure(__notify0.Error!.At("Opportunity.Win"));
         }
         return DomainResult.Success();
     }
@@ -520,20 +538,28 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfCapture(ChargeRequest request)
     {
+        if (request == null)
+        {
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'request' is required.", "Opportunity.Capture"));
+        }
+        if (request.Currency == null)
+        {
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Currency' is required.", "request.Currency"));
+        }
         if (this.CurrentStage != OpportunityStage.Commit)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Capture' requires stage 'Commit' on entity 'Opportunity'.", "Opportunity.Capture", "Commit"));
         }
-        var assignValue0 = this.Amount;
-        if (assignValue0 < 0m)
+        var __assignValue0 = this.Amount;
+        if (__assignValue0 < 0m)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Opportunity.Amount"));
         }
-        if (assignValue0 > 100000000m)
+        if (__assignValue0 > 100000000m)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Opportunity.Amount"));
         }
-        this.Amount = assignValue0;
+        this.Amount = __assignValue0;
         return DomainResult.Success();
     }
     public bool HasLines() => this.Lines.Count > 0;
@@ -544,9 +570,9 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             this._accountOpportunitiesWonSubscribers = new List<Account>();
         }
-        foreach (var existing in this._accountOpportunitiesWonSubscribers)
+        foreach (var __existing in this._accountOpportunitiesWonSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -560,9 +586,9 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             this._accountOpportunitiesProposeSubscribers = new List<Account>();
         }
-        foreach (var existing in this._accountOpportunitiesProposeSubscribers)
+        foreach (var __existing in this._accountOpportunitiesProposeSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -576,9 +602,9 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             this._accountOpportunitiesLostSubscribers = new List<Account>();
         }
-        foreach (var existing in this._accountOpportunitiesLostSubscribers)
+        foreach (var __existing in this._accountOpportunitiesLostSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -590,19 +616,24 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Won");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Won");
+                return DomainResult.Success();
+            }
             if (this._accountOpportunitiesWonSubscribers != null)
             {
-                foreach (var sub in this._accountOpportunitiesWonSubscribers)
+                foreach (var __sub in this._accountOpportunitiesWonSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachOpportunityWon();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachOpportunityWon();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
-                    var handlerResult1 = sub.WhenEachOpportunityWon(this);
-                    if (!handlerResult1.IsSuccess)
+                    var __handlerResult1 = __sub.WhenEachOpportunityWon(this);
+                    if (!__handlerResult1.IsSuccess)
                     {
-                        return handlerResult1;
+                        return __handlerResult1;
                     }
                 }
             }
@@ -618,14 +649,19 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Propose");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Propose");
+                return DomainResult.Success();
+            }
             if (this._accountOpportunitiesProposeSubscribers != null)
             {
-                foreach (var sub in this._accountOpportunitiesProposeSubscribers)
+                foreach (var __sub in this._accountOpportunitiesProposeSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachOpportunityPropose(this);
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachOpportunityPropose(this);
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -641,14 +677,19 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Lost");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Lost");
+                return DomainResult.Success();
+            }
             if (this._accountOpportunitiesLostSubscribers != null)
             {
-                foreach (var sub in this._accountOpportunitiesLostSubscribers)
+                foreach (var __sub in this._accountOpportunitiesLostSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachOpportunityLost(this);
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachOpportunityLost(this);
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -659,10 +700,65 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "Won")
+            {
+                var __notified0 = this.NotifyWonSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
+            if (__stage == "Propose")
+            {
+                var __notified1 = this.NotifyProposeSubscribers();
+                if (!__notified1.IsSuccess)
+                {
+                    return __notified1;
+                }
+            }
+            if (__stage == "Lost")
+            {
+                var __notified2 = this.NotifyLostSubscribers();
+                if (!__notified2.IsSuccess)
+                {
+                    return __notified2;
+                }
+            }
+        }
+        return DomainResult.Success();
+    }
     private DomainResult __EnterInitialStage()
     {
         Poly.Runtime.ActionScope.Touch(this);
-        this.Probability = 10L;
+        this.__deferringStageNotifications = true;
+        try
+        {
+            this.Probability = 10L;
+        }
+        finally
+        {
+            this.__deferringStageNotifications = false;
+        }
         return DomainResult.Success();
     }
     internal static DomainResult<Opportunity> Create(string? title = default, decimal? amount = default, DateOnly? closeBy = default, Account? account = default, Contact? contact = default, IEnumerable<Activity>? activities = default, IEnumerable<Line>? lines = default, IEnumerable<Quote>? quotes = default)
@@ -714,18 +810,85 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'account' is required.", "Opportunity.account"));
         }
         var __account = account;
-        var created = new Opportunity(__title, __amount, __closeBy, __account, contact, activities, lines, quotes);
-        Poly.Runtime.ActionScope.Create(created, "Opportunity");
-        var __entry = created.__EnterInitialStage();
+        if (activities != null)
+        {
+            foreach (var __activitiesElement in activities)
+            {
+                if (__activitiesElement == null)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'activities' contains a null element.", "Opportunity.activities"));
+                }
+            }
+        }
+        if (lines != null)
+        {
+            foreach (var __linesElement in lines)
+            {
+                if (__linesElement == null)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'lines' contains a null element.", "Opportunity.lines"));
+                }
+            }
+        }
+        if (quotes != null)
+        {
+            foreach (var __quotesElement in quotes)
+            {
+                if (__quotesElement == null)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'quotes' contains a null element.", "Opportunity.quotes"));
+                }
+            }
+        }
+        var __created = new Opportunity(__title, __amount, __closeBy, __account, contact, activities, lines, quotes);
+        Poly.Runtime.ActionScope.Create(__created, "Opportunity");
+        var __entry = __created.__EnterInitialStage();
         if (!__entry.IsSuccess)
         {
             return DomainResult<Opportunity>.Failure(__entry.Error!);
         }
         if (account != null)
         {
-            account.AttachOpportunities(created);
+            var __attach = account.AttachOpportunities(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Opportunity>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Opportunity>.Success(created);
+        if (activities != null)
+        {
+            foreach (var __child in activities)
+            {
+                if (__child.Opportunity != null && __child.Opportunity != __created)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'activities': the child's 'opportunity' is already set to another owner.", "Opportunity.activities"));
+                }
+                __child.AttachOpportunity(__created);
+            }
+        }
+        if (lines != null)
+        {
+            foreach (var __child in lines)
+            {
+                if (__child.Opportunity != null && __child.Opportunity != __created)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'lines': the child's 'opportunity' is already set to another owner.", "Opportunity.lines"));
+                }
+                __child.AttachOpportunity(__created);
+            }
+        }
+        if (quotes != null)
+        {
+            foreach (var __child in quotes)
+            {
+                if (__child.Opportunity != null && __child.Opportunity != __created)
+                {
+                    return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'quotes': the child's 'opportunity' is already set to another owner.", "Opportunity.quotes"));
+                }
+                __child.AttachOpportunity(__created);
+            }
+        }
+        return DomainResult<Opportunity>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {
@@ -742,7 +905,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[14];
+        var __state = new object?[16];
         __state[0] = this.Title;
         __state[1] = this.Amount;
         __state[2] = this.CloseBy;
@@ -756,7 +919,9 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         __state[10] = (this._accountOpportunitiesWonSubscribers == null ? null : new List<Account>(this._accountOpportunitiesWonSubscribers));
         __state[11] = (this._accountOpportunitiesProposeSubscribers == null ? null : new List<Account>(this._accountOpportunitiesProposeSubscribers));
         __state[12] = (this._accountOpportunitiesLostSubscribers == null ? null : new List<Account>(this._accountOpportunitiesLostSubscribers));
-        __state[13] = this._notifyDepth;
+        __state[13] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[14] = this.__deferringStageNotifications;
+        __state[15] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -832,6 +997,23 @@ internal class Opportunity : Poly.Runtime.IActionScoped
                 this._accountOpportunitiesLostSubscribers.Add(__item12);
             }
         }
-        this._notifyDepth = (int)__saved[13]!;
+        if (__saved[13] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item13 in(List<string>)__saved[13]!)
+            {
+                this.__pendingStageNotifications.Add(__item13);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[14]!;
+        this._notifyDepth = (int)__saved[15]!;
     }
 }

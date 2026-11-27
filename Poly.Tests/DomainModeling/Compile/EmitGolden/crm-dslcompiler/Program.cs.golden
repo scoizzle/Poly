@@ -22,7 +22,7 @@ builder.Services.AddScoped<Poly.Runtime.IStoragePort, CrmDbContext>();
 
 var app = builder.Build();
 
-var schemaId = 432019307;
+var schemaId = 92187481;
 
 using (var scope = app.Services.CreateScope())
 {
@@ -30,7 +30,7 @@ using (var scope = app.Services.CreateScope())
     var created = await db.Database.EnsureCreatedAsync();
     if (created)
     {
-        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 432019307");
+        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 92187481");
     }
     else
     {
@@ -47,7 +47,10 @@ using (var scope = app.Services.CreateScope())
             Environment.Exit(1);
         }
     }
-    await SeedAsync(db);
+    if (builder.Configuration.GetValue<bool>("SeedDemoData"))
+    {
+        await SeedAsync(db);
+    }
 }
 
 app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListAsync());
@@ -55,49 +58,133 @@ app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListA
 app.MapGet("/api/products/{sku}", async (string sku, CrmDbContext db) => (await db.Products.FirstOrDefaultAsync(e => e.Sku == sku) is Crm.Product product ? Results.Ok(product) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
+    if (dto.Sku != null && dto.Sku.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'Sku' contains '/', which no route can read back; use a key without '/'");
+    }
     var productResult = Crm.Product.Create(db, dto.Sku, dto.Name, dto.ListPrice);
     if (!productResult.IsSuccess)
     {
         return Problem(productResult.Error!);
     }
     db.Products.Add(productResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.Products.AnyAsync(row => row.Sku == productResult.Value.Sku))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Sku' value is already used on another 'Product'.", "Product.Sku"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/products/", System.Uri.EscapeDataString(productResult.Value.Sku)), productResult.Value);
 });
 
-app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync());
+app.MapGet("/api/leads", async (CrmDbContext db) => {
+    var leads = await db.Leads.ToListAsync();
+    foreach (var lead in leads)
+    {
+        await db.Entry(lead).Reference(e => e.Account).LoadAsync();
+    }
+    return leads;
+});
 
-app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Crm.Lead lead ? Results.Ok(lead) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => {
+    var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
+    if (lead == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(lead).Reference(e => e.Account).LoadAsync();
+    return Results.Ok(lead);
+});
 
 app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
+    if (dto.Email != null && dto.Email.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'Email' contains '/', which no route can read back; use a key without '/'");
+    }
     var leadResult = Crm.Lead.Create(db, dto.Name, dto.Email, dto.Company, null);
     if (!leadResult.IsSuccess)
     {
         return Problem(leadResult.Error!);
     }
     db.Leads.Add(leadResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.Leads.AnyAsync(row => row.Email == leadResult.Value.Email))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Lead'.", "Lead.Email"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/leads/", System.Uri.EscapeDataString(leadResult.Value.Email)), leadResult.Value);
 });
 
-app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListAsync());
+app.MapGet("/api/accounts", async (CrmDbContext db) => {
+    var accounts = await db.Accounts.ToListAsync();
+    foreach (var account in accounts)
+    {
+        await db.Entry(account).Collection(e => e.Contacts).LoadAsync();
+        await db.Entry(account).Collection(e => e.Opportunities).LoadAsync();
+        await db.Entry(account).Collection(e => e.Tickets).LoadAsync();
+        await db.Entry(account).Reference(e => e.Parent).LoadAsync();
+        await db.Entry(account).Reference(e => e.Hq).LoadAsync();
+    }
+    return accounts;
+});
 
-app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Crm.Account account ? Results.Ok(account) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => {
+    var account = await db.Accounts.FindAsync(id);
+    if (account == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(account).Collection(e => e.Contacts).LoadAsync();
+    await db.Entry(account).Collection(e => e.Opportunities).LoadAsync();
+    await db.Entry(account).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(account).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(account).Reference(e => e.Hq).LoadAsync();
+    return Results.Ok(account);
+});
 
 app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
-    var accountResult = Crm.Account.Create(dto.Name, dto.Industry, null, null, null, null, null, null, null, null);
+    var accountResult = Crm.Account.Create(dto.Name, dto.Industry, null, dto.WonCount, dto.OpenPipeline, null, null, null, null, dto.ClosedTickets);
     if (!accountResult.IsSuccess)
     {
         return Problem(accountResult.Error!);
     }
     db.Accounts.Add(accountResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(accountResult.Value);
+    var createdId = db.Entry(accountResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/accounts/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), accountResult.Value);
 });
 
-app.MapGet("/api/campaigns", async (CrmDbContext db) => await db.Campaigns.ToListAsync());
+app.MapGet("/api/campaigns", async (CrmDbContext db) => {
+    var campaigns = await db.Campaigns.ToListAsync();
+    foreach (var campaign in campaigns)
+    {
+        await db.Entry(campaign).Collection(e => e.Members).LoadAsync();
+    }
+    return campaigns;
+});
 
-app.MapGet("/api/campaigns/{id}", async (int id, CrmDbContext db) => (await db.Campaigns.FindAsync(id) is Crm.Campaign campaign ? Results.Ok(campaign) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/campaigns/{id}", async (int id, CrmDbContext db) => {
+    var campaign = await db.Campaigns.FindAsync(id);
+    if (campaign == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(campaign).Collection(e => e.Members).LoadAsync();
+    return Results.Ok(campaign);
+});
 
 app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
     var campaignResult = Crm.Campaign.Create(dto.Name, null);
@@ -107,7 +194,8 @@ app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
     }
     db.Campaigns.Add(campaignResult.Value);
     await db.SaveChangesAsync();
-    return Results.Ok(campaignResult.Value);
+    var createdId = db.Entry(campaignResult.Value).Property<int>("Id").CurrentValue;
+    return Results.Created(string.Concat("/api/campaigns/", System.Uri.EscapeDataString(System.Convert.ToString(createdId, System.Globalization.CultureInfo.InvariantCulture))), campaignResult.Value);
 });
 
 app.MapGet("/api/accounts/{id}/hq", async (int id, CrmDbContext db) => {
@@ -127,6 +215,10 @@ app.MapGet("/api/accounts/{id}/contacts", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Contacts).LoadAsync();
+    foreach (var contact in parent.Contacts.ToList())
+    {
+        await db.Entry(contact).Reference(e => e.Account).LoadAsync();
+    }
     return Results.Ok(parent.Contacts);
 });
 
@@ -142,6 +234,7 @@ app.MapGet("/api/accounts/{id}/contacts/{email}", async (int id, string email, C
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Account).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -152,6 +245,14 @@ app.MapGet("/api/accounts/{id}/opportunities", async (int id, CrmDbContext db) =
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Opportunities).LoadAsync();
+    foreach (var opportunity in parent.Opportunities.ToList())
+    {
+        await db.Entry(opportunity).Collection(e => e.Activities).LoadAsync();
+        await db.Entry(opportunity).Collection(e => e.Lines).LoadAsync();
+        await db.Entry(opportunity).Collection(e => e.Quotes).LoadAsync();
+        await db.Entry(opportunity).Reference(e => e.Account).LoadAsync();
+        await db.Entry(opportunity).Reference(e => e.Contact).LoadAsync();
+    }
     return Results.Ok(parent.Opportunities);
 });
 
@@ -167,6 +268,11 @@ app.MapGet("/api/accounts/{id}/opportunities/{opportunityId}", async (int id, in
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Collection(e => e.Activities).LoadAsync();
+    await db.Entry(child).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(child).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(child).Reference(e => e.Account).LoadAsync();
+    await db.Entry(child).Reference(e => e.Contact).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -177,6 +283,10 @@ app.MapGet("/api/opportunities/{id}/activities", async (int id, CrmDbContext db)
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Activities).LoadAsync();
+    foreach (var activity in parent.Activities.ToList())
+    {
+        await db.Entry(activity).Reference(e => e.Opportunity).LoadAsync();
+    }
     return Results.Ok(parent.Activities);
 });
 
@@ -192,6 +302,7 @@ app.MapGet("/api/opportunities/{id}/activities/{activityId}", async (int id, int
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Opportunity).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -202,6 +313,11 @@ app.MapGet("/api/opportunities/{id}/quotes", async (int id, CrmDbContext db) => 
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Quotes).LoadAsync();
+    foreach (var quote in parent.Quotes.ToList())
+    {
+        await db.Entry(quote).Collection(e => e.Lines).LoadAsync();
+        await db.Entry(quote).Reference(e => e.Opportunity).LoadAsync();
+    }
     return Results.Ok(parent.Quotes);
 });
 
@@ -217,6 +333,8 @@ app.MapGet("/api/opportunities/{id}/quotes/{quoteId}", async (int id, int quoteI
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(child).Reference(e => e.Opportunity).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -227,6 +345,11 @@ app.MapGet("/api/campaigns/{id}/members", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Members).LoadAsync();
+    foreach (var campaignMember in parent.Members.ToList())
+    {
+        await db.Entry(campaignMember).Reference(e => e.Contact).LoadAsync();
+        await db.Entry(campaignMember).Reference(e => e.Campaign).LoadAsync();
+    }
     return Results.Ok(parent.Members);
 });
 
@@ -242,6 +365,8 @@ app.MapGet("/api/campaigns/{id}/members/{campaignMemberId}", async (int id, int 
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Contact).LoadAsync();
+    await db.Entry(child).Reference(e => e.Campaign).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -252,6 +377,10 @@ app.MapGet("/api/accounts/{id}/tickets", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Tickets).LoadAsync();
+    foreach (var ticket in parent.Tickets.ToList())
+    {
+        await db.Entry(ticket).Reference(e => e.Account).LoadAsync();
+    }
     return Results.Ok(parent.Tickets);
 });
 
@@ -267,6 +396,7 @@ app.MapGet("/api/accounts/{id}/tickets/{ticketId}", async (int id, int ticketId,
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Account).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -277,6 +407,11 @@ app.MapGet("/api/opportunities/{id}/lines", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
+    foreach (var line in parent.Lines.ToList())
+    {
+        await db.Entry(line).Reference(e => e.Product).LoadAsync();
+        await db.Entry(line).Reference(e => e.Opportunity).LoadAsync();
+    }
     return Results.Ok(parent.Lines);
 });
 
@@ -292,6 +427,8 @@ app.MapGet("/api/opportunities/{id}/lines/{lineId}", async (int id, int lineId, 
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Product).LoadAsync();
+    await db.Entry(child).Reference(e => e.Opportunity).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -302,6 +439,11 @@ app.MapGet("/api/quotes/{id}/lines", async (int id, CrmDbContext db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
+    foreach (var quoteLine in parent.Lines.ToList())
+    {
+        await db.Entry(quoteLine).Reference(e => e.Product).LoadAsync();
+        await db.Entry(quoteLine).Reference(e => e.Quote).LoadAsync();
+    }
     return Results.Ok(parent.Lines);
 });
 
@@ -317,6 +459,8 @@ app.MapGet("/api/quotes/{id}/lines/{quoteLineId}", async (int id, int quoteLineI
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Product).LoadAsync();
+    await db.Entry(child).Reference(e => e.Quote).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -332,6 +476,7 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
         var result = entity.Convert();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -339,6 +484,10 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Lead' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -359,6 +508,7 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
         var result = entity.Disqualify();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -366,6 +516,10 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Lead' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -385,11 +539,13 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.PlaceHq(dto.City, dto.Region);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -397,6 +553,10 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Account' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -416,11 +576,13 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.AddContact(dto.Name, dto.Email, db);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -428,6 +590,10 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Account' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -447,9 +613,10 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
-        var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.LeadId);
+        var lead = (dto.LeadId == null ? null : await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.LeadId));
         if (lead == null)
         {
             return StatusProblem(404, "Not Found", "Lead not found");
@@ -457,6 +624,7 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
         var result = entity.ConvertLead(lead, db);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -464,6 +632,10 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Account' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -483,11 +655,13 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.OpenDeal(dto.Title, dto.Amount);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -495,6 +669,10 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Account' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -514,11 +692,13 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.Archive();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -526,6 +706,10 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Account' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -545,11 +729,13 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.OpenTicket(dto.Subject);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -557,6 +743,10 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Account' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -576,11 +766,13 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
     await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.Restore();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -588,6 +780,10 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Account' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -615,11 +811,13 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
         return StatusProblem(404, "Not Found", "Contact not found for this Account");
     }
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Retire();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -627,6 +825,10 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Contact' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -654,11 +856,13 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
         return StatusProblem(404, "Not Found", "Contact not found for this Account");
     }
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Reactivate();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -666,6 +870,10 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Contact' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -697,11 +905,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.CompleteOpenWork();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -709,6 +919,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -740,11 +954,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Propose();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -752,6 +968,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -783,11 +1003,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Lose();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -795,6 +1017,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -826,11 +1052,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Log(dto.Subject);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -838,6 +1066,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -869,9 +1101,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
-        var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
+        var product = (dto.SkuId == null ? null : await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId));
         if (product == null)
         {
             return StatusProblem(404, "Not Found", "Product not found");
@@ -879,6 +1112,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
         var result = entity.AddLine(product, dto.Qty);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -886,6 +1120,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -917,11 +1155,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.QuoteDeal();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -929,6 +1169,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -960,11 +1204,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Commit();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -972,6 +1218,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1003,11 +1253,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Win();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1015,6 +1267,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1046,11 +1302,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Capture(dto.Request);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1058,6 +1316,10 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Opportunity' '{opportunityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1090,6 +1352,7 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
         var result = entity.Snooze();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1097,6 +1360,10 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Activity' '{activityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1129,6 +1396,7 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
         var result = entity.Complete();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1136,6 +1404,10 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Activity' '{activityId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1166,7 +1438,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
     await db.Entry(entity).Reference(e => e.Opportunity).LoadAsync();
     try
     {
-        var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
+        var product = (dto.SkuId == null ? null : await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId));
         if (product == null)
         {
             return StatusProblem(404, "Not Found", "Product not found");
@@ -1174,6 +1446,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
         var result = entity.AddLine(product, dto.Qty);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -1181,6 +1454,10 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Quote' '{quoteId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1214,6 +1491,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
         var result = entity.Present();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1221,6 +1499,10 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Quote' '{quoteId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1254,6 +1536,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
         var result = entity.Accept();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1261,6 +1544,10 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Quote' '{quoteId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1294,6 +1581,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
         var result = entity.Reject();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1301,6 +1589,10 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Quote' '{quoteId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1318,7 +1610,7 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
     await db.Entry(entity).Collection(e => e.Members).LoadAsync();
     try
     {
-        var contact = await db.Contacts.FirstOrDefaultAsync(e => e.Email == dto.WhoId);
+        var contact = (dto.WhoId == null ? null : await db.Contacts.FirstOrDefaultAsync(e => e.Email == dto.WhoId));
         if (contact == null)
         {
             return StatusProblem(404, "Not Found", "Contact not found");
@@ -1326,6 +1618,7 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
         var result = entity.Enroll(contact);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -1333,6 +1626,10 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Campaign' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1353,6 +1650,7 @@ app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
         var result = entity.End();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1360,6 +1658,10 @@ app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Campaign' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1387,11 +1689,13 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
         return StatusProblem(404, "Not Found", "Ticket not found for this Account");
     }
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Work();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1399,6 +1703,10 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Ticket' '{ticketId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1426,11 +1734,13 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
         return StatusProblem(404, "Not Found", "Ticket not found for this Account");
     }
     await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Close();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -1438,6 +1748,10 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Ticket' '{ticketId}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -1533,6 +1847,9 @@ internal record AccountDto
     public string? Name { get; init; }
     [EnumDataType(typeof(Crm.Industry))]
     public Crm.Industry? Industry { get; init; }
+    public long? WonCount { get; init; }
+    public decimal? OpenPipeline { get; init; }
+    public long? ClosedTickets { get; init; }
 }
 
 internal record CampaignDto
@@ -1555,7 +1872,7 @@ internal record AddContactDto
 
 internal record ConvertLeadDto
 {
-    public string LeadId { get; init; } = default!;
+    public string? LeadId { get; init; } = default!;
 }
 
 internal record OpenDealDto
@@ -1576,7 +1893,7 @@ internal record OpportunityLogDto
 
 internal record OpportunityAddLineDto
 {
-    public string SkuId { get; init; } = default!;
+    public string? SkuId { get; init; } = default!;
     public long Qty { get; init; }
 }
 
@@ -1587,11 +1904,11 @@ internal record CaptureDto
 
 internal record QuoteAddLineDto
 {
-    public string SkuId { get; init; } = default!;
+    public string? SkuId { get; init; } = default!;
     public long Qty { get; init; }
 }
 
 internal record EnrollDto
 {
-    public string WhoId { get; init; } = default!;
+    public string? WhoId { get; init; } = default!;
 }

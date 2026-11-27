@@ -4,6 +4,9 @@
 ###  Start the server:
 ###    dotnet run --project path/to/project --urls "http://localhost:5201"
 ###
+###  The database starts empty. Add "--SeedDemoData true" to insert one
+###  sample row per entity.
+###
 ###  Then click "Send Request" above any request below.
 ### ═══════════════════════════════════════════════════════════
 
@@ -21,7 +24,7 @@ GET http://localhost:5201/api/accounts/1/hq/1
 GET http://localhost:5201/api/products
 
 ### Get product by Sku
-GET http://localhost:5201/api/products/example-value
+GET http://localhost:5201/api/products/example-sku
 
 ### Create a new product
 POST http://localhost:5201/api/products
@@ -39,7 +42,7 @@ Content-Type: application/json
 GET http://localhost:5201/api/leads
 
 ### Get lead by Email
-GET http://localhost:5201/api/leads/example-value
+GET http://localhost:5201/api/leads/user@test.com
 
 ### Create a new lead
 POST http://localhost:5201/api/leads
@@ -47,15 +50,15 @@ Content-Type: application/json
 
 {
     "Name": "sample",
-    "Email": "example-email",
+    "Email": "user@test.com",
     "Company": "sample"
 }
 
 ### Action: Convert
-POST http://localhost:5201/api/leads/example-value/convert
+POST http://localhost:5201/api/leads/user@test.com/convert
 
 ### Action: Disqualify
-POST http://localhost:5201/api/leads/example-value/disqualify
+POST http://localhost:5201/api/leads/user@test.com/disqualify
 
 ### ──────────── Accounts ────────────
 
@@ -71,7 +74,10 @@ Content-Type: application/json
 
 {
     "Name": "sample",
-    "Industry": "Technology"
+    "Industry": "Technology",
+    "WonCount": 0,
+    "OpenPipeline": 0.0,
+    "ClosedTickets": 0
 }
 
 ### Action: PlaceHq
@@ -97,7 +103,7 @@ POST http://localhost:5201/api/accounts/1/convertLead
 Content-Type: application/json
 
 {
-    "LeadId": "example-lead-id"
+    "LeadId": "user@test.com"
 }
 
 ### Action: OpenDeal
@@ -129,13 +135,13 @@ POST http://localhost:5201/api/accounts/1/restore
 GET http://localhost:5201/api/accounts/1/contacts
 
 ### Get contact by id for account
-GET http://localhost:5201/api/accounts/1/contacts/example-value
+GET http://localhost:5201/api/accounts/1/contacts/user@test.com
 
 ### Action: Retire
-POST http://localhost:5201/api/accounts/1/contacts/example-value/retire
+POST http://localhost:5201/api/accounts/1/contacts/user@test.com/retire
 
 ### Action: Reactivate
-POST http://localhost:5201/api/accounts/1/contacts/example-value/reactivate
+POST http://localhost:5201/api/accounts/1/contacts/user@test.com/reactivate
 
 ### ──────────── Opportunities ────────────
 
@@ -167,7 +173,7 @@ POST http://localhost:5201/api/accounts/1/opportunities/1/addLine
 Content-Type: application/json
 
 {
-    "SkuId": "example-product-id",
+    "SkuId": "example-sku",
     "Qty": 0
 }
 
@@ -215,7 +221,7 @@ POST http://localhost:5201/api/opportunities/1/quotes/1/addLine
 Content-Type: application/json
 
 {
-    "SkuId": "example-product-id",
+    "SkuId": "example-sku",
     "Qty": 0
 }
 
@@ -249,7 +255,7 @@ POST http://localhost:5201/api/campaigns/1/enroll
 Content-Type: application/json
 
 {
-    "WhoId": "example-contact-id"
+    "WhoId": "user@test.com"
 }
 
 ### Action: End

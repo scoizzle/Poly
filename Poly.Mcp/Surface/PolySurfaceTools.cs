@@ -1,15 +1,21 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
+using Poly.Compile;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
@@ -36,6 +42,52 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     private const int FindingCap = 20;
     private const int InlineLimit = 4000;
+
+    /// <summary>
+    /// The artifact files each workspace has written: <c>poly-&lt;workspace&gt;-&lt;format&gt;-&lt;sha16&gt;.&lt;ext&gt;</c> in
+    /// the OS temp directory, content-addressed so an unchanged export reuses one file. Closing the
+    /// workspace removes them; without that a long-lived session grows the temp directory per call (#598).
+    /// </summary>
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _exportedFiles =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The one tool builder: the host serves exactly what this returns and every test builds its
+    /// tools from here, so no caller can see a schema the host does not publish. The SDK's
+    /// <c>WithTools&lt;T&gt;</c> cannot carry <see cref="McpServerToolCreateOptions"/>, and the
+    /// published schema is the argument contract the pre-binder validator derives from.
+    /// </summary>
+    internal static IReadOnlyList<McpServerTool> McpTools() =>
+        [.. typeof(PolySurfaceTools).GetMethods()
+            .Select(method => (Method: method, Attribute: method.GetCustomAttribute<McpServerToolAttribute>()))
+            .Where(pair => pair.Attribute?.Name is not null)
+            .Select(pair => McpServerTool.Create(pair.Method, Instance, CreateOptions()))];
+
+    /// <summary>One target per call, as <c>WithTools&lt;T&gt;</c> did: the tool adapters are per instance.</summary>
+    private static readonly Func<RequestContext<CallToolRequestParams>, object> Instance =
+        context => ActivatorUtilities.CreateInstance<PolySurfaceTools>(context.Services!);
+
+    private static McpServerToolCreateOptions CreateOptions() => new() {
+        SchemaCreateOptions = new AIJsonSchemaCreateOptions {
+            TransformOptions = new AIJsonSchemaTransformOptions {
+                TransformSchemaNode = (context, node) =>
+                    context.Path.Length == 2 && context.Path[0] == "properties" && context.Path[1] == "steps"
+                        && node is JsonObject property
+                        ? StepsAsArrayOrText(property)
+                        : node,
+            },
+        },
+    };
+
+    /// <summary>
+    /// #488: an agent's natural `steps` is the array the description names, so the schema
+    /// publishes the array beside the JSON text the binder takes. The rest of the property —
+    /// its description, and the parent's required set — is carried through untouched.
+    /// </summary>
+    private static JsonNode StepsAsArrayOrText(JsonObject property) {
+        property["type"] = new JsonArray("string", "array");
+        return property;
+    }
 
     // ── 1. guide ────────────────────────────────────────────────
 
@@ -111,9 +163,10 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                     ErrorCode: "WORKSPACE_NOT_FOUND");
             }
             store.Remove(workspace);
+            RemoveExportedFiles(workspace);
             return new PolyResponse(
                 Ok: true,
-                Summary: "Workspace closed. Its model and instances are gone.",
+                Summary: "Workspace closed. Its model, instances and exported artifact files are gone.",
                 Findings: [],
                 Data: null,
                 Next: ["poly_workspace"],
@@ -145,7 +198,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 3. define ───────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_define", Title = "Define the domain", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Validates and applies one .poly document to the workspace, or edits the document last applied. This is the only authoring path: write the domain down, let the constraint-aware analysis gate it, and fix what it reports. Pass poly to replace the model with a complete document, or edit to change the stored document in place. apply=false is a dry run that changes nothing. A rejected document or edit changes nothing, returns structured findings (severity, code, element path, message) and leaves the revision unchanged.")]
+    [McpServerTool(Name = "poly_define", Title = "Define the domain", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Validates and applies one .poly document to the workspace, or edits the document last applied. This is the only authoring path: write the domain down, let the constraint-aware analysis gate it, and fix what it reports. Pass poly to replace the model with a complete document, or edit to change the stored document in place. apply=false is a dry run that changes nothing. A rejected document or edit changes nothing, returns structured findings (severity, code, element path, message) and leaves the revision unchanged. A successful apply replaces the lowered module, so the workspace's simulated instances are cleared: the summary and data.instancesCleared say how many.")]
     public PolyResponse Define(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("The complete .poly document. It replaces the current model; it does not merge. Pass exactly one of poly or edit.")] string? poly = null,
@@ -159,11 +212,14 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 "Pass exactly one of poly (the complete document) or edit (a JSON array of ops).");
 
         logger.LogDebug("poly_define {Workspace} apply={Apply} edit={Edit}", workspace, apply, edit is not null);
+        var instancesBefore = current.ExecutorIfCreated?.Instances.Count() ?? 0;
         if (edit is null) {
             var replaced = apply
                 ? _dsl.ApplyDsl(workspace, poly!)
                 : _dsl.ValidateDsl(workspace, poly!);
-            return DefineResponse(workspace, apply, replaced, ValidationData(replaced));
+            var cleared = apply && replaced.Success ? instancesBefore : 0;
+            return DefineResponse(workspace, apply, replaced, WithInstancesCleared(ValidationData(replaced), cleared),
+                ClearedSummary(replaced.Message, cleared));
         }
 
         if (current.SourceText is null)
@@ -195,8 +251,28 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             if (outcome.Regions.FirstOrDefault(r => line >= r.StartLine && line <= r.EndLine) is { } region)
                 summary = $"{summary} (in edit {region.Index})";
         }
+        var clearedInstances = apply && response.Success ? instancesBefore : 0;
+        if (clearedInstances > 0) {
+            summary = ClearedSummary(summary, clearedInstances)!;
+            data["instancesCleared"] = clearedInstances;
+        }
 
         return DefineResponse(workspace, apply, response, data, summary);
+    }
+
+    /// <summary>The applied summary plus how many simulated instances the apply discarded (#575).</summary>
+    private static string? ClearedSummary(string? summary, int cleared) =>
+        cleared > 0
+            ? $"{summary} {cleared} simulated instance{(cleared == 1 ? "" : "s")} cleared."
+            : summary;
+
+    /// <summary>Adds <c>instancesCleared</c> to the applied result's own payload; nothing was cleared, nothing is added.</summary>
+    private static object? WithInstancesCleared(object? data, int cleared) {
+        if (data is null || cleared == 0)
+            return data;
+        var node = JsonSerializer.SerializeToNode(data)!.AsObject();
+        node["instancesCleared"] = cleared;
+        return node;
     }
 
     private static int? FailedLine(string message) {
@@ -217,13 +293,13 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     private static object? ValidationData(DomainToolResponse response) =>
         response.Data is DslValidationData validation
             ? new {
-                validation.DomainName,
-                validation.Valid,
-                validation.EntityCount,
-                validation.RelationshipCount,
-                validation.ErrorCount,
-                validation.WarningCount,
-                validation.HintCount,
+                domainName = validation.DomainName,
+                valid = validation.Valid,
+                entityCount = validation.EntityCount,
+                relationshipCount = validation.RelationshipCount,
+                errorCount = validation.ErrorCount,
+                warningCount = validation.WarningCount,
+                hintCount = validation.HintCount,
             }
             : response.Data;
 
@@ -243,19 +319,19 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 4. check ────────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. Returns proven, violated, or unknown: proven only when every write was verified against its range, length, pattern or equals constraints (unique, required and enum membership are checked elsewhere), unknown (with the count of unverified findings) while any write could not be: bound the source, widen the target, or guard a non-parameter write; a Text or Number action parameter written into a bounded property stays unknown until parameter constraints exist. Findings carry the element path and the analyzer's message. Does not change the model. Use poly_define to fix a violation.")]
+    [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. An expression is probed against the model's own functions and enums; every property it reads needs a value in bindings, and an expression that reads none needs no bindings. Returns proven, violated, or unknown: proven only when every write was verified against its range, length, pattern or equals constraints (unique, required and enum membership are checked elsewhere), unknown (with the count of unverified findings) while any write could not be: bound the source, widen the target, or guard a non-parameter write; a Text or Number action parameter written into a bounded property stays unknown until parameter constraints exist. Findings carry the element path and the analyzer's message, with the source line and column when the stored document's outline reaches that element; data.hints lists the hints the summary counts (data.hintCount is the total). Does not change the model. Use poly_define to fix a violation.")]
     public PolyResponse Check(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("Optional element path to focus, e.g. \"Product\" or \"Product.Submit\".")] string? select = null,
         [Description("Optional JSON object of action arguments; argument-specific proofs are not implemented yet and return unknown.")] string? args = null,
-        [Description("Optional DSL expression fragment to evaluate, e.g. \"Total > 100\". Requires bindings.")] string? expression = null,
-        [Description("Optional JSON object of property values for expression.")] string? bindings = null) {
+        [Description("Optional DSL expression fragment to evaluate, e.g. \"Total > 100\". The model's functions and enums are in scope. Each property it reads needs a value in bindings; an expression that reads none needs no bindings.")] string? expression = null,
+        [Description("Optional JSON object of property values for expression, keyed by property name, e.g. \"{\\\"Total\\\":150}\".")] string? bindings = null) {
         if (!TryWorkspace(workspace, out var workspaceState))
             return WorkspaceRequired();
 
         if (!string.IsNullOrWhiteSpace(expression)) {
             var evaluated = _oracle.OracleExpression(
-                expression, string.IsNullOrWhiteSpace(bindings) ? "{}" : bindings);
+                expression, string.IsNullOrWhiteSpace(bindings) ? "{}" : bindings, workspaceState.Domain);
             var result = evaluated.Success
                 ? JsonSerializer.SerializeToNode(evaluated.Data)?["result"]?.GetValue<bool>()
                 : null;
@@ -287,7 +363,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 State: StateOf(workspace));
         }
 
-        var allFindings = AllFindings(analysis);
+        var allFindings = AllFindings(analysis, workspaceState.SourceText);
         var selectMatched = true;
         string? scopePath = null;
         IReadOnlyList<ActionInvariantFact>? witness = null;
@@ -305,9 +381,28 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             var focused = allFindings.Where(f => PathMatches(f.Path, normalized)).ToList();
             selectMatched = focused.Count > 0 || ElementExists(workspaceState.Domain, normalized);
             allFindings = focused;
+
+            // #534: a typo used to answer ok with an "unknown" verdict, indistinguishable from a
+            // legitimately undecided proof. The resolver, not a second guess, says whether the path names anything.
+            if (!selectMatched) {
+                var inspected = InspectService.Inspect(workspace, workspaceState, select, _query);
+                if (!inspected.Ok)
+                    return new PolyResponse(
+                        Ok: false,
+                        Summary: inspected.Summary,
+                        Findings: [],
+                        Data: inspected.Data,
+                        Next: Next(workspace, "poly_inspect", "poly_check"),
+                        State: StateOf(workspace),
+                        ErrorCode: inspected.ErrorCode ?? InspectService.ElementNotFoundCode);
+            }
         }
 
         var hintCount = allFindings.Count(f => string.Equals(f.Severity, "Hint", StringComparison.OrdinalIgnoreCase));
+        var hints = allFindings
+            .Where(f => string.Equals(f.Severity, "Hint", StringComparison.OrdinalIgnoreCase))
+            .Take(FindingCap)
+            .ToList();
         var reportable = allFindings
             .Where(f => !string.Equals(f.Severity, "Hint", StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -325,7 +420,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
         var summary = verdict switch {
             "violated" => $"Violated: {errorCount} error(s), {warningCount} warning(s), {hintCount} hint(s).",
-            "unknown" when !selectMatched => $"Unknown: no element or finding matches '{select}'.",
+            "unknown" when !selectMatched => $"Unknown: no finding matches '{select}'.",
             "unknown" when !string.IsNullOrWhiteSpace(args) => "Unknown: argument-specific proofs are not implemented yet; use poly_simulate to execute the action.",
             "unknown" => $"Unknown: {unverified} finding(s) could not be verified (writes analysis could not prove inside their constraints, or a default() beside a range or length), {warningCount} warning(s), {hintCount} hint(s). Bound the source, widen the target or guard a non-parameter write; poly_simulate executes the action.",
             _ => $"Proven: no errors, every write verified, {warningCount} warning(s), {hintCount} hint(s).",
@@ -341,6 +436,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 errorCount,
                 warningCount,
                 hintCount,
+                hints,
                 unverifiedFindings = unverified,
                 findingsTotal = reportable.Count,
                 truncated = reportable.Count > FindingCap,
@@ -379,7 +475,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 6. export ───────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_export", Title = "Export an artifact", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Produces the artifact the task needs from the current model: dsl, json-schema, csharp, markdown, html, json-ld, or shacl. Small artifacts are returned inline; anything over 4 KB is written to a file and returned as {path, bytes, sha256}. Read-only; the model is unchanged.")]
+    [McpServerTool(Name = "poly_export", Title = "Export an artifact", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Produces the artifact the task needs from the current model: dsl, json-schema, csharp, markdown, html, json-ld, or shacl. Small artifacts are returned inline; anything over 4 KB is written to a temp file named by its sha256 and returned as {path, bytes, sha256}, so identical content reuses one file and poly_workspace op=close removes the files the workspace wrote. Read-only; the model is unchanged.")]
     public PolyResponse Export(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("dsl | json-schema | csharp | markdown | html | json-ld | shacl")] string format,
@@ -416,11 +512,13 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         var bytes = Encoding.UTF8.GetByteCount(content);
         object data;
         if (!inline && bytes > InlineLimit) {
-            var name = $"poly-{Sanitize(workspace)}-{normalized}-" +
-                $"{Path.GetFileNameWithoutExtension(Path.GetRandomFileName())}.{extension}";
-            var path = Path.Combine(Path.GetTempPath(), name);
-            File.WriteAllText(path, content);
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+            var name = $"poly-{Sanitize(workspace)}-{normalized}-{hash[..16]}.{extension}";
+            var path = Path.Combine(Path.GetTempPath(), name);
+            if (!File.Exists(path))
+                File.WriteAllText(path, content);
+            _exportedFiles.GetOrAdd(workspace, _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal))
+                .TryAdd(path, 0);
             data = new { format = normalized, path, bytes, sha256 = hash };
         }
         else {
@@ -429,7 +527,9 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
         return new PolyResponse(
             Ok: true,
-            Summary: $"Exported {normalized} ({bytes} bytes).",
+            Summary: normalized == "csharp"
+                ? $"Exported csharp ({bytes} bytes); compile it against {CSharpHostDependencies.Requirement(ExportFileNames(response))}."
+                : $"Exported {normalized} ({bytes} bytes).",
             Findings: [],
             Data: data,
             Next: Next(workspace, "poly_inspect", "poly_check"),
@@ -438,20 +538,51 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 7. simulate ─────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. Steps are a JSON array of {op: create|link|unlink|invoke|evaluate|get|list, ...}. A guard-blocked step is a failed step, not a failed call; earlier steps stay committed. reset=true starts from a clean instance state.")]
+    /// <summary>
+    /// The keys each step op reads, in the order the tool description lists them. A step object's
+    /// keys outside this set are a caller error: dropping them silently turned a misspelled key
+    /// into a different, successful scenario (#536).
+    /// </summary>
+    private static readonly Dictionary<string, string[]> StepKeys = new(StringComparer.Ordinal) {
+        ["create"] = ["op", "entity", "properties", "as"],
+        ["link"] = ["op", "sourceInstanceId", "relationship", "targetInstanceId"],
+        ["unlink"] = ["op", "sourceInstanceId", "relationship", "targetInstanceId"],
+        ["invoke"] = ["op", "instanceId", "action", "args"],
+        ["evaluate"] = ["op", "entity", "policy", "instanceId"],
+        ["get"] = ["op", "instanceId"],
+        ["list"] = ["op", "entity"],
+    };
+
+    [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. steps is a JSON array of objects, or that array as its JSON text; every object carries op plus that op's own keys, and any other key is a failed step that names the valid ones: " +
+        "create {entity, properties?, as?}; link {sourceInstanceId, relationship, targetInstanceId}; unlink (the same keys as link); " +
+        "invoke {instanceId, action, args?}; evaluate {entity, policy, instanceId}; get {instanceId}; list {entity?}. " +
+        "properties and args are JSON objects of property and parameter values. An instanceId takes an instance id or a create's as alias; a singular navigation in properties takes one too. " +
+        "A guard-blocked step is a failed step, not a failed call; earlier steps stay committed. reset=true clears the instances first; a poly_define clears them too.")]
     public PolyResponse Simulate(
         [Description("Workspace handle from poly_workspace.")] string workspace,
-        [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42},\"as\":\"p\"}]. " +
+        [Description("The steps: a JSON array, or that array as its JSON text - both run the same scenario. " +
+            "e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42},\"as\":\"p\"}]. " +
             "A create's properties may name a singular navigation whose value is an instance id or an earlier step's alias, " +
-            "e.g. {\"Name\":\"Grace\",\"account\":\"acme\"}; a required navigation must be given at create.")] string steps,
+            "e.g. {\"Name\":\"Grace\",\"account\":\"acme\"}; a required navigation must be given at create. " +
+            "An invoke's entity-typed args value takes an instance id or an earlier step's alias the same way.")] JsonElement steps,
         [Description("Clear existing instances before running (default false).")] bool reset = false,
         [Description("Stop at the first failed step (default true).")] bool stopOnError = true) {
         if (!TryWorkspace(workspace, out var state))
             return WorkspaceRequired();
 
+        // The array an agent naturally writes and the JSON text of that array are one scenario:
+        // normalise here, so no step can tell which form its caller sent.
+        var json = steps.ValueKind switch {
+            JsonValueKind.String => steps.GetString()!,
+            JsonValueKind.Array => steps.GetRawText(),
+            _ => null,
+        };
+        if (json is null)
+            return new PolyResponse(false, "steps must be a JSON array.", [], null, ["poly_simulate"], StateOf(workspace));
+
         JsonDocument document;
         try {
-            document = JsonDocument.Parse(steps);
+            document = JsonDocument.Parse(json);
         }
         catch (JsonException ex) {
             return new PolyResponse(false, $"Invalid steps JSON: {ex.Message}", [], null, ["poly_simulate"], StateOf(workspace));
@@ -478,6 +609,16 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 if (step.ValueKind != JsonValueKind.Object)
                     throw new InvalidOperationException("Each step must be a JSON object.");
                 op = step.TryGetProperty("op", out var opValue) ? opValue.GetString() ?? "" : "";
+                if (StepKeys.TryGetValue(op, out var validKeys)) {
+                    var unknownKeys = step.EnumerateObject()
+                        .Select(property => property.Name)
+                        .Where(name => !validKeys.Contains(name, StringComparer.Ordinal))
+                        .ToList();
+                    if (unknownKeys.Count > 0)
+                        throw new InvalidOperationException(
+                            $"Unknown key(s) {string.Join(", ", unknownKeys.Select(name => $"'{name}'"))} for op '{op}'. "
+                            + $"Valid keys: {string.Join(", ", validKeys)}.");
+                }
                 response = op switch {
                     "create" => _runtime.CreateInstance(
                         workspace,
@@ -498,7 +639,8 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                         workspace,
                         Resolve(Required(step, "instanceId"), aliases),
                         Required(step, "action"),
-                        OptionalJson(step, "args")),
+                        OptionalJson(step, "args"),
+                        aliases),
                     "evaluate" => _policy.EvaluatePolicy(
                         workspace,
                         Required(step, "entity"),
@@ -582,17 +724,22 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         return state;
     }
 
-    private static List<PolyFinding> AllFindings(DomainToolResponse response) {
+    private static List<PolyFinding> AllFindings(DomainToolResponse response, string? sourceText = null) {
         if (response.Data is DslValidationData validation)
             return validation.Findings
                 .Select(f => new PolyFinding(f.Severity, f.Code, f.ElementPath, f.Message, Line: f.Line, Column: f.Column))
                 .ToList();
 
-        if (response.Data is AnalysisData analysis && analysis.DiagnosticFacts is { Count: > 0 } facts)
+        if (response.Data is AnalysisData analysis && analysis.DiagnosticFacts is { Count: > 0 } facts) {
+            var (outline, lines) = SourceOutline(sourceText);
             return facts
-                .Select(f => new PolyFinding(f.Severity, f.Code, f.ElementPath, f.Message))
+                .Select(f => {
+                    var (line, column) = PositionOf(f.ElementPath, outline, lines);
+                    return new PolyFinding(f.Severity, f.Code, f.ElementPath, f.Message, Line: line, Column: column);
+                })
                 .DistinctBy(f => (f.Code, f.Path, f.Message))
                 .ToList();
+        }
 
         if (response.Diagnostics is { Count: > 0 } diagnostics)
             return diagnostics
@@ -602,8 +749,29 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         return [];
     }
 
-    private static List<PolyFinding> FindingsFrom(DomainToolResponse response) =>
-        AllFindings(response).Take(FindingCap).ToList();
+    /// <summary>The stored document's outline and line map, or nulls when there is no readable source.</summary>
+    private static (DslOutline? Outline, LineMap? Lines) SourceOutline(string? sourceText) {
+        if (string.IsNullOrEmpty(sourceText))
+            return (null, null);
+        try {
+            return (DslOutline.Build(sourceText), new LineMap(sourceText));
+        }
+        catch (FormatException) {
+            // A document the tokenizer rejects has no outline; the finding keeps its element path.
+            return (null, null);
+        }
+    }
+
+    /// <summary>The 1-based line and column the element path starts at, or nulls when the outline cannot reach it.</summary>
+    private static (int? Line, int? Column) PositionOf(string elementPath, DslOutline? outline, LineMap? lines) {
+        if (outline is null || lines is null || outline.Locate(elementPath) is not { } node)
+            return (null, null);
+        var (line, column) = lines.At(node.StartOffset);
+        return (line, column);
+    }
+
+    private static List<PolyFinding> FindingsFrom(DomainToolResponse response, string? sourceText = null) =>
+        AllFindings(response, sourceText).Take(FindingCap).ToList();
 
     private static IReadOnlyList<string> Next(string workspace, params string[] tools) =>
         tools.Select(tool => $"{tool}(workspace:\"{workspace}\")").ToList();
@@ -624,7 +792,22 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         path.Equals(normalized, StringComparison.Ordinal)
         || path.EndsWith("/" + normalized, StringComparison.Ordinal)
         || path.StartsWith(normalized + "/", StringComparison.Ordinal)
-        || path.Contains("/" + normalized + "/", StringComparison.Ordinal);
+        || path.Contains("/" + normalized + "/", StringComparison.Ordinal)
+        || StageActionPathMatches(path, normalized);
+
+    /// <summary>
+    /// #481: "Entity.Action" selects that action wherever it runs, so it also matches the action's
+    /// own findings inside a stage ("Domain/Entity/Stage/Action"). Findings carry the stage segment;
+    /// the unqualified select does not.
+    /// </summary>
+    private static bool StageActionPathMatches(string path, string normalized) {
+        var selectParts = normalized.Split('/');
+        var pathParts = path.Split('/');
+        return selectParts.Length == 2
+            && pathParts.Length == 4
+            && string.Equals(pathParts[1], selectParts[0], StringComparison.Ordinal)
+            && string.Equals(pathParts[3], selectParts[1], StringComparison.Ordinal);
+    }
 
     private static bool ElementExists(Domain domain, string normalized) {
         var parts = normalized.Split('/');
@@ -650,6 +833,15 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         return node?[property]?.GetValue<string>();
     }
 
+    /// <summary>
+    /// The file names a producing tool reported in <c>Data.files</c>, so a success summary can
+    /// name what the artifact needs to compile.
+    /// </summary>
+    private static IReadOnlyList<string> ExportFileNames(DomainToolResponse response) {
+        var files = JsonSerializer.SerializeToNode(response.Data)?["files"] as JsonArray;
+        return files?.Select(file => file?.GetValue<string>()).OfType<string>().ToList() ?? [];
+    }
+
     private static string Required(JsonElement step, string name) =>
         step.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? throw new InvalidOperationException($"Step is missing '{name}'.")
@@ -670,6 +862,19 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     private static string Sanitize(string value) =>
         string.Concat(value.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '_'));
+
+    /// <summary>Deletes the artifact files this workspace wrote; a failed delete never fails the close.</summary>
+    private void RemoveExportedFiles(string workspace) {
+        if (!_exportedFiles.TryRemove(workspace, out var files))
+            return;
+        foreach (var path in files.Keys) {
+            try {
+                File.Delete(path);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
 
     private const string Quickstart = """
         Poly models a domain as one executable .poly document: entities, typed properties

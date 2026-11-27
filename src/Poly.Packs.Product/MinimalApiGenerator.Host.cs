@@ -172,6 +172,10 @@ public sealed partial class MinimalApiGenerator {
             "decimal" => new Constant(1m),
             "double" or "float" => new Constant(1.0),
             "Guid" => new Invoke(new Member(new TypeReference("Guid"), "NewGuid")),
+            // Binary is base64 over JSON (System.Text.Json's byte[] encoding); the seed writes the two bytes
+            // 0x00 0x01, the same value a POST body carries as "AAE=".
+            "byte[]" => new Invoke(
+                new Member(new TypeReference("System.Convert"), "FromBase64String"), new Constant("AAE=")),
             _ when _enumLookup.TryGetValue(typeName, out var enumType) && enumType.MemberNames.Count > 0
                 => new Member(new TypeReference(VisibleType(typeName)), enumType.MemberNames[0]),
             _ => new Constant("Sample"),

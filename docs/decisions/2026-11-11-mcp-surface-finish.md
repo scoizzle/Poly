@@ -19,7 +19,9 @@ gaps produced the wrong answer:
   was told the server had a bug when the call was malformed.
 - **#488: `steps` as a JSON array.** `poly_simulate.steps` is declared `string`; the binder throws
   `JsonException` and the caller sees `INTERNAL_ERROR`. The repair is a typed
-  `INVALID_ARGUMENT` until M-07 widens the parameter to array-or-string.
+  `INVALID_ARGUMENT` until M-07 widens the parameter to array-or-string — which it has: `steps`
+  is now `JsonElement` and the published schema is `["string","array"]`, so an array runs, while
+  `INVALID_ARGUMENT` still covers every other JSON kind.
 - **The hand-maintained allow-list drifted.** `UnknownArgumentFilter` held a literal
   `tool → argument names` table; it had to be updated by hand for every tool change and could not
   see types or required-ness.
@@ -111,7 +113,9 @@ summary is for a human or an agent reading it, and a client must not parse it.
 It is **empty today**: the slice that owns a number (G-09's `DslLimits.MaxDocumentChars`) adds its
 entry, and the entry is visible in a diff. The check is pure and takes the map as a parameter, so a
 synthetic map proves enforcement without a mutable static. `MaxItems` is measured on the raw
-`JsonElement` array and is inert until an array-typed argument exists (M-07).
+`JsonElement` array. It stays inert while the registry is empty, and M-07's array `steps` (#488)
+is the argument that would use it: an array form is counted as an array, while the text form is
+only bounded by `MaxChars`.
 
 ### 6. What is deleted
 
@@ -127,8 +131,11 @@ spec. No test is deleted or weakened.
 - **A new CLR parameter type needs a mapping.** `ArgumentSpecCatalog` maps the JSON type names the
   SDK emits (`string`, `boolean`, `number`/`integer`, `object`, `array`, `null`). A schema shape
   outside that set fails the startup self-check; the slice adding it extends the map.
-- **`steps`-as-array is pinned invalid.** `McpProtocolTests` names the assertion for M-07, so the
-  flip is a deliberate edit, not a silent fossil.
+- **`steps`-as-array is pinned accepted.** M-07 flipped the assertion this slice named for it:
+  `McpProtocolTests.Simulate_StepsAsArray_RunsTheSameScenarioAsItsJsonText` proves the array runs
+  the same scenario as its JSON text, and the wrong-kind rows (`42`, `true`, `null`) keep the
+  typed refusal. The host builds its tools through `PolySurfaceTools.McpTools` for the same
+  reason the schema is the contract: the union must reach `tools/list`, not only the validator.
 - **No producer for a limit.** The registry is the seam, not the cap; M-01 claims the registry only.
 
 ## Evidence

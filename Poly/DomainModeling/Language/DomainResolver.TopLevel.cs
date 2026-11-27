@@ -49,15 +49,24 @@ public sealed partial class DomainResolver {
         if (PeekIs(TokenKind.Colon)) {
             var name = Shown(Current);
             var typeWord = Peek(2);
+            if (typeWord.Kind == TokenKind.Identifier && typeWord.TextEquals("function")) {
+                // #638: functions ship; the author used the entity-declaration position.
+                return GrammarError.Error(
+                    $"'function' is declared at top level, as in 'function {name}(x: Number): Number = x', " +
+                    $"not '{name}: function …'.",
+                    typeWord.Line, typeWord.Col);
+            }
             if (typeWord.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(typeWord.Name())) {
-                return new FormatException(
-                    $"'{Shown(typeWord)}' is not supported in Phase 1a (use 'entity' instead)");
+                return GrammarError.Error(
+                    $"'{Shown(typeWord)}' is not supported in Phase 1a (use 'entity' instead)",
+                    typeWord.Line, typeWord.Col);
             }
             if (typeWord.Kind == TokenKind.Identifier
                 && Peek(3).Kind == TokenKind.Entity) {
-                return new FormatException(
+                return GrammarError.Error(
                     $"Entity inheritance ('{name}: {Shown(typeWord)} entity') is no longer supported. " +
-                    $"Define '{Shown(typeWord)}' properties directly on '{name}'.");
+                    $"Define '{Shown(typeWord)}' properties directly on '{name}'.",
+                    typeWord.Line, typeWord.Col);
             }
         }
         return Error($"Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got '{Shown(Current)}'");

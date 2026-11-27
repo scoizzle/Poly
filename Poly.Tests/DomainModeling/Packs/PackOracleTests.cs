@@ -36,8 +36,8 @@ public class PackOracleTests {
         using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
         await Assert.That(json.RootElement.ValueKind).IsEqualTo(JsonValueKind.Array);
 
-        // Pinned: a 404 for an unknown id is the correct behaviour and does not flip with #589.
-        // #589 is the unserialised synthetic Id (and a POST that answers 200 without Location), not this status.
+        // Pinned: a 404 for an unknown id is the correct behaviour. #589 gave a shadow-key create its 201 and Location;
+        // P-12's remaining half is the body, which still carries no id member. Neither is this status.
         using var missing = await oracle.Client.GetAsync("/api/orders/999");
         await Assert.That(missing.StatusCode).IsEqualTo(HttpStatusCode.NotFound);
     }
@@ -201,6 +201,60 @@ public class PackOracleTests {
         await Assert.That(rows).IsEquivalentTo(new[] { ("paid", "ORD1") });
     }
 
+    /// <summary>#905: a <c>Binary</c> member is <c>byte[]</c> on the generated host (the property carries its
+    /// materialization initializer, the seed passes a <c>byte[]</c>) and base64 over JSON, System.Text.Json's own
+    /// encoding: a POST of <c>"AAE="</c> creates the row and a GET returns the same <c>"data":"AAE="</c>.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task BinaryProperty_CreatesAndReadsBackAsBase64() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Binary905);
+
+        // An absent required Binary member is the module's Required failure (400), not a null stored in the column.
+        using var missing = await oracle.Client.PostAsync(
+            "/api/blobs", new StringContent("""{"Code":"BL0"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)missing.StatusCode).IsEqualTo(400);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/blobs", new StringContent("""{"Code":"BL1","Data":"AAE="}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var fetched = await oracle.Client.GetAsync("/api/blobs/BL1");
+        await Assert.That(fetched.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await fetched.Content.ReadAsStringAsync());
+        await Assert.That(json.RootElement.GetProperty("data").GetString()).IsEqualTo("AAE=");
+    }
+
+    /// <summary>#563: the generated schema mirrors the length and default constraints <c>Create</c> enforces, so a
+    /// row written outside the domain is held to the same rule: a too-short value is refused by the length CHECK,
+    /// and a column left out takes the declared default.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task GeneratedSchema_RefusesTooShortText_AndAppliesTheDeclaredDefault_Issue563() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Constraints563);
+        var databasePath = oracle.DatabasePath
+            ?? throw new InvalidOperationException("the host created no database file");
+
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath};Mode=ReadWrite");
+        connection.Open();
+
+        using (var tooShort = connection.CreateCommand()) {
+            tooShort.CommandText = "INSERT INTO Carriers (Name) VALUES ('x')";
+            var failure = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(
+                () => tooShort.ExecuteNonQueryAsync());
+            await Assert.That(failure!.Message).Contains("CHECK constraint failed");
+        }
+
+        using (var accepted = connection.CreateCommand()) {
+            accepted.CommandText = "INSERT INTO Carriers (Name) VALUES ('AB')";
+            await Assert.That(await accepted.ExecuteNonQueryAsync()).IsEqualTo(1);
+        }
+
+        using var readBack = connection.CreateCommand();
+        readBack.CommandText = "SELECT Active FROM Carriers WHERE Name = 'AB'";
+        await Assert.That(Convert.ToInt64(await readBack.ExecuteScalarAsync(),
+            System.Globalization.CultureInfo.InvariantCulture)).IsEqualTo(1L);
+    }
+
     [Test]
     [Category("OracleFull")]
     public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_Boots_Issue791() {
@@ -208,6 +262,106 @@ public class PackOracleTests {
 
         using var list = await oracle.Client.GetAsync("/api/orders");
         await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// #560: a subscription is a function of persisted state. A restart (new process, new DbContext scope, the same SQLite
+    /// file) must restore the parent's subscription registry, so clearing a stored hold runs the parent's <c>when</c>
+    /// handler. Before the fix the registry was populated only by <c>Create</c>, so the handler never ran.
+    /// </summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task StoredSubscription_IsRestoredAfterReload_SoTheParentHandlerRuns_Issue560(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var options = new PackOracleBootOptions { RunDirectory = directory };
+            string database;
+            await using (var first = await PackOracle.BootAsync(PackOracleDomains.Shipment560, options: options)) {
+                using var created = await first.Client.PostAsync(
+                    "/api/shipments", new StringContent("""{"Reference":"S1"}""", Encoding.UTF8, "application/json"));
+                await Assert.That((int)created.StatusCode).IsEqualTo(201);
+                using var held = await first.Client.PostAsync(
+                    "/api/shipments/S1/hold", new StringContent("""{"Reason":"docs"}""", Encoding.UTF8, "application/json"));
+                await Assert.That((int)held.StatusCode).IsEqualTo(200);
+                database = first.DatabasePath!;
+            }
+
+            int holdId;
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False")) {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "SELECT Id FROM CustomsHolds";
+                holdId = Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            // A restart: a new child process, a new DbContext scope, the same database file.
+            await using var second = await PackOracle.BootAsync(PackOracleDomains.Shipment560, options: options);
+            using var cleared = await second.Client.PostAsync(
+                $"/api/shipments/S1/holds/{holdId}/clear",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            await Assert.That((int)cleared.StatusCode).IsEqualTo(200);
+
+            using var holds = JsonDocument.Parse(await second.Client.GetStringAsync("/api/shipments/S1/holds"));
+            await Assert.That(holds.RootElement[0].GetProperty("cleared").GetBoolean()).IsTrue();
+
+            using var shipment = JsonDocument.Parse(await second.Client.GetStringAsync("/api/shipments/S1"));
+            await Assert.That(shipment.RootElement.GetProperty("note").GetString()).IsEqualTo("hold cleared");
+        });
+    }
+
+    /// <summary>#594: a <c>GET</c> of an entity returns its declared collections and single links loaded, as the
+    /// simulator's <c>get</c> shows them. A child reached through its parent's action is in the parent's JSON on the
+    /// detail route, on the list route and on the nested collection route; the child's link back to its owner is the
+    /// cycle the host's <c>ReferenceHandler.IgnoreCycles</c> breaks, so it reads back null instead of looping.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task GeneratedHost_GetLoadsNavigations_Issue594() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Navigations594);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var added = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/addline", new StringContent("""{"Qty":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)added.StatusCode).IsEqualTo(200);
+
+        using var tagged = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/tagit", new StringContent("""{"Label":"t1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)tagged.StatusCode).IsEqualTo(200);
+
+        // Detail: the collection and the single link both arrive loaded.
+        using var detail = await oracle.Client.GetAsync("/api/orders/ORD1");
+        await Assert.That(detail.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var detailJson = JsonDocument.Parse(await detail.Content.ReadAsStringAsync());
+        var lines = detailJson.RootElement.GetProperty("lines");
+        await Assert.That(lines.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(lines[0].GetProperty("qty").GetInt32()).IsEqualTo(5);
+        await Assert.That(detailJson.RootElement.GetProperty("tag").GetProperty("label").GetString()).IsEqualTo("t1");
+
+        // List: each row is loaded the same way. The seed row (#595) is present too, so find ORD1 by its key.
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var listJson = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        var row = listJson.RootElement.EnumerateArray().Single(o => o.GetProperty("code").GetString() == "ORD1");
+        await Assert.That(row.GetProperty("lines").GetArrayLength()).IsEqualTo(1);
+        await Assert.That(row.GetProperty("tag").GetProperty("label").GetString()).IsEqualTo("t1");
+
+        // The nested collection route loads each item's own navigations; the item's link to its owner is the cycle
+        // ReferenceHandler.IgnoreCycles breaks, so the body ends there instead of looping.
+        using var children = await oracle.Client.GetAsync("/api/orders/ORD1/lines");
+        await Assert.That(children.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var childrenJson = JsonDocument.Parse(await children.Content.ReadAsStringAsync());
+        await Assert.That(childrenJson.RootElement.GetArrayLength()).IsEqualTo(1);
+        var child = childrenJson.RootElement[0];
+        await Assert.That(child.GetProperty("qty").GetInt32()).IsEqualTo(5);
+        await Assert.That(child.GetProperty("order").GetProperty("code").GetString()).IsEqualTo("ORD1");
+        // The owner's collection is loaded too, so the cycle shows where IgnoreCycles cut it: the child itself is null.
+        var ownerLines = child.GetProperty("order").GetProperty("lines");
+        await Assert.That(ownerLines.ValueKind).IsEqualTo(JsonValueKind.Array);
+        await Assert.That(ownerLines.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(ownerLines[0].ValueKind).IsEqualTo(JsonValueKind.Null);
     }
 
     [Test]
@@ -220,16 +374,44 @@ public class PackOracleTests {
         await Assert.That(json.RootElement.ValueKind).IsEqualTo(JsonValueKind.Array);
     }
 
+    /// <summary>#595: the seed is opt-in. A default boot writes nothing, so a generated host cannot pollute the
+    /// database it points at or reserve unique values; <c>--SeedDemoData true</c> still writes one row per entity.</summary>
     [Test]
-    public async Task GeneratedInventoryApp_SeedRow_Present_Pins595() {
+    public async Task GeneratedInventoryApp_Seed_IsOptIn_Issue595() {
+        await using (var plain = await PackOracle.BootAsync(PackOracleDomains.Inventory588)) {
+            using var list = await plain.Client.GetAsync("/api/orders");
+            using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+            await Assert.That(json.RootElement.GetArrayLength()).IsEqualTo(0);
+        }
+
+        await using var seeded = await PackOracle.BootAsync(
+            PackOracleDomains.Inventory588, options: new PackOracleBootOptions { SeedDemoData = true });
+        using var seededList = await seeded.Client.GetAsync("/api/orders");
+        using var seededJson = JsonDocument.Parse(await seededList.Content.ReadAsStringAsync());
+        await Assert.That(seededJson.RootElement.GetArrayLength()).IsEqualTo(1);
+    }
+
+    /// <summary>#589: an entity without a natural key has a shadow <c>Id</c> no JSON body carries. Its create
+    /// answers 201 with a <c>Location</c> naming the row EF just inserted, so the per-id routes the same host
+    /// maps are reachable from the response a client already holds.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task Create_ShadowKeyEntity_AnswersCreatedWithAGettableLocation_Issue589(CancellationToken cancellationToken) {
+        _ = cancellationToken;
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Inventory588);
 
-        using var list = await oracle.Client.GetAsync("/api/orders");
-        using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        using var post = await oracle.Client.PostAsync("/api/orders",
+            new StringContent("""{"Qty":2,"Total":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)post.StatusCode).IsEqualTo(201);
 
-        // #595 pin: the generated Program.cs seeds a placeholder row into a fresh database.
-        // P-07 removes the seed and flips this assertion to zero.
-        await Assert.That(json.RootElement.GetArrayLength()).IsEqualTo(1);
+        var location = post.Headers.Location;
+        await Assert.That(location).IsNotNull();
+        await Assert.That(location!.OriginalString).StartsWith("/api/orders/");
+
+        using var get = await oracle.Client.GetAsync(location);
+        await Assert.That((int)get.StatusCode).IsEqualTo(200);
+        using var json = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
+        await Assert.That(json.RootElement.GetProperty("qty").GetInt64()).IsEqualTo(2);
     }
 
     /// <summary>Two boots: the worst case (2 x 135 s) exceeds the assembly's 180 s default, so this test carries
@@ -825,7 +1007,8 @@ public class PackOracleTests {
     [Timeout(300_000)]
     public async Task Failure_KindDrivesStatus_AndBodyIsProblemDetails(CancellationToken cancellationToken) {
         _ = cancellationToken;
-        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Failures687);
+        await using var oracle = await PackOracle.BootAsync(
+            PackOracleDomains.Failures687, options: new PackOracleBootOptions { SeedDemoData = true });
 
         static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
 
@@ -856,7 +1039,7 @@ public class PackOracleTests {
             "Unique constraint violated: 'Code' value is already used on another 'Child'.", "Child.Code", null);
 
         // Link: the action's second create into the now-occupied to-one is 409. Node has no natural
-        // key, so its seed row is routed by the shadow id.
+        // key, so its opt-in seed row (#595) is routed by the shadow id.
         using var relinked = await oracle.Client.PostAsync("/api/nodes/1/extend", Json("{}"));
         await ExpectProblem(relinked, 409, "Link",
             "Cannot add a second link on 'next': the source already has a target.", "Node.next", null);
@@ -881,15 +1064,63 @@ public class PackOracleTests {
         await ExpectProblem(missing, 404, "Not Found", null, null, null);
     }
 
+    /// <summary>
+    /// #562: the unique check in <c>Create</c> is check-then-act, so concurrent creates of one key both pass
+    /// it. The database's unique index is the authority; the request that loses must answer the same 409
+    /// ProblemDetails the pre-check gives, never a 500, and one row must exist. Twelve requests are fired
+    /// together because the pre-check window is one round trip wide.
+    /// </summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Create_ConcurrentSameUniqueKey_OneCreatedRestUniqueConflict_Issue562(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Failures687);
+
+        static StringContent Json() => new("""{"Code":"RACE","Qty":5}""", Encoding.UTF8, "application/json");
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 12)
+            .Select(_ => oracle.Client.PostAsync("/api/children", Json())));
+        try {
+            var statuses = responses.Select(r => (int)r.StatusCode).ToArray();
+            await Assert.That(statuses.Count(s => s == 201)).IsEqualTo(1)
+                .Because("exactly one create may win the unique key; got " + string.Join(",", statuses));
+
+            foreach (var loser in responses.Where(r => (int)r.StatusCode != 201)) {
+                await Assert.That((int)loser.StatusCode).IsEqualTo(409)
+                    .Because("a duplicate unique key is a conflict, never a server error");
+                await Assert.That(loser.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+                using var problem = JsonDocument.Parse(await loser.Content.ReadAsStringAsync());
+                await Assert.That(problem.RootElement.GetProperty("status").GetInt32()).IsEqualTo(409);
+                await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Unique");
+                await Assert.That(problem.RootElement.GetProperty("detail").GetString())
+                    .IsEqualTo("Unique constraint violated: 'Code' value is already used on another 'Child'.");
+                await Assert.That(problem.RootElement.GetProperty("elementPath").GetString()).IsEqualTo("Child.Code");
+            }
+
+            using var list = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/children"));
+            var rows = list.RootElement.EnumerateArray()
+                .Count(row => row.EnumerateObject()
+                    .Any(property => string.Equals(property.Name, "code", StringComparison.OrdinalIgnoreCase)
+                        && property.Value.GetString() == "RACE"));
+            await Assert.That(rows).IsEqualTo(1);
+        }
+        finally {
+            foreach (var response in responses)
+                response.Dispose();
+        }
+    }
+
     /// <summary>P-13a (#912): the host hands the module the stored link. The first create into an empty <c>next</c>
     /// lands; every later one is the module's own 409 Link and creates no second row. <c>/api/nodes/1</c> is the
-    /// seed row (#595, #589), so the count is measured against the count before the first call.</summary>
+    /// opt-in seed row (#595, #589), so the count is measured against the count before the first call.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
     public async Task Action_CreateIntoOccupiedToOne_IsLinkConflict_AndCreatesNoSecondRow_Issue912(CancellationToken cancellationToken) {
         _ = cancellationToken;
-        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.NodeLink912);
+        await using var oracle = await PackOracle.BootAsync(
+            PackOracleDomains.NodeLink912, options: new PackOracleBootOptions { SeedDemoData = true });
 
         async Task<int> CountAsync() {
             using var list = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/nodes"));
@@ -976,6 +1207,111 @@ public class PackOracleTests {
                 using var problem = JsonDocument.Parse(body);
                 await Assert.That(problem.RootElement.GetProperty("guard").GetString()).IsEqualTo(simulated[i].FailedGuards.Single());
             }
+        }
+    }
+
+    /// <summary>#658, the refusal half of the issue's own child route: a task filed with no assignee. The guard reads a
+    /// to-one that is genuinely absent, so the policy is false in both hosts; HTTP answers the simulator's own guard
+    /// name with the policy status, and the stage does not move.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_GuardOverAbsentToOne_RefusesAsTheSimulatorDoes_Issue658(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var fixture = PackOracleDomains.DeskUnassigned658;
+
+        var harness = PolySurfaceHarness.New();
+        var workspace = harness.Open("desk");
+        var defined = harness.Define(workspace, fixture.Poly);
+        await Assert.That(defined.Success).IsTrue().Because(defined.Summary);
+        var project = harness.Create(workspace, "Project", """{"Key":"P2"}""").InstanceId;
+        var filed = harness.Invoke(workspace, project, "FileUnassigned").Result;
+        await Assert.That(filed.Succeeded).IsTrue().Because($"simulator FileUnassigned: {filed.ErrorMessage}");
+        var listed = harness.List(workspace, "Task").Data;
+        var task = ((listed?["instances"] as System.Text.Json.Nodes.JsonArray)?
+            .Select(i => i?["instanceId"]?.GetValue<string>()).OfType<string>() ?? []).Single();
+        var refused = harness.Invoke(workspace, task, "Triage").Result;
+        await Assert.That(refused.Succeeded).IsFalse();
+        await Assert.That(refused.FailedGuards.Single()).IsEqualTo("Assigned");
+
+        await using var oracle = await PackOracle.BootAsync(fixture);
+        static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+        using var created = await oracle.Client.PostAsync("/api/projects", Json("""{"Key":"P2"}"""));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        // The task is the only row in Tasks: a task is not a root and is never seeded (#595).
+        using var filedOverHttp = await oracle.Client.PostAsync("/api/projects/P2/fileunassigned", Json("{}"));
+        await Assert.That((int)filedOverHttp.StatusCode).IsEqualTo(200).Because(await filedOverHttp.Content.ReadAsStringAsync());
+
+        using var refusedOverHttp = await oracle.Client.PostAsync("/api/projects/P2/tasks/1/triage", Json("{}"));
+        var body = await refusedOverHttp.Content.ReadAsStringAsync();
+        await Assert.That((int)refusedOverHttp.StatusCode).IsEqualTo(422).Because(body);
+        await Assert.That(refusedOverHttp.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+        using (var problem = JsonDocument.Parse(body)) {
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Policy");
+            await Assert.That(problem.RootElement.GetProperty("guard").GetString()).IsEqualTo(refused.FailedGuards.Single());
+        }
+
+        using var row = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/projects/P2/tasks/1"));
+        await Assert.That(row.RootElement.GetProperty("currentStage").GetString()).IsEqualTo("Todo");
+    }
+
+    /// <summary>#559: a <c>Decimal</c> with a <c>range</c> is stored as TEXT on SQLite, so a CHECK that compares it as
+    /// text refuses valid values (<c>"9" &gt; "1000000"</c>) and the create answers 500. Every value inside the
+    /// declared range must save and read back exactly; an out-of-range value is refused by <c>Create</c> as
+    /// <c>400 Range</c>, not by the database.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task DecimalRange_EveryValidValueSaves_AndOutOfRangeIsCreateRange_Issue559(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Shipment559);
+        static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+        // The issue's table (9, 99, 2000, 500000, 1000000 and 10, which used to pass by luck), plus both bounds and
+        // fractional values, which a numeric comparison must also keep.
+        var valid = new[] { ("REF-1", 9m), ("REF-2", 99m), ("REF-3", 2000m), ("REF-4", 500000m), ("REF-5", 1000000m),
+            ("REF-6", 10m), ("REF-7", 0m), ("REF-8", 0.01m), ("REF-9", 999999.99m),
+            ("REF-10", 1000000.00m), ("REF-11", 0.00m) };
+        foreach (var (reference, declared) in valid) {
+            using var created = await oracle.Client.PostAsync(
+                "/api/shipments", Json($$"""{"Reference":"{{reference}}","WeightKg":500,"Declared":{{declared.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}"""));
+            await Assert.That((int)created.StatusCode).IsEqualTo(201)
+                .Because($"{declared}: {await created.Content.ReadAsStringAsync()}");
+
+            using var row = JsonDocument.Parse(await oracle.Client.GetStringAsync($"/api/shipments/{reference}"));
+            await Assert.That(row.RootElement.GetProperty("declared").GetDecimal()).IsEqualTo(declared);
+        }
+
+        foreach (var (reference, declared) in new[] { ("REF-HI", "1000001"), ("REF-LO", "-1") }) {
+            using var refused = await oracle.Client.PostAsync(
+                "/api/shipments", Json($$"""{"Reference":"{{reference}}","WeightKg":500,"Declared":{{declared}}}"""));
+            var body = await refused.Content.ReadAsStringAsync();
+            await Assert.That((int)refused.StatusCode).IsEqualTo(400).Because($"{declared}: {body}");
+            using var problem = JsonDocument.Parse(body);
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Range").Because(declared);
+        }
+
+        using var all = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/shipments"));
+        var references = all.RootElement.EnumerateArray().Select(s => s.GetProperty("reference").GetString()).ToArray();
+        await Assert.That(references.Count(r => r is "REF-HI" or "REF-LO")).IsEqualTo(0);
+
+        // Whole-number bounds above 2^53 are not doubles: 9007199254740993 is 9007199254740992.0 as a REAL. The CHECK
+        // must round the bound and the stored value the same way, or the value at the bound is refused.
+        foreach (var (code, amount) in new[] { ("VLT-1", 9007199254740993m), ("VLT-2", 9007199254740995m), ("VLT-3", 9007199254741000m) }) {
+            using var created = await oracle.Client.PostAsync(
+                "/api/vaults", Json($$"""{"Code":"{{code}}","Amount":{{amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}"""));
+            await Assert.That((int)created.StatusCode).IsEqualTo(201)
+                .Because($"{amount}: {await created.Content.ReadAsStringAsync()}");
+            using var row = JsonDocument.Parse(await oracle.Client.GetStringAsync($"/api/vaults/{code}"));
+            await Assert.That(row.RootElement.GetProperty("amount").GetDecimal()).IsEqualTo(amount);
+        }
+
+        foreach (var (code, amount) in new[] { ("VLT-LO", "9007199254740992"), ("VLT-HI", "9007199254741001") }) {
+            using var refusedBound = await oracle.Client.PostAsync(
+                "/api/vaults", Json($$"""{"Code":"{{code}}","Amount":{{amount}}}"""));
+            await Assert.That((int)refusedBound.StatusCode).IsEqualTo(400).Because($"{amount}: {await refusedBound.Content.ReadAsStringAsync()}");
         }
     }
 
@@ -1079,6 +1415,95 @@ public class PackOracleTests {
 
         using var snapshot = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/tallies/t1"));
         await Assert.That(snapshot.RootElement.GetProperty("n").GetInt64()).IsEqualTo(1);
+    }
+
+    /// <summary>#626: a stage-guarded action is a read-modify-write of one aggregate, and eight requests fired
+    /// together all read the pre-transition stage. The host's save is the arbiter: exactly one <c>Ship</c> commits,
+    /// every other request is a 409 — the host's <c>Conflict</c>, or the module's <c>Stage</c> once the winner's row is
+    /// what the loser read — never a second transition and never a 500. The seeded order is row 1 (#595); the entity
+    /// has no natural key, so the route key is the shadow id.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Ship_ConcurrentStageGuardedAction_OneTransitionRestConflict_Issue626(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        // The order under race is the host's seeded row 1, and seeding is opt-in (#595).
+        await using var oracle = await PackOracle.BootAsync(
+            PackOracleDomains.Inventory626, options: new PackOracleBootOptions { SeedDemoData = true });
+
+        static StringContent Empty() => new("{}", Encoding.UTF8, "application/json");
+
+        using (var submitted = await oracle.Client.PostAsync("/api/orders/1/submit", Empty()))
+            await Assert.That((int)submitted.StatusCode).IsEqualTo(200);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 8)
+            .Select(_ => oracle.Client.PostAsync("/api/orders/1/ship", Empty())));
+        try {
+            var statuses = responses.Select(r => (int)r.StatusCode).ToArray();
+            await Assert.That(statuses.Count(s => s == 200)).IsEqualTo(1)
+                .Because("exactly one save may win the transition; got " + string.Join(",", statuses));
+
+            foreach (var loser in responses.Where(r => (int)r.StatusCode != 200)) {
+                await Assert.That((int)loser.StatusCode).IsEqualTo(409)
+                    .Because("a save that lost the race is a conflict, never a second transition and never a server error");
+                await Assert.That(loser.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+                using var problem = JsonDocument.Parse(await loser.Content.ReadAsStringAsync());
+                await Assert.That(problem.RootElement.GetProperty("status").GetInt32()).IsEqualTo(409);
+                // Either the module's Stage guard read the committed Shipped row, or the host's token lost the race:
+                // both are 409, and #653 pins the token's own title because there is no guard in the way.
+                await Assert.That(problem.RootElement.GetProperty("title").GetString() is "Stage" or "Conflict").IsTrue()
+                    .Because("a lost save is the host's Conflict, and a guard that read the committed row is Stage");
+            }
+        }
+        finally {
+            foreach (var response in responses)
+                response.Dispose();
+        }
+
+        using var after = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/orders/1"));
+        await Assert.That(after.RootElement.GetProperty("currentStage").GetString()).IsEqualTo("Shipped");
+    }
+
+    /// <summary>#653: 30 concurrent <c>assign N to N + 1</c> calls are 30 read-modify-writes of one row, so the
+    /// host's save is the arbiter. Every success applied exactly one increment to the value it read, so the number
+    /// of 200s equals the stored <c>N</c>; every other request is the 409 Conflict, and none is a 500.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Bump_ConcurrentIncrements_SuccessesEqualFinalValue_Issue653(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Tally653);
+
+        using (var created = await oracle.Client.PostAsync(
+            "/api/tallies", new StringContent("""{"Name":"t1"}""", Encoding.UTF8, "application/json")))
+            await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 30)
+            .Select(_ => oracle.Client.PostAsync(
+                "/api/tallies/t1/bump", new StringContent("{}", Encoding.UTF8, "application/json"))));
+        try {
+            var statuses = responses.Select(r => (int)r.StatusCode).ToArray();
+            var successes = statuses.Count(s => s == 200);
+            await Assert.That(successes).IsGreaterThanOrEqualTo(1);
+            await Assert.That(statuses.Count(s => s is not (200 or 409))).IsEqualTo(0)
+                .Because("a lost update is a conflict, never a server error; got " + string.Join(",", statuses));
+
+            foreach (var loser in responses.Where(r => (int)r.StatusCode == 409)) {
+                await Assert.That(loser.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+                using var problem = JsonDocument.Parse(await loser.Content.ReadAsStringAsync());
+                await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Conflict");
+                await Assert.That(problem.RootElement.GetProperty("detail").GetString())
+                    .Contains("'Tally'").And.Contains("'t1'");
+            }
+
+            using var snapshot = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/tallies/t1"));
+            await Assert.That(snapshot.RootElement.GetProperty("n").GetInt64()).IsEqualTo(successes)
+                .Because("each 200 applied exactly one increment to the value it read, and no increment is lost");
+        }
+        finally {
+            foreach (var response in responses)
+                response.Dispose();
+        }
     }
 
     /// <summary>#675 (Q13 ruling, 2026-11-12): a designated <c>initial(Open)</c> is honoured on the HTTP
@@ -1274,7 +1699,8 @@ public class PackOracleTests {
         await Assert.That((int)list.StatusCode).IsEqualTo(200);
         using var customer = await oracle.Client.PostAsync(
             "/api/customers", new StringContent("""{"Name":"Ada"}""", Encoding.UTF8, "application/json"));
-        await Assert.That((int)customer.StatusCode).IsEqualTo(200);
+        // A shadow-key create answers 201 with its id's route (#589); this test's subject is the order's 405.
+        await Assert.That((int)customer.StatusCode).IsEqualTo(201);
         using var order = await oracle.Client.PostAsync(
             "/api/orders", new StringContent("""{"Number":"A1"}""", Encoding.UTF8, "application/json"));
         await Assert.That((int)order.StatusCode).IsEqualTo(405).Because(await order.Content.ReadAsStringAsync());
@@ -1302,6 +1728,185 @@ public class PackOracleTests {
         using var created = await oracle.Client.PostAsync(
             "/api/things", new StringContent(match.Groups[1].Value, Encoding.UTF8, "application/json"));
         await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(match.Groups[1].Value + " -> " + await created.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>#937: a DateTime stored with its UTC marker reads back with it. The POST echo and a later GET of the
+    /// same row carry the same instant in the same text, for the required and the optional column.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task StoredDateTime_GetCarriesTheUtcMarkerThePostEchoed(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.UtcRoundtrip937);
+
+        const string dt = "2026-01-01T10:00:00Z";
+        const string maybe = "2026-02-02T05:30:00Z";
+        using var created = await oracle.Client.PostAsync(
+            "/api/things", new StringContent(
+                $$"""{"Name":"t1","Dt":"{{dt}}"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(await created.Content.ReadAsStringAsync());
+        using var createdBody = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        await Assert.That(createdBody.RootElement.GetProperty("dt").GetString()).IsEqualTo(dt).Because("the POST echo");
+
+        using var set = await oracle.Client.PostAsync(
+            "/api/things/t1/set", new StringContent(
+                $$"""{"At":"{{maybe}}"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)set.StatusCode).IsEqualTo(200).Because(await set.Content.ReadAsStringAsync());
+
+        using var read = await oracle.Client.GetAsync("/api/things/t1");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        var bodyText = body.RootElement.GetRawText();
+        await Assert.That(body.RootElement.GetProperty("dt").GetString()).IsEqualTo(dt)
+            .Because("the stored instant keeps its Z: " + bodyText);
+        await Assert.That(body.RootElement.GetProperty("maybe").GetString()).IsEqualTo(maybe)
+            .Because("the optional column is DateTime? and keeps its Z too: " + bodyText);
+
+        // An optional DateTime the client never wrote is still null: the null arm of the DateTime? converter is not a value.
+        using var unset = await oracle.Client.PostAsync(
+            "/api/things", new StringContent(
+                """{"Name":"t2","Dt":"2026-01-01T10:00:00Z"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)unset.StatusCode).IsEqualTo(201).Because(await unset.Content.ReadAsStringAsync());
+        using var unsetRead = await oracle.Client.GetAsync("/api/things/t2");
+        await Assert.That(unsetRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var unsetBody = JsonDocument.Parse(await unsetRead.Content.ReadAsStringAsync());
+        await Assert.That(unsetBody.RootElement.GetProperty("maybe").ValueKind).IsEqualTo(JsonValueKind.Null)
+            .Because(unsetBody.RootElement.GetRawText());
+    }
+
+    /// <summary>#937: a client may send an offset. What is stored is the instant, so the GET answers that instant in
+    /// UTC with its marker — the same moment, in the one clock the DSL's <c>Now</c> names.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task StoredDateTime_WithAnOffset_ReadsBackAsTheSameInstantInUtc(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.UtcRoundtrip937);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/things", new StringContent(
+                """{"Name":"t1","Dt":"2026-01-01T10:00:00+02:00"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(await created.Content.ReadAsStringAsync());
+
+        using var read = await oracle.Client.GetAsync("/api/things/t1");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        await Assert.That(body.RootElement.GetProperty("dt").GetString()).IsEqualTo("2026-01-01T08:00:00Z")
+            .Because("10:00+02:00 is the same instant as 08:00Z: " + body.RootElement.GetRawText());
+    }
+
+    /// <summary>#654: a DateTime plus a Duration value in an action body compiles on the generated HTTP host and the
+    /// stored end time is the sum (the duration library's <c>DateTime.Add(TimeSpan)</c>, not <c>AddDays</c>).</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task DateTimePlusDurationValue_ActionRunsOnTheHttpHost(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Slots654);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/slots",
+            new StringContent("""{"Name":"a","Start":"2031-01-01T10:00:00","Len":"01:30:00"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201).Because(await created.Content.ReadAsStringAsync());
+
+        using var extended = await oracle.Client.PostAsync(
+            "/api/slots/a/extend", new StringContent("{}", Encoding.UTF8, "application/json"));
+        await Assert.That((int)extended.StatusCode).IsEqualTo(200).Because(await extended.Content.ReadAsStringAsync());
+
+        using var read = await oracle.Client.GetAsync("/api/slots/a");
+        await Assert.That((int)read.StatusCode).IsEqualTo(200);
+        using var json = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        var stop = json.RootElement.GetProperty("stop").GetString();
+        // The GET carries its UTC marker (#937), so the text is read as the UTC instant, not converted to local time.
+        await Assert.That(DateTime.Parse(stop!, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind))
+            .IsEqualTo(new DateTime(2031, 1, 1, 11, 30, 0, DateTimeKind.Utc));
+    }
+
+    /// <summary>#940: an action's entity argument is the target's route-key CLR type, so a Number (<c>long</c>) key is a
+    /// JSON number the lookup compares with the column. The action resolves the row it names — the assign reads the
+    /// target through the argument — and an unknown, absent or null key is the host's 404, never a 500.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ActionEntityArgument_WithANumericNaturalKey_ResolvesTheTargetItNames(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.ActionKeyArgument940);
+
+        using var course = await oracle.Client.PostAsync(
+            "/api/courses", new StringContent("""{"Seq":42,"Name":"Math"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)course.StatusCode).IsEqualTo(201).Because(await course.Content.ReadAsStringAsync());
+        using var student = await oracle.Client.PostAsync(
+            "/api/students", new StringContent("""{"Email":"a@b"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)student.StatusCode).IsEqualTo(201).Because(await student.Content.ReadAsStringAsync());
+
+        using var joined = await oracle.Client.PostAsync(
+            "/api/students/a@b/join", new StringContent("""{"CourseId":42}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)joined.StatusCode).IsEqualTo(200).Because(await joined.Content.ReadAsStringAsync());
+
+        using var read = await oracle.Client.GetAsync("/api/students/a@b");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        await Assert.That(body.RootElement.GetProperty("joined").GetString()).IsEqualTo("Math")
+            .Because("the action read the course the argument named: " + body.RootElement.GetRawText());
+
+        foreach (var (label, bodyJson) in new[] {
+            ("unknown key", """{"CourseId":43}"""),
+            ("absent key", "{}"),
+            ("null key", """{"CourseId":null}"""),
+        }) {
+            using var missing = await oracle.Client.PostAsync(
+                "/api/students/a@b/join", new StringContent(bodyJson, Encoding.UTF8, "application/json"));
+            await Assert.That((int)missing.StatusCode).IsEqualTo(404).Because(label + ": " + await missing.Content.ReadAsStringAsync());
+        }
+
+        // A JSON value that is not a number is the binder's 400: the member is a number, not a string (#940's cause).
+        using var wrongKind = await oracle.Client.PostAsync(
+            "/api/students/a@b/join", new StringContent("""{"CourseId":"abc"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)wrongKind.StatusCode).IsEqualTo(400).Because(await wrongKind.Content.ReadAsStringAsync());
+
+        // A Date (<c>DateOnly</c>) key takes the reader's own JSON form, and the host compiles with the member a
+        // DateOnly?: the route key the create answered and the action argument are one spelling.
+        using var day = await oracle.Client.PostAsync(
+            "/api/days", new StringContent("""{"On":"2026-01-05","Label":"Mon"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)day.StatusCode).IsEqualTo(201).Because(await day.Content.ReadAsStringAsync());
+        using var attended = await oracle.Client.PostAsync(
+            "/api/students/a@b/attend", new StringContent("""{"DayId":"2026-01-05"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)attended.StatusCode).IsEqualTo(200).Because(await attended.Content.ReadAsStringAsync());
+        using var absentDay = await oracle.Client.PostAsync(
+            "/api/students/a@b/attend", new StringContent("{}", Encoding.UTF8, "application/json"));
+        await Assert.That((int)absentDay.StatusCode).IsEqualTo(404).Because(await absentDay.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>#940: an entity argument whose target has a shadow (int) key used to reach <c>FindAsync</c> with a string
+    /// and answer 500 for every id. The member is now the key's <c>int?</c>, so an unknown, absent or null key is the
+    /// action's 404. The 200 is not reachable over HTTP: no client can learn a shadow id (P-12, #589).</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ActionEntityArgument_WithAShadowKey_Answers404NotA500(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.ActionShadowKeyArgument940);
+
+        using var member = await oracle.Client.PostAsync(
+            "/api/members", new StringContent("""{"Label":"m"}""", Encoding.UTF8, "application/json"));
+        // A shadow-key create answers 201 with its id's Location (#589).
+        await Assert.That((int)member.StatusCode).IsEqualTo(201).Because(await member.Content.ReadAsStringAsync());
+        using var student = await oracle.Client.PostAsync(
+            "/api/students", new StringContent("""{"Email":"a@b"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)student.StatusCode).IsEqualTo(201).Because(await student.Content.ReadAsStringAsync());
+
+        // A string id is what a client sends to a member typed `string`, and it reached FindAsync as one (500).
+        foreach (var (label, bodyJson) in new[] {
+            ("string id", """{"MemberId":"999999"}"""),
+            ("number id", """{"MemberId":999999}"""),
+            ("absent id", "{}"),
+            ("null id", """{"MemberId":null}"""),
+        }) {
+            using var response = await oracle.Client.PostAsync(
+                "/api/students/a@b/pass", new StringContent(bodyJson, Encoding.UTF8, "application/json"));
+            await Assert.That((int)response.StatusCode).IsEqualTo(404).Because(label + ": " + await response.Content.ReadAsStringAsync());
+        }
     }
 
     /// <summary>E-10a (#924): an enum and an entity named like C# keywords boot, answer a POST with 201 and list the row.</summary>
@@ -1698,9 +2303,8 @@ public class PackOracleTests {
 
     /// <summary>P-12a (#687 row P-12): a created row's <c>Location</c> carries its natural key as one escaped path
     /// segment, so a key with a space, a non-ASCII letter, <c>?</c>, <c>#</c>, <c>%</c> or a newline answers 201 and its
-    /// Location reads the same row back. A key with a <c>/</c> gets the escaped Location too; ASP.NET does not turn
-    /// <c>%2F</c> back into <c>/</c> in a route value, so that route cannot be read back (recorded in the PR, no fix
-    /// here: the escaped text is still the right Location).</summary>
+    /// Location reads the same row back. A key containing <c>/</c> is refused at create instead (#592): ASP.NET does
+    /// not turn <c>%2F</c> back into <c>/</c> in a route value, so no escaped Location could read it back.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
@@ -1708,13 +2312,11 @@ public class PackOracleTests {
         _ = cancellationToken;
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
 
-        foreach (var key in new[] { "a b", "a b@d", "ä", "a?b#c", "a%2Fb", "a\nb", "a/b", "a b/c@d" }) {
+        foreach (var key in new[] { "a b", "a b@d", "ä", "a?b#c", "a%2Fb", "a\nb" }) {
             using var created = await PostJsonAsync(oracle, "/api/customers", "Email", key);
             await Assert.That((int)created.StatusCode).IsEqualTo(201).Because($"POST {JsonSerializer.Serialize(key)}");
             var location = created.Headers.Location?.OriginalString;
             await Assert.That(location).IsEqualTo("/api/customers/" + Uri.EscapeDataString(key)).Because(JsonSerializer.Serialize(key));
-            if (key.Contains('/'))
-                continue;
             using var read = await oracle.Client.GetAsync(new Uri(location!, UriKind.Relative));
             await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK).Because($"GET {location}");
             using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
@@ -1722,8 +2324,36 @@ public class PackOracleTests {
         }
     }
 
+    /// <summary>#592: a natural key containing <c>/</c> cannot be one route segment (ASP.NET leaves <c>%2F</c> encoded in
+    /// the route value), so the create answers 400 with a message BEFORE the row is saved, never a 201 whose Location
+    /// reaches nothing. Every other key still gets its escaped Location and reads back.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task NaturalKeyContainingSlash_Is400BeforeTheRowIsSaved(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
+
+        foreach (var key in new[] { "a/b", "a b/c@d" }) {
+            using var created = await PostJsonAsync(oracle, "/api/customers", "Email", key);
+            await Assert.That((int)created.StatusCode).IsEqualTo(400).Because(JsonSerializer.Serialize(key));
+            await Assert.That(created.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+            using var problem = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Bad Request");
+            await Assert.That(problem.RootElement.GetProperty("detail").GetString())
+                .Contains("the natural key 'Email' contains '/', which no route can read back");
+        }
+
+        using var list = await oracle.Client.GetAsync("/api/customers");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var listed = await list.Content.ReadAsStringAsync();
+        await Assert.That(listed).DoesNotContain("\"a/b\"");
+        await Assert.That(listed).DoesNotContain("a b/c@d");
+    }
+
     /// <summary>P-12a regression guard: a key that needs no escaping gets the same <c>Location</c> as before, a Number
-    /// key included, and a shadow-key entity's POST is still a 200 with no <c>Location</c>.</summary>
+    /// key included. A shadow-key entity's POST used to answer 200 with no <c>Location</c>, which left its per-id routes
+    /// unreachable (#589); it is now a 201 whose <c>Location</c> is the shadow id's route, and that route reads back.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
@@ -1742,8 +2372,10 @@ public class PackOracleTests {
         await Assert.That(readNumber.StatusCode).IsEqualTo(HttpStatusCode.OK);
 
         using var shadow = await PostJsonAsync(oracle, "/api/notes", "Body", "hello");
-        await Assert.That((int)shadow.StatusCode).IsEqualTo(200);
-        await Assert.That(shadow.Headers.Location).IsNull();
+        await Assert.That((int)shadow.StatusCode).IsEqualTo(201);
+        await Assert.That(shadow.Headers.Location?.OriginalString).Matches("^/api/notes/[0-9]+$");
+        using var readShadow = await oracle.Client.GetAsync(shadow.Headers.Location!.OriginalString);
+        await Assert.That(readShadow.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
     /// <summary>P-12a: a Date key's Location is culture-invariant ISO text that the route binds back. Before, it was the
@@ -1765,9 +2397,8 @@ public class PackOracleTests {
     }
 
     /// <summary>P-12a fix round: an optional unique Date key is a <c>DateOnly?</c>, and the generated host compiles with it
-    /// (it did not, CS1501, with the unguarded ISO format) and serves. The create path is not exercised: on this host every
-    /// create of such an entity answers 409 Unique (and an optional unique Text key kills the host at boot, a
-    /// <c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.</summary>
+    /// (it did not, CS1501, with the unguarded ISO format) and serves. #611/#634: an absent optional unique value is not a
+    /// key, so a create that omits it succeeds; before the fix every such create answered 409 Unique.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
@@ -1777,6 +2408,12 @@ public class PackOracleTests {
 
         using var list = await oracle.Client.GetAsync("/api/slots");
         await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        using var first = await PostJsonAsync(oracle, "/api/slots", "Name", "one");
+        await Assert.That((int)first.StatusCode).IsEqualTo(201);
+        using var second = await PostJsonAsync(oracle, "/api/slots", "Name", "two");
+        await Assert.That((int)second.StatusCode).IsEqualTo(201)
+            .Because("a second instance may omit an optional unique value");
     }
 
     /// <summary>P-12a: the GET body of a keyed entity carries every declared scalar and the stage, under the member
@@ -1895,6 +2532,8 @@ public class PackOracleTests {
                         Regex.IsMatch(input, $@"^column \w+\.{Regex.Escape(column)} ", RegexOptions.Multiline)
                         || (column == "CurrentStage" && Regex.IsMatch(input, @"^stage \w+\.CurrentStage ", RegexOptions.Multiline))
                         || ((column == "Id" || column == "PolyId") && flat.Contains($"Property<int>(\"{column}\")", StringComparison.Ordinal))
+                        // The optimistic-concurrency token (#626, #653): a long shadow column, named by the printed model.
+                        || flat.Contains($"Property<long>(\"{column}\")", StringComparison.Ordinal)
                         || (foreignKeys.Contains(column) && navigationNames.Contains(column.EndsWith("Id", StringComparison.Ordinal) ? column[..^2] : column));
                     if (!accounted)
                         unaccounted.Add($"{table}.{column}");

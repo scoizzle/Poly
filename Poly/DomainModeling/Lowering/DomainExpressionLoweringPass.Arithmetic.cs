@@ -1,12 +1,14 @@
 using Add = Poly.DomainModeling.Ontology.Add;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Negate = Poly.DomainModeling.Ontology.Negate;
 using SN = Poly.Ast.Nodes;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Lowering;
 
-// Arithmetic expressions: Add, Subtract, Multiply, Divide. Library handlers get first refusal.
+// Arithmetic expressions: Add, Subtract, Multiply, Divide, Modulo, Negate. Library handlers get first refusal.
 
 public sealed partial class DomainExpressionLoweringPass {
     protected override LoweredExpression Add(Add a) {
@@ -35,5 +37,16 @@ public sealed partial class DomainExpressionLoweringPass {
         var left = Route(d.Left);
         var right = Route(d.Right);
         return LoweredExpression.Combine([left, right], new SN.Divide(left.Value, right.Value));
+    }
+
+    protected override LoweredExpression Negate(Negate n) {
+        var operand = Route(n.Operand);
+        return LoweredExpression.Combine([operand], new SN.UnaryMinus(operand.Value));
+    }
+
+    protected override LoweredExpression Modulo(Modulo m) {
+        var left = Route(m.Left);
+        var right = Route(m.Right);
+        return LoweredExpression.Combine([left, right], new SN.Modulo(left.Value, right.Value));
     }
 }

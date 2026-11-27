@@ -1348,4 +1348,35 @@ public class CSharpScriptTests {
         await Assert.That(underIndented.Success).IsFalse();
         await Assert.That(underIndented.Diagnostics.Any(d => d.Contains("does not start with the same whitespace"))).IsTrue();
     }
+
+    [Test]
+    public async Task Run_CaughtCalleeThrowInLoopThenCall_DoesNotLeakValueStack() {
+        var result = CSharpScript.Run(
+            "class C { C() { } long T(long x) { throw new System.InvalidOperationException(\"x\"); } " +
+            "long U(long x, long y) { return x + y; } " +
+            "long M() { long n = 0; for (long i = 0; i < 1000; i = i + 1) { " +
+            "try { this.T(i); } catch (System.Exception e) { n = this.U(n, 1); } } return n; } } new C().M();");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("1000");
+    }
+
+    [Test]
+    public async Task Run_CalleeThrowThroughFinallyToOuterCatch_KeepsCalling() {
+        var result = CSharpScript.Run(
+            "class C { C() { } long T(long x) { throw new System.InvalidOperationException(\"x\"); } " +
+            "long U(long x, long y) { return x + y; } " +
+            "long M() { long n = 0; for (long i = 0; i < 1000; i = i + 1) { " +
+            "try { try { this.T(i); } finally { n = this.U(n, 0); } } " +
+            "catch (System.Exception e) { n = this.U(n, 1); } } return n; } } new C().M();");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("1000");
+    }
+
+    [Test]
+    public async Task Run_ReturnInsideTryWithFinally_KeepsResult() {
+        var result = CSharpScript.Run(
+            "class C { C() { } long M() { try { return 7; } finally { } } } new C().M();");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("7");
+    }
 }

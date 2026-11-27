@@ -32,9 +32,14 @@ internal class Quote : Poly.Runtime.IActionScoped
     public Opportunity? Opportunity { get; private set; }
     public IReadOnlyList<QuoteLine> Lines
     {
-        get => this._lines;
+        get => new List<QuoteLine>(this._lines);
     }
     public QuoteStage CurrentStage { get; private set; }
+    internal void AttachOpportunity(Opportunity child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Opportunity = child;
+    }
     internal DomainResult<QuoteLine> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -61,18 +66,20 @@ internal class Quote : Poly.Runtime.IActionScoped
     }
     private DomainResult<QuoteLine> __BodyOfCreateLines(long? qty, decimal? unitPrice, Product? product)
     {
-        var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
-        if (!quoteLineResult.IsSuccess)
+        var __quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
+        if (!__quoteLineResult.IsSuccess)
         {
-            return DomainResult<QuoteLine>.Failure(quoteLineResult.Error!);
+            return DomainResult<QuoteLine>.Failure(__quoteLineResult.Error!);
         }
-        var quoteLine = quoteLineResult.Value;
-        return DomainResult<QuoteLine>.Success(quoteLine);
+        var __quoteLine = __quoteLineResult.Value;
+        return DomainResult<QuoteLine>.Success(__quoteLine);
     }
-    internal void AttachLines(QuoteLine child)
+    internal DomainResult AttachLines(QuoteLine child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
+        child.AttachQuote(this);
+        return DomainResult.Success();
     }
     internal DomainResult<QuoteLine> AddLine(Product sku, long qty)
     {
@@ -104,23 +111,23 @@ internal class Quote : Poly.Runtime.IActionScoped
         {
             return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Stage("'AddLine' requires stage 'Draft' on entity 'Quote'.", "Quote.AddLine", "Draft"));
         }
-        var assignValue0 = this.Amount + qty * sku.ListPrice;
-        if (assignValue0 < 0m)
+        var __assignValue0 = this.Amount + qty * sku.ListPrice;
+        if (__assignValue0 < 0m)
         {
             return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Quote.Amount"));
         }
-        if (assignValue0 > 100000000m)
+        if (__assignValue0 > 100000000m)
         {
             return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Quote.Amount"));
         }
-        this.Amount = assignValue0;
-        var create1 = this.CreateLines(qty, sku.ListPrice, sku);
-        if (!create1.IsSuccess)
+        this.Amount = __assignValue0;
+        var __create1 = this.CreateLines(qty, sku.ListPrice, sku);
+        if (!__create1.IsSuccess)
         {
-            return DomainResult<QuoteLine>.Failure(create1.Error!.At("Quote.AddLine"));
+            return DomainResult<QuoteLine>.Failure(__create1.Error!.At("Quote.AddLine"));
         }
-        var created2 = create1.Value;
-        return DomainResult<QuoteLine>.Success(created2);
+        var __created2 = __create1.Value;
+        return DomainResult<QuoteLine>.Success(__created2);
     }
     internal DomainResult Present()
     {
@@ -269,13 +276,38 @@ internal class Quote : Poly.Runtime.IActionScoped
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Required("'opportunity' is required.", "Quote.opportunity"));
         }
         var __opportunity = opportunity;
-        var created = new Quote(__title, __amount, __opportunity, lines);
-        Poly.Runtime.ActionScope.Create(created, "Quote");
+        if (lines != null)
+        {
+            foreach (var __linesElement in lines)
+            {
+                if (__linesElement == null)
+                {
+                    return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Required("'lines' contains a null element.", "Quote.lines"));
+                }
+            }
+        }
+        var __created = new Quote(__title, __amount, __opportunity, lines);
+        Poly.Runtime.ActionScope.Create(__created, "Quote");
         if (opportunity != null)
         {
-            opportunity.AttachQuotes(created);
+            var __attach = opportunity.AttachQuotes(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Quote>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Quote>.Success(created);
+        if (lines != null)
+        {
+            foreach (var __child in lines)
+            {
+                if (__child.Quote != null && __child.Quote != __created)
+                {
+                    return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'lines': the child's 'quote' is already set to another owner.", "Quote.lines"));
+                }
+                __child.AttachQuote(__created);
+            }
+        }
+        return DomainResult<Quote>.Success(__created);
     }
     public object __Snapshot()
     {

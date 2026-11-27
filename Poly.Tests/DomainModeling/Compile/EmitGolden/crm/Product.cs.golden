@@ -78,12 +78,12 @@ internal class Product : Poly.Runtime.IActionScoped
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Sku' value is already used on another 'Product'.", "Product.Sku"));
         }
-        var created = new Product(__sku, __name, __listPrice);
-        Poly.Runtime.ActionScope.Create(created, "Product");
+        var __created = new Product(__sku, __name, __listPrice);
+        Poly.Runtime.ActionScope.Create(__created, "Product");
         db.Record("Product", "Sku", __sku);
-        return DomainResult<Product>.Success(created);
+        return DomainResult<Product>.Success(__created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

@@ -2,6 +2,7 @@
 
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
@@ -36,67 +37,88 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     {
         modelBuilder.Entity<Book>(b => {
     b.ToTable("Books", t => {
-    t.HasCheckConstraint("CK_pages", "pages >= 1 AND pages <= 10000");
+    t.HasCheckConstraint("CK_pages", "\"pages\" >= 1 AND \"pages\" <= 10000");
+    t.HasCheckConstraint("CK_isbn_length", "length(CAST(isbn AS BLOB)) >= 10 AND length(isbn) <= 17");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Author).HasColumnName("author").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.ISBN).HasColumnName("isbn").HasColumnType("TEXT").IsRequired().HasMaxLength(17);
+    b.Property(x => x.ISBN).HasColumnName("isbn").IsRequired().HasMaxLength(17);
     b.Property(x => x.Pages).HasColumnName("pages").HasColumnType("INTEGER");
     b.Property(x => x.Genre).HasColumnName("genre").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
     b.HasIndex(x => x.ISBN).IsUnique();
 });
         modelBuilder.Entity<Patron>(b => {
     b.ToTable("Patrons", t => {
-    t.HasCheckConstraint("CK_maxItems", "maxItems >= 0 AND maxItems <= 20");
+    t.HasCheckConstraint("CK_maxItems", "\"maxItems\" >= 0 AND \"maxItems\" <= 20");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
+    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.MemberSince).HasColumnName("memberSince").HasColumnType("TEXT");
-    b.Property(x => x.Status).HasColumnName("status").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
+    b.Property(x => x.Status).HasColumnName("status").HasColumnType("INTEGER").HasConversion<int>().IsRequired().HasDefaultValue(PatronStatus.Active);
     b.Property(x => x.MaxItems).HasColumnName("maxItems").HasColumnType("INTEGER");
-    b.Property(x => x.CurrentBorrowCount).HasColumnName("currentBorrowCount").HasColumnType("INTEGER");
-    b.Property(x => x.OutstandingFines).HasColumnName("outstandingFines").HasColumnType("INTEGER");
+    b.Property(x => x.CurrentBorrowCount).HasColumnName("currentBorrowCount").HasColumnType("INTEGER").HasDefaultValue(0L);
+    b.Property(x => x.OutstandingFines).HasColumnName("outstandingFines").HasColumnType("INTEGER").HasDefaultValue(0L);
     b.HasIndex(x => x.Email).IsUnique();
-    b.Metadata.FindNavigation(nameof(Patron.Loans))!.SetPropertyAccessMode(PropertyAccessMode.Field);
-    b.Metadata.FindNavigation(nameof(Patron.Fines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Loans")!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Fines")!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
         modelBuilder.Entity<Loan>(b => {
     b.ToTable("Loans");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Status).HasColumnName("status").HasColumnType("TEXT");
-    b.Property(x => x.CheckedOutAt).HasColumnName("checkedOutAt").HasColumnType("TEXT");
-    b.Property(x => x.DueDate).HasColumnName("dueDate").HasColumnType("TEXT");
-    b.Property(x => x.ReturnedAt).HasColumnName("returnedAt").HasColumnType("TEXT");
+    b.Property(x => x.CheckedOutAt).HasColumnName("checkedOutAt").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+    b.Property(x => x.DueDate).HasColumnName("dueDate").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+    b.Property(x => x.ReturnedAt).HasColumnName("returnedAt").HasColumnType("TEXT").HasConversion(v => (v == null ? (DateTime?)null : (v.Value.Kind == DateTimeKind.Local ? v.Value.ToUniversalTime() : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc))), v => (v == null ? (DateTime?)null : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc)));
     b.Property(x => x.TimesRenewed).HasColumnName("timesRenewed").HasColumnType("INTEGER");
 });
         modelBuilder.Entity<Fine>(b => {
     b.ToTable("Fines");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("INTEGER");
     b.Property(x => x.Reason).HasColumnName("reason").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.DateIssued).HasColumnName("dateIssued").HasColumnType("TEXT");
+    b.Property(x => x.DateIssued).HasColumnName("dateIssued").HasColumnType("TEXT").HasConversion(v => (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)), v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
     b.Property(x => x.Paid).HasColumnName("paid").HasColumnType("INTEGER");
 });
         modelBuilder.Entity<PremiumPatron>(b => {
     b.ToTable("PremiumPatrons");
     b.Property<int>("Id");
     b.HasKey("Id");
+    b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
+    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.RewardPoints).HasColumnName("rewardPoints").HasColumnType("INTEGER");
-    b.Property(x => x.Tier).HasColumnName("tier").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
+    b.Property(x => x.Tier).HasColumnName("tier").HasColumnType("INTEGER").HasConversion<int>().IsRequired().HasDefaultValue(PremiumTier.Silver);
     b.Property(x => x.PriorityAccess).HasColumnName("priorityAccess").HasColumnType("INTEGER");
     b.HasIndex(x => x.Email).IsUnique();
 });
         modelBuilder.Entity<Loan>().HasOne(e => e.Book).WithMany().IsRequired().OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Loan>().HasOne(e => e.Borrower).WithMany(i => i.Loans).IsRequired().OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Fine>().HasOne(e => e.Patron).WithMany(i => i.Fines).IsRequired().OnDelete(DeleteBehavior.Restrict);
+    }
+    public void BumpVersions(object entity)
+    {
+        this.ChangeTracker.DetectChanges();
+        foreach (var entry in this.ChangeTracker.Entries())
+        {
+            if (entry.Metadata.FindProperty("Version") == null)
+            {
+                continue;
+            }
+            if (entry.State == EntityState.Modified || entry.Entity == entity && entry.State == EntityState.Unchanged)
+            {
+                entry.Property("Version").CurrentValue = (long)entry.Property("Version").OriginalValue! + 1L;
+            }
+        }
     }
     public bool Exists(string entity, string property, string value)
     {

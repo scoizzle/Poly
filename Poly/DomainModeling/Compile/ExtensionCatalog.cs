@@ -46,6 +46,7 @@ public sealed class ExtensionCatalog {
     public DomainSession Authoring => DomainSession.ForExtensions(ProductAuthoring, this);
 
     private readonly Dictionary<string, IDomainLibrary> _libraries;
+    private readonly IReadOnlyDictionary<string, string> _unavailable;
     private readonly ConcurrentDictionary<string, Lazy<LibraryProbe>> _probes = new(StringComparer.Ordinal);
 
     public static ExtensionCatalog Core { get; } = new ExtensionCatalog()
@@ -56,10 +57,12 @@ public sealed class ExtensionCatalog {
 
     public ExtensionCatalog() {
         _libraries = new Dictionary<string, IDomainLibrary>(StringComparer.Ordinal);
+        _unavailable = new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
-    private ExtensionCatalog(Dictionary<string, IDomainLibrary> libraries) {
+    private ExtensionCatalog(Dictionary<string, IDomainLibrary> libraries, IReadOnlyDictionary<string, string> unavailable) {
         _libraries = libraries;
+        _unavailable = unavailable;
     }
 
     public ExtensionCatalog With(IDomainLibrary library) {
@@ -71,14 +74,48 @@ public sealed class ExtensionCatalog {
         var next = new Dictionary<string, IDomainLibrary>(_libraries, StringComparer.Ordinal) {
             [library.Id] = library
         };
-        return new ExtensionCatalog(next);
+        return new ExtensionCatalog(next, _unavailable);
     }
+
+    /// <summary>
+    /// Records an id this catalog deliberately does not carry, with the reason a
+    /// <c>uses</c> line naming it is refused. The id stays unselectable
+    /// (<see cref="Contains"/> is false); only the refusal's wording changes, from
+    /// "unknown" to that reason. A selectable id, or a second reason for the same id,
+    /// is a programming error.
+    /// </summary>
+    public ExtensionCatalog WithUnavailable(string id, string reason) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (_libraries.ContainsKey(id))
+            throw new InvalidOperationException($"Extension '{id}' is already in the catalog.");
+        if (_unavailable.ContainsKey(id))
+            throw new InvalidOperationException($"Extension '{id}' already has an unavailable reason.");
+        var next = new Dictionary<string, string>(_unavailable, StringComparer.Ordinal) {
+            [id] = reason
+        };
+        return new ExtensionCatalog(_libraries, next);
+    }
+
+    /// <summary>
+    /// The refusal for <paramref name="id"/>, or <see langword="null"/> when the catalog carries it
+    /// (the <see cref="TargetError"/> shape): the recorded reason when this catalog knows the id but
+    /// does not carry it, otherwise "unknown". <see cref="Resolve"/> throws this text and the compiler
+    /// reports it as <c>DSL0002</c>, so the CLI and the MCP harness cannot disagree.
+    /// </summary>
+    public string? ExtensionError(string id) =>
+        Contains(id) ? null
+        : _unavailable.TryGetValue(id, out var reason)
+            ? $"Domain extension '{id}' is not selectable: {reason}"
+            : $"Unknown domain extension '{id}'. Record only ids this catalog can resolve.";
+
+    /// <summary>True when the catalog records <paramref name="id"/> as known but not carried (<see cref="WithUnavailable"/>).</summary>
+    internal bool IsUnavailable(string id) => id is not null && _unavailable.ContainsKey(id);
 
     public IDomainLibrary Resolve(string id) {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (!_libraries.TryGetValue(id, out var library))
-            throw new InvalidOperationException(
-                $"Unknown domain extension '{id}'. Record only ids this catalog can resolve.");
+            throw new InvalidOperationException(ExtensionError(id));
         return library;
     }
 

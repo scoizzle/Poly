@@ -101,11 +101,31 @@ public class DslCompilerCompileOracleTests {
         await AssertSolutionCompiles();
     }
 
+    /// <summary>
+    /// #562: a unique key that is not Text. The save-time conflict mapping compares it the way the port's
+    /// key is encoded (both sides <c>ToString()</c>), and the host must stay warning-free with a provider
+    /// whose exception type it never names (CS1701 is what naming it costs).
+    /// </summary>
+    [Test]
+    public async Task Compile_NonTextUniqueKeys_EmitsCompilableSolution() {
+        const string poly = """
+            domain Metering
+
+            Reading: entity {
+              Serial: Text unique
+              Value: Decimal unique
+              ReadingNo: Number unique
+            }
+            """;
+        await AssertSolutionCompiles(poly);
+    }
+
     [Test]
     [Arguments("docs/probes/fleet-eval/09-transport/warehouse.poly")]
     [Arguments("docs/probes/fleet-eval/09-transport/orders.poly")]
     [Arguments("docs/probes/fleet-eval/09-transport/clinic.poly")]
     [Arguments("docs/probes/fleet-eval/12-mcp/mcp-library.poly")]
+    [Arguments("docs/missions/evolve-2026-10-13/library.poly")]
     [Arguments("docs/probes/dogfood/university.poly")]
     [Arguments("docs/probes/dogfood/crm.poly")]
     [Arguments("docs/probes/dogfood/hotel.poly")]
@@ -155,6 +175,21 @@ public class DslCompilerCompileOracleTests {
         await Assert.That(program.Contains("/api/ledgers")).IsFalse();
 
         await AssertSolutionCompiles(poly);
+    }
+
+    [Test]
+    public async Task Compile_All_PropertyNamedCreated_EmitsCompilableSolution() {
+        // #927 / #516: `Created` is an ordinary property name. The factory takes `created`, its effective value is
+        // `__created`, and the instance local must meet neither.
+        await AssertSolutionCompiles("""
+            domain Tasks
+            uses temporal
+
+            Task: entity {
+              Created: Date
+              OptDue: Date optional
+            }
+            """);
     }
 
     private static string FindRepoRoot() {

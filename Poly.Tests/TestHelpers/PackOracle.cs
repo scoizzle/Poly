@@ -35,6 +35,10 @@ public sealed class PackOracleBootOptions {
     /// <summary>An existing directory to run in instead of a fresh one, so two boots share one database file. The
     /// oracle never deletes it; whoever made it does.</summary>
     public string? RunDirectory { get; init; }
+
+    /// <summary>Passes <c>--SeedDemoData true</c>, the generated host's opt-in to writing one sample row per
+    /// entity (#595). Off by default, as the host is.</summary>
+    public bool SeedDemoData { get; init; }
 }
 
 /// <summary>A boot that did not reach a listening host. The child, if one started, is already dead.</summary>
@@ -292,6 +296,10 @@ public sealed class PackOracle : IAsyncDisposable {
             RedirectStandardError = true,
         };
         info.ArgumentList.Add(app.AppDll);
+        if (options.SeedDemoData) {
+            info.ArgumentList.Add("--SeedDemoData");
+            info.ArgumentList.Add("true");
+        }
 
         // The parent's environment minus everything that steers the runtime, then exactly what the plan sets.
         var inherited = info.Environment.Keys.Where(IsRuntimeSteering).ToList();

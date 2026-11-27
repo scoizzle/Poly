@@ -43,17 +43,22 @@ internal class Account : Poly.Runtime.IActionScoped
     public Site? Hq { get; private set; }
     public IReadOnlyList<Contact> Contacts
     {
-        get => this._contacts;
+        get => new List<Contact>(this._contacts);
     }
     public IReadOnlyList<Opportunity> Opportunities
     {
-        get => this._opportunities;
+        get => new List<Opportunity>(this._opportunities);
     }
     public IReadOnlyList<Ticket> Tickets
     {
-        get => this._tickets;
+        get => new List<Ticket>(this._tickets);
     }
     public AccountStage CurrentStage { get; private set; }
+    internal void AttachParent(Account child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Parent = child;
+    }
     internal DomainResult<Site> CreateHq(string? city = default, string? region = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -80,14 +85,19 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     private DomainResult<Site> __BodyOfCreateHq(string? city, string? region)
     {
-        var siteResult = Site.Create(city, region);
-        if (!siteResult.IsSuccess)
+        var __siteResult = Site.Create(city, region);
+        if (!__siteResult.IsSuccess)
         {
-            return DomainResult<Site>.Failure(siteResult.Error!);
+            return DomainResult<Site>.Failure(__siteResult.Error!);
         }
-        var site = siteResult.Value;
-        this.Hq = site;
-        return DomainResult<Site>.Success(site);
+        var __site = __siteResult.Value;
+        this.Hq = __site;
+        return DomainResult<Site>.Success(__site);
+    }
+    internal void AttachHq(Site child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Hq = child;
     }
     internal DomainResult<Contact> CreateContacts(Poly.Runtime.IStoragePort db, string? name = default, string? email = default)
     {
@@ -115,18 +125,20 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     private DomainResult<Contact> __BodyOfCreateContacts(string? name, string? email, Poly.Runtime.IStoragePort db)
     {
-        var contactResult = Contact.Create(db, name, email, this);
-        if (!contactResult.IsSuccess)
+        var __contactResult = Contact.Create(db, name, email, this);
+        if (!__contactResult.IsSuccess)
         {
-            return DomainResult<Contact>.Failure(contactResult.Error!);
+            return DomainResult<Contact>.Failure(__contactResult.Error!);
         }
-        var contact = contactResult.Value;
-        return DomainResult<Contact>.Success(contact);
+        var __contact = __contactResult.Value;
+        return DomainResult<Contact>.Success(__contact);
     }
-    internal void AttachContacts(Contact child)
+    internal DomainResult AttachContacts(Contact child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._contacts.Add(child);
+        child.AttachAccount(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Opportunity> CreateOpportunities(string? title = default, decimal? amount = default, DateOnly? closeBy = default, Contact? contact = default)
     {
@@ -154,21 +166,28 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     private DomainResult<Opportunity> __BodyOfCreateOpportunities(string? title, decimal? amount, DateOnly? closeBy, Contact? contact)
     {
-        var opportunityResult = Opportunity.Create(title, amount, closeBy, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>());
-        if (!opportunityResult.IsSuccess)
+        var __opportunityResult = Opportunity.Create(title, amount, closeBy, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>());
+        if (!__opportunityResult.IsSuccess)
         {
-            return DomainResult<Opportunity>.Failure(opportunityResult.Error!);
+            return DomainResult<Opportunity>.Failure(__opportunityResult.Error!);
         }
-        var opportunity = opportunityResult.Value;
-        return DomainResult<Opportunity>.Success(opportunity);
+        var __opportunity = __opportunityResult.Value;
+        var __notify = __opportunity.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Opportunity>.Failure(__notify.Error!);
+        }
+        return DomainResult<Opportunity>.Success(__opportunity);
     }
-    internal void AttachOpportunities(Opportunity child)
+    internal DomainResult AttachOpportunities(Opportunity child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._opportunities.Add(child);
+        child.AttachAccount(this);
         child.RegisterAccountOpportunitiesWonSubscriber(this);
         child.RegisterAccountOpportunitiesProposeSubscriber(this);
         child.RegisterAccountOpportunitiesLostSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Ticket> CreateTickets(string? subject = default)
     {
@@ -196,19 +215,26 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     private DomainResult<Ticket> __BodyOfCreateTickets(string? subject)
     {
-        var ticketResult = Ticket.Create(subject, this);
-        if (!ticketResult.IsSuccess)
+        var __ticketResult = Ticket.Create(subject, this);
+        if (!__ticketResult.IsSuccess)
         {
-            return DomainResult<Ticket>.Failure(ticketResult.Error!);
+            return DomainResult<Ticket>.Failure(__ticketResult.Error!);
         }
-        var ticket = ticketResult.Value;
-        return DomainResult<Ticket>.Success(ticket);
+        var __ticket = __ticketResult.Value;
+        var __notify = __ticket.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Ticket>.Failure(__notify.Error!);
+        }
+        return DomainResult<Ticket>.Success(__ticket);
     }
-    internal void AttachTickets(Ticket child)
+    internal DomainResult AttachTickets(Ticket child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._tickets.Add(child);
+        child.AttachAccount(this);
         child.RegisterAccountTicketsClosedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Site> PlaceHq(string city, string region)
     {
@@ -244,13 +270,13 @@ internal class Account : Poly.Runtime.IActionScoped
         {
             return DomainResult<Site>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a second link on 'hq': the source already has a target.", "Account.hq"));
         }
-        var create0 = this.CreateHq(city, region);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateHq(city, region);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Site>.Failure(create0.Error!.At("Account.PlaceHq"));
+            return DomainResult<Site>.Failure(__create0.Error!.At("Account.PlaceHq"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Site>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Site>.Success(__created1);
     }
     internal DomainResult<Contact> AddContact(string name, string email, Poly.Runtime.IStoragePort db)
     {
@@ -282,13 +308,13 @@ internal class Account : Poly.Runtime.IActionScoped
         {
             return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Stage("'AddContact' requires stage 'Open' on entity 'Account'.", "Account.AddContact", "Open"));
         }
-        var create0 = this.CreateContacts(db, name, email);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateContacts(db, name, email);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Contact>.Failure(create0.Error!.At("Account.AddContact"));
+            return DomainResult<Contact>.Failure(__create0.Error!.At("Account.AddContact"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Contact>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Contact>.Success(__created1);
     }
     internal DomainResult<Contact> ConvertLead(Lead lead, Poly.Runtime.IStoragePort db)
     {
@@ -320,13 +346,13 @@ internal class Account : Poly.Runtime.IActionScoped
         {
             return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Stage("'ConvertLead' requires stage 'Open' on entity 'Account'.", "Account.ConvertLead", "Open"));
         }
-        var create0 = this.CreateContacts(db, lead.Name, lead.Email);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateContacts(db, lead.Name, lead.Email);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Contact>.Failure(create0.Error!.At("Account.ConvertLead"));
+            return DomainResult<Contact>.Failure(__create0.Error!.At("Account.ConvertLead"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Contact>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Contact>.Success(__created1);
     }
     internal DomainResult<Opportunity> OpenDeal(string title, long amount)
     {
@@ -358,13 +384,13 @@ internal class Account : Poly.Runtime.IActionScoped
         {
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Stage("'OpenDeal' requires stage 'Open' on entity 'Account'.", "Account.OpenDeal", "Open"));
         }
-        var create0 = this.CreateOpportunities(title, amount);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateOpportunities(title, amount);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Opportunity>.Failure(create0.Error!.At("Account.OpenDeal"));
+            return DomainResult<Opportunity>.Failure(__create0.Error!.At("Account.OpenDeal"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Opportunity>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Opportunity>.Success(__created1);
     }
     internal DomainResult Archive()
     {
@@ -429,13 +455,13 @@ internal class Account : Poly.Runtime.IActionScoped
         {
             return DomainResult<Ticket>.Failure(Poly.Runtime.DomainFailure.Stage("'OpenTicket' requires stage 'Open' on entity 'Account'.", "Account.OpenTicket", "Open"));
         }
-        var create0 = this.CreateTickets(subject);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateTickets(subject);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Ticket>.Failure(create0.Error!.At("Account.OpenTicket"));
+            return DomainResult<Ticket>.Failure(__create0.Error!.At("Account.OpenTicket"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Ticket>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Ticket>.Success(__created1);
     }
     internal DomainResult Restore()
     {
@@ -543,13 +569,76 @@ internal class Account : Poly.Runtime.IActionScoped
         }
         var __wonCount = (wonCount == null ? 0L : (long)wonCount);
         var __openPipeline = (openPipeline == null ? 0m : (decimal)openPipeline);
+        if (contacts != null)
+        {
+            foreach (var __contactsElement in contacts)
+            {
+                if (__contactsElement == null)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Required("'contacts' contains a null element.", "Account.contacts"));
+                }
+            }
+        }
+        if (opportunities != null)
+        {
+            foreach (var __opportunitiesElement in opportunities)
+            {
+                if (__opportunitiesElement == null)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Required("'opportunities' contains a null element.", "Account.opportunities"));
+                }
+            }
+        }
+        if (tickets != null)
+        {
+            foreach (var __ticketsElement in tickets)
+            {
+                if (__ticketsElement == null)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Required("'tickets' contains a null element.", "Account.tickets"));
+                }
+            }
+        }
         var __closedTickets = (closedTickets == null ? 0L : (long)closedTickets);
-        var created = new Account(__name, __industry, parent, __wonCount, __openPipeline, hq, contacts, opportunities, tickets, __closedTickets);
-        Poly.Runtime.ActionScope.Create(created, "Account");
-        created.InitializeSubscriptions();
-        return DomainResult<Account>.Success(created);
+        var __created = new Account(__name, __industry, parent, __wonCount, __openPipeline, hq, contacts, opportunities, tickets, __closedTickets);
+        Poly.Runtime.ActionScope.Create(__created, "Account");
+        __created.InitializeSubscriptions();
+        if (contacts != null)
+        {
+            foreach (var __child in contacts)
+            {
+                if (__child.Account != null && __child.Account != __created)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'contacts': the child's 'account' is already set to another owner.", "Account.contacts"));
+                }
+                __child.AttachAccount(__created);
+            }
+        }
+        if (opportunities != null)
+        {
+            foreach (var __child in opportunities)
+            {
+                if (__child.Account != null && __child.Account != __created)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'opportunities': the child's 'account' is already set to another owner.", "Account.opportunities"));
+                }
+                __child.AttachAccount(__created);
+            }
+        }
+        if (tickets != null)
+        {
+            foreach (var __child in tickets)
+            {
+                if (__child.Account != null && __child.Account != __created)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'tickets': the child's 'account' is already set to another owner.", "Account.tickets"));
+                }
+                __child.AttachAccount(__created);
+            }
+        }
+        return DomainResult<Account>.Success(__created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Opportunities)
         {

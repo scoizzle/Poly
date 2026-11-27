@@ -6,6 +6,7 @@ using Poly.Introspection.CommonLanguageRuntime;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using OntologyPrimitive = Poly.DomainModeling.Ontology.PrimitiveType;
@@ -316,6 +317,7 @@ public class DomainTypeModelTests {
         (new Subtract(new Literal(1), new Literal(2)), OperatorKind.Subtract),
         (new Multiply(new Literal(1), new Literal(2)), OperatorKind.Multiply),
         (new Divide(new Literal(1), new Literal(2)), OperatorKind.Divide),
+        (new Modulo(new Literal(1), new Literal(2)), OperatorKind.Modulo),
         (new Comparison(new Literal(1), new Literal(2), ComparisonKind.Equal), OperatorKind.Equal),
         (new Comparison(new Literal(1), new Literal(2), ComparisonKind.NotEqual), OperatorKind.NotEqual),
         (new Comparison(new Literal(1), new Literal(2), ComparisonKind.LessThan), OperatorKind.LessThan),
@@ -341,9 +343,9 @@ public class DomainTypeModelTests {
         await Assert.That(seen.Concat(PlatformOnlyKinds).Order().ToArray()).IsEquivalentTo(Enum.GetValues<OperatorKind>().Order().ToArray());
     }
 
-    /// <summary>The kinds the .NET rule set answers that no domain syntax denotes yet (F-04, F-05 map the syntax).</summary>
+    /// <summary>The kinds the .NET rule set answers that no domain syntax denotes yet.</summary>
     private static readonly OperatorKind[] PlatformOnlyKinds = [
-        OperatorKind.Modulo, OperatorKind.UnaryMinus, OperatorKind.UnaryPlus, OperatorKind.BitwiseAnd, OperatorKind.BitwiseOr,
+        OperatorKind.UnaryMinus, OperatorKind.UnaryPlus, OperatorKind.BitwiseAnd, OperatorKind.BitwiseOr,
         OperatorKind.BitwiseXor, OperatorKind.BitwiseNot, OperatorKind.ShiftLeft, OperatorKind.ShiftRight
     ];
 

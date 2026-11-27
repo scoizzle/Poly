@@ -429,12 +429,21 @@ public class FailureTypingTests {
         }
         """;
 
+    /// <summary>
+    /// A stage whose requirement reads a linked peer. The peer's own action is the one path that can
+    /// still falsify it: #576 refuses a create whose values do, and #577's after-action check judges only
+    /// the acting entity's body, so a same-entity action can no longer leave its stage falsified.
+    /// </summary>
     private const string StageRequireDsl = """
         domain Lab
+        Room: entity {
+          Occupied: Boolean default(false)
+          Occupy: action { assign Occupied to true }
+        }
         Item: entity {
-          Ok: Boolean
-          IsOk: policy { Ok is true }
-          Draft: stage require IsOk {
+          room: Room optional
+          RoomFree: policy { room Occupied is false }
+          Draft: stage require RoomFree {
             Go: action { transition to Done }
           }
           Done: stage { }
@@ -484,10 +493,10 @@ public class FailureTypingTests {
     [Arguments(StageFallthroughDsl, "Stage(\"'Cancel' is not valid for the current stage on entity 'Ticket'.\", \"Ticket.Cancel\")")]
     [Arguments(PolicyDsl, "Policy(\"'Go' blocked by policy 'IsOk'.\", \"Item.Go\", \"IsOk\")")]
     [Arguments(PolicyDsl, "Policy(\"'Skip' blocked by policy 'IsOk'.\", \"Item.Skip\", \"IsOk\")")]
-    [Arguments(StageRequireDsl, "Policy(\"'Go' blocked by policy 'IsOk'.\", \"Item.Go\", \"IsOk\")")]
+    [Arguments(StageRequireDsl, "Policy(\"'Go' blocked by policy 'RoomFree'.\", \"Item.Go\", \"RoomFree\")")]
     [Arguments(LinkDsl, "Link(\"Cannot add a second link on 'kid': the source already has a target.\", \"Parent.kid\")")]
     [Arguments(InvokeUnlinkedDsl, "Required(\"'Go' requires a linked 'kid' on entity 'Parent'.\", \"Parent.kid\")")]
-    [Arguments(PathPrefixDsl, "Required(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\", \"Reservation.room\")")]
+    [Arguments(PathPrefixDsl, "Policy(\"'CheckIn' blocked by policy 'RoomFree'.\", \"Reservation.CheckIn\", \"RoomFree\")")]
     [Arguments(EnsureUniqueDsl, "Constraint(\"A unique assign needs the storage port.\", \"Widget\")")]
     public async Task ActionKinds_PrintTheirKindPathAndGuard(string dsl, string call) {
         var cs = Print(dsl);
@@ -500,13 +509,25 @@ public class FailureTypingTests {
         var asm = ExportedCSharp.CompileAndLoad(Print(dsl));
         var type = asm.GetType(entity)!;
         // The values each fixture's Create requires, passed by name: no helper invents one.
-        (string Name, object? Value)[] values = entity switch {
-            "Item" => [("ok", action == "Skip")],
-            "Widget" => [("sku", "x")],
-            _ => [],
-        };
-        var created = ExportedCSharp.InvokeCreate(type, [.. values, ("db", new InMemoryStoragePort())]);
-        var instance = created.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(created)!;
+        object instance;
+        if (dsl == StageRequireDsl) {
+            // The stage's requirement reads a linked peer, so the peer is created first and its own
+            // action falsifies the requirement: #576 refuses that at create, and #577's after-action
+            // check covers only the acting entity, so this is the reachable path to the gate.
+            var room = Instantiate(asm.GetType("Room")!)!;
+            var item = ExportedCSharp.InvokeCreate(type, ("room", room), ("db", new InMemoryStoragePort()));
+            instance = item.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(item)!;
+            asm.GetType("Room")!.GetMethod("Occupy", PrintedMembers.Any)!.Invoke(room, []);
+        }
+        else {
+            (string Name, object? Value)[] values = entity switch {
+                "Item" => [("ok", action == "Skip")],
+                "Widget" => [("sku", "x")],
+                _ => [],
+            };
+            var created = ExportedCSharp.InvokeCreate(type, [.. values, ("db", new InMemoryStoragePort())]);
+            instance = created.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(created)!;
+        }
         object? result = null;
         if (action is null)
             result = type.GetMethod("EnsureUnique", PrintedMembers.Any)!.Invoke(instance, ["Sku", "other"]);
@@ -658,10 +679,10 @@ public class FailureTypingTests {
     [Arguments(StageGateDsl, "Visit", "CheckIn", 2, DomainFailureKind.Stage, "'CheckIn' requires stage 'Scheduled' on entity 'Visit'.", "Visit.CheckIn", "Scheduled")]
     [Arguments(PolicyDsl, "Item", "Go", 1, DomainFailureKind.Policy, "'Go' blocked by policy 'IsOk'.", "Item.Go", "IsOk")]
     [Arguments(PolicyDsl, "Item", "Skip", 1, DomainFailureKind.Policy, "'Skip' blocked by policy 'IsOk'.", "Item.Skip", "IsOk")]
-    [Arguments(StageRequireDsl, "Item", "Go", 1, DomainFailureKind.Policy, "'Go' blocked by policy 'IsOk'.", "Item.Go", "IsOk")]
+    [Arguments(StageRequireDsl, "Item", "Go", 1, DomainFailureKind.Policy, "'Go' blocked by policy 'RoomFree'.", "Item.Go", "RoomFree")]
     [Arguments(LinkDsl, "Parent", "AddKid", 2, DomainFailureKind.Link, "Cannot add a second link on 'kid': the source already has a target.", "Parent.kid", null)]
     [Arguments(InvokeUnlinkedDsl, "Parent", "Go", 1, DomainFailureKind.Required, "'Go' requires a linked 'kid' on entity 'Parent'.", "Parent.kid", null)]
-    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", 1, DomainFailureKind.Required, "'CheckIn' requires a linked 'room' on entity 'Reservation'.", "Reservation.room", null)]
+    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", 1, DomainFailureKind.Policy, "'CheckIn' blocked by policy 'RoomFree'.", "Reservation.CheckIn", "RoomFree")]
     [Arguments(EnsureUniqueDsl, "Widget", null, 1, DomainFailureKind.Constraint, "A unique assign needs the storage port.", "Widget", null)]
     public async Task ActionKinds_PrintedAssembly_CarryKindPathGuardAndLegacyText(
         string dsl, string entity, string? action, int times,
@@ -678,16 +699,28 @@ public class FailureTypingTests {
     [Arguments(StageGateDsl, "Visit", "CheckIn", "'CheckIn' requires stage 'Scheduled' on entity 'Visit'.", DomainFailureKind.Stage, "Visit.CheckIn", "Scheduled")]
     [Arguments(PolicyDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.", DomainFailureKind.Policy, "Item.Go", "IsOk")]
     [Arguments(PolicyDsl, "Item", "Skip", "'Skip' blocked by policy 'IsOk'.", DomainFailureKind.Policy, "Item.Skip", "IsOk")]
-    [Arguments(StageRequireDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.", DomainFailureKind.Policy, "Item.Go", "IsOk")]
+    [Arguments(StageRequireDsl, "Item", "Go", "'Go' blocked by policy 'RoomFree'.", DomainFailureKind.Policy, "Item.Go", "RoomFree")]
     [Arguments(LinkDsl, "Parent", "AddKid", "Cannot add a second link on 'kid': the source already has a target.", DomainFailureKind.Link, "Parent.kid", null)]
     [Arguments(InvokeUnlinkedDsl, "Parent", "Go", "'Go' requires a linked 'kid' on entity 'Parent'.", DomainFailureKind.Required, "Parent.kid", null)]
-    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", "'CheckIn' requires a linked 'room' on entity 'Reservation'.", DomainFailureKind.Required, "Reservation.room", null)]
+    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", "'CheckIn' blocked by policy 'RoomFree'.", DomainFailureKind.Policy, "Reservation.CheckIn", "RoomFree")]
     public async Task ActionKinds_OnBothSides_CarryKindPathGuardAndLegacyText(
         string dsl, string entity, string action, string expected,
         DomainFailureKind kind, string path, string? guard) {
         var twice = action is "CheckIn" && entity == "Visit" || action == "AddKid";
+        var stageRequireRow = dsl == StageRequireDsl;
         var (simulate, printed) = ParityScenario.FromDsl(dsl, "FailureTypingAction" + Guid.NewGuid().ToString("N"))
             .Run(side => {
+                if (stageRequireRow) {
+                    // The requirement reads a linked peer, and only the peer's own action falsifies it:
+                    // #576 refuses that at create and #577's after-action check sees only the actor.
+                    var room = side.Create("Room");
+                    var item = side.Create(entity, ("room", room));
+                    side.Use(room);
+                    side.Invoke("Occupy");
+                    side.Use(item);
+                    side.Invoke(action);
+                    return;
+                }
                 if (entity == "Item")
                     side.Create(entity, ("Ok", action == "Skip"));
                 else
@@ -697,7 +730,7 @@ public class FailureTypingTests {
                     side.Invoke(action);
             });
 
-        var index = twice ? 2 : 1;
+        var index = stageRequireRow ? 5 : twice ? 2 : 1;
         await Assert.That(ParityScenario.Differences(simulate, printed)).IsEmpty();
         foreach (var failed in new[] { simulate[index], printed[index] }) {
             await Assert.That(failed.Success).IsFalse();
@@ -773,7 +806,7 @@ public class FailureTypingTests {
         await Assert.That(cs).DoesNotContain("ConstraintFailureException");
         await Assert.That(cs).DoesNotContain("ErrorMessage ?? \"\"");
         var entry = ExportedCSharp.ExtractMethod(cs, "private DomainResult __EnterInitialStage(");
-        await Assert.That(entry).Contains("DomainResult.Failure(create0.Error!)");
+        await Assert.That(entry).Contains("DomainResult.Failure(__create0.Error!)");
         await Assert.That(entry).DoesNotContain(".At(");
     }
 

@@ -23,12 +23,14 @@ internal class Customer : Poly.Runtime.IActionScoped
     public string Tier { get; private set; } = default!;
     public IReadOnlyList<Order> Orders
     {
-        get => this._orders;
+        get => new List<Order>(this._orders);
     }
-    internal void AttachOrders(Order child)
+    internal DomainResult AttachOrders(Order child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._orders.Add(child);
+        child.AttachCustomer(this);
+        return DomainResult.Success();
     }
     internal DomainResult ShipAll()
     {
@@ -56,16 +58,16 @@ internal class Customer : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfShipAll()
     {
-        foreach (var target0 in this.Orders)
+        foreach (var __target0 in this.Orders)
         {
-            if (!target0.IsPaid())
+            if (!__target0.IsPaid())
             {
                 continue;
             }
-            var result1 = target0.Ship();
-            if (!result1.IsSuccess)
+            var __result1 = __target0.Ship();
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Customer.ShipAll"));
+                return DomainResult.Failure(__result1.Error!.At("Customer.ShipAll"));
             }
         }
         return DomainResult.Success();
@@ -96,16 +98,16 @@ internal class Customer : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfCancelPending()
     {
-        foreach (var target0 in this.Orders)
+        foreach (var __target0 in this.Orders)
         {
-            if (target0.CurrentStage != OrderStage.Pending)
+            if (__target0.CurrentStage != OrderStage.Pending)
             {
                 continue;
             }
-            var result1 = target0.Cancel("customer request");
-            if (!result1.IsSuccess)
+            var __result1 = __target0.Cancel("customer request");
+            if (!__result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.Error!.At("Customer.CancelPending"));
+                return DomainResult.Failure(__result1.Error!.At("Customer.CancelPending"));
             }
         }
         return DomainResult.Success();
@@ -154,16 +156,37 @@ internal class Customer : Poly.Runtime.IActionScoped
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 100 characters.", "Customer.Name"));
         }
         var __tier = (tier == null ? "standard" : tier);
+        if (orders != null)
+        {
+            foreach (var __ordersElement in orders)
+            {
+                if (__ordersElement == null)
+                {
+                    return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Required("'orders' contains a null element.", "Customer.orders"));
+                }
+            }
+        }
         if (Customer.ExistsWithEmail(db, __email))
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Customer'.", "Customer.Email"));
         }
-        var created = new Customer(__email, __name, __tier, orders);
-        Poly.Runtime.ActionScope.Create(created, "Customer");
+        var __created = new Customer(__email, __name, __tier, orders);
+        Poly.Runtime.ActionScope.Create(__created, "Customer");
+        if (orders != null)
+        {
+            foreach (var __child in orders)
+            {
+                if (__child.Customer != null && __child.Customer != __created)
+                {
+                    return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'orders': the child's 'customer' is already set to another owner.", "Customer.orders"));
+                }
+                __child.AttachCustomer(__created);
+            }
+        }
         db.Record("Customer", "Email", __email);
-        return DomainResult<Customer>.Success(created);
+        return DomainResult<Customer>.Success(__created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

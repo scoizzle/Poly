@@ -4,6 +4,7 @@ using Poly.Grammar;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
@@ -38,6 +39,7 @@ public static class CoreExpressionPrintBinders {
         registry.Register(new FallbackBinding(typeof(Subtract)));
         registry.Register(new FallbackBinding(typeof(Multiply)));
         registry.Register(new FallbackBinding(typeof(Divide)));
+        registry.Register(new FallbackBinding(typeof(Modulo)));
         registry.Register(new FallbackBinding(typeof(Comparison)));
         registry.Register(new FallbackBinding(typeof(OwnedAccess)));
         registry.Register(new FallbackBinding(typeof(RelationshipNavigation)));

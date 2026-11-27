@@ -20,6 +20,19 @@ public class DbContextGeneratorTests {
         return nl < 0 ? poly : poly[..(nl + 1)] + "uses persistence\n" + poly[(nl + 1)..];
     }
 
+    /// <summary>As <see cref="ParseDomain"/>, on the product catalog, so <c>uses sqlite</c> resolves and <c>Decimal</c>
+    /// maps to the pack's <c>TEXT</c> column type.</summary>
+    private static Domain ParseSqliteDomain(string poly) {
+        var tree = DslSyntaxTree.Parse(poly);
+        var session = DomainSession.Create(
+            tree.Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds) with { Authoring = true });
+        var changes = new PolyDslParser(poly, session).Parse();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+        if (!result.Succeeded)
+            throw new InvalidOperationException("Domain evolution failed");
+        return result.Root!;
+    }
+
     private static Domain ParseDomain(string poly) {
         poly = WithPersistence(poly);
         var ctx = ExtensionCatalog.Core.Authoring;
@@ -264,6 +277,34 @@ public class DbContextGeneratorTests {
         await Assert.That(typeArg.States(typeof(int))).IsTrue();
     }
 
+    /// <summary>#937: a DateTime column reads back as the instant it was written, so the generator configures a
+    /// two-expression converter on the required column and one with a null arm on the optional column. Neither a
+    /// Text column nor anything but a DateTime gets one, and the file names <c>DateTimeKind</c>'s namespace.</summary>
+    [Test]
+    public async Task DateTimeColumn_ConvertsToAndFromUtc() {
+        var domain = ParseDomain("""
+            domain T
+            uses temporal
+            Item: entity {
+              Name: Text
+              Stamp: DateTime
+              Maybe: DateTime optional
+            }
+            """);
+        var omc = OnModelCreating(domain);
+        var conversions = omc.FindInvocations("HasConversion");
+
+        await Assert.That(conversions.Count).IsEqualTo(2).Because("one per DateTime column, and none for the Text one");
+        await Assert.That(conversions.All(c => c.Arguments.Length == 2 && c.Arguments.All(a => a is Lambda))).IsTrue();
+        await Assert.That(conversions[0].Arguments[1]).IsTypeOf<Lambda>()
+            .Because("the required column reads back through SpecifyKind");
+        await Assert.That(((Lambda)conversions[0].Arguments[1]).Body is Conditional).IsFalse();
+        await Assert.That(((Lambda)conversions[1].Arguments[1]).Body is Conditional).IsTrue()
+            .Because("the optional column is DateTime?, so both expressions carry a null arm");
+        await Assert.That(GenerationAssertions.DbContextIr(domain).Usings).Contains("System")
+            .Because("the converter names DateTimeKind");
+    }
+
     [Test]
     public async Task DbContext_StoragePort_EmitsTryReserveAndKeyCodecKeys() {
         var domain = ParseDomain("""
@@ -302,6 +343,100 @@ public class DbContextGeneratorTests {
             .Select(i => i.Arguments[1] is Constant { Value: string sql } ? sql : "")
             .ToList();
 
+    /// <summary>
+    /// #635: a CHECK is built from the declared range, so it is emitted only when every writer is proven
+    /// to stay inside it. On <c>range(0, 100000)</c> the write <c>Capacity + 1</c> is <c>[1, 100001]</c>,
+    /// one past the declared maximum: the analysis warns and the column gets no CHECK. The fail-closed
+    /// side is deliberate — a CHECK the domain could trip is worse than none.
+    /// </summary>
+    [Test]
+    public async Task CheckConstraint_AbsentWhenAWriterCanExceedTheDeclaredRange() {
+        var domain = ParseDomain("""
+            domain Test
+            Warehouse: entity {
+              Capacity: Number range(0, 100000)
+              Grow: action { assign Capacity to Capacity + 1 }
+            }
+            """);
+
+        await Assert.That(CheckConstraints(domain)).IsEmpty()
+            .Because("no CHECK is safe while a writer can reach 100001: the emitter projects only a "
+                     + "range the analysis proved for every writer");
+    }
+
+    /// <summary>
+    /// The other half of #635: writers the analysis does prove inside keep the CHECK. <c>Capacity * 1</c>
+    /// is <c>[0, 100000]</c> on the same declaration and a constant is a point interval.
+    /// </summary>
+    [Test]
+    public async Task CheckConstraint_PresentWhenEveryWriterStaysInsideTheDeclaredRange() {
+        var domain = ParseDomain("""
+            domain Test
+            Warehouse: entity {
+              Capacity: Number range(0, 100000)
+              Hold: action { assign Capacity to Capacity * 1 }
+              Reset: action { assign Capacity to 5 }
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("\"capacity\" >= 0");
+        await Assert.That(checks[0]).Contains("\"capacity\" <= 100000");
+    }
+
+    /// <summary>
+    /// #635's escape hatch: with no declared maximum, <c>Capacity + 1</c> is <c>[1, ∞)</c> inside
+    /// <c>[0, ∞)</c>, so the one-sided CHECK is emitted instead of nothing.
+    /// </summary>
+    [Test]
+    public async Task CheckConstraint_OpenMaximum_KeepsTheOneSidedCheck() {
+        var domain = ParseDomain("""
+            domain Test
+            Warehouse: entity {
+              Capacity: Number range(0)
+              Grow: action { assign Capacity to Capacity + 1 }
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("\"capacity\" >= 0");
+        await Assert.That(checks[0].Contains("capacity <=", StringComparison.Ordinal)).IsFalse();
+    }
+
+    /// <summary>#559: SQLite stores a <c>Decimal</c> as TEXT, where a bare comparison to a numeric bound is a text
+    /// comparison (<c>'9' &gt; '1000000'</c>), so the CHECK compares the stored value numerically, and the bound becomes a
+    /// REAL literal so both sides round together (an INTEGER bound above 2^53 is compared exactly and would refuse the
+    /// value at the bound). A <c>Number</c> column has a numeric store type and keeps its plain comparison, as does a
+    /// <c>Decimal</c> on a pack whose decimal column is numeric (<c>decimal</c>).</summary>
+    [Test]
+    public async Task CheckSql_DecimalStoredAsText_ComparesNumerically() {
+        var domain = ParseSqliteDomain("""
+            domain Test
+            uses sqlite
+            Item: entity {
+              Price: Decimal range(0, 1000000)
+              Fee: Decimal range(0.00, 100.00)
+              High: Decimal range(9007199254740993, 9007199254741000)
+              Band: Decimal range(-100, -1)
+              Qty: Number range(1, 10)
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Single(c => c.Contains("price", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(\"price\" AS REAL) >= 0.0 AND CAST(\"price\" AS REAL) <= 1000000.0");
+        await Assert.That(checks.Single(c => c.Contains("fee", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(\"fee\" AS REAL) >= 0.00 AND CAST(\"fee\" AS REAL) <= 100.00");
+        await Assert.That(checks.Single(c => c.Contains("high", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(\"high\" AS REAL) >= 9007199254740993.0 AND CAST(\"high\" AS REAL) <= 9007199254741000.0");
+        await Assert.That(checks.Single(c => c.Contains("band", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(\"band\" AS REAL) >= -100.0 AND CAST(\"band\" AS REAL) <= -1.0");
+        await Assert.That(checks.Single(c => c.Contains("qty", StringComparison.Ordinal)))
+            .IsEqualTo("\"qty\" >= 1 AND \"qty\" <= 10");
+    }
+
     /// <summary>V-05b T3: a declared bound above 2^53 reaches the CHECK text exactly, never rounded
     /// through <c>double</c> to <c>…992</c>.</summary>
     [Test]
@@ -315,8 +450,8 @@ public class DbContextGeneratorTests {
 
         var checks = CheckConstraints(domain);
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("price >= 0");
-        await Assert.That(checks[0]).Contains("price <= 9007199254740993");
+        await Assert.That(checks[0]).Contains("\"price\" >= 0");
+        await Assert.That(checks[0]).Contains("\"price\" <= 9007199254740993");
     }
 
     /// <summary>V-05b A13: the CHECK text keeps the declared decimal scale
@@ -332,8 +467,8 @@ public class DbContextGeneratorTests {
 
         var checks = CheckConstraints(domain);
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("price >= 0.00");
-        await Assert.That(checks[0]).Contains("price <= 100.00");
+        await Assert.That(checks[0]).Contains("\"price\" >= 0.00");
+        await Assert.That(checks[0]).Contains("\"price\" <= 100.00");
     }
 
     /// <summary>V-05b fix round 1: an API-built fractional double bound is not an exact number, but it is
@@ -347,8 +482,8 @@ public class DbContextGeneratorTests {
         var checks = CheckConstraints(domain);
 
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("price >= 0.5");
-        await Assert.That(checks[0]).Contains("price <= 1.5");
+        await Assert.That(checks[0]).Contains("\"price\" >= 0.5");
+        await Assert.That(checks[0]).Contains("\"price\" <= 1.5");
     }
 
     /// <summary>V-05b fix round 2: a tiny finite double bound must not round to 0 in the CHECK; an open
@@ -374,7 +509,188 @@ public class DbContextGeneratorTests {
         var checks = CheckConstraints(domain);
 
         await Assert.That(checks.Count).IsEqualTo(1);
-        await Assert.That(checks[0]).Contains("price <= 18446744073709551615");
+        await Assert.That(checks[0]).Contains("\"price\" <= 18446744073709551615");
+    }
+
+    /// <summary>#632: the CHECK expression quotes the column identifier. An unquoted one is a
+    /// syntax error when the property is named after an SQL keyword (<c>Limit</c>, <c>Order</c>,
+    /// <c>Group</c>), which crashes the generated app in <c>EnsureCreatedAsync</c>.</summary>
+    [Test]
+    public async Task CheckSql_ColumnIdentifier_IsQuoted() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Limit: Number range(0, 100)
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).IsEqualTo("\"limit\" >= 0 AND \"limit\" <= 100");
+    }
+
+    /// <summary>#563: a length constraint reaches the database as a CHECK, from the property's
+    /// <c>LengthConstraint</c>. The maximum compares code points (<c>length</c>) and the minimum compares
+    /// UTF-8 bytes (<c>length(CAST(… AS BLOB))</c>), so neither side can reject a value Create accepts.</summary>
+    [Test]
+    public async Task LengthConstraint_MinimumAndMaximum_EmitCheck() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Code: Text length(2, 80)
+            }
+            """);
+
+        var checks = OnModelCreating(domain).FindInvocations("HasCheckConstraint");
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(((Constant)checks[0].Arguments[0]).Value).IsEqualTo("CK_code_length");
+        await Assert.That(((Constant)checks[0].Arguments[1]).Value)
+            .IsEqualTo("length(CAST(code AS BLOB)) >= 2 AND length(code) <= 80");
+    }
+
+    /// <summary>#563: the CHECK is built from the property's <c>LengthConstraint</c>, not from
+    /// <see cref="StorageColumn.MaxLength"/>: Email's 256 fallback is an unrelated mapping default, so a
+    /// pattern-only Email gets no length CHECK (the database is never stricter than Create).</summary>
+    [Test]
+    public async Task PatternOnlyEmail_EmitsNoLengthCheck() {
+        var domain = ParseDomain("""
+            domain Test
+            Patron: entity {
+              Email: Text unique pattern("^[^@]+@[^@]+$")
+            }
+            """);
+
+        await Assert.That(CheckConstraints(domain)).IsEmpty();
+    }
+
+    /// <summary>#563: SQLite has no regex, and a GLOB translation is out of scope, so a pattern emits no CHECK.
+    /// The pattern stays where Create and assign enforce it.</summary>
+    [Test]
+    public async Task PatternConstraint_EmitsNoCheck() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              ScacCode: Text unique pattern("^[A-Z]{2,4}$")
+            }
+            """);
+
+        await Assert.That(CheckConstraints(domain)).IsEmpty();
+    }
+
+    /// <summary>The first argument of every emitted <c>HasDefaultValue</c>, in order.</summary>
+    /// <summary>The column defaults the domain's own constraints state: the concurrency token's <c>HasDefaultValue(0)</c>
+    /// (#626/#653) is the host's, not a declared default, so it is left out.</summary>
+    private static List<Node> DefaultValues(Domain domain) =>
+        OnModelCreating(domain).FindInvocations("HasDefaultValue")
+            .Where(i => i.Delegate is not Member { Value: Invoke { Delegate: Member { MemberName: "IsConcurrencyToken" } } })
+            .Select(i => i.Arguments[0]).ToList();
+
+    /// <summary>#563: a literal default is mapped, so a row inserted without the column reads what Create would
+    /// have written.</summary>
+    [Test]
+    public async Task DefaultValue_BooleanLiteral_EmitsHasDefaultValue() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Active: Boolean default(true)
+            }
+            """);
+
+        var values = DefaultValues(domain);
+        await Assert.That(values.Count).IsEqualTo(1);
+        await Assert.That(values[0] is Constant { Value: true }).IsTrue();
+    }
+
+    [Test]
+    public async Task DefaultValue_NumberLiteral_EmitsHasDefaultValue() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Count: Number default(0)
+            }
+            """);
+
+        var values = DefaultValues(domain);
+        await Assert.That(values.Count).IsEqualTo(1);
+        await Assert.That(((Constant)values[0]).Value).IsEqualTo(0L);
+    }
+
+    /// <summary>#563: an enum member default is qualified by its enum type, the same node the exporter's
+    /// <c>Create</c> slot carries.</summary>
+    [Test]
+    public async Task DefaultValue_EnumMember_EmitsQualifiedMember() {
+        var domain = ParseDomain("""
+            domain Test
+            Tier: enum { Silver, Gold }
+            Item: entity {
+              Level: Tier default(Silver)
+            }
+            """);
+
+        var values = DefaultValues(domain);
+        await Assert.That(values.Count).IsEqualTo(1);
+        await Assert.That(values[0] is Member { MemberName: "Silver", Value: NamedTypeReference { TypeName: "Tier" } }).IsTrue();
+    }
+
+    /// <summary>#563: an integral literal default on a decimal column becomes a decimal constant, so EF's
+    /// default holds the property's own type.</summary>
+    [Test]
+    public async Task DefaultValue_IntegralLiteralOnDecimalColumn_IsDecimal() {
+        var amount = new Property("Amount", new DomainTypeReference("Decimal"),
+            [new DefaultValueConstraint(new Literal(5L))]);
+        var domain = DomainTestFactory.Create("Test", [new Entity("Item", [amount], [], [], [])], [])
+            with { Extensions = ["persistence"] };
+
+        var values = DefaultValues(domain);
+        await Assert.That(values.Count).IsEqualTo(1);
+        await Assert.That(((Constant)values[0]).Value).IsEqualTo(5m);
+    }
+
+    /// <summary>#563: a runtime default (now/today/guid) is computed by the host, so the database gets no default.</summary>
+    [Test]
+    public async Task DefaultValue_RuntimeDefault_EmitsNoHasDefaultValue() {
+        var domain = ParseDomain("""
+            domain Test
+            uses temporal
+            Item: entity {
+              MemberSince: Date default(Today)
+            }
+            """);
+
+        await Assert.That(DefaultValues(domain)).IsEmpty();
+    }
+
+    /// <summary>#626/#653: the optimistic-concurrency token is one shadow column per entity, and the save-time bump
+    /// the action routes call is on the context. Both are storage-only: no entity CLR member and no DTO change.</summary>
+    [Test]
+    public async Task ConcurrencyToken_IsAShadowColumnWithABumpOnTheContext() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var unit = GenerationAssertions.DbContextIr(domain);
+        var rendered = new CSharpWriter().Write(unit);
+
+        await Assert.That(rendered).Contains("""b.Property<long>("Version").IsConcurrencyToken().HasDefaultValue(0L);""");
+        await Assert.That(rendered).Contains("public void BumpVersions(object entity)");
+        await Assert.That(rendered).Contains("""entry.Property("Version").CurrentValue""");
+        await Assert.That(rendered).Contains("this.ChangeTracker.DetectChanges();");
+    }
+
+    /// <summary>#626/#653: a domain property may already be called <c>Version</c>. It keeps its own value and its own
+    /// column, and the token moves to the first free <c>PolyVersion</c> name rather than silently taking it over.</summary>
+    [Test]
+    public async Task ConcurrencyToken_SkipsANameTheDomainAlreadyUses() {
+        var domain = ParseDomain("""
+            domain Test
+            Document: entity { Version: Text Title: Text }
+            """);
+        var rendered = new CSharpWriter().Write(GenerationAssertions.DbContextIr(domain));
+
+        await Assert.That(rendered).Contains("""b.Property<long>("PolyVersion").IsConcurrencyToken().HasDefaultValue(0L);""");
+        await Assert.That(rendered).Contains("""entry.Property("PolyVersion").CurrentValue""");
+        await Assert.That(rendered).Contains("b.Property(x => x.Version)");
+        await Assert.That(rendered).DoesNotContain("""b.Property<long>("Version")""");
     }
 
     private static IEnumerable<Node> Descendants(Node node) {

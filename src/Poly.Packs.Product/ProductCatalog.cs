@@ -12,10 +12,19 @@ namespace Poly.Packs.Product;
 /// the host-file contributors wired: persistence, sqlite and sqlserver emit the DbContext, http
 /// emits Program.cs and demo.http. polyc and the DslCompiler facade resolve from it. The posix
 /// package is surface-only until the Lower splice door carries a syscall body, and only a caller
-/// that names a host target can load it.
+/// that names a host target can load it. <c>mysql</c> is named with its refusal
+/// (<c>MySqlRefusal</c>), never silently unknown: the pack ships but has no host provider.
 /// </summary>
 public static class ProductCatalog {
     public static ExtensionCatalog Catalog { get; } = Build(wired: true, hostVendor: null);
+
+    /// <summary>
+    /// Why <c>uses mysql</c> is refused: <c>Poly.Packs.MySql</c> ships a model library, but the
+    /// Minimal API host has no MySQL provider arm, so this catalog cannot load it for a host.
+    /// Registering the pack is #552's product decision; until then the refusal says so.
+    /// </summary>
+    private const string MySqlRefusal =
+        "the pack ships as Poly.Packs.MySql, but it has no host provider arm, so this catalog cannot load it. Use 'sqlite' or 'sqlserver'.";
 
     /// <summary>
     /// The one implicit library set a document that lists no <c>uses</c> loads:
@@ -49,5 +58,6 @@ public static class ProductCatalog {
         .With(new SqliteLibrary(wired ? new DbContextArtifactContributor() : null))
         .With(new SqlServerLibrary(wired ? new DbContextArtifactContributor() : null))
         .With(new HttpLibrary(wired ? new MinimalApiHostArtifactContributor(vendor: hostVendor) : null))
-        .With(new PosixLibrary());
+        .With(new PosixLibrary())
+        .WithUnavailable("mysql", MySqlRefusal);
 }

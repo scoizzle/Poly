@@ -127,8 +127,9 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
         RelationshipNavigation navigation => !IsPathPrefixPredicate(navigation.TargetProperty)
             && NavigationReadMayBeAbsent(navigation, binderEntity),
         MatchExpr match => match.Arms.Select(a => a.Value).Append(match.Else).Any(arm => MayBeAbsent(arm, binderEntity)),
-        Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide =>
-            value.Children.OfType<DomainExpression>().Any(operand => MayBeAbsent(operand, binderEntity)),
+        Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide or Ontology.Modulo
+            or Ontology.Negate =>
+                value.Children.OfType<DomainExpression>().Any(operand => MayBeAbsent(operand, binderEntity)),
         _ => false,
     };
 
@@ -180,7 +181,8 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     /// local-name generator. A quantifier body is a <paramref name="condition"/>.
     /// </summary>
     private LoweredExpression LowerAgainstEntity(
-        string? entityName, DomainExpression expression, Node subject, bool condition = false) {
+        string? entityName, DomainExpression expression, Node subject, bool condition = false,
+        Node? subjectPresence = null) {
         IReadOnlyDictionary<string, string>? enums = _context.EnumPropertyNames;
         if (entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
@@ -192,7 +194,7 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
         var nested = new DomainExpressionLoweringPass(_context with {
             EnumPropertyNames = enums,
             SourceEntityName = entityName ?? _context.SourceEntityName
-        });
+        }) { _subjectPresence = subjectPresence };
         return condition ? nested.LowerCondition(expression, subject) : nested.LowerExpression(expression, subject);
     }
 
@@ -278,12 +280,18 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     /// (<see cref="LoweringContext.SourceEntityName"/>), resolved the way
     /// <see cref="ResolveRelationshipTarget"/> resolves its source. No domain-wide scan.
     /// </summary>
-    private bool SourceEntityHasProperty(string name) {
+    private bool SourceEntityHasProperty(string name) => SourceProperty(name) is not null;
+
+    /// <summary>The entity whose members the subject exposes, or null when this body is not an entity's.</summary>
+    private Entity? SourceEntity() {
         if (_context.SourceEntityName is null)
-            return false;
-        var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            return null;
+        return _domain.Types.OfType<Entity>().FirstOrDefault(e =>
             string.Equals(e.Name, _context.SourceEntityName, StringComparison.Ordinal));
-        return source?.Properties.Any(p =>
-            string.Equals(p.Name, name, StringComparison.Ordinal)) == true;
     }
+
+    /// <summary>A declared property of <see cref="SourceEntity"/>, or null.</summary>
+    private Property? SourceProperty(string name) =>
+        SourceEntity()?.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.Ordinal));
 }

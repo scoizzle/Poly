@@ -5,8 +5,8 @@
 # measured
 documents scanned = 84
 documents with require not (source text) = 7
-documents with a create under require (analysed domain) = 5
-documents with no analysed domain = 22
+documents with a create under require (analysed domain) = 6
+documents with no analysed domain = 21
 range findings = 59
 docs/missions/evolve-2026-10-13/billing.poly | 11:3 | DMCS003? | Cannot verify 'create Reading { Usage: usage }' against constraint range(0, +∞) on property 'Usage': the assigned value has no bound analysis can use.
 docs/missions/evolve-2026-10-13/claims.poly | 8:3 | DMCS003? | Cannot verify 'create Claim { Amount: amount }' against constraint range(0, +∞) on property 'Amount': the assigned value has no bound analysis can use.

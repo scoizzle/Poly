@@ -526,7 +526,6 @@ public class OperatorOracleTests {
         new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-07 (enum member literals)", 2, "a3b0e50adb3c6b77"),
         // Temporal cells: the analyzer's offset permission and its rejection of CLR-defined duration arithmetic.
         new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10b (the temporal offset permission: Date and DateTime ± Number, and Date - Date)", 5, "c35db5c816281edf"),
-        new(OracleKind.AnalyzerDisagrees, "DateTime", "Add,Subtract", "Duration", "analyzer rejects", "F-11 (#550: DateTime ± a Duration value is refused as not supported yet)", 2, "81c2b5da5da106de"),
         new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10b (temporal operands the CLR defines)", 7, "0409473254198adb"),
         // Permanent: C# defines string + object, and Poly allows only Text + Text. A named language policy, not a gap.
         new(OracleKind.AnalyzerDisagrees, "*", "Add", "*", "analyzer rejects, tree String", "T-07 (language policy: only Text + Text concatenates)", 16, "a66331455543d1e9")
@@ -549,11 +548,7 @@ public class OperatorOracleTests {
         new(OracleKind.AbiDivergesFromTree, "Date,DateTime", "Add,Subtract", "*", "executes an undefined cell", "T-10b (the date fence accepts Date and DateTime plus or minus a number the provider defines no operator for)", 48, "10a8b9989a446795"),
         new(OracleKind.AbiDivergesFromTree, "Text", Ordering, "Text", "executes an undefined cell", "T-07 (#631 ordering legality: TextAndBooleanOrderingRule)", 4, "04c3d80b8bd14c13"),
         // T-22a adds 50: the shift-count policy cells of a small integer or char left, whose left converts to Int32 as for an int count.
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting); T-18b adds 520 native-integer cells (T-18b lock amendment 7: 'its unstated conversion is then T-21's ledger line'); T-22a adds the 50 shift-count policy cells of a small left", 2299, "0e5ea4c8443835bf"),
-        // Wrong values (issue 832; T-21a fixed -Decimal and -Duration). T-22a states the bitwise and shift type, so the 255 type-only and
-        // 8 type-and-value cells of the emitter's own promotion are gone: the 8 keep their value line, and 8 shift-count policy cells
-        // of a uint or ulong left join it with the value master computed (the uint and ulong shift of an int count is on this line too).
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 129, "af9015153602991d")
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting); T-18b adds 520 native-integer cells (T-18b lock amendment 7: 'its unstated conversion is then T-21's ledger line'); T-22a adds the 50 shift-count policy cells of a small left", 2299, "0e5ea4c8443835bf")
     ];
 
     private static readonly LedgerRule[] RejectedDefinedRules = [];
@@ -578,7 +573,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AnalyzerDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 34);
+        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 32);
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -586,7 +581,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 2480);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 2351);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -604,9 +599,10 @@ public class OperatorOracleTests {
         (40, "8f48a0defcb327e9"), (20, "7ba4ce6c196e991e"), (20, "5b5cc5a3f2ece6cd"), (8, "a2d892f80f998382")
     ];
 
-    /// <summary>T-22a moved these (its PR lists each cell): 1059 to 44 (40 date cells, T-10; 4 Text ordering cells, T-07), 1729 to 1759, and 115 to 129.</summary>
+    /// <summary>T-22a moved these (its PR lists each cell): 1059 to 44 (40 date cells, T-10; 4 Text ordering cells, T-07), 1729 to 1759, and 115 to 129.
+    /// The 127 wrong values those 129 counted on the 22-operand grid are gone (issue 832): no cell has a value divergence.</summary>
     private static readonly (int Count, string Checksum)[] MasterAbi = [
-        (40, "975825d5af45e060"), (4, "04c3d80b8bd14c13"), (1759, "c6974bac9345ce1e"), (127, "726f5d3f4f352d12")
+        (40, "975825d5af45e060"), (4, "04c3d80b8bd14c13"), (1759, "c6974bac9345ce1e")
     ];
 
     private static bool IsNative(string? operand) => operand is "NInt" or "NUInt";
@@ -644,6 +640,173 @@ public class OperatorOracleTests {
     private static OracleCell Cell(string left, OperatorKind op, string? right) =>
         OperatorOracle.Run.Value.Cells.Single(c => c.Left == left && c.Op == op && c.Right == right);
 
+    /// <summary>
+    /// Issue 832: the value cells the VM answered in the wrong shape. Three shapes, one per cause: a <c>uint</c>
+    /// operation run at 64 bits (so it never wrapped to 32), a <c>float</c> answer reported as the double its bits
+    /// hold, and a <c>ulong</c> answer reported as the signed bitcast of its word.
+    /// </summary>
+    private static readonly (string Left, OperatorKind Op, string? Right)[] FixedValueCells832 = [
+        ("Char", OperatorKind.Add, "UInt32"),
+        ("Char", OperatorKind.BitwiseOr, "UInt64"),
+        ("Char", OperatorKind.BitwiseXor, "UInt64"),
+        ("Char", OperatorKind.Divide, "Float32"),
+        ("Char", OperatorKind.Multiply, "Float32"),
+        ("Char", OperatorKind.Multiply, "UInt32"),
+        ("Char", OperatorKind.Multiply, "UInt64"),
+        ("Char", OperatorKind.Subtract, "UInt32"),
+        ("Float32", OperatorKind.Add, "Int32"),
+        ("Float32", OperatorKind.Add, "Number"),
+        ("Float32", OperatorKind.Add, "UInt32"),
+        ("Float32", OperatorKind.Add, "UInt64"),
+        ("Float32", OperatorKind.Divide, "Char"),
+        ("Float32", OperatorKind.Divide, "Float32"),
+        ("Float32", OperatorKind.Divide, "Int16"),
+        ("Float32", OperatorKind.Divide, "Int32"),
+        ("Float32", OperatorKind.Divide, "Int8"),
+        ("Float32", OperatorKind.Divide, "Number"),
+        ("Float32", OperatorKind.Divide, "UInt16"),
+        ("Float32", OperatorKind.Divide, "UInt32"),
+        ("Float32", OperatorKind.Divide, "UInt64"),
+        ("Float32", OperatorKind.Divide, "UInt8"),
+        ("Float32", OperatorKind.Multiply, "Char"),
+        ("Float32", OperatorKind.Multiply, "Int16"),
+        ("Float32", OperatorKind.Multiply, "Int32"),
+        ("Float32", OperatorKind.Multiply, "Int8"),
+        ("Float32", OperatorKind.Multiply, "Number"),
+        ("Float32", OperatorKind.Multiply, "UInt16"),
+        ("Float32", OperatorKind.Multiply, "UInt32"),
+        ("Float32", OperatorKind.Multiply, "UInt64"),
+        ("Float32", OperatorKind.Multiply, "UInt8"),
+        ("Float32", OperatorKind.Subtract, "Int32"),
+        ("Float32", OperatorKind.Subtract, "Number"),
+        ("Float32", OperatorKind.Subtract, "UInt32"),
+        ("Float32", OperatorKind.Subtract, "UInt64"),
+        ("Int16", OperatorKind.Divide, "Float32"),
+        ("Int16", OperatorKind.Multiply, "Float32"),
+        ("Int32", OperatorKind.Add, "Float32"),
+        ("Int32", OperatorKind.Divide, "Float32"),
+        ("Int32", OperatorKind.Multiply, "Float32"),
+        ("Int32", OperatorKind.Subtract, "Float32"),
+        ("Int8", OperatorKind.Divide, "Float32"),
+        ("Int8", OperatorKind.Multiply, "Float32"),
+        ("Number", OperatorKind.Add, "Float32"),
+        ("Number", OperatorKind.Divide, "Float32"),
+        ("Number", OperatorKind.Multiply, "Float32"),
+        ("Number", OperatorKind.Subtract, "Float32"),
+        ("UInt16", OperatorKind.Add, "UInt32"),
+        ("UInt16", OperatorKind.BitwiseOr, "UInt64"),
+        ("UInt16", OperatorKind.BitwiseXor, "UInt64"),
+        ("UInt16", OperatorKind.Divide, "Float32"),
+        ("UInt16", OperatorKind.Multiply, "Float32"),
+        ("UInt16", OperatorKind.Multiply, "UInt32"),
+        ("UInt16", OperatorKind.Multiply, "UInt64"),
+        ("UInt16", OperatorKind.Subtract, "UInt32"),
+        ("UInt32", OperatorKind.Add, "Char"),
+        ("UInt32", OperatorKind.Add, "Float32"),
+        ("UInt32", OperatorKind.Add, "UInt16"),
+        ("UInt32", OperatorKind.Add, "UInt32"),
+        ("UInt32", OperatorKind.Add, "UInt8"),
+        ("UInt32", OperatorKind.BitwiseNot, null),
+        ("UInt32", OperatorKind.BitwiseOr, "UInt64"),
+        ("UInt32", OperatorKind.BitwiseXor, "UInt64"),
+        ("UInt32", OperatorKind.Divide, "Float32"),
+        ("UInt32", OperatorKind.Multiply, "Char"),
+        ("UInt32", OperatorKind.Multiply, "Float32"),
+        ("UInt32", OperatorKind.Multiply, "UInt16"),
+        ("UInt32", OperatorKind.Multiply, "UInt32"),
+        ("UInt32", OperatorKind.Multiply, "UInt64"),
+        ("UInt32", OperatorKind.Multiply, "UInt8"),
+        ("UInt32", OperatorKind.ShiftLeft, "Char"),
+        ("UInt32", OperatorKind.ShiftLeft, "Int16"),
+        ("UInt32", OperatorKind.ShiftLeft, "Int32"),
+        ("UInt32", OperatorKind.ShiftLeft, "Int8"),
+        ("UInt32", OperatorKind.ShiftLeft, "NInt"),
+        ("UInt32", OperatorKind.ShiftLeft, "Number"),
+        ("UInt32", OperatorKind.ShiftLeft, "UInt16"),
+        ("UInt32", OperatorKind.ShiftLeft, "UInt32"),
+        ("UInt32", OperatorKind.ShiftLeft, "UInt64"),
+        ("UInt32", OperatorKind.ShiftLeft, "UInt8"),
+        ("UInt32", OperatorKind.ShiftRight, "Char"),
+        ("UInt32", OperatorKind.ShiftRight, "NInt"),
+        ("UInt32", OperatorKind.Subtract, "Char"),
+        ("UInt32", OperatorKind.Subtract, "Float32"),
+        ("UInt32", OperatorKind.Subtract, "UInt16"),
+        ("UInt32", OperatorKind.Subtract, "UInt32"),
+        ("UInt32", OperatorKind.Subtract, "UInt8"),
+        ("UInt64", OperatorKind.Add, "Float32"),
+        ("UInt64", OperatorKind.BitwiseNot, null),
+        ("UInt64", OperatorKind.BitwiseOr, "Char"),
+        ("UInt64", OperatorKind.BitwiseOr, "UInt16"),
+        ("UInt64", OperatorKind.BitwiseOr, "UInt32"),
+        ("UInt64", OperatorKind.BitwiseOr, "UInt64"),
+        ("UInt64", OperatorKind.BitwiseOr, "UInt8"),
+        ("UInt64", OperatorKind.BitwiseXor, "Char"),
+        ("UInt64", OperatorKind.BitwiseXor, "UInt16"),
+        ("UInt64", OperatorKind.BitwiseXor, "UInt32"),
+        ("UInt64", OperatorKind.BitwiseXor, "UInt64"),
+        ("UInt64", OperatorKind.BitwiseXor, "UInt8"),
+        ("UInt64", OperatorKind.Divide, "Float32"),
+        ("UInt64", OperatorKind.Multiply, "Char"),
+        ("UInt64", OperatorKind.Multiply, "Float32"),
+        ("UInt64", OperatorKind.Multiply, "UInt16"),
+        ("UInt64", OperatorKind.Multiply, "UInt32"),
+        ("UInt64", OperatorKind.Multiply, "UInt64"),
+        ("UInt64", OperatorKind.Multiply, "UInt8"),
+        ("UInt64", OperatorKind.ShiftLeft, "Char"),
+        ("UInt64", OperatorKind.ShiftLeft, "Int16"),
+        ("UInt64", OperatorKind.ShiftLeft, "Int32"),
+        ("UInt64", OperatorKind.ShiftLeft, "Int8"),
+        ("UInt64", OperatorKind.ShiftLeft, "Number"),
+        ("UInt64", OperatorKind.ShiftLeft, "UInt16"),
+        ("UInt64", OperatorKind.ShiftLeft, "UInt32"),
+        ("UInt64", OperatorKind.ShiftLeft, "UInt64"),
+        ("UInt64", OperatorKind.ShiftLeft, "UInt8"),
+        ("UInt64", OperatorKind.Subtract, "Char"),
+        ("UInt64", OperatorKind.Subtract, "Float32"),
+        ("UInt64", OperatorKind.Subtract, "UInt16"),
+        ("UInt64", OperatorKind.Subtract, "UInt32"),
+        ("UInt64", OperatorKind.Subtract, "UInt64"),
+        ("UInt64", OperatorKind.Subtract, "UInt8"),
+        ("UInt8", OperatorKind.Add, "UInt32"),
+        ("UInt8", OperatorKind.BitwiseOr, "UInt64"),
+        ("UInt8", OperatorKind.BitwiseXor, "UInt64"),
+        ("UInt8", OperatorKind.Divide, "Float32"),
+        ("UInt8", OperatorKind.Multiply, "Float32"),
+        ("UInt8", OperatorKind.Multiply, "UInt32"),
+        ("UInt8", OperatorKind.Multiply, "UInt64"),
+        ("UInt8", OperatorKind.Subtract, "UInt32")
+    ];
+
+    /// <summary>
+    /// Issue 832: every cell the VM answered in the wrong shape, checked against C# itself. The C# binder gives the
+    /// result type for the operands (a shift's count converted to <c>int</c> per the permanent policy), and that must be
+    /// the type the tree states — so the value below is compared at C#'s type, not at a type the analysis invented. The
+    /// VM's own answer then carries no value divergence: it is that value.
+    /// </summary>
+    [Test]
+    public async Task Issue832_FixedValueCells_AnswerAtCSharpsTypeAndValue() {
+        var problems = new List<string>();
+        foreach (var (leftName, kind, rightName) in FixedValueCells832) {
+            var left = OperatorOracle.GridOperands.Single(o => o.Name == leftName);
+            var right = rightName is null ? null : OperatorOracle.GridOperands.Single(o => o.Name == rightName);
+            var cell = Cell(leftName, kind, rightName);
+            // C# rejects a shift count that is not int; the policy converts it to int unchecked, so its int cell is the type.
+            var policyCount = kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
+                && right is not null
+                && CSharpBuiltIns.IsPolicyShiftCount(Poly.Interpretation.CSharp.CSharpTypeSystem.SimpleTypeOf(right.Clr));
+            var count = right is null ? null : policyCount ? (object)1 : right.Plain;
+            var csharp = CSharpOperatorBinder.ResultType(kind, left.Plain!, count);
+            if (csharp is null)
+                problems.Add($"{cell.Key}: C# defines no operator for the operands");
+            else if (!cell.Tree.StartsWith(csharp.Name, StringComparison.Ordinal))
+                problems.Add($"{cell.Key}: tree {cell.Tree}, C# {csharp.Name}");
+            foreach (var divergence in cell.Divergences.Where(static d =>
+                d.Kind == OracleKind.AbiDivergesFromTree && d.Reason.StartsWith("value S", StringComparison.Ordinal)))
+                problems.Add($"{cell.Key}: {divergence.Reason}");
+        }
+        await Assert.That(problems).IsEmpty();
+    }
+
     [Test]
     public async Task Probe_Int32PlusInt32_TreeAndAbiBothSay32BitWrap() {
         // The T-03b seed said the VM returns long. With typed Int32 operands it does not: it wraps at 32 bits,
@@ -680,15 +843,14 @@ public class OperatorOracleTests {
     }
 
     /// <summary>
-    /// A WRONG VALUE, pinned as it is today (issue 832, owner T-21b): <c>UInt8 | UInt64</c> reads its UInt64 word as a
-    /// signed one (T-22a typed it UInt64, the provider's type; it was Byte). It is not the right answer; T-21b's fix
-    /// inverts it (T-21a fixed unary minus on a Decimal and a Duration). The ledger's checksums are value-independent, so
-    /// without this a wrong value that moved to a different wrong value would be invisible. The operands are exactly
+    /// Issue 832, fixed: <c>UInt8 | UInt64</c> computes the UInt64 word and answers it as the UInt64 it is. It used to
+    /// come back as the signed bitcast of the word (-1); T-21a fixed unary minus on a Decimal and a Duration, and this
+    /// change fixes the uint arithmetic width plus the float and ulong answer shape. The operands are exactly
     /// representable and the text is the oracle's invariant-culture rendering, so the pin is the same on arm64 and x64.
     /// </summary>
     [Test]
-    public async Task Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem() {
-        await Assert.That(Cell("UInt8", OperatorKind.BitwiseOr, "UInt64").Abi).IsEqualTo("UInt64; S1=255; S2=-1");
+    public async Task Probe_UInt8BitwiseOrUInt64_AnswersTheUInt64MaxValue() {
+        await Assert.That(Cell("UInt8", OperatorKind.BitwiseOr, "UInt64").Abi).IsEqualTo("UInt64; S1=255; S2=18446744073709551615");
     }
 
     /// <summary>

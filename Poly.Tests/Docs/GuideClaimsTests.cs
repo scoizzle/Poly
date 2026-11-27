@@ -90,17 +90,6 @@ public class GuideClaimsTests {
         }
         """;
 
-    private const string OwnedDomain = """
-        domain Owned
-        A: entity {
-          N: Number
-          kid: owned B optional
-        }
-        B: entity {
-          M: Number
-        }
-        """;
-
     /// <summary>#492's reproduction: <c>action when S</c> where <c>S</c> is a real stage.</summary>
     private const string ActionWhenDomain = """
         domain T
@@ -126,14 +115,11 @@ public class GuideClaimsTests {
     /// </summary>
     private static readonly ClaimProbe[] Probes = [
         new("c600", "#600",
-            "Store notify runs stage-scoped handlers first, then entity-level.",
-            ["entity-first", "stage-first"], "stage-first", "M-02", NotifyOrder),
+            "Store notify runs entity-level handlers first, then stage-scoped ones.",
+            ["entity-first", "stage-first"], "entity-first", "M-02", NotifyOrder),
         new("c601", "#601",
-            "Fires **once** when **at least one** linked related entity is in a matching stage",
-            ["once", "each-transition"], "once", "M-02", AnyFiresOnce),
-        new("c637", "#637",
-            "removing the owner instance entirely is not an unlink, so it is exempt from the minimum.",
-            ["present", "absent"], "present", "M-02", OwnedRemoval),
+            "Fires on **each** matching transition while **at least one** linked related entity is in a matching stage",
+            ["once", "each-transition"], "each-transition", "M-02", AnyFiresOnce),
         new("c492", "#492",
             "Action `when Stage` | Not a runtime or emit gate",
             ["accepted", "rejected"], "rejected", "G-05",
@@ -154,25 +140,12 @@ public class GuideClaimsTests {
     /// The rows this slice knows about: the id, the one slice that deletes the row, the measured detail,
     /// and which resolution retires it. Each entry is a recorded contradiction, never a pass.
     /// <para>
-    /// c576 and c577 share one claim sentence — the guide's only statement about a stage <c>require</c>
-    /// being an invariant — so one M-02 reword retires both rows, and neither can outlive the sentence.
+    /// c576 (create, L-17 #576) and c577 (an action, V-10 #518/#577) share the guide's one stage-<c>require</c>
+    /// invariant sentence; both are retired (#1064 and #1039 checked the requirement at create and after the
+    /// action), so the probes stay and no row remains, as R6a requires.
     /// </para>
     /// </summary>
     private static readonly DriftRow[] KnownGuideDrift = [
-        new("c600", "M-02", "entity-first: Trace=12",
-            "M-02 reword: the guide says stage-scoped first; it must say entity-level first."),
-        new("c601", "M-02", "each-transition: AnyN=2, EachN=2",
-            "M-02 reword: 'once' becomes 'each matching transition'."),
-        new("c637", "M-02", "absent: 3/3 effect verbs are parse errors; last-owner unlink refused",
-            "M-02 reword: the removal exemption goes, or a removal operation lands."),
-        new("c492", "G-05", "accepted: 0 errors",
-            "G-05 refuses `action when S` in analysis, at the action's own line; the section 10 row is then true."),
-        new("c576", "L-17", "accepted: created in Open with Cleared=true",
-            "L-17 refuses create in a stage whose require the initial values falsify. Shares c577's claim "
-            + "sentence, so one M-02 reword retires both rows."),
-        new("c577", "V-10", "accepted: 0 errors; the clearing action succeeds; the following action is blocked",
-            "V-10 refuses or post-checks an action that falsifies the stage require. Shares c576's claim "
-            + "sentence, so one M-02 reword retires both rows."),
     ];
 
     /// <summary>The audit's answer: contradictions with no row, and rows with no contradiction.</summary>
@@ -396,33 +369,6 @@ public class GuideClaimsTests {
             _ => "AnyN=" + any,
         };
         return new ProbeAnswer(verdict, $"{verdict}: AnyN={any}, EachN={each}");
-    }
-
-    /// <summary>
-    /// #637: the guide says removing an owner is exempt from the owned-target minimum. The probe asks
-    /// whether any removal exists at all, and whether the minimum still refuses a last-owner unlink.
-    /// </summary>
-    private static ProbeAnswer OwnedRemoval() {
-        var verbs = new[] { "delete", "remove", "destroy" };
-        var refused = verbs.Count(verb => {
-            var result = GuideBlocks.Analyze(
-                "domain Verbed\n\nA: entity {\n  N: Number\n  Zap: action { " + verb + " this }\n}\n");
-            return result.Diagnostics.Any(d => d.IsError && d.Code == "DSL0001");
-        });
-
-        var domain = Compile(OwnedDomain);
-        var exec = ModuleExec.For(domain);
-        var a = exec.Create("A", Values(("N", 1L))).Instance;
-        var b = exec.Create("B", Values(("M", 1L))).Instance;
-        if (a is null || b is null)
-            return new ProbeAnswer("create-refused", "create refused");
-        if (!exec.Link("kid", a, b).Succeeded)
-            return new ProbeAnswer("link-refused", "link refused");
-        var unlink = exec.Unlink("kid", a, b);
-        var verdict = refused == verbs.Length ? "absent" : "present";
-        return new ProbeAnswer(verdict,
-            $"{verdict}: {refused}/3 effect verbs are parse errors; last-owner unlink "
-            + (unlink.Succeeded ? "allowed" : "refused"));
     }
 
     /// <summary>#518/#577: an action inside the stage can falsify the stage's <c>require</c>.</summary>

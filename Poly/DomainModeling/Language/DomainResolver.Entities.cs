@@ -199,7 +199,7 @@ public sealed partial class DomainResolver {
                                 ParseNavLine(name);
                             }
                             else {
-                                CheckUnsupportedKeyword(name, typeWord);
+                                CheckUnsupportedKeyword(name, Current);
                                 throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                             }
                             continue;
@@ -260,13 +260,18 @@ public sealed partial class DomainResolver {
                     ParseStandaloneAction(name, changes);
                 }
                 else {
-                    CheckUnsupportedKeyword(name, DslTokenText.Word(Current));
+                    CheckUnsupportedKeyword(name, Current);
                     throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                 }
                 continue;
             }
 
-            throw Error($"Expected property, stage, action, or policy, got '{Shown(Current)}'");
+            // A member name that lexes as a keyword (`from: Text`) can never match a row. Say so and name the
+            // rename, rather than "Expected property, stage, action, or policy" (#549).
+            throw Error(PeekIs(TokenKind.Colon) && ReservedMemberWord(Current) is { Length: > 0 } reserved
+                ? $"'{reserved}' is a reserved word and cannot name a property; " +
+                  $"rename it (e.g. '{char.ToUpperInvariant(reserved[0])}{reserved[1..]}' or a synonym)."
+                : $"Expected property, stage, action, or policy, got '{Shown(Current)}'");
         }
 
         Expect(TokenKind.RBrace);
@@ -286,11 +291,13 @@ public sealed partial class DomainResolver {
     /// </summary>
     private void ResolvePendingRequires(List<DomainChange> changes) {
         foreach (var pr in _pendingRequires) {
+            // The require token is the anchor for both refusals: the cursor has already passed the
+            // entity's '}', so the current token is the next declaration.
             if (pr.Negated) {
                 // require not PolicyName
                 if (!_entityPolicies.TryGetValue(pr.PolicyName, out var expr)) {
-                    throw Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
-                        $"which is not defined on entity '{_currentEntityName}'.");
+                    throw GrammarError.Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
+                        $"which is not defined on entity '{_currentEntityName}'.", pr.At.Line, pr.At.Col);
                 }
                 var policyName = $"not_{pr.PolicyName}";
                 changes.Add(new AddPolicyToActionChange(_currentEntityName, pr.ActionName,
@@ -299,8 +306,8 @@ public sealed partial class DomainResolver {
             else {
                 // require PolicyName
                 if (!_entityPolicies.TryGetValue(pr.PolicyName, out var expr)) {
-                    throw Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
-                        $"which is not defined on entity '{_currentEntityName}'.");
+                    throw GrammarError.Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
+                        $"which is not defined on entity '{_currentEntityName}'.", pr.At.Line, pr.At.Col);
                 }
                 changes.Add(new AddPolicyToActionChange(_currentEntityName, pr.ActionName,
                     new Policy(pr.PolicyName, expr), StageName: pr.StageName));
@@ -510,13 +517,15 @@ public sealed partial class DomainResolver {
     }
 
     /// <summary>
-    /// Throws a specific "not supported in Phase 1a" error if <paramref name="keyword"/>
+    /// Throws a specific "not supported in Phase 1a" error at <paramref name="keyword"/>, the type word, if it
     /// is a known unsupported construct keyword. Otherwise returns without throwing.
     /// </summary>
-    private static void CheckUnsupportedKeyword(string name, string keyword) {
-        if (_unsupportedKeywords.Contains(keyword)) {
-            throw new FormatException(
-                $"'{keyword}' is not supported in Phase 1a (used as type for '{name}')");
+    private static void CheckUnsupportedKeyword(string name, DslToken keyword) {
+        var word = DslTokenText.Word(keyword);
+        if (_unsupportedKeywords.Contains(word)) {
+            throw GrammarError.Error(
+                $"'{word}' is not supported in Phase 1a (used as type for '{name}')",
+                keyword.Line, keyword.Col);
         }
     }
 }

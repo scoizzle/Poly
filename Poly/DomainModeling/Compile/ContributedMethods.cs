@@ -356,8 +356,15 @@ internal static class ContributedMethods {
                 TypeDefinitionReference primitive when Poly.Introspection.CommonLanguageRuntime.ClrBuiltInRules.IsPrimitive(primitive.TypeDefinition) => null,
                 NamedTypeReference named => named.TypeName,
                 TypeReference type => type.TypeName,
-                _ => null
+                // A field or property of `this` (`this._items.Add(item)` in __Restore, #934) has the type the
+                // enclosing type declares for it; a call through it threads only when that type is a module type.
+                Member { Value: ThisReference } own => ReceiverTypeName(DeclaredType(module[enclosing], own.MemberName)),
+                // A cast names its receiver's type (`((IList)this._items).Clear()` in __Restore).
+                TypeCast cast => ReceiverTypeName(cast.TargetTypeReference),
+                _ => LoopVariableElementType(member.Value, enclosing, enclosingMethod, module, methods)
             };
+            if (resolved is "")
+                return [];
             if (resolved is null) {
                 if (threadedMethods.Contains(member.MemberName))
                     throw new InvalidOperationException(
@@ -404,10 +411,104 @@ internal static class ContributedMethods {
         return missing.OrderBy(m => m.Index).ToList();
     }
 
+    /// <summary>The type <paramref name="type"/> declares for its field or property <paramref name="memberName"/>; null when it declares none.</summary>
+    private static Node? DeclaredType(TypeDefinitionNode type, string memberName) =>
+        type.Fields?.FirstOrDefault(f => string.Equals(f.Name, memberName, StringComparison.Ordinal))?.MemberType
+        ?? type.Properties?.FirstOrDefault(p => string.Equals(p.Name, memberName, StringComparison.Ordinal))?.MemberType;
+
+    /// <summary>
+    /// The name to look a receiver of type <paramref name="typeNode"/> up by among the module types; <c>""</c> for a
+    /// constructed generic (<c>List&lt;Item&gt;</c>), which no module type is; null, which refuses a threaded name, when
+    /// there is no type to name or it is a CLR primitive (as for a primitive receiver above).
+    /// </summary>
+    private static string? ReceiverTypeName(Node? typeNode) {
+        if (typeNode is OptionalTypeReference optional)
+            typeNode = optional.InnerType;
+        return typeNode switch {
+            TypeDefinitionReference primitive when Poly.Introspection.CommonLanguageRuntime.ClrBuiltInRules.IsPrimitive(primitive.TypeDefinition) => null,
+            NamedTypeReference { TypeArguments.Count: > 0 } => "",
+            NamedTypeReference named => named.TypeName,
+            TypeReference typeReference => typeReference.TypeName,
+            _ => null
+        };
+    }
+
     private static bool IsSameBinding(Node argument, string name) => argument switch {
         Parameter parameter => string.Equals(parameter.Name, name, StringComparison.Ordinal),
         Variable variable => string.Equals(variable.Name, name, StringComparison.Ordinal),
         _ => false
+    };
+
+    /// <summary>
+    /// The element type of a loop variable the enclosing method declares over a field on this type. A subscription
+    /// dispatcher calls every handler on its registry list's loop variable (<c>sub.Handler(…)</c>), so a handler that
+    /// needs a contributed parameter must resolve the loop's element type (#830). A create-in's unwrapped factory local
+    /// resolves to the factory's type (<see cref="CreatedLocalType"/>). Every other receiver — a local, a parameter, a
+    /// call result — stays unresolved, and the call is refused rather than guessed.
+    /// </summary>
+    private static string? LoopVariableElementType(
+        Node receiver,
+        int enclosing,
+        string enclosingMethod,
+        IReadOnlyList<TypeDefinitionNode> module,
+        List<List<MethodDefinitionNode>> methods) {
+        if (receiver is not Variable variable)
+            return null;
+        var body = methods[enclosing]
+            .FirstOrDefault(m => string.Equals(m.Name, enclosingMethod, StringComparison.Ordinal))?.Body;
+        // A create-in body unwraps its factory's result into a local (`var __child = __childResult.Value;` after
+        // `var __childResult = Child.Create(…)`) and calls the child's notify and replay methods on it (#630). That
+        // local's type is the factory's type, stated in the tree; it is the one local besides a loop variable that resolves.
+        if (body is not null && CreatedLocalType(body, variable.Name) is { } created)
+            return created;
+        var loop = body is null ? null : FindLoop(body, variable.Name);
+        if (loop?.Collection is not Member { Value: ThisReference } collection)
+            return null;
+        var field = module[enclosing].Fields?
+            .FirstOrDefault(f => string.Equals(f.Name, collection.MemberName, StringComparison.Ordinal));
+        return field is null ? null : CollectionElementType(field.FieldType);
+    }
+
+    /// <summary>The type <c>T</c> of a local assigned <c>r.Value</c> where <c>r</c> is assigned <c>T.Create(…)</c>, else null.</summary>
+    private static string? CreatedLocalType(Node body, string variableName) {
+        if (FindAssignment(body, variableName)?.Value is not Member { MemberName: "Value", Value: Variable result })
+            return null;
+        if (FindAssignment(body, result.Name)?.Value is not Invoke { Delegate: Member { MemberName: "Create" } factory })
+            return null;
+        return factory.Value switch {
+            NamedTypeReference named => named.TypeName,
+            TypeReference type => type.TypeName,
+            _ => null
+        };
+    }
+
+    private static Assignment? FindAssignment(Node node, string variableName) {
+        if (node is Assignment { Destination: Variable destination } assignment
+            && string.Equals(destination.Name, variableName, StringComparison.Ordinal))
+            return assignment;
+        foreach (var child in node.Children) {
+            if (child is not null && FindAssignment(child, variableName) is { } found)
+                return found;
+        }
+        return null;
+    }
+
+    private static ForEachLoop? FindLoop(Node node, string variableName) {
+        if (node is ForEachLoop loop
+            && string.Equals(loop.LoopVariable.Name, variableName, StringComparison.Ordinal))
+            return loop;
+        foreach (var child in node.Children) {
+            if (child is not null && FindLoop(child, variableName) is { } found)
+                return found;
+        }
+        return null;
+    }
+
+    /// <summary>The element type name of a field declared as <c>List&lt;T&gt;</c>, else null.</summary>
+    private static string? CollectionElementType(Node type) => type switch {
+        OptionalTypeReference optional => CollectionElementType(optional.InnerType),
+        NamedTypeReference { TypeName: "List", TypeArguments: [NamedTypeReference element] } => element.TypeName,
+        _ => null
     };
 
     private static void RejectConstructorCalls(
@@ -459,6 +560,7 @@ internal static class ContributedMethods {
             Subtract e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Subtract(l, r)),
             Multiply e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Multiply(l, r)),
             Divide e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Divide(l, r)),
+            Modulo e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Modulo(l, r)),
             Poly.Ast.Nodes.And e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Poly.Ast.Nodes.And(l, r)),
             Poly.Ast.Nodes.Or e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Poly.Ast.Nodes.Or(l, r)),
             Coalesce e => Binary(e, e.LeftHandValue, e.RightHandValue, Map, (l, r) => new Coalesce(l, r)),

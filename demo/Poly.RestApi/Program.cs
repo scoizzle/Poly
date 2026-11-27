@@ -2,6 +2,7 @@
 
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
@@ -22,7 +23,7 @@ builder.Services.AddScoped<Poly.Runtime.IStoragePort, LibraryDbContext>();
 
 var app = builder.Build();
 
-var schemaId = 2021377792;
+var schemaId = 187169496;
 
 using (var scope = app.Services.CreateScope())
 {
@@ -30,7 +31,7 @@ using (var scope = app.Services.CreateScope())
     var created = await db.Database.EnsureCreatedAsync();
     if (created)
     {
-        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 2021377792");
+        await db.Database.ExecuteSqlRawAsync("PRAGMA user_version = 187169496");
     }
     else
     {
@@ -47,7 +48,10 @@ using (var scope = app.Services.CreateScope())
             Environment.Exit(1);
         }
     }
-    await SeedAsync(db);
+    if (builder.Configuration.GetValue<bool>("SeedDemoData"))
+    {
+        await SeedAsync(db);
+    }
 }
 
 app.MapGet("/api/books", async (LibraryDbContext db) => await db.Books.ToListAsync());
@@ -55,28 +59,75 @@ app.MapGet("/api/books", async (LibraryDbContext db) => await db.Books.ToListAsy
 app.MapGet("/api/books/{isbn}", async (string isbn, LibraryDbContext db) => (await db.Books.FirstOrDefaultAsync(e => e.ISBN == isbn) is Library.Book book ? Results.Ok(book) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
+    if (dto.ISBN != null && dto.ISBN.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'ISBN' contains '/', which no route can read back; use a key without '/'");
+    }
     var bookResult = Library.Book.Create(db, dto.Title, dto.Author, dto.ISBN, dto.Pages, dto.Genre);
     if (!bookResult.IsSuccess)
     {
         return Problem(bookResult.Error!);
     }
     db.Books.Add(bookResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.Books.AnyAsync(row => row.ISBN == bookResult.Value.ISBN))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'ISBN' value is already used on another 'Book'.", "Book.ISBN"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/books/", System.Uri.EscapeDataString(bookResult.Value.ISBN)), bookResult.Value);
 });
 
-app.MapGet("/api/patrons", async (LibraryDbContext db) => await db.Patrons.ToListAsync());
+app.MapGet("/api/patrons", async (LibraryDbContext db) => {
+    var patrons = await db.Patrons.ToListAsync();
+    foreach (var patron in patrons)
+    {
+        await db.Entry(patron).Collection(e => e.Loans).LoadAsync();
+        await db.Entry(patron).Collection(e => e.Fines).LoadAsync();
+    }
+    return patrons;
+});
 
-app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Library.Patron patron ? Results.Ok(patron) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => {
+    var patron = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
+    if (patron == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(patron).Collection(e => e.Loans).LoadAsync();
+    await db.Entry(patron).Collection(e => e.Fines).LoadAsync();
+    return Results.Ok(patron);
+});
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
-    var patronResult = Library.Patron.Create(db, dto.Name, dto.Email, null, null, dto.MaxItems, null, null, null, null);
+    if (dto.Email != null && dto.Email.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'Email' contains '/', which no route can read back; use a key without '/'");
+    }
+    var patronResult = Library.Patron.Create(db, dto.Name, dto.Email, dto.MemberSince, dto.Status, dto.MaxItems, dto.CurrentBorrowCount, dto.OutstandingFines, null, null);
     if (!patronResult.IsSuccess)
     {
         return Problem(patronResult.Error!);
     }
     db.Patrons.Add(patronResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.Patrons.AnyAsync(row => row.Email == patronResult.Value.Email))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Patron'.", "Patron.Email"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/patrons/", System.Uri.EscapeDataString(patronResult.Value.Email)), patronResult.Value);
 });
 
@@ -85,13 +136,28 @@ app.MapGet("/api/premiumpatrons", async (LibraryDbContext db) => await db.Premiu
 app.MapGet("/api/premiumpatrons/{email}", async (string email, LibraryDbContext db) => (await db.PremiumPatrons.FirstOrDefaultAsync(e => e.Email == email) is Library.PremiumPatron premiumPatron ? Results.Ok(premiumPatron) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/premiumpatrons", async (PremiumPatronDto dto, LibraryDbContext db) => {
-    var premiumPatronResult = Library.PremiumPatron.Create(db, dto.Name, dto.Email, dto.RewardPoints, null, dto.PriorityAccess);
+    if (dto.Email != null && dto.Email.Contains("/"))
+    {
+        return StatusProblem(400, "Bad Request", "the natural key 'Email' contains '/', which no route can read back; use a key without '/'");
+    }
+    var premiumPatronResult = Library.PremiumPatron.Create(db, dto.Name, dto.Email, dto.RewardPoints, dto.Tier, dto.PriorityAccess);
     if (!premiumPatronResult.IsSuccess)
     {
         return Problem(premiumPatronResult.Error!);
     }
     db.PremiumPatrons.Add(premiumPatronResult.Value);
-    await db.SaveChangesAsync();
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException)
+    {
+        if (await db.PremiumPatrons.AnyAsync(row => row.Email == premiumPatronResult.Value.Email))
+        {
+            return Problem(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'PremiumPatron'.", "PremiumPatron.Email"));
+        }
+        return StatusProblem(500, "Internal Server Error");
+    }
     return Results.Created(string.Concat("/api/premiumpatrons/", System.Uri.EscapeDataString(premiumPatronResult.Value.Email)), premiumPatronResult.Value);
 });
 
@@ -102,6 +168,11 @@ app.MapGet("/api/patrons/{email}/loans", async (string email, LibraryDbContext d
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Loans).LoadAsync();
+    foreach (var loan in parent.Loans.ToList())
+    {
+        await db.Entry(loan).Reference(e => e.Book).LoadAsync();
+        await db.Entry(loan).Reference(e => e.Borrower).LoadAsync();
+    }
     return Results.Ok(parent.Loans);
 });
 
@@ -117,6 +188,8 @@ app.MapGet("/api/patrons/{email}/loans/{id}", async (string email, int id, Libra
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Book).LoadAsync();
+    await db.Entry(child).Reference(e => e.Borrower).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -127,6 +200,10 @@ app.MapGet("/api/patrons/{email}/fines", async (string email, LibraryDbContext d
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Fines).LoadAsync();
+    foreach (var fine in parent.Fines.ToList())
+    {
+        await db.Entry(fine).Reference(e => e.Patron).LoadAsync();
+    }
     return Results.Ok(parent.Fines);
 });
 
@@ -142,6 +219,7 @@ app.MapGet("/api/patrons/{email}/fines/{id}", async (string email, int id, Libra
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Patron).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -153,9 +231,10 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
-        var book = await db.Books.FirstOrDefaultAsync(e => e.ISBN == dto.BookId);
+        var book = (dto.BookId == null ? null : await db.Books.FirstOrDefaultAsync(e => e.ISBN == dto.BookId));
         if (book == null)
         {
             return StatusProblem(404, "Not Found", "Book not found");
@@ -163,6 +242,7 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
         var result = entity.CheckOut(book);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
@@ -170,6 +250,10 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Patron' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -186,11 +270,13 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.Suspend();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -198,6 +284,10 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Patron' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -214,11 +304,13 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.CloseAccount();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -226,6 +318,10 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Patron' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -242,11 +338,13 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
     }
     await db.Entry(entity).Collection(e => e.Loans).LoadAsync();
     await db.Entry(entity).Collection(e => e.Fines).LoadAsync();
+    entity.InitializeSubscriptions();
     try
     {
         var result = entity.Reinstate();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -254,6 +352,10 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Patron' '{email}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -280,11 +382,13 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
     }
     await db.Entry(entity).Reference(e => e.Book).LoadAsync();
     await db.Entry(entity).Reference(e => e.Borrower).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Renew();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -292,6 +396,10 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Loan' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -318,11 +426,13 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
     }
     await db.Entry(entity).Reference(e => e.Book).LoadAsync();
     await db.Entry(entity).Reference(e => e.Borrower).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Return();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -330,6 +440,10 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Loan' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -355,11 +469,13 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
         return StatusProblem(404, "Not Found", "Fine not found for this Patron");
     }
     await db.Entry(entity).Reference(e => e.Patron).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Pay();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -367,6 +483,10 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Fine' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -392,11 +512,13 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
         return StatusProblem(404, "Not Found", "Fine not found for this Patron");
     }
     await db.Entry(entity).Reference(e => e.Patron).LoadAsync();
+    parentEntity.InitializeSubscriptions();
     try
     {
         var result = entity.Waive();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -404,6 +526,10 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Fine' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -488,8 +614,13 @@ internal record PatronDto
     [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
     public string? Email { get; init; }
+    public DateOnly? MemberSince { get; init; }
+    [EnumDataType(typeof(Library.PatronStatus))]
+    public Library.PatronStatus? Status { get; init; }
     [Range(0, 20)]
     public long? MaxItems { get; init; }
+    public long? CurrentBorrowCount { get; init; }
+    public long? OutstandingFines { get; init; }
 }
 
 internal record PremiumPatronDto
@@ -500,10 +631,12 @@ internal record PremiumPatronDto
     [RegularExpression("^[^@]+@[^@]+$")]
     public string? Email { get; init; }
     public long? RewardPoints { get; init; }
+    [EnumDataType(typeof(Library.PremiumTier))]
+    public Library.PremiumTier? Tier { get; init; }
     public bool? PriorityAccess { get; init; }
 }
 
 internal record CheckOutDto
 {
-    public string BookId { get; init; } = default!;
+    public string? BookId { get; init; } = default!;
 }

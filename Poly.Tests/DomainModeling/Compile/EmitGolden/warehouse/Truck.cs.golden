@@ -35,13 +35,20 @@ internal class Truck : Poly.Runtime.IActionScoped
     public Warehouse? Warehouse { get; private set; }
     public IReadOnlyList<Delivery> Deliveries
     {
-        get => this._deliveries;
+        get => new List<Delivery>(this._deliveries);
     }
     public TruckStage CurrentStage { get; private set; }
-    internal void AttachDeliveries(Delivery child)
+    internal void AttachWarehouse(Warehouse child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Warehouse = child;
+    }
+    internal DomainResult AttachDeliveries(Delivery child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._deliveries.Add(child);
+        child.AttachTruck(this);
+        return DomainResult.Success();
     }
     internal DomainResult Load(long weight)
     {
@@ -69,16 +76,16 @@ internal class Truck : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfLoad(long weight)
     {
-        var assignValue0 = this.CurrentLoad + weight;
-        if (assignValue0 < 0L)
+        var __assignValue0 = this.CurrentLoad + weight;
+        if (__assignValue0 < 0L)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be >= 0.", "Truck.CurrentLoad"));
         }
-        if (assignValue0 > 40000L)
+        if (__assignValue0 > 40000L)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be <= 40000.", "Truck.CurrentLoad"));
         }
-        this.CurrentLoad = assignValue0;
+        this.CurrentLoad = __assignValue0;
         return DomainResult.Success();
     }
     internal DomainResult Dispatch()
@@ -186,20 +193,45 @@ internal class Truck : Poly.Runtime.IActionScoped
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Required("'warehouse' is required.", "Truck.warehouse"));
         }
         var __warehouse = warehouse;
+        if (deliveries != null)
+        {
+            foreach (var __deliveriesElement in deliveries)
+            {
+                if (__deliveriesElement == null)
+                {
+                    return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Required("'deliveries' contains a null element.", "Truck.deliveries"));
+                }
+            }
+        }
         if (Truck.ExistsWithVin(db, __vin))
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Vin' value is already used on another 'Truck'.", "Truck.Vin"));
         }
-        var created = new Truck(__vin, __maxLoad, __currentLoad, __status, __warehouse, deliveries);
-        Poly.Runtime.ActionScope.Create(created, "Truck");
+        var __created = new Truck(__vin, __maxLoad, __currentLoad, __status, __warehouse, deliveries);
+        Poly.Runtime.ActionScope.Create(__created, "Truck");
         if (warehouse != null)
         {
-            warehouse.AttachTrucks(created);
+            var __attach = warehouse.AttachTrucks(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Truck>.Failure(__attach.Error!);
+            }
+        }
+        if (deliveries != null)
+        {
+            foreach (var __child in deliveries)
+            {
+                if (__child.Truck != null && __child.Truck != __created)
+                {
+                    return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'deliveries': the child's 'truck' is already set to another owner.", "Truck.deliveries"));
+                }
+                __child.AttachTruck(__created);
+            }
         }
         db.Record("Truck", "Vin", __vin);
-        return DomainResult<Truck>.Success(created);
+        return DomainResult<Truck>.Success(__created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

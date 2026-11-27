@@ -1,4 +1,5 @@
 using Poly.Analysis;
+using Poly.Ast;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
@@ -88,7 +89,10 @@ public sealed class PolyCompiler {
         ArgumentNullException.ThrowIfNull(analysis);
         var build = new DiagnosticBuilder(file, "");
         var diags = new List<CompileDiagnostic>();
-        var files = ProduceFiles(build, diags, session, domain, analysis);
+        // Lower, the lowered module's VM analysis and the C# print all recurse over the tree, so this door runs on the
+        // same parse stack Compile and Analyze use: the caller's stack must not decide whether a legal document emits
+        // (#882, where a 256-level policy aborted a 512 KB caller in ConstantFoldingPass).
+        var files = DslLimits.RunOnParseStack(() => ProduceFiles(build, diags, session, domain, analysis));
         return new CompileResult(file, domain.Name, diags, files, domain, analysis, session, session.ArtifactCatalog);
     }
 
@@ -118,11 +122,9 @@ public sealed class PolyCompiler {
         try {
             tree = DslSyntaxTree.Parse(text);
         }
-        catch (GrammarException ex) {
-            diags.Add(FromGrammar(build, ex));
-            return Fail();
-        }
         catch (FormatException ex) {
+            // The header reader positions a duplicate id; HeaderFailure keeps the DSL0003 code for it,
+            // and hands any other refusal (a positioned tokenizer error included) to FromGrammar.
             diags.Add(HeaderFailure(build, text, ex));
             return Fail();
         }
@@ -302,10 +304,13 @@ public sealed class PolyCompiler {
                 ok = false;
                 continue;
             }
-            if (!_options.Catalog.Contains(id)) {
+            if (_options.Catalog.ExtensionError(id) is { } refusal) {
                 diags.Add(ExtensionDiagnostic(build, tree, id, occurrence: 1, Severities.Error,
                     DiagnosticCodes.UnknownExtension,
-                    $"Unknown domain extension '{id}'. Record only ids this catalog can resolve."));
+                    // A recorded-unavailable id (`mysql`) says why; an unknown one names the ids that resolve (C-06).
+                    _options.Catalog.IsUnavailable(id)
+                        ? refusal
+                        : $"Unknown domain extension '{id}'. Known ids: {string.Join(", ", _options.Catalog.KnownIds)}."));
                 ok = false;
             }
         }
@@ -331,32 +336,52 @@ public sealed class PolyCompiler {
             return build.Unplaced(Severities.Error, DiagnosticCodes.Parse, ex.Detail);
         var offset = ex.Offset >= 0 ? ex.Offset : build.Lines.OffsetOf(ex.Line, ex.Column);
         var length = ex.Length > 0 ? ex.Length : build.WordLength(offset);
-        return build.Span(offset, length, Severities.Error, DiagnosticCodes.Parse, ex.Detail, "");
+        // A detail that carries its own position (the parse layer writes one for consumers that read only the
+        // message) repeats the placement; the reader gets the position once.
+        return build.Span(offset, length, Severities.Error, DiagnosticCodes.Parse,
+            WithoutRepeatedPosition(ex.Detail, ex.Line, ex.Column), "");
     }
 
     /// <summary>
-    /// A <see cref="FormatException"/> with no position came out of header parsing. Re-read the header
-    /// tokens to tell a duplicate <c>uses</c> id from any other header problem.
+    /// A <see cref="FormatException"/> came out of header parsing. Re-read the header tokens to tell a
+    /// duplicate <c>uses</c> id (DSL0003, at the second id) from any other header problem; a
+    /// positioned refusal that is not the duplicate keeps its position through <see cref="FromGrammar"/>.
     /// </summary>
     private static CompileDiagnostic HeaderFailure(DiagnosticBuilder build, string text, FormatException ex) {
-        var reader = new DslTokenReader(text);
+        var detail = ex is GrammarException grammar ? grammar.Detail : ex.Message;
+        if (DuplicateIdToken(text) is { } duplicate)
+            return build.Span(duplicate.Start, duplicate.Length, Severities.Error,
+                DiagnosticCodes.DuplicateExtension, detail, "");
+        return ex is GrammarException positioned
+            ? FromGrammar(build, positioned)
+            : build.Unplaced(Severities.Error, DiagnosticCodes.Parse, detail);
+    }
+
+    /// <summary>
+    /// The second occurrence's id token when the header lists an id twice; null otherwise, or when the
+    /// text does not tokenize at all (the tokenizer's own refusal is already the reported one).
+    /// </summary>
+    private static DslToken? DuplicateIdToken(string text) {
         var tokens = new List<DslToken>();
-        while (true) {
-            var token = reader.Peek();
-            tokens.Add(token);
-            if (token.Kind == DslTokenKind.EndOfFile)
-                break;
-            reader.Consume(1);
+        try {
+            var reader = new DslTokenReader(text);
+            while (true) {
+                var token = reader.Peek();
+                tokens.Add(token);
+                if (token.Kind == DslTokenKind.EndOfFile)
+                    break;
+                reader.Consume(1);
+            }
+        }
+        catch (FormatException) {
+            return null;
         }
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 2; DslSyntaxTree.TryReadUse(tokens, i, out var id, out _, out var next); i = next) {
-            if (!seen.Add(id)) {
-                var token = tokens[i + 1];
-                return build.Span(token.Start, token.Length, Severities.Error,
-                    DiagnosticCodes.DuplicateExtension, ex.Message, "");
-            }
+            if (!seen.Add(id))
+                return tokens[i + 1];
         }
-        return build.Unplaced(Severities.Error, DiagnosticCodes.Parse, ex.Message);
+        return null;
     }
 
     private static CompileDiagnostic PlaceAnalysis(
@@ -366,13 +391,43 @@ public sealed class PolyCompiler {
         if (root is null)
             return build.Unplaced(severity, code, diagnostic.Message, "");
         var path = DomainElementPath.Resolve(root, diagnostic.Node);
+        var (line, column) = NodePosition(diagnostic.Node);
+        if (line > 0) {
+            // The node knows where its own keyword sits (a `match`, a call, a literal), so the diagnostic is placed
+            // there rather than at the nearest named element that holds it.
+            var at = build.Lines.OffsetOf(line, column);
+            return build.Span(at, build.WordLength(at), severity, code,
+                WithoutRepeatedPosition(diagnostic.Message, line, column), path);
+        }
         var node = SpanBridge.Locate(outline.Value, path);
         if (node is null)
             return build.Unplaced(severity, code, diagnostic.Message, path);
         var length = string.Equals(build.TextAt(node.StartOffset, node.Name.Length), node.Name, StringComparison.Ordinal)
             ? node.Name.Length
             : 1;
-        return build.Span(node.StartOffset, length, severity, code, diagnostic.Message, path);
+        var placed = build.Lines.At(node.StartOffset);
+        return build.Span(node.StartOffset, length, severity, code,
+            WithoutRepeatedPosition(diagnostic.Message, placed.Line, placed.Column), path);
+    }
+
+    /// <summary>The source position a node records for itself, or <c>(0, 0)</c> when it records none.</summary>
+    private static (int Line, int Column) NodePosition(Node node) => node switch {
+        MatchExpr match => (match.Line, match.Col),
+        FunctionCall call => (call.Line, call.Col),
+        Literal literal => (literal.Line, literal.Col),
+        _ => (0, 0),
+    };
+
+    /// <summary>
+    /// Analysis writes a position into a message for consumers that carry none. A placed diagnostic carries the
+    /// position, so a trailing copy of that same position is dropped: one position, once.
+    /// </summary>
+    private static string WithoutRepeatedPosition(string message, int line, int column) {
+        var suffix = $" (line {line}, col {column})";
+        var at = message.EndsWith(suffix + ".", StringComparison.Ordinal)
+            ? message.Length - suffix.Length - 1
+            : message.EndsWith(suffix, StringComparison.Ordinal) ? message.Length - suffix.Length : -1;
+        return at < 0 ? message : string.Concat(message[..at], message[(at + suffix.Length)..]);
     }
 
     private static CompileDiagnostic FromFinding(DiagnosticBuilder build, AnalysisFinding finding) =>

@@ -99,7 +99,9 @@ public sealed class DslOperatorTable {
                 ? new BinaryRow(op, precedence, assoc, (l, r) => claim(l, r) ?? plain(l, r))
                 : new BinaryRow(op, precedence, assoc, plain, follow);
 
-        const int or = 10, and = 20, compare = 40, add = 50, mul = 60;
+        // A prefix whose operand is a primary binds tighter than every binary level (a precedence above mul):
+        // it starts where a primary starts, so `-x * y` is `(-x) * y` and never re-enters the level chain.
+        const int or = 10, and = 20, compare = 40, add = 50, mul = 60, unary = 70;
         return new DslOperatorTable(
             [
                 Row(DslTokenKind.Or, or, Assoc.Left, DomainExpression.Or),
@@ -116,8 +118,12 @@ public sealed class DslOperatorTable {
                 Row(DslTokenKind.Minus, add, Assoc.Left, DomainExpression.Subtract),
                 Row(DslTokenKind.Star, mul, Assoc.Left, DomainExpression.Multiply),
                 Row(DslTokenKind.Slash, mul, Assoc.Left, DomainExpression.Divide),
+                Row(DslTokenKind.Percent, mul, Assoc.Left, DomainExpression.Modulo),
             ],
-            [new PrefixRow(DslTokenKind.Not, add, DomainExpression.Not)],
+            [
+                new PrefixRow(DslTokenKind.Not, add, DomainExpression.Not),
+                new PrefixRow(DslTokenKind.Minus, unary, DomainExpression.Negate),
+            ],
             claims);
     }
 
@@ -215,8 +221,15 @@ public sealed class DslOperatorTable {
         return -1;
     }
 
-    /// <summary>The level at whose head <paramref name="row"/> applies: the highest level below its operand precedence.</summary>
-    public int HeadLevel(PrefixRow row) => LevelAtOrAbove(row.OperandPrecedence) - 1;
+    /// <summary>
+    /// The level at whose head <paramref name="row"/> applies: the highest level below its operand precedence.
+    /// A prefix whose operand is a primary (an operand precedence above every level) applies at no head
+    /// (<c>-1</c>): it can only start where a primary starts, so <c>-x * y</c> parses as <c>(-x) * y</c>.
+    /// </summary>
+    public int HeadLevel(PrefixRow row) {
+        var level = LevelAtOrAbove(row.OperandPrecedence);
+        return level >= Levels.Count ? -1 : level - 1;
+    }
 }
 
 /// <summary>One precedence level of <see cref="DslOperatorTable.Levels"/>.</summary>

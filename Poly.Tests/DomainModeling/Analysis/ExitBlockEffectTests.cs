@@ -125,6 +125,23 @@ public class ExitBlockEffectTests {
         await Assert.That(errors).IsEmpty();
     }
 
+    // #798: the rule rejects in an exit block only. An entry block admits the same effects, and
+    // EntryBlockEffectParityTests shows both hosts execute them; rejecting them here would break
+    // behaviour that runs today.
+    [Test]
+    public async Task Analyze_CreateAndForInvokeInEntry_AreNotRejected() {
+        var errors = ExitEffectErrors("""
+            domain E7b
+            Z: entity {
+              Items: many Item
+              A: stage {
+                entry { create Item { }  create in Items { }  for Items as i invoke i.Touch }
+              }
+            }
+            """ + "\n" + Items);
+        await Assert.That(errors).IsEmpty();
+    }
+
     [Test]
     public async Task Analyze_InvokeInElseBranchOfExitBlock_IsRejected() =>
         await AssertRejected<InvokeActionEffect>("""

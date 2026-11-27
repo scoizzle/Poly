@@ -38,13 +38,20 @@ internal class Hall : Poly.Runtime.IActionScoped
     public Property? Property { get; private set; }
     public IReadOnlyList<Section> Sections
     {
-        get => this._sections;
+        get => new List<Section>(this._sections);
     }
     public HallStage CurrentStage { get; private set; }
-    internal void AttachSections(Section child)
+    internal void AttachProperty(Property child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Property = child;
+    }
+    internal DomainResult AttachSections(Section child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._sections.Add(child);
+        child.AttachHall(this);
+        return DomainResult.Success();
     }
     internal DomainResult Occupy()
     {
@@ -338,13 +345,38 @@ internal class Hall : Poly.Runtime.IActionScoped
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'property' is required.", "Hall.property"));
         }
         var __property = property;
-        var created = new Hall(__name, __capacity, __dayRate, __occupied, __offline, __busySections, __property, sections);
-        Poly.Runtime.ActionScope.Create(created, "Hall");
+        if (sections != null)
+        {
+            foreach (var __sectionsElement in sections)
+            {
+                if (__sectionsElement == null)
+                {
+                    return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'sections' contains a null element.", "Hall.sections"));
+                }
+            }
+        }
+        var __created = new Hall(__name, __capacity, __dayRate, __occupied, __offline, __busySections, __property, sections);
+        Poly.Runtime.ActionScope.Create(__created, "Hall");
         if (property != null)
         {
-            property.AttachHalls(created);
+            var __attach = property.AttachHalls(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Hall>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Hall>.Success(created);
+        if (sections != null)
+        {
+            foreach (var __child in sections)
+            {
+                if (__child.Hall != null && __child.Hall != __created)
+                {
+                    return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'sections': the child's 'hall' is already set to another owner.", "Hall.sections"));
+                }
+                __child.AttachHall(__created);
+            }
+        }
+        return DomainResult<Hall>.Success(__created);
     }
     public object __Snapshot()
     {

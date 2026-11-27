@@ -128,7 +128,7 @@ public class ActionScopeTouchShapeTests {
     [Test]
     public async Task AttachAndRegister_TouchThisBeforeTheirWrites() {
         var cs = Print(Dsl);
-        var attach = Method(cs, "void AttachBooks(");
+        var attach = Method(cs, "DomainResult AttachBooks(");
         var register = Method(cs, "Subscriber(Shelf subscriber)");
 
         await Assert.That(At(attach, Touch)).IsLessThan(At(attach, "this._books.Add("));
@@ -145,9 +145,9 @@ public class ActionScopeTouchShapeTests {
         // L-04b: the public factory is the root-scope wrapper; the lowered factory body is its private partner.
         await Assert.That(wrapper).Contains("ActionScope.Begin(");
         await Assert.That(wrapper).Contains("Book.__BodyOfCreate(");
-        await Assert.That(create).Contains("Poly.Runtime.ActionScope.Create(created, \"Book\");");
-        await Assert.That(At(create, "new Book(")).IsLessThan(At(create, "ActionScope.Create(created"));
-        await Assert.That(At(create, "ActionScope.Create(created")).IsLessThan(At(create, ".AttachBooks(created)"));
+        await Assert.That(create).Contains("Poly.Runtime.ActionScope.Create(__created, \"Book\");");
+        await Assert.That(At(create, "new Book(")).IsLessThan(At(create, "ActionScope.Create(__created"));
+        await Assert.That(At(create, "ActionScope.Create(__created")).IsLessThan(At(create, ".AttachBooks(__created)"));
     }
 
     // F2: the cascade returns its entry depth and the exit assigns it back, so a rollback inside the cascade (which
@@ -354,7 +354,8 @@ public class ActionScopeTouchShapeTests {
 
     /// <summary>
     /// The predicted hunk classes, read off every checked-in golden and demo file: H1 a Touch first in each wrapper's
-    /// try, H2 one in each handler, H3 one first in each <c>Attach*</c>, H4 one first in each <c>Register*Subscriber</c>,
+    /// try, H2 one in each handler, H3 one first in each <c>Attach*</c> (a collection's returns a <c>DomainResult</c> since #585), H4 one first in
+    /// each <c>Register*Subscriber</c>,
     /// H5 the entry depth captured and assigned back in each notify method, H6 <c>ActionScope.Create</c> after
     /// <c>new</c> in each factory body. L-04b: every static <c>Create</c> is a root-scope wrapper (an H1 with no Touch of its
     /// own: the body records and the entry method touches), and every <c>Create{Nav}</c> an H1 with a Touch. The counts are the files' own mutators on the merged head (S-13a included): a file
@@ -396,7 +397,8 @@ public class ActionScopeTouchShapeTests {
             Each("H1", @"DomainResult(<[\w.?<>]+>)? \w+\([^)]*\)\n\s*\{\n\s*var __scope = ",
                 m => System.Text.RegularExpressions.Regex.IsMatch(m, @"try\n\s*\{\n\s*(Poly\.Runtime\.ActionScope\.Touch\(this\);\n\s*var __result = |var __result = \w+\.__BodyOfCreate\()"));
             Each("H2", @"DomainResult When(Each|Any|All)\w*\(", m => m.Contains(Touch, StringComparison.Ordinal));
-            Each("H3", @"void Attach\w+\(", m => FirstStatement(m) == Touch);
+            // A collection Attach returns a DomainResult (#585); a singular one (#572/#587) returns nothing.
+            Each("H3", @"(?:DomainResult|void) Attach\w+\(", m => FirstStatement(m) == Touch);
             Each("H4", @"void Register\w+Subscriber\(", m => FirstStatement(m) == Touch);
             Each("H5", @"DomainResult Notify\w+Subscribers\(", m =>
                 FirstStatement(m).StartsWith("var __depth = this.EnterNotifyCascade(", StringComparison.Ordinal)
@@ -404,7 +406,7 @@ public class ActionScopeTouchShapeTests {
             Each("H6", @"static DomainResult<\w+> __BodyOfCreate\(", m => {
                 var entity = System.Text.RegularExpressions.Regex.Match(m, @"DomainResult<(\w+)>").Groups[1].Value;
                 return System.Text.RegularExpressions.Regex.IsMatch(m,
-                    $@"var created = new {entity}\([^\n]*\);\n\s*Poly\.Runtime\.ActionScope\.Create\(created, ""{entity}""\);");
+                    $@"var __created = new {entity}\([^\n]*\);\n\s*Poly\.Runtime\.ActionScope\.Create\(__created, ""{entity}""\);");
             });
             if (counts.Values.Sum() > before || problems.Any(p => p.StartsWith(name + ":", StringComparison.Ordinal))) {
                 if (file.EndsWith(".golden", StringComparison.Ordinal))
@@ -417,7 +419,10 @@ public class ActionScopeTouchShapeTests {
         await Assert.That(string.Join("\n", problems)).IsEqualTo("");
         await Assert.That((goldens, demo)).IsEqualTo((48, 5));
         await Assert.That(string.Join(",", counts.Select(c => $"{c.Key}={c.Value}")))
-            .IsEqualTo("H1=193,H2=23,H3=29,H4=20,H5=18,H6=53"); // L-15a: the demo's `create in fines` adds Patron.CreateFines (#677 ruling B)
+            // L-15a: the demo's `create in fines` adds Patron.CreateFines (#677 ruling B).
+            // #572: every singular navigation now prints Attach{Nav} too, so a create argument
+            // can set the child's side of the pair (H3 29 → 76).
+            .IsEqualTo("H1=193,H2=23,H3=76,H4=20,H5=18,H6=53");
     }
 
     private static Node Strip(Node body) => body switch {

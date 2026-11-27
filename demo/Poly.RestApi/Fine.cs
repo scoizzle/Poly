@@ -17,6 +17,8 @@ internal enum FineStage
 internal class Fine : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronFinesResolvedSubscribers;
+    private List<string>? __pendingStageNotifications;
+    private bool __deferringStageNotifications;
     private int _notifyDepth;
     private Fine() { }
     private Fine(long amount, string reason, DateTime dateIssued, bool? paid, Patron? patron)
@@ -34,6 +36,11 @@ internal class Fine : Poly.Runtime.IActionScoped
     public bool? Paid { get; private set; }
     public Patron? Patron { get; private set; }
     public FineStage CurrentStage { get; private set; }
+    internal void AttachPatron(Patron child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Patron = child;
+    }
     internal DomainResult Pay()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -74,10 +81,10 @@ internal class Fine : Poly.Runtime.IActionScoped
         }
         this.CurrentStage = FineStage.Resolved;
         this.Paid = true;
-        var notify0 = this.NotifyResolvedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyResolvedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Fine.Pay"));
+            return DomainResult.Failure(__notify0.Error!.At("Fine.Pay"));
         }
         return DomainResult.Success();
     }
@@ -115,10 +122,10 @@ internal class Fine : Poly.Runtime.IActionScoped
         this.Paid = true;
         this.CurrentStage = FineStage.Resolved;
         this.Paid = true;
-        var notify0 = this.NotifyResolvedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyResolvedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Fine.Waive"));
+            return DomainResult.Failure(__notify0.Error!.At("Fine.Waive"));
         }
         return DomainResult.Success();
     }
@@ -129,9 +136,9 @@ internal class Fine : Poly.Runtime.IActionScoped
         {
             this._patronFinesResolvedSubscribers = new List<Patron>();
         }
-        foreach (var existing in this._patronFinesResolvedSubscribers)
+        foreach (var __existing in this._patronFinesResolvedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -143,14 +150,19 @@ internal class Fine : Poly.Runtime.IActionScoped
         var __depth = this.EnterNotifyCascade("Resolved");
         try
         {
+            if (this.__deferringStageNotifications)
+            {
+                this.__DeferStageNotification("Resolved");
+                return DomainResult.Success();
+            }
             if (this._patronFinesResolvedSubscribers != null)
             {
-                foreach (var sub in this._patronFinesResolvedSubscribers)
+                foreach (var __sub in this._patronFinesResolvedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachFineResolved();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachFineResolved();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -158,6 +170,37 @@ internal class Fine : Poly.Runtime.IActionScoped
         finally
         {
             this.ExitNotifyCascade(__depth);
+        }
+        return DomainResult.Success();
+    }
+    private void __DeferStageNotification(string stage)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            this.__pendingStageNotifications = new List<string>();
+        }
+        this.__pendingStageNotifications.Add(stage);
+    }
+    internal DomainResult __ReplayStageNotifications()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        if (this.__pendingStageNotifications == null)
+        {
+            return DomainResult.Success();
+        }
+        var __pending = this.__pendingStageNotifications;
+        this.__pendingStageNotifications = null;
+        foreach (var __stage in __pending)
+        {
+            if (__stage == "Resolved")
+            {
+                var __notified0 = this.NotifyResolvedSubscribers();
+                if (!__notified0.IsSuccess)
+                {
+                    return __notified0;
+                }
+            }
         }
         return DomainResult.Success();
     }
@@ -202,13 +245,17 @@ internal class Fine : Poly.Runtime.IActionScoped
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'patron' is required.", "Fine.patron"));
         }
         var __patron = patron;
-        var created = new Fine(__amount, __reason, __dateIssued, paid, __patron);
-        Poly.Runtime.ActionScope.Create(created, "Fine");
+        var __created = new Fine(__amount, __reason, __dateIssued, paid, __patron);
+        Poly.Runtime.ActionScope.Create(__created, "Fine");
         if (patron != null)
         {
-            patron.AttachFines(created);
+            var __attach = patron.AttachFines(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Fine>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Fine>.Success(created);
+        return DomainResult<Fine>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {
@@ -225,7 +272,7 @@ internal class Fine : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[8];
+        var __state = new object?[10];
         __state[0] = this.Amount;
         __state[1] = this.Reason;
         __state[2] = this.DateIssued;
@@ -233,7 +280,9 @@ internal class Fine : Poly.Runtime.IActionScoped
         __state[4] = this.Patron;
         __state[5] = this.CurrentStage;
         __state[6] = (this._patronFinesResolvedSubscribers == null ? null : new List<Patron>(this._patronFinesResolvedSubscribers));
-        __state[7] = this._notifyDepth;
+        __state[7] = (this.__pendingStageNotifications == null ? null : new List<string>(this.__pendingStageNotifications));
+        __state[8] = this.__deferringStageNotifications;
+        __state[9] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -261,6 +310,23 @@ internal class Fine : Poly.Runtime.IActionScoped
                 this._patronFinesResolvedSubscribers.Add(__item6);
             }
         }
-        this._notifyDepth = (int)__saved[7]!;
+        if (__saved[7] == null)
+        {
+            this.__pendingStageNotifications = null;
+        }
+        else
+        {
+            if (this.__pendingStageNotifications == null)
+            {
+                this.__pendingStageNotifications = new List<string>();
+            }
+            ((System.Collections.IList)this.__pendingStageNotifications).Clear();
+            foreach (var __item7 in(List<string>)__saved[7]!)
+            {
+                this.__pendingStageNotifications.Add(__item7);
+            }
+        }
+        this.__deferringStageNotifications = (bool)__saved[8]!;
+        this._notifyDepth = (int)__saved[9]!;
     }
 }

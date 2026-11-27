@@ -30,11 +30,11 @@ internal class Property : Poly.Runtime.IActionScoped
     public string City { get; private set; } = default!;
     public IReadOnlyList<Hall> Halls
     {
-        get => this._halls;
+        get => new List<Hall>(this._halls);
     }
     public IReadOnlyList<Room> Rooms
     {
-        get => this._rooms;
+        get => new List<Room>(this._rooms);
     }
     public PropertyStage CurrentStage { get; private set; }
     internal DomainResult<Hall> CreateHalls(string? name = default, long? capacity = default, decimal? dayRate = default, bool? occupied = default, bool? offline = default, long? busySections = default)
@@ -63,23 +63,27 @@ internal class Property : Poly.Runtime.IActionScoped
     }
     private DomainResult<Hall> __BodyOfCreateHalls(string? name, long? capacity, decimal? dayRate, bool? occupied, bool? offline, long? busySections)
     {
-        var hallResult = Hall.Create(name, capacity, dayRate, occupied, offline, busySections, this, new List<Section>());
-        if (!hallResult.IsSuccess)
+        var __hallResult = Hall.Create(name, capacity, dayRate, occupied, offline, busySections, this, new List<Section>());
+        if (!__hallResult.IsSuccess)
         {
-            return DomainResult<Hall>.Failure(hallResult.Error!);
+            return DomainResult<Hall>.Failure(__hallResult.Error!);
         }
-        var hall = hallResult.Value;
-        return DomainResult<Hall>.Success(hall);
+        var __hall = __hallResult.Value;
+        return DomainResult<Hall>.Success(__hall);
     }
-    internal void AttachHalls(Hall child)
+    internal DomainResult AttachHalls(Hall child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._halls.Add(child);
+        child.AttachProperty(this);
+        return DomainResult.Success();
     }
-    internal void AttachRooms(Room child)
+    internal DomainResult AttachRooms(Room child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._rooms.Add(child);
+        child.AttachProperty(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Hall> AddHall(string name, long seats, long rate)
     {
@@ -111,13 +115,13 @@ internal class Property : Poly.Runtime.IActionScoped
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Stage("'AddHall' requires stage 'Open' on entity 'Property'.", "Property.AddHall", "Open"));
         }
-        var create0 = this.CreateHalls(name, seats, rate);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateHalls(name, seats, rate);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Hall>.Failure(create0.Error!.At("Property.AddHall"));
+            return DomainResult<Hall>.Failure(__create0.Error!.At("Property.AddHall"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Hall>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Hall>.Success(__created1);
     }
     internal DomainResult Close()
     {
@@ -237,9 +241,51 @@ internal class Property : Poly.Runtime.IActionScoped
         {
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'City' must be at most 60 characters.", "Property.City"));
         }
-        var created = new Property(__name, __city, halls, rooms);
-        Poly.Runtime.ActionScope.Create(created, "Property");
-        return DomainResult<Property>.Success(created);
+        if (halls != null)
+        {
+            foreach (var __hallsElement in halls)
+            {
+                if (__hallsElement == null)
+                {
+                    return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Required("'halls' contains a null element.", "Property.halls"));
+                }
+            }
+        }
+        if (rooms != null)
+        {
+            foreach (var __roomsElement in rooms)
+            {
+                if (__roomsElement == null)
+                {
+                    return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Required("'rooms' contains a null element.", "Property.rooms"));
+                }
+            }
+        }
+        var __created = new Property(__name, __city, halls, rooms);
+        Poly.Runtime.ActionScope.Create(__created, "Property");
+        if (halls != null)
+        {
+            foreach (var __child in halls)
+            {
+                if (__child.Property != null && __child.Property != __created)
+                {
+                    return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'halls': the child's 'property' is already set to another owner.", "Property.halls"));
+                }
+                __child.AttachProperty(__created);
+            }
+        }
+        if (rooms != null)
+        {
+            foreach (var __child in rooms)
+            {
+                if (__child.Property != null && __child.Property != __created)
+                {
+                    return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'rooms': the child's 'property' is already set to another owner.", "Property.rooms"));
+                }
+                __child.AttachProperty(__created);
+            }
+        }
+        return DomainResult<Property>.Success(__created);
     }
     public object __Snapshot()
     {

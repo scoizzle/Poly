@@ -579,7 +579,7 @@ public class ParityTests {
             Account: entity {
               Name: Text
               parent: Account optional
-              children: many Account
+              children: many Account via parent
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
               }
@@ -593,10 +593,84 @@ public class ParityTests {
         await Assert.That(outcomes[0].State["parent"]).IsEqualTo("0");
         await Assert.That(outcomes[1].State["parent"]).IsEqualTo("1");
         await Assert.That(outcomes[1].State["children"]).IsEqualTo("0");
-        // The new parent must not point back at the root (a cycle); its inverse
-        // collection holds the root instead.
+        // The new parent must not point back at the root (a cycle); the declared
+        // pair puts the root in its collection instead.
         await Assert.That(outcomes[2].State["parent"]).IsEqualTo("0");
         await Assert.That(outcomes[2].State["children"]).IsEqualTo("1");
+    }
+
+    /// <summary>
+    /// #482: a quantifier over a self-referential collection reads the instance's own collection, one level, exactly
+    /// like a quantifier over any other collection — on the simulator and the printed C# alike. A child that has no
+    /// reports of its own answers from an empty collection even though its parent has two, so nothing recurses into
+    /// the children's children unless the document writes it.
+    /// </summary>
+    [Test]
+    public async Task Policy_QuantifiersOverASelfRelationship_ReadOneLevelOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Org
+            Employee: entity {
+              Name: Text
+              Salary: Number
+              reports: many Employee
+              HasReports: policy { count reports > 0 }
+              HasMoreThanTwo: policy { count reports > 2 }
+              NoneNamedZ: policy { none reports where Name == "z" }
+              AnyNamedA: policy { any reports where Name == "a" }
+              Payroll: policy { sum reports Salary > 25 }
+            }
+            """, "ParitySelfReferentialQuantifiers")
+            .AssertAgree(side => {
+                var root = side.Create("Employee", ("Name", "root"), ("Salary", 1L));
+                var first = side.Create("Employee", ("Name", "a"), ("Salary", 10L));
+                var second = side.Create("Employee", ("Name", "b"), ("Salary", 20L));
+                side.Use(root);
+                side.Link("reports", first, second);
+                side.EvaluatePolicy("HasReports");
+                side.EvaluatePolicy("HasMoreThanTwo");
+                side.EvaluatePolicy("NoneNamedZ");
+                side.EvaluatePolicy("AnyNamedA");
+                side.EvaluatePolicy("Payroll");
+                // The child's own collection is empty: the quantifier does not see the parent's two.
+                side.Use(first);
+                side.EvaluatePolicy("HasReports");
+                side.EvaluatePolicy("Payroll");
+            });
+        await Assert.That(outcomes[4].State["reports"]).IsEqualTo("2");
+        await Assert.That(outcomes[5].State["HasReports"]).IsEqualTo("True");
+        await Assert.That(outcomes[6].State["HasMoreThanTwo"]).IsEqualTo("False");
+        await Assert.That(outcomes[7].State["NoneNamedZ"]).IsEqualTo("True");
+        await Assert.That(outcomes[8].State["AnyNamedA"]).IsEqualTo("True");
+        await Assert.That(outcomes[9].State["Payroll"]).IsEqualTo("True");
+        await Assert.That(outcomes[11].State["HasReports"]).IsEqualTo("False");
+        await Assert.That(outcomes[12].State["Payroll"]).IsEqualTo("False");
+    }
+
+    /// <summary>
+    /// #584: the same shape with no declaration. `parent` and `children` are two candidate
+    /// navigations of one target type, so the pairing is ambiguous and nothing is wired —
+    /// the new parent is not silently handed a collection the caller never named.
+    /// </summary>
+    [Test]
+    public async Task Invoke_SelfRelCreateInParent_UndeclaredPairing_WiresNothing() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain SelfRel
+            Account: entity {
+              Name: Text
+              parent: Account optional
+              children: many Account
+              Active: stage {
+                AddParent: action { create in parent { Name: "x" } }
+              }
+            }
+            """, "ParitySelfRelCreateInParentUndeclared")
+            .AssertAgree(side => {
+                side.Create("Account", ("Name", "root"));
+                side.Invoke("AddParent");
+                side.UseLinked("parent");
+            });
+        await Assert.That(outcomes[1].State["parent"]).IsEqualTo("1");
+        await Assert.That(outcomes[2].State["children"]).IsEqualTo("0");
     }
 
     [Test]
@@ -963,20 +1037,41 @@ public class ParityTests {
 
     // Guard blocks are the module Failure string on both sides. The old simulate
     // path dropped that string into FailedGuards; that split left with DEI.
+    // A stage requirement is an invariant (#576): a create may not falsify it, and an action that stays
+    // in the stage may not either (#577). The fixture therefore falsifies it through the entity the
+    // policy reads — now authorable in the DSL, which the builder above predates.
+    private const string StagePolicyFalseDsl = """
+        domain D
+        Room: entity {
+          Occupied: Boolean default(false)
+          Occupy: action { assign Occupied to true }
+        }
+        Item: entity {
+          room: Room optional
+          Ready: policy { room Occupied is false }
+          Open: stage require Ready {
+            Go: action { }
+          }
+        }
+        """;
+
     [Test]
     public async Task Invoke_WhenStagePolicyIsFalse_BothSidesFail() {
-        var domain = StagePolicyDomain(false);
-        var source = PrintedCSharp(domain);
+        var source = PrintedCSharp(EvolvedDomain.FromDsl(StagePolicyFalseDsl).Domain);
         await Assert.That(source).Contains("bool Ready(");
         await Assert.That(source).Contains("blocked by policy 'Ready'");
 
-        var outcomes = await ParityScenario.FromDomain(domain, "ParityStagePolicyFalse")
+        var outcomes = await ParityScenario.FromDsl(StagePolicyFalseDsl, "ParityStagePolicyFalse")
             .AssertAgree(side => {
-                side.Create("Item");
+                var room = side.Create("Room");
+                var item = side.Create("Item", ("room", room));
+                side.Use(room);
+                side.Invoke("Occupy");
+                side.Use(item);
                 side.Invoke("Go");
             });
-        await Assert.That(outcomes[1].Success).IsFalse();
-        await Assert.That(outcomes[1].Message).Contains("blocked by policy 'Ready'");
+        await Assert.That(outcomes[5].Success).IsFalse();
+        await Assert.That(outcomes[5].Message).Contains("blocked by policy 'Ready'");
     }
 
     [Test]

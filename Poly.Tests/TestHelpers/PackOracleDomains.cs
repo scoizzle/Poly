@@ -61,6 +61,65 @@ public static class PackOracleDomains {
         Boots: false,
         NotBootingReason: "#559: the reproduction has no 'uses http', so no Program.cs is emitted and there is no host to boot");
 
+    /// <summary>#560 Minimal reproduction, with the shipped shape's <c>via</c> back-reference so the child is an aggregate
+    /// member: a stored <c>Shipment</c> watches its holds' <c>Closed</c> stage. The parent handler must run after a reload.</summary>
+    public static PackOracleDomain Shipment560 { get; } = new(
+        "Shipment560",
+        """
+        domain Logistics
+        uses sqlite
+        uses http
+
+        Shipment: entity {
+          Reference: Text unique
+          Note: Text optional
+          holds: many CustomsHold
+          Hold: action (reason: Text) {
+            create in holds { Reason: reason }
+          }
+          when holds Closed {
+            assign Note to "hold cleared"
+          }
+        }
+
+        CustomsHold: entity {
+          Reason: Text
+          Cleared: Boolean default(false)
+          holder: Shipment via holds
+          Open: stage {
+            Clear: action {
+              assign Cleared to true
+              transition to Closed
+            }
+          }
+          Closed: stage { }
+        }
+        """,
+        "/api/shipments");
+
+    /// <summary>#559, bootable: the issue's Minimal reproduction plus <c>uses http</c>, so the POST route exists. The
+    /// SQLite host stores <c>Declared</c> as TEXT, so the range CHECK is what decides whether a valid value saves.
+    /// <c>Vault.Amount</c> has whole-number bounds above 2^53, which no double holds exactly: the CHECK must round the
+    /// bound and the stored value the same way or it refuses the value at the bound. It
+    /// stays out of <see cref="All"/>; <see cref="Logistics559"/> keeps the issue's block verbatim.</summary>
+    public static PackOracleDomain Shipment559 { get; } = new(
+        "Shipment559",
+        """
+        domain Logistics
+        uses http
+        uses sqlite
+        Shipment: entity {
+          Reference: Text unique length(4, 20)
+          WeightKg: Number range(1, 40000)
+          Declared: Decimal range(0, 1000000)
+        }
+        Vault: entity {
+          Code: Text unique length(4, 20)
+          Amount: Decimal range(9007199254740993, 9007199254741000)
+        }
+        """,
+        "/api/shipments");
+
     /// <summary>#620 Minimal reproduction. A failing action whose earlier effect is persisted.</summary>
     public static PackOracleDomain Warehouse620 { get; } = new(
         "Warehouse620",
@@ -310,6 +369,37 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
+    /// <summary>#594: a <c>GET</c> returns the entity with its declared navigations loaded, as the simulator's
+    /// <c>get</c> shows them. Both sides of each navigation are <c>public</c>, so the navigation prints and appears in
+    /// the entity's JSON; the child's link back to its owner is the cycle <c>ReferenceHandler.IgnoreCycles</c> breaks.
+    /// Both children are reachable: <c>lines</c> through an action's <c>create in</c>, <c>tag</c> likewise. It stays out
+    /// of <see cref="All"/>: it pins one read behaviour, it is not a catalogue member.</summary>
+    public static PackOracleDomain Navigations594 { get; } = new(
+        "Navigations594",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        public entity Tag {
+          Label: Text length(1, 8)
+        }
+
+        public entity OrderLine {
+          Qty: Number range(1, 100)
+          order: Order via lines
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          lines: many owned OrderLine
+          tag: one Tag optional
+          public action AddLine (qty: Number) { create in lines { Qty: qty } }
+          public action TagIt (label: Text) { create in tag { Label: label } }
+        }
+        """,
+        "/api/orders");
+
     /// <summary>P-14a (row P-14). One host with every failure the HTTP contract maps: a Range, a unique,
     /// an occupied to-one link, a Stage and a Policy failure.</summary>
     public static PackOracleDomain Failures687 { get; } = new(
@@ -386,6 +476,41 @@ public static class PackOracleDomains {
         }
         """,
         "/api/leads");
+
+    /// <summary>#658, the refusal half of the issue's document. The assignee is <c>optional</c> and the task names its
+    /// required <c>project</c> back-navigation, so a task filed without an assignee stays an aggregate child with the
+    /// issue's own route shape (an entity whose to-one navigations are all optional is a root, and has no nested
+    /// route). <c>FileUnassigned</c> files one, so the guard's false branch is reachable over the same child route.
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain DeskUnassigned658 { get; } = new(
+        "DeskUnassigned658",
+        """
+        domain Desk
+        uses http
+        uses sqlite
+
+        User: entity {
+          Email: Text unique
+        }
+
+        Project: entity {
+          Key: Text unique
+          tasks: many Task
+          FileTask: action (who: User) { create in tasks { assignee: who } }
+          FileUnassigned: action { create in tasks { } }
+        }
+
+        Task: entity {
+          project: Project
+          assignee: User optional
+          Assigned: policy { assignee exists }
+          Todo: stage {
+            Triage: action require Assigned { transition to Done }
+          }
+          Done: stage { }
+        }
+        """,
+        "/api/projects");
 
     /// <summary>P-13b (ii) (#912): reads at depth. <c>Order</c> reaches <c>Customer.Region.Zone</c> through three links, a line's
     /// product through a quantifier body and a fan-out, and <c>Both</c> takes two products. Each link is made over HTTP by the
@@ -827,6 +952,100 @@ public static class PackOracleDomains {
         """,
         "/api/things");
 
+    /// <summary>P (#937): a required and an optional DateTime. The create body carries only Required slots, so the
+    /// optional column is written by an action; both converters (<c>DateTime</c> and <c>DateTime?</c>) then run through
+    /// the SQLite round trip. Stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain UtcRoundtrip937 { get; } = new(
+        "UtcRoundtrip937",
+        """
+        domain Roundtrip
+        uses temporal
+        uses sqlite
+        uses http
+
+        Thing: entity {
+          Name: Text unique
+          Dt: DateTime
+          Maybe: DateTime optional
+          Set: action (at: DateTime) { assign Maybe to at }
+        }
+        """,
+        "/api/things");
+
+    /// <summary>#654 Minimal reproduction. <c>DateTime + Duration value</c> in an action body runs on the generated
+    /// HTTP host. Stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain Slots654 { get; } = new(
+        "Slots654",
+        """
+        domain Slots
+        uses temporal
+        uses sqlite
+        uses http
+
+        Slot: entity {
+          Name: Text unique
+          Start: DateTime
+          Len: Duration
+          Stop: DateTime optional
+          Extend: action { assign Stop to Start + Len }
+        }
+        """,
+        "/api/slots");
+
+    /// <summary>P-11 (#940): an action's entity argument whose target has a Number (<c>long</c>), a Date
+    /// (<c>DateOnly</c>) or a Text key — every key kind a <c>string</c> member cannot carry as itself (for the two
+    /// value kinds, the member does not even compile against the column, CS0019). <c>Student</c> is the route subject (a
+    /// Text natural key) so the actions are reachable, and one assign reads the target through the argument. Stays out
+    /// of <see cref="All"/>.</summary>
+    public static PackOracleDomain ActionKeyArgument940 { get; } = new(
+        "ActionKeyArgument940",
+        """
+        domain Enroll
+        uses temporal
+        uses sqlite
+        uses http
+
+        Course: entity {
+          Seq: Number unique
+          Name: Text
+        }
+
+        Day: entity {
+          On: Date unique
+          Label: Text
+        }
+
+        Student: entity {
+          Email: Text unique
+          Joined: Text optional
+          Join: action (course: Course) { assign Joined to course Name }
+          Attend: action (day: Day) { }
+        }
+        """,
+        "/api/students");
+
+    /// <summary>P-11 (#940): an action's entity argument whose target has a shadow (<c>int</c>) key. A <c>string</c>
+    /// member reaches <c>FindAsync</c> with the wrong type, and every call answers 500. The route subject is a Text key
+    /// so the action is reachable; the shadow id is not (P-12), so only the 404 is pinned. Stays out of
+    /// <see cref="All"/>.</summary>
+    public static PackOracleDomain ActionShadowKeyArgument940 { get; } = new(
+        "ActionShadowKeyArgument940",
+        """
+        domain Enroll
+        uses sqlite
+        uses http
+
+        Member: entity {
+          Label: Text
+        }
+
+        Student: entity {
+          Email: Text unique
+          Pass: action (member: Member) { }
+        }
+        """,
+        "/api/students");
+
     /// <summary>E-10a (#924): an enum and an entity named like C# keywords. Stays out of <see cref="All"/>.</summary>
     public static PackOracleDomain KeywordNames924 { get; } = new(
         "KeywordNames924",
@@ -891,8 +1110,7 @@ public static class PackOracleDomains {
         "/api/customers");
 
     /// <summary>P-12a fix round: an OPTIONAL unique key is still the route key. <c>Day</c> (Date) is a <c>DateOnly?</c> key, so the
-    /// host must compile with it (a create of it answers 409 Unique, which this slice does not touch, so only the compile is tested). An optional unique Text key cannot be a fixture: the generated host dies at boot
-    /// (<c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.
+    /// host must compile with it, and a create that omits it succeeds since #611/#634 (an absent optional value is not a key).
     /// Date, not DateTime or Time: a required DateTime/Time/Duration host member does not compile yet (#923).
     /// It stays out of <see cref="All"/>.</summary>
     public static PackOracleDomain OptionalKeys687 { get; } = new(
@@ -909,6 +1127,38 @@ public static class PackOracleDomains {
         }
         """,
         "/api/slots");
+
+    /// <summary>#905. A <c>Binary</c> member is <c>byte[]</c> in the generated host, base64 over JSON
+    /// (System.Text.Json's own <c>byte[]</c> encoding). The issue's host did not compile: the create DTO carried
+    /// the member as a string (<c>CS1503</c>) and the module's property had no initializer (<c>CS8618</c>).</summary>
+    public static PackOracleDomain Binary905 { get; } = new(
+        "Binary905",
+        """
+        domain S
+        uses http
+        uses sqlite
+        Blob: entity {
+          Code: Text unique
+          Data: Binary
+        }
+        """,
+        "/api/blobs");
+
+    /// <summary>#563: the EF mapping mirrors the length and default constraints <c>Create</c> enforces, so a row
+    /// written outside the domain is held to the same rule. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain Constraints563 { get; } = new(
+        "Constraints563",
+        """
+        domain Freight
+        uses sqlite
+        uses http
+
+        Carrier: entity {
+          Name: Text unique length(2, 80)
+          Active: Boolean default(true)
+        }
+        """,
+        "/api/carriers");
 
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];

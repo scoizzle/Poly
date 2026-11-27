@@ -185,12 +185,14 @@ internal abstract record LocalType(Type Clr) {
 
     /// <summary><paramref name="value"/> stored at <paramref name="slotType"/>.
     /// Between a word and an IEEE slot this is the bit pattern. Between a word
-    /// and an <c>int</c> slot it is numeric.</summary>
+    /// and an <c>int</c> or <c>uint</c> slot it is numeric.</summary>
     public static Expression AsSlot(Expression value, Type slotType) {
         if (value.Type == slotType)
             return value;
         if (slotType == typeof(int))
             return Convert(Of(value.Type) is IEEELocal ? RingCodec.FromIeee(value) : value, typeof(int));
+        if (slotType == typeof(uint))
+            return Convert(Of(value.Type) is IEEELocal ? RingCodec.FromIeee(value) : value, typeof(uint));
         if (value.Type == typeof(int))
             return slotType == typeof(double) ? Convert(value, typeof(double))
                 : slotType == typeof(float) ? Convert(Convert(value, typeof(double)), typeof(float))

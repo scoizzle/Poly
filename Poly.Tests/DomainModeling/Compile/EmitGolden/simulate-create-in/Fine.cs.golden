@@ -17,6 +17,11 @@ internal class Fine : Poly.Runtime.IActionScoped
     public long Amount { get; private set; }
     public string Reason { get; private set; } = default!;
     public Patron? Patron { get; private set; }
+    internal void AttachPatron(Patron child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Patron = child;
+    }
     internal static DomainResult<Fine> Create(long? amount = default, string? reason = default, Patron? patron = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -65,13 +70,17 @@ internal class Fine : Poly.Runtime.IActionScoped
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'patron' is required.", "Fine.patron"));
         }
         var __patron = patron;
-        var created = new Fine(__amount, __reason, __patron);
-        Poly.Runtime.ActionScope.Create(created, "Fine");
+        var __created = new Fine(__amount, __reason, __patron);
+        Poly.Runtime.ActionScope.Create(__created, "Fine");
         if (patron != null)
         {
-            patron.AttachFines(created);
+            var __attach = patron.AttachFines(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Fine>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Fine>.Success(created);
+        return DomainResult<Fine>.Success(__created);
     }
     public object __Snapshot()
     {

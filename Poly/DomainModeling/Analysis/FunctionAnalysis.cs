@@ -3,6 +3,7 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
@@ -47,7 +48,7 @@ internal static class FunctionAnalysis {
         switch (expression) {
             case ParameterAccess or Literal:
                 return;
-            case Add or Subtract or Multiply or Divide or Comparison or And or Or or Not:
+            case Add or Subtract or Multiply or Divide or Modulo or Negate or Comparison or And or Or or Not:
                 break;
             case FunctionCall call when IsEndpointCall(context, call):
                 context.ReportError(function,
@@ -111,6 +112,15 @@ internal static class FunctionAnalysis {
         if (function is null) {
             if (IsEndpointCall(context, call))
                 return;
+            // #547: a built-in numeric name no declared function owns. Arity is a function fact; its argument
+            // types are ExpressionTypeAnalyzer's (a call to a builtin has no declared parameter list there).
+            if (BuiltinFunctions.Find(context.GetTypeLookup()?.Domain, call.Name) is { } builtin) {
+                if (call.Arguments.Count != builtin.Parameters.Count)
+                    context.ReportError(call,
+                        $"Function '{call.Name}' expects {builtin.Parameters.Count} argument(s), got {call.Arguments.Count}{where}.",
+                        DomainModelDiagnosticCodes.FunctionArity);
+                return;
+            }
             context.ReportError(call,
                 $"Call to unknown function '{call.Name}'{where}.",
                 DomainModelDiagnosticCodes.FunctionUnknown);

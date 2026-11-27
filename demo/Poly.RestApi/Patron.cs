@@ -42,11 +42,11 @@ internal class Patron : Poly.Runtime.IActionScoped
     public long OutstandingFines { get; private set; }
     public IReadOnlyList<Loan> Loans
     {
-        get => this._loans;
+        get => new List<Loan>(this._loans);
     }
     public IReadOnlyList<Fine> Fines
     {
-        get => this._fines;
+        get => new List<Fine>(this._fines);
     }
     public PatronStage CurrentStage { get; private set; }
     internal DomainResult<Loan> CreateLoans(string? status = default, DateTime? dueDate = default, DateTime? returnedAt = default, long? timesRenewed = default, Book? book = default)
@@ -75,20 +75,27 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     private DomainResult<Loan> __BodyOfCreateLoans(string? status, DateTime? dueDate, DateTime? returnedAt, long? timesRenewed, Book? book)
     {
-        var loanResult = Loan.Create(status, dueDate, returnedAt, timesRenewed, book, this);
-        if (!loanResult.IsSuccess)
+        var __loanResult = Loan.Create(status, dueDate, returnedAt, timesRenewed, book, this);
+        if (!__loanResult.IsSuccess)
         {
-            return DomainResult<Loan>.Failure(loanResult.Error!);
+            return DomainResult<Loan>.Failure(__loanResult.Error!);
         }
-        var loan = loanResult.Value;
-        return DomainResult<Loan>.Success(loan);
+        var __loan = __loanResult.Value;
+        var __notify = __loan.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Loan>.Failure(__notify.Error!);
+        }
+        return DomainResult<Loan>.Success(__loan);
     }
-    internal void AttachLoans(Loan child)
+    internal DomainResult AttachLoans(Loan child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._loans.Add(child);
+        child.AttachBorrower(this);
         child.RegisterPatronLoansOverdueSubscriber(this);
         child.RegisterPatronLoansReturnedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Fine> CreateFines(long? amount = default, string? reason = default, DateTime? dateIssued = default, bool? paid = default)
     {
@@ -116,19 +123,26 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     private DomainResult<Fine> __BodyOfCreateFines(long? amount, string? reason, DateTime? dateIssued, bool? paid)
     {
-        var fineResult = Fine.Create(amount, reason, dateIssued, paid, this);
-        if (!fineResult.IsSuccess)
+        var __fineResult = Fine.Create(amount, reason, dateIssued, paid, this);
+        if (!__fineResult.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(fineResult.Error!);
+            return DomainResult<Fine>.Failure(__fineResult.Error!);
         }
-        var fine = fineResult.Value;
-        return DomainResult<Fine>.Success(fine);
+        var __fine = __fineResult.Value;
+        var __notify = __fine.__ReplayStageNotifications();
+        if (!__notify.IsSuccess)
+        {
+            return DomainResult<Fine>.Failure(__notify.Error!);
+        }
+        return DomainResult<Fine>.Success(__fine);
     }
-    internal void AttachFines(Fine child)
+    internal DomainResult AttachFines(Fine child)
     {
         Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
+        child.AttachPatron(this);
         child.RegisterPatronFinesResolvedSubscriber(this);
+        return DomainResult.Success();
     }
     internal DomainResult<Loan> CheckOut(Book book)
     {
@@ -173,13 +187,13 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'HasFines'.", "Patron.CheckOut", "HasFines"));
         }
         this.CurrentBorrowCount = this.CurrentBorrowCount + 1L;
-        var create0 = this.CreateLoans((string?)null, (DateTime?)null, (DateTime?)null, (long?)null, book);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateLoans((string?)null, (DateTime?)null, (DateTime?)null, (long?)null, book);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<Loan>.Failure(create0.Error!.At("Patron.CheckOut"));
+            return DomainResult<Loan>.Failure(__create0.Error!.At("Patron.CheckOut"));
         }
-        var created1 = create0.Value;
-        return DomainResult<Loan>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<Loan>.Success(__created1);
     }
     internal DomainResult Suspend()
     {
@@ -297,25 +311,25 @@ internal class Patron : Poly.Runtime.IActionScoped
     public bool HasFines() => this.OutstandingFines > 0L;
     public bool HasOverdueLoans()
     {
-        var any1 = false;
-        foreach (var item0 in this.Loans)
+        var __any1 = false;
+        foreach (var __item0 in this.Loans)
         {
-            if (item0.Status == "Overdue")
+            if (__item0.Status == "Overdue")
             {
-                any1 = true;
+                __any1 = true;
                 break;
             }
         }
-        return any1;
+        return __any1;
     }
     public bool AccountInGoodStanding() => this.Status == PatronStatus.Active && this.OutstandingFines == 0L;
     internal DomainResult WhenEachLoanOverdue()
     {
         Poly.Runtime.ActionScope.Touch(this);
-        var create0 = this.CreateFines(5L, "Overdue item");
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateFines(5L, "Overdue item");
+        if (!__create0.IsSuccess)
         {
-            return DomainResult.Failure(create0.Error!);
+            return DomainResult.Failure(__create0.Error!);
         }
         this.OutstandingFines = this.OutstandingFines + 5L;
         return DomainResult.Success();
@@ -392,17 +406,59 @@ internal class Patron : Poly.Runtime.IActionScoped
         }
         var __currentBorrowCount = (currentBorrowCount == null ? 0L : (long)currentBorrowCount);
         var __outstandingFines = (outstandingFines == null ? 0L : (long)outstandingFines);
+        if (loans != null)
+        {
+            foreach (var __loansElement in loans)
+            {
+                if (__loansElement == null)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'loans' contains a null element.", "Patron.loans"));
+                }
+            }
+        }
+        if (fines != null)
+        {
+            foreach (var __finesElement in fines)
+            {
+                if (__finesElement == null)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'fines' contains a null element.", "Patron.fines"));
+                }
+            }
+        }
         if (Patron.ExistsWithEmail(db, __email))
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Patron'.", "Patron.Email"));
         }
-        var created = new Patron(__name, __email, __memberSince, __status, __maxItems, __currentBorrowCount, __outstandingFines, loans, fines);
-        Poly.Runtime.ActionScope.Create(created, "Patron");
-        created.InitializeSubscriptions();
+        var __created = new Patron(__name, __email, __memberSince, __status, __maxItems, __currentBorrowCount, __outstandingFines, loans, fines);
+        Poly.Runtime.ActionScope.Create(__created, "Patron");
+        __created.InitializeSubscriptions();
+        if (loans != null)
+        {
+            foreach (var __child in loans)
+            {
+                if (__child.Borrower != null && __child.Borrower != __created)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'loans': the child's 'borrower' is already set to another owner.", "Patron.loans"));
+                }
+                __child.AttachBorrower(__created);
+            }
+        }
+        if (fines != null)
+        {
+            foreach (var __child in fines)
+            {
+                if (__child.Patron != null && __child.Patron != __created)
+                {
+                    return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a link on 'fines': the child's 'patron' is already set to another owner.", "Patron.fines"));
+                }
+                __child.AttachPatron(__created);
+            }
+        }
         db.Record("Patron", "Email", __email);
-        return DomainResult<Patron>.Success(created);
+        return DomainResult<Patron>.Success(__created);
     }
-    private void InitializeSubscriptions()
+    internal void InitializeSubscriptions()
     {
         foreach (var target in this.Loans)
         {
@@ -417,7 +473,7 @@ internal class Patron : Poly.Runtime.IActionScoped
             target.RegisterPatronFinesResolvedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value)
+    private DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
         {

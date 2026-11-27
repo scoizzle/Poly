@@ -74,6 +74,15 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string OwnedTargetMultipleOwners = "DMSTR010";
 
+    /// <summary>
+    /// A value type used as an action payload (an action parameter, or a contract payload bound to
+    /// one) contains itself, directly or through other value types: <c>Link { Next: Link }</c>, or
+    /// <c>A { B: B }</c> with <c>B { A: A }</c>. The payload's member constraints are checked
+    /// recursively, so the walk never terminates and Lower cannot produce a sound guard. An error,
+    /// positioned on the parameter; the fix is to break the cycle.
+    /// </summary>
+    public const string SelfContainingValuePayload = "DMSTR011";
+
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";
@@ -407,6 +416,16 @@ internal static class DomainModelDiagnosticCodes {
     /// L-13 deletes this code.
     /// </summary>
     public const string EffectLinkNotLowerable = "DMEFF020";
+
+    /// <summary>
+    /// A recursive invoke cycle (#535, #1101): an action that can reach itself through invokes — guarded or not,
+    /// on one entity or across a relationship, or through a transition into a stage whose entry (or out of one
+    /// whose exit) invokes it. The printed C# has no invoke depth guard, so a recursion that runs deep overflows
+    /// the process while the simulator fails cleanly; the cycle is refused at define so every host agrees (owner
+    /// ruling 2026-11-23). A cycle of transitions alone is <see cref="UnconditionalAutomaticTransitionCycle"/>'s.
+    /// An error.
+    /// </summary>
+    public const string InvokeCycle = "DMEFF021";
 
     /// <summary>
     /// A <c>match</c> arm condition (#409) is not Boolean. An error.

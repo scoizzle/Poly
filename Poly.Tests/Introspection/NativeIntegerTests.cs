@@ -127,9 +127,6 @@ internal static class NativeIntegerGrid {
     /// <summary>The VM's result read as the type the program states: a scalar root is a 64-bit word.</summary>
     public static object? Read(ExecutionResult exec, Type? root) {
         var value = exec.Result.Value;
-        // The interpreter answers a float root as the double its word holds.
-        if (value is double widened && root == typeof(float))
-            return (float)widened;
         if (value is not long word || root is null)
             return value;
         // A lifted root answers its present value as the boxed word, read as it is (as the pre-T-18a table was captured).

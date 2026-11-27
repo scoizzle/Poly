@@ -101,6 +101,31 @@ public class PolySurfaceHarnessTests {
     }
 
     /// <summary>
+    /// A csharp export says what the printed module needs to compile (#490): a Poly.Runtime
+    /// reference, and no EF Core claim when the export carries no DbContext.
+    /// </summary>
+    [Test]
+    public async Task Export_CSharp_SummaryNamesTheRuntimeDependency() {
+        var h = PolySurfaceHarness.New();
+        var ws = h.Open("Compiled");
+
+        var define = h.Define(ws, """
+            domain Compiled
+            uses sqlite
+
+            Widget: entity {
+              Name: Text
+            }
+            """);
+        await Assert.That(define.Success).IsTrue().Because(define.Summary);
+
+        var csharp = h.Export(ws, "csharp");
+        await Assert.That(csharp.Success).IsTrue().Because(csharp.Summary);
+        await Assert.That(csharp.Summary).Contains("Poly.Runtime");
+        await Assert.That(csharp.Summary).DoesNotContain("Microsoft.EntityFrameworkCore");
+    }
+
+    /// <summary>
     /// The only wire test here. Rows overlap <c>McpProtocolTests.CallerErrors_ReturnTypedErrors_AtTheWire</c>
     /// on purpose: that test pins the wire, this one pins the harness decode. Envelope fields only,
     /// never Data: the wire casing differs from the in-process one.

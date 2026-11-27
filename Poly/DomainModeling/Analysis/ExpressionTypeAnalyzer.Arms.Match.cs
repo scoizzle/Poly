@@ -3,6 +3,7 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
@@ -222,7 +223,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckMatchNames(context, match, cmp.Left, props, parameters, enumTypes, where);
                 CheckMatchNames(context, match, cmp.Right, props, parameters, enumTypes, where);
                 return;
-            case And or Or or Not or Add or Subtract or Multiply or Divide:
+            case And or Or or Not or Add or Subtract or Multiply or Divide or Modulo or Negate:
                 foreach (var child in expr.Children.OfType<DomainExpression>())
                     CheckMatchNames(context, match, child, props, parameters, enumTypes, where);
                 return;

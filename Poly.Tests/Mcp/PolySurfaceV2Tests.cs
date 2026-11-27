@@ -200,6 +200,38 @@ public class PolySurfaceV2Tests {
         await Assert.That(bad["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
     }
 
+    /// <summary>
+    /// #481: an action selected by its unqualified name keeps the findings it carries inside a
+    /// stage ("Entity.Stage.Action"), so the select reports the same warning as the whole model.
+    /// </summary>
+    [Test]
+    public async Task PolyCheck_SelectStageActionByUnqualifiedName_KeepsItsOwnFinding() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain V2
+            A: entity {
+              N: Number range(0, 10) default(0)
+              Open: stage {
+                Inc: action { assign N to N + 1 }
+              }
+              Done: stage { }
+            }
+            """).Ok).IsTrue();
+
+        var whole = surface.Check(workspace);
+        var action = surface.Check(workspace, select: "A.Inc");
+        var staged = surface.Check(workspace, select: "A.Open.Inc");
+
+        await Assert.That(whole.Findings.Select(f => f.Code)).Contains("DMEFF008");
+        await Assert.That(action.Findings.Select(f => f.Code)).Contains("DMEFF008");
+        await Assert.That(action.Findings.Single(f => f.Code == "DMEFF008").Path).IsEqualTo("V2/A/Open/Inc");
+        await Assert.That(staged.Findings.Select(f => f.Code)).Contains("DMEFF008");
+
+        var data = JsonSerializer.SerializeToNode(action.Data)!;
+        await Assert.That(data["warningCount"]!.GetValue<int>()).IsEqualTo(1);
+    }
+
     [Test]
     public async Task PolyCheck_PatternWrite_IsUnknown() {
         var surface = Surface();
@@ -301,7 +333,7 @@ public class PolySurfaceV2Tests {
               {"op":"get","instanceId":"p1"}
             ]
             """;
-        var response = surface.Simulate(workspace, steps);
+        var response = surface.Simulate(workspace, JsonSerializer.SerializeToElement(steps));
 
         var data = JsonSerializer.SerializeToNode(response.Data)!;
         await Assert.That(response.Ok).IsTrue();
@@ -335,7 +367,11 @@ public class PolySurfaceV2Tests {
         await Assert.That(selectedData["verdict"]!.GetValue<string>()).IsEqualTo("violated");
         await Assert.That(entityData["verdict"]!.GetValue<string>()).IsEqualTo("violated")
             .Because("selecting an entity must include its members' findings");
-        await Assert.That(missingData["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
+        // #534 moved this assertion: a select that names no element is an error, so the old
+        // pinned "unknown" verdict can no longer stand — the answer is ELEMENT_NOT_FOUND.
+        await Assert.That(missing.Ok).IsFalse();
+        await Assert.That(missing.ErrorCode).IsEqualTo("ELEMENT_NOT_FOUND");
+        await Assert.That(missingData["reason"]!.GetValue<string>()).IsEqualTo("unknown");
     }
 
     [Test]
@@ -344,11 +380,11 @@ public class PolySurfaceV2Tests {
         var workspace = Open(surface);
         await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
         var created = surface.Simulate(workspace,
-            """[{"op":"create","entity":"Product","properties":{"Total":1}}]""");
+            JsonSerializer.SerializeToElement("""[{"op":"create","entity":"Product","properties":{"Total":1}}]"""));
         await Assert.That(created.State!.Instances).IsEqualTo(1);
         var revision = created.State.Revision;
 
-        var rejected = surface.Simulate(workspace, "not json", reset: true);
+        var rejected = surface.Simulate(workspace, JsonSerializer.SerializeToElement("not json"), reset: true);
 
         await Assert.That(rejected.Ok).IsFalse();
         await Assert.That(rejected.State!.Instances).IsEqualTo(1);
@@ -361,7 +397,7 @@ public class PolySurfaceV2Tests {
         var workspace = Open(surface);
         await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
 
-        var response = surface.Simulate(workspace, """["create"]""");
+        var response = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""["create"]"""));
 
         await Assert.That(response.Ok).IsTrue();
         var data = JsonSerializer.SerializeToNode(response.Data)!;
@@ -410,7 +446,7 @@ public class PolySurfaceV2Tests {
             """);
         await Assert.That(defined.Ok).IsTrue();
 
-        var response = surface.Simulate(workspace, """
+        var response = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""
             [
               {"op":"create","entity":"Order","properties":{"Total":10},"as":"o"},
               {"op":"create","entity":"Line","properties":{"Sku":"A"},"as":"l"},
@@ -421,7 +457,7 @@ public class PolySurfaceV2Tests {
               {"op":"unlink","sourceInstanceId":"o","relationship":"lines","targetInstanceId":"l"},
               {"op":"list","entity":"Line"}
             ]
-            """);
+            """));
 
         var data = JsonSerializer.SerializeToNode(response.Data)!;
         await Assert.That(response.Ok).IsTrue();
@@ -449,31 +485,31 @@ public class PolySurfaceV2Tests {
             """);
         await Assert.That(defined.Ok).IsTrue();
 
-        var stopped = surface.Simulate(workspace, """
+        var stopped = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""
             [
               {"op":"create","entity":"Task","properties":{"Locked":true,"Attempts":0},"as":"t"},
               {"op":"invoke","instanceId":"t","action":"Run"},
               {"op":"get","instanceId":"t"}
             ]
-            """);
+            """));
         var stoppedData = JsonSerializer.SerializeToNode(stopped.Data)!;
         await Assert.That(stopped.Ok).IsTrue();
         await Assert.That(stoppedData["trace"]!.AsArray().Count).IsEqualTo(2)
             .Because("the guard-blocked invoke is a failed step and stopOnError defaults true");
         await Assert.That(stoppedData["failedAt"]!.GetValue<int>()).IsEqualTo(1);
 
-        var reset = surface.Simulate(workspace, """[{"op":"list","entity":"Task"}]""", reset: true);
+        var reset = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""[{"op":"list","entity":"Task"}]"""), reset: true);
         var resetData = JsonSerializer.SerializeToNode(reset.Data)!;
         await Assert.That(resetData["trace"]![0]!["data"]!["count"]!.GetValue<int>()).IsEqualTo(0)
             .Because("reset clears instances before the steps run");
 
-        var continued = surface.Simulate(workspace, """
+        var continued = surface.Simulate(workspace, JsonSerializer.SerializeToElement("""
             [
               {"op":"create","entity":"Task","properties":{"Locked":false,"Attempts":0},"as":"t"},
               {"op":"invoke","instanceId":"t","action":"Run"},
               {"op":"get","instanceId":"t"}
             ]
-            """, stopOnError: false);
+            """), stopOnError: false);
         var continuedData = JsonSerializer.SerializeToNode(continued.Data)!;
         await Assert.That(continuedData["trace"]!.AsArray().Count).IsEqualTo(3);
         await Assert.That(continuedData["failedAt"]).IsNull();
@@ -492,6 +528,79 @@ public class PolySurfaceV2Tests {
             .IsEqualTo("proven");
         await Assert.That(JsonSerializer.SerializeToNode(falsy.Data)!["verdict"]!.GetValue<string>())
             .IsEqualTo("violated");
+    }
+
+    [Test]
+    public async Task Check_ExpressionCallsAFunctionDeclaredInTheModel() {
+        // #496: the probe's model was a synthetic domain with no functions, so any call to a
+        // declared function was DMFUN001, and a pure expression needed a dummy binding.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain Probe
+            F: entity { N: Number default(0) }
+            function Within(x: Number, lo: Number, hi: Number): Boolean = x >= lo and x <= hi
+            """).Ok).IsTrue();
+
+        var proven = surface.Check(workspace, expression: "Within(5, 1, 10)");
+        var violated = surface.Check(workspace, expression: "Within(50, 1, 10)");
+
+        var provenData = JsonSerializer.SerializeToNode(proven.Data)!;
+        await Assert.That(provenData["verdict"]!.GetValue<string>()).IsEqualTo("proven").Because(proven.Summary);
+        await Assert.That(provenData["result"]!.GetValue<bool>()).IsTrue();
+        var violatedData = JsonSerializer.SerializeToNode(violated.Data)!;
+        await Assert.That(violatedData["verdict"]!.GetValue<string>()).IsEqualTo("violated").Because(violated.Summary);
+        await Assert.That(violatedData["result"]!.GetValue<bool>()).IsFalse();
+    }
+
+    [Test]
+    public async Task Check_ExpressionReadsABareEnumMember() {
+        // #497: `Level is Senior` read `Senior` as a missing property, because the probe's
+        // synthetic domain carried none of the model's enums.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain Probe
+            Grade: enum { Junior, Senior }
+            Emp: entity { Level: Grade default(Junior) }
+            """).Ok).IsTrue();
+
+        var proven = surface.Check(workspace, expression: "Level is Senior", bindings: """{"Level":"Senior"}""");
+        var violated = surface.Check(workspace, expression: "Level is Senior", bindings: """{"Level":"Junior"}""");
+
+        var provenData = JsonSerializer.SerializeToNode(proven.Data)!;
+        await Assert.That(provenData["verdict"]!.GetValue<string>()).IsEqualTo("proven").Because(proven.Summary);
+        var violatedData = JsonSerializer.SerializeToNode(violated.Data)!;
+        await Assert.That(violatedData["verdict"]!.GetValue<string>()).IsEqualTo("violated").Because(violated.Summary);
+    }
+
+    [Test]
+    public async Task Check_ExpressionUnknownProperty_NamesTheBindingsArgument() {
+        // #497: the message pointed at a `propertiesJson` parameter the tool does not have.
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
+
+        var check = surface.Check(workspace, expression: "NonExistent == 1", bindings: """{"Total":5}""");
+
+        await Assert.That(JsonSerializer.SerializeToNode(check.Data)!["verdict"]!.GetValue<string>())
+            .IsEqualTo("unknown");
+        await Assert.That(check.Summary).Contains("bindings").Because(check.Summary);
+        await Assert.That(check.Summary).DoesNotContain("propertiesJson");
+        await Assert.That(check.Findings.Any(f => f.Message.Contains("bindings", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task Check_ExpressionUnknownFunction_FailsClosed() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, Valid).Ok).IsTrue();
+
+        var check = surface.Check(workspace, expression: "Nope(1)");
+
+        await Assert.That(JsonSerializer.SerializeToNode(check.Data)!["verdict"]!.GetValue<string>())
+            .IsEqualTo("unknown");
+        await Assert.That(check.Summary).Contains("unknown function").Because(check.Summary);
     }
 
     [Test]
@@ -520,9 +629,8 @@ public class PolySurfaceV2Tests {
             .ToList();
         await Assert.That(tools.Count).IsEqualTo(7);
 
-        var surface = Surface();
         foreach (var (method, attribute) in tools) {
-            var tool = McpServerTool.Create(method, surface, new McpServerToolCreateOptions());
+            var tool = PolySurfaceTools.McpTools().Single(candidate => candidate.ProtocolTool.Name == attribute!.Name);
             var spec = ArgumentSpecCatalog.Map(attribute!.Name!, tool.ProtocolTool.InputSchema);
             var parameters = method.GetParameters()
                 .Select(parameter => parameter.Name!)
@@ -545,6 +653,25 @@ public class PolySurfaceV2Tests {
                     .Because($"{attribute.Name}.workspace required-ness follows its signature");
             }
         }
+    }
+
+    /// <summary>
+    /// #488: `steps` publishes the array an agent writes beside the JSON text the binder takes,
+    /// and that union is what makes the pre-binder validator accept one. The transform must not
+    /// drop the description or the required-ness the signature carries.
+    /// </summary>
+    [Test]
+    public async Task Simulate_StepsArgument_PublishesTheArrayAndTheTextForm() {
+        var tool = PolySurfaceTools.McpTools().Single(candidate => candidate.ProtocolTool.Name == "poly_simulate");
+        var steps = ArgumentSpecCatalog.Map("poly_simulate", tool.ProtocolTool.InputSchema)
+            .Single(argument => argument.Name == "steps");
+
+        await Assert.That(steps.Required).IsTrue();
+        await Assert.That(string.Join(",", steps.JsonTypes.OrderBy(type => type, StringComparer.Ordinal)))
+            .IsEqualTo("array,string");
+
+        var published = tool.ProtocolTool.InputSchema.GetProperty("properties").GetProperty("steps");
+        await Assert.That(published.GetProperty("description").GetString()).Contains("both run the same scenario");
     }
 
     [Test]

@@ -115,7 +115,9 @@ public sealed partial class DomainToCSharpExporter {
         AddPolicyMethods(entity, domain, metadata, methods, policyBodies);
 
         // ── Notify dispatch and handlers ──────────────────────────
-        AddSubscriptionRegistry(targetSubs, stageEnumTypeName, handlerNames, fields, methods);
+        var defersCreationNotifications = DefersCreationNotifications(esm, postTransitionNotifyStages);
+        AddSubscriptionRegistry(targetSubs, stageEnumTypeName, handlerNames, fields, methods,
+            defersCreationNotifications);
         AddSubscriptionHandlers(entity, domain, metadata, esm, subscriberSubs, handlerNames,
             postTransitionNotifyStages, previousStageNotifyStages, stageEnumTypeName,
             subscriptionBodies, methods);

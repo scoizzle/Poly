@@ -53,50 +53,13 @@ internal static class ResolverErrorBaseline {
     /// (before its <c> @line:col</c>). A tag whose row's message no longer ends with its fragment is stale and fails until it is deleted.
     /// </summary>
     public static readonly (string Key, string Fixer, string Fragment)[] KnownWrong = [
-        // G-29: unsupported-keyword errors with no position, and the unknown `uses` id with no position.
-        ("S:Effects.unsupported.check/ok", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a"),
-        ("S:Effects.unsupported.check/case", "G-29", "ERR FormatException: 'Schedule' is not supported in Phase 1a"),
-        ("S:Effects.unsupported.message/ok", "G-29", "ERR FormatException: 'PARALLEL' is not supported in Phase 1a"),
-        ("S:Effects.unsupported.message/function", "G-29", "ERR FormatException: 'function' is not supported in Phase 1a"),
-        ("S:Entities.typed-line.unsupported/ok", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Who')"),
-        ("S:Entities.typed-line.unsupported/case", "G-29", "ERR FormatException: 'Schedule' is not supported in Phase 1a (used as type for 'Who')"),
-        ("S:Entities.typed-line.unsupported/function", "G-29", "ERR FormatException: 'function' is not supported in Phase 1a (used as type for 'Who')"),
-        ("S:Entities.fallback.unsupported/mis-keyword", "G-29", "ERR FormatException: 'for' is not supported in Phase 1a (used as type for 'Go')"),
-        ("S:Relationships.navline.text/unsupported", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Owner')"),
-        ("S:Relationships.navline.text/case", "G-29", "ERR FormatException: 'PARALLEL' is not supported in Phase 1a (used as type for 'Owner')"),
+        // G-29: the unknown `uses` id reaches an InvalidOperationException with no position.
         ("X:entities#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'. Record only ids this catalog can resolve."),
         ("X:expressions#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'. Record only ids this catalog can resolve."),
-        // G-05 keeps `actor` (S-09 owns the rest of TopLevelRejection's unpositioned refusals: `Function`, `schedule`); G-29 owns the inheritance error.
-        ("S:TopLevel.rejection.unsupported/ok", "G-05", "ERR FormatException: 'actor' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.unsupported/case", "S-09", "ERR FormatException: 'Function' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.unsupported-message/ok", "S-09", "ERR FormatException: 'schedule' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.inheritance/ok", "G-29", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported. Define 'Base' properties directly on 'X'."),
-        ("S:TopLevel.rejection.inheritance-define/unicode", "G-29", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported. Define 'Größe' properties directly on 'X'."),
-        // G-32 (#871): a `require` of a missing policy is reported at the end of the entity body, not at the `require` (frozen @33:1 for a require on line 23).
-        ("E:site:Entities:ResolvePendingRequires#1", "G-32", "@33:1 off=-1 len=0 :: Action 'Act' requires policy 'Q' which is not defined on entity 'X'."),
-        ("E:site:Entities:ResolvePendingRequires#2", "G-32", "@33:1 off=-1 len=0 :: Action 'Run' requires policy 'P' which is not defined on entity 'X'."),
-        ("E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1' which is not defined on entity 'X'."),
-        ("E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1' which is not defined on entity 'X'."),
-        ("E:defer:order:requires-before-navs", "G-32", "@7:2 off=-1 len=0 :: Action 'Go' requires policy 'M' which is not defined on entity 'Z'."),
     ];
 
     /// <summary>Where a tag's fixing row lives when that is not obvious from the fixer: a site in G-30 or G-33 code is fixed by whichever row converts it.</summary>
     public static readonly Dictionary<string, string> KnownWrongNotes = new(StringComparer.Ordinal) {
-        ["S:Effects.unsupported.check/ok"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
-        ["S:Effects.unsupported.check/case"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
-        ["S:Effects.unsupported.message/ok"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
-        ["S:Effects.unsupported.message/function"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
-        ["S:Entities.typed-line.unsupported/ok"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
-        ["S:Entities.typed-line.unsupported/case"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
-        ["S:Entities.typed-line.unsupported/function"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
-        ["S:Entities.fallback.unsupported/mis-keyword"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
-        ["S:Relationships.navline.text/unsupported"] = "site in the navigation line (G-30 converts it; G-29 owns the message)",
-        ["S:Relationships.navline.text/case"] = "site in the navigation line (G-30 converts it; G-29 owns the message)",
-        ["E:site:Entities:ResolvePendingRequires#1"] = "#871; the site is in the entity body (G-30 converts it), the position fix is G-32's action `require`",
-        ["E:site:Entities:ResolvePendingRequires#2"] = "#871; the site is in the entity body (G-30 converts it), the position fix is G-32's action `require`",
-        ["E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2"] = "#871",
-        ["E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3"] = "#871",
-        ["E:defer:order:requires-before-navs"] = "#871",
     };
 
     // ── sites no input can reach (stale-checked both ways) ───────────────────────────
@@ -106,8 +69,8 @@ internal static class ResolverErrorBaseline {
     /// <summary>A scanned site that no input can reach, with a closed reason code and why. A reached site in this list fails.</summary>
     public static readonly (string Site, string Code, string Why)[] Unreachable = [
         ("Actions:ParseActionParameterList#1", "CallerGuard", "every caller tests for `(` first (`Current.Kind == LParen`, or the legacy-action row `Identifier LParen`)"),
-        ("Actions:ParseActionParameterList#4", "LoopExit", "the `while (Current.Kind != RParen)` loop exits only on `)`"),
-        ("Actions:ParseActionBody#2", "LoopExit", "the effect loop exits only on `}`"),
+        ("Actions:ParseActionParameterList#5", "LoopExit", "the `while (Current.Kind != RParen)` loop exits only on `)`"),
+        ("Actions:ParseActionBody#3", "LoopExit", "the effect loop exits only on `}`"),
         ("Effects:ParseEffect#7", "DefaultArm", "every `effect` row has a case above; the default arm names a row no grammar defines"),
         ("Effects:ParseIfEffectCore#3", "LoopExit", "the then-body loop exits only on `}`"),
         ("Effects:ParseIfEffectCore#5", "LoopExit", "the else-body loop exits only on `}`"),

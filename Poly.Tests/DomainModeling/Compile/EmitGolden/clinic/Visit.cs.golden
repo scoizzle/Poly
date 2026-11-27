@@ -31,6 +31,16 @@ internal class Visit : Poly.Runtime.IActionScoped
     public Patient? Patient { get; private set; }
     public Doctor? PrimaryDoctor { get; private set; }
     public VisitStage CurrentStage { get; private set; }
+    internal void AttachPatient(Patient child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Patient = child;
+    }
+    internal void AttachPrimaryDoctor(Doctor child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.PrimaryDoctor = child;
+    }
     internal DomainResult AssignDoctor(Doctor doctor)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -147,13 +157,17 @@ internal class Visit : Poly.Runtime.IActionScoped
             return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Required("'primaryDoctor' is required.", "Visit.primaryDoctor"));
         }
         var __primaryDoctor = primaryDoctor;
-        var created = new Visit(__reason, __state, __patient, __primaryDoctor);
-        Poly.Runtime.ActionScope.Create(created, "Visit");
+        var __created = new Visit(__reason, __state, __patient, __primaryDoctor);
+        Poly.Runtime.ActionScope.Create(__created, "Visit");
         if (patient != null)
         {
-            patient.AttachVisits(created);
+            var __attach = patient.AttachVisits(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Visit>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Visit>.Success(created);
+        return DomainResult<Visit>.Success(__created);
     }
     public object __Snapshot()
     {

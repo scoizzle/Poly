@@ -27,6 +27,11 @@ internal class Activity : Poly.Runtime.IActionScoped
     public DateOnly DueOn { get; private set; }
     public Opportunity? Opportunity { get; private set; }
     public ActivityStage CurrentStage { get; private set; }
+    internal void AttachOpportunity(Opportunity child)
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Opportunity = child;
+    }
     internal DomainResult Snooze()
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
@@ -129,13 +134,17 @@ internal class Activity : Poly.Runtime.IActionScoped
             return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Required("'opportunity' is required.", "Activity.opportunity"));
         }
         var __opportunity = opportunity;
-        var created = new Activity(__subject, __dueOn, __opportunity);
-        Poly.Runtime.ActionScope.Create(created, "Activity");
+        var __created = new Activity(__subject, __dueOn, __opportunity);
+        Poly.Runtime.ActionScope.Create(__created, "Activity");
         if (opportunity != null)
         {
-            opportunity.AttachActivities(created);
+            var __attach = opportunity.AttachActivities(__created);
+            if (!__attach.IsSuccess)
+            {
+                return DomainResult<Activity>.Failure(__attach.Error!);
+            }
         }
-        return DomainResult<Activity>.Success(created);
+        return DomainResult<Activity>.Success(__created);
     }
     public object __Snapshot()
     {

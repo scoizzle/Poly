@@ -15,7 +15,9 @@ namespace Poly.Tests.Polyc;
 /// <see cref="LibrarySelection"/> path. The facade owns no selection rule of its own.
 /// </summary>
 public sealed class DslCompilerSelectionTests {
-    private const string Entity = "A: entity {\n  X: Text unique\n}\n";
+    // A unique Text must carry a length on a provider that cannot index an unbounded text column, so the
+    // fixture declares one; `Note` stays unbounded and keeps the vendor's type on the column (#627).
+    private const string Entity = "A: entity {\n  X: Text unique length(1, 20)\n  Note: Text\n}\n";
 
     private static string Doc(params string[] uses) =>
         "domain D\n" + string.Concat(uses.Select(id => $"uses {id}\n")) + Entity;
@@ -42,6 +44,26 @@ public sealed class DslCompilerSelectionTests {
 
         await Assert.That(result.Success).IsTrue().Because(string.Join("; ", result.Errors ?? []));
         await Assert.That(DbContextOf(result)).Contains("nvarchar(max)");
+    }
+
+    /// <summary>
+    /// A document that lists generic <c>persistence</c> beside a vendor (<c>uses persistence</c>, <c>uses sqlite</c>)
+    /// loads the vendor only, the rule a host's vendor already follows: both register the storage pass, and loading
+    /// both crashed every compile with an unpositioned "analyzer already registered".
+    /// </summary>
+    [Test]
+    [Arguments("persistence sqlite")]
+    [Arguments("sqlite persistence")]
+    [Arguments("temporal http persistence sqlite")]
+    public async Task Document_ListingPersistenceBesideAVendor_LoadsTheVendorOnly(string list) {
+        var uses = list.Split(' ');
+        var catalog = ProductCatalog.Create("sqlite");
+
+        var ids = LibrarySelection.Resolve(DslSyntaxTree.Parse(Doc(uses)).Uses, new SessionOptions(catalog, ProductCatalog.ImplicitIds));
+        var compiled = new PolyCompiler(catalog, SessionOptions.Bare(catalog)).Compile(Doc(uses), "both.poly");
+
+        await Assert.That(ids).IsEquivalentTo(uses.Where(id => id != "persistence"));
+        await Assert.That(compiled.Succeeded).IsTrue();
     }
 
     /// <summary>
@@ -125,6 +147,18 @@ public sealed class DslCompilerSelectionTests {
         var diagnostic = result.Diagnostics.Single(d => d.Code == DiagnosticCodes.UnknownExtension);
         await Assert.That(diagnostic.Message).Contains("nope");
         await Assert.That(diagnostic.Placed).IsTrue();
+    }
+
+    /// <summary>#640: the refusal names the ids this catalog resolves, so the author can pick one.</summary>
+    [Test]
+    public async Task UnknownUses_NamesTheIdsTheCatalogResolves() {
+        var catalog = ProductCatalog.Create("sqlite");
+        var result = new PolyCompiler(catalog, DbOptions(catalog, DbmsPack.Sqlite)).Compile(Doc("nope"), "x.poly");
+
+        var diagnostic = result.Diagnostics.Single(d => d.Code == DiagnosticCodes.UnknownExtension);
+        await Assert.That(diagnostic.Message).Contains("storage");
+        await Assert.That(diagnostic.Message).Contains("sqlite");
+        await Assert.That(diagnostic.Message).Contains("temporal");
     }
 
     /// <summary>The seed and hook overloads are gone; the catalog and the options are the whole input.</summary>

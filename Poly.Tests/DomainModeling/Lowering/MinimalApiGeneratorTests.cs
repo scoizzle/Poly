@@ -100,6 +100,15 @@ public partial class MinimalApiGeneratorTests {
     }
 
     [Test]
+    public async Task Seed_IsOptIn_BehindTheConfigurationGate() {
+        // #595: a generated host must not write placeholder rows into whatever database
+        // it points at. The seed stays available, but only when the operator asks.
+        var d = ParseDomain("domain T\nItem: entity { Name: Text }");
+
+        await Assert.That(Render(d)).Contains("if (builder.Configuration.GetValue<bool>(\"SeedDemoData\"))");
+    }
+
+    [Test]
     public async Task Detail_UsesBindingName() {
         var d = ParseDomain("domain T\nItem: entity { Sku: Text unique }");
         await Assert.That(Render(d).Contains("is T.Item item")).IsTrue();
@@ -109,6 +118,84 @@ public partial class MinimalApiGeneratorTests {
     public async Task List_UsesToListAsync() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("ToListAsync")).IsTrue();
+    }
+
+    /// <summary>The text of one route registration, from its line to the line that closes it: the handler body alone, so an
+    /// assertion about what that route does cannot match another route's statement.</summary>
+    private static string HandlerOf(string program, string mapping, string route) {
+        var lines = program.Split('\n');
+        var start = Array.FindIndex(lines, l => l.Contains($"{mapping}(\"{route}\"", StringComparison.Ordinal));
+        if (start < 0)
+            throw new InvalidOperationException($"No {mapping} for route '{route}'.");
+        var end = Array.FindIndex(lines, start, l => l.TrimStart().StartsWith("});", StringComparison.Ordinal));
+        if (end < 0)
+            throw new InvalidOperationException($"The {mapping} for route '{route}' is not closed.");
+        return string.Join("\n", lines[start..(end + 1)]);
+    }
+
+    /// <summary>#594: a GET of an entity returns it with its declared navigations loaded, as the simulator's `get`
+    /// shows them: one level, every collection and every single link, on the detail route and for each row of a list. An
+    /// entity with no navigation keeps its one-expression handler, so the loads appear only where there is something to
+    /// load.</summary>
+    [Test]
+    public async Task Get_LoadsEveryDeclaredNavigation() {
+        var d = ParseDomain("""
+            domain Shop
+            public entity Line {
+              Qty: Number
+            }
+            public entity Note {
+              Body: Text
+            }
+            public entity Order {
+              Code: Text
+              lines: many Line
+              note: Note optional
+            }
+            """);
+        var program = Render(d);
+        var detail = HandlerOf(program, "MapGet", "/api/orders/{id}");
+        var list = HandlerOf(program, "MapGet", "/api/orders");
+
+        await Assert.That(detail).Contains("await db.Entry(order).Collection(e => e.Lines).LoadAsync();");
+        await Assert.That(detail).Contains("await db.Entry(order).Reference(e => e.Note).LoadAsync();");
+        await Assert.That(detail).Contains("return Results.Ok(order);");
+        await Assert.That(detail.Contains("LoadAsync")).IsTrue();
+
+        await Assert.That(list).Contains("foreach (var order in orders)");
+        await Assert.That(list).Contains("await db.Entry(order).Collection(e => e.Lines).LoadAsync();");
+        await Assert.That(list).Contains("await db.Entry(order).Reference(e => e.Note).LoadAsync();");
+        await Assert.That(list).Contains("return orders;");
+
+        // Nothing to load: the handler stays the single expression it was.
+        await Assert.That(program).Contains(
+            "app.MapGet(\"/api/lines\", async (TDbCtx db) => await db.Lines.ToListAsync());");
+    }
+
+    /// <summary>#594, the to-one child route: a single aggregate child is returned as the reference itself, so its own
+    /// navigations load on a local that may be empty — never as an iteration over a value that is not a collection.</summary>
+    [Test]
+    public async Task Get_ChildToOneRoute_LoadsTheChildsNavigations() {
+        var d = ParseDomain("""
+            domain Ship
+            public entity Region {
+              Name: Text
+            }
+            public entity Address {
+              City: Text
+              region: Region optional
+            }
+            public entity Account {
+              Name: Text
+              hq: owned Address optional
+            }
+            """);
+        var route = HandlerOf(Render(d), "MapGet", "/api/accounts/{id}/hq");
+
+        await Assert.That(route).Contains("await db.Entry(parent).Reference(e => e.Hq).LoadAsync();");
+        await Assert.That(route).Contains("var address = parent.Hq;");
+        await Assert.That(route).Contains("await db.Entry(address).Reference(e => e.Region).LoadAsync();");
+        await Assert.That(route.Contains("parent.Hq.ToList()")).IsFalse();
     }
 
     [Test]
@@ -163,6 +250,17 @@ public partial class MinimalApiGeneratorTests {
     }
 
     [Test]
+    public async Task Post_EntityWithoutNaturalKey_ReturnsCreatedWithTheShadowId() {
+        // #589: `Item` has no natural key, so its route key is EF's shadow `Id`. The create publishes it as
+        // the Location the client GETs next, instead of a 200 that names no row.
+        var d = ParseDomain("domain T\nItem: entity { Name: Text }");
+        var program = Render(d);
+
+        await Assert.That(program).Contains("Results.Created(");
+        await Assert.That(program).Contains("Property<int>(\"Id\").CurrentValue");
+    }
+
+    [Test]
     public async Task Post_ChecksIsSuccess() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("IsSuccess")).IsTrue();
@@ -184,6 +282,59 @@ public partial class MinimalApiGeneratorTests {
     public async Task Dto_RecordPresent() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("ItemDto")).IsTrue();
+    }
+
+    /// <summary>#588: the create DTO carries every settable property, not only the Required ones. A
+    /// defaulted, optional or enum-defaulted value the client sends is otherwise silently dropped
+    /// (Create keeps the default) while <c>poly_simulate</c> keeps it, so HTTP and simulation disagree.</summary>
+    [Test]
+    public async Task CreateDto_CarriesDefaultedOptionalAndEnumProperties() {
+        var d = ParseDomain("""
+            domain T
+            Category: enum { Tools, Toys }
+            Item: entity {
+              Sku: Text unique length(3, 12)
+              Stock: Number range(0, 100000) default(0)
+              Cat: Category default(Tools)
+              Note: Text optional length(0, 100)
+            }
+            """);
+        var dto = IrUnit(d).FindType("ItemDto");
+        await Assert.That(dto).IsNotNull();
+        foreach (var name in new[] { "Sku", "Stock", "Cat", "Note" }) {
+            await Assert.That(dto!.FindProperty(name)).IsNotNull().Because(name);
+        }
+
+        // A member the caller may omit is never [Required]: only a Required slot fails on null.
+        foreach (var name in new[] { "Stock", "Cat", "Note" }) {
+            var prop = dto!.FindProperty(name)!;
+            var attributes = prop.Attributes ?? [];
+            await Assert.That(attributes.Any(a => a.Name == "Required")).IsFalse().Because(name);
+        }
+
+        // And the route passes them to Create, so a supplied value reaches the model.
+        var rendered = Render(d);
+        foreach (var name in new[] { "dto.Stock", "dto.Cat", "dto.Note" }) {
+            await Assert.That(rendered).Contains(name).Because(name);
+        }
+    }
+
+    /// <summary>#641: an entity whose create DTO would have no members takes no body parameter. The
+    /// route used to bind <c>CartDto</c> and never declare the record, so the generated Web project
+    /// did not compile (CS0246) while polyc reported success.</summary>
+    [Test]
+    public async Task CreateRoute_EntityWithNoCreateMembers_BindsNoBody() {
+        var d = ParseDomain("""
+            domain T
+            Cart: entity { lines: many CartLine }
+            CartLine: entity {
+              cart: Cart
+              N: Number
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).DoesNotContain("CartDto");
+        await Assert.That(rendered).Contains("app.MapPost(\"/api/carts\", async (TDbCtx db)");
     }
 
     [Test]
@@ -807,6 +958,53 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(CompileHost(http.Files!)).IsEmpty();
     }
 
+    /// <summary>#905: a Binary member is <c>byte[]</c> in the generated host, encoded as base64 by System.Text.Json.
+    /// Red tail before the fix: the seed passed <c>"Sample"</c> where <c>Create</c> takes <c>byte[]?</c>
+    /// (<c>CS1503: cannot convert from 'string' to 'byte[]?'</c>), and the module's property carried no
+    /// initializer (<c>CS8618</c> on <c>Data</c>).</summary>
+    [Test]
+    public async Task BinaryMember_DtoBindsByteArray_HostCompiles() {
+        const string poly = """
+            domain S
+            uses sqlite
+            uses http
+            Blob: entity {
+              Code: Text unique
+              Data: Binary
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(http.Files!.Single(f => f.FileName == "Program.cs").Source)
+            .Contains("public byte[]? Data { get; init; }");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    /// <summary>#905 follow-through: a Binary route key reaches the host as a path segment that cannot bind, and its
+    /// <c>Location</c> would be <c>byte[].ToString()</c>. The host refuses it when the app is generated rather than
+    /// serving a key no route can find. Red tail: no refusal — the host compiled a <c>byte[] code</c> route parameter.</summary>
+    [Test]
+    public async Task BinaryRouteKey_IsRefused_WhenTheHostIsGenerated() {
+        const string poly = """
+            domain S
+            uses sqlite
+            uses http
+            Blob: entity {
+              Code: Binary unique
+              Data: Text
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsFalse();
+        var errors = string.Join("; ", http.Errors ?? []);
+        await Assert.That(errors).Contains("'Blob'");
+        await Assert.That(errors).Contains("'Code'");
+    }
+
     [Test]
     public async Task ActionParameterOfDateTime_HostCompiles() {
         const string poly = """
@@ -903,11 +1101,35 @@ public partial class MinimalApiGeneratorTests {
             """));
         await Assert.That(rendered).Contains("public string City");
         await Assert.That(rendered).Contains("public string Region");
-        await Assert.That(rendered).Contains("public string LeadId");
+        // An entity argument is the target's key and nullable since #940 (`Lead.Email` is the key): an absent key is
+        // null — 404 — and not the key type's default, which a row could carry.
+        await Assert.That(rendered).Contains("public string? LeadId");
         await Assert.That(rendered).Contains("dto.City");
         await Assert.That(rendered).Contains("dto.LeadId");
         await Assert.That(rendered.Contains("public string city")).IsFalse();
         await Assert.That(rendered.Contains("dto.leadId")).IsFalse();
+    }
+
+    /// <summary>#940: an action's entity argument is typed as the target's route key, not a string. A shadow key is
+    /// <c>int?</c> and a Number key <c>long?</c>, so the lookup compares and binds against the column; and an absent
+    /// key short-circuits to null (the host's 404) instead of reaching <c>FindAsync(null)</c>.</summary>
+    [Test]
+    public async Task ActionDto_EntityArgumentIsTheTargetsRouteKey() {
+        var rendered = Render(ParseDomain("""
+            domain T
+            Ticket: entity { Seq: Number unique }
+            Member: entity { Label: Text }
+            Student: entity {
+              Email: Text unique
+              Join: action (ticket: Ticket) { }
+              Pass: action (member: Member) { }
+            }
+            """));
+        await Assert.That(rendered).Contains("public long? TicketId");
+        await Assert.That(rendered).Contains("public int? MemberId");
+        await Assert.That(rendered.Contains("public string TicketId")).IsFalse();
+        await Assert.That(rendered).Contains("dto.TicketId == null ? null : await db.Tickets.FirstOrDefaultAsync");
+        await Assert.That(rendered).Contains("dto.MemberId == null ? null : await db.Members.FindAsync");
     }
 
     [Test]
@@ -1094,6 +1316,21 @@ public partial class MinimalApiGeneratorTests {
 
         await Assert.That(program).DoesNotContain("user_version");
         await Assert.That(program).DoesNotContain("schemaId");
+    }
+
+    /// <summary>#591: every host creates the schema before the seed reads a table. The sqlserver host seeded
+    /// against a database with no tables — it emits no migration and used to emit no EnsureCreated — so a
+    /// fresh database failed at startup. The sqlite host's own EnsureCreated (with its schema id) is the
+    /// same guarantee.</summary>
+    [Test]
+    [Arguments("uses sqlserver")]
+    [Arguments("uses persistence")]
+    public async Task Seed_RunsAfterEnsureCreated_OnEveryProvider(string store) {
+        var program = HostProgram("domain Counter\nuses http\n" + store + "\n" + CounterBody);
+
+        await Assert.That(program).Contains("await db.Database.EnsureCreatedAsync();");
+        await Assert.That(program.IndexOf("EnsureCreatedAsync", StringComparison.Ordinal))
+            .IsLessThan(program.IndexOf("SeedAsync(db)", StringComparison.Ordinal));
     }
 
     internal static MinimalApiGenerator GeneratorFor(string poly) {

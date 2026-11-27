@@ -18,8 +18,9 @@ public sealed partial class DomainResolver {
             }
 
             if (Current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(Current.Name())) {
-                throw new FormatException(
-                    $"'{Shown(Current)}' is not supported in Phase 1a");
+                throw GrammarError.Error(
+                    $"'{Shown(Current)}' is not supported in Phase 1a",
+                    Current.Line, Current.Col);
             }
 
             // N4 (DX only): the head keyword matched but its tail pattern

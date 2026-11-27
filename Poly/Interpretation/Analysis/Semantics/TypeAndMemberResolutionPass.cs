@@ -1,6 +1,7 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
 using Poly.Ast.Nodes;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>Resolves both types and member references for all AST nodes.
@@ -237,9 +238,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             PopCount => context.TypeSystem.ClrDefinitionOf(typeof(int)),
             UsingStatement => null,
             TryCatchFinally tcf => ResolveNodeType(context, tcf.TryBlock),
-            SwitchStatement swt => swt.Cases.Count > 0
-                ? ResolveNodeType(context, swt.Cases[0].Body)
-                : swt.DefaultCase is not null ? ResolveNodeType(context, swt.DefaultCase) : null,
+            SwitchStatement swt => ResolveSwitchType(context, swt),
             Await aw => ResolveAwaitType(context, aw),
             Return r => r.Value is null ? null : ResolveNodeType(context, r.Value),
             _ => null
@@ -729,11 +728,55 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         return Equals(thenType, elseType) ? then : null;
     }
 
+    /// <summary>#805: a switch's value is its arms', so its type is the arms' common type (decimal
+    /// over long, long over int), lifted when any arm is nullable. The old answer — the first case
+    /// body's type — left a default of another shape stored as a raw word and read as the first
+    /// arm's type. Arms with no common type keep the first one; a statement switch that merely
+    /// discards mixed bodies is legal, and its value is never read.</summary>
+    private static ITypeDefinition? ResolveSwitchType(AnalysisContext context, SwitchStatement swt) {
+        var arms = new List<ITypeDefinition>();
+        foreach (var c in swt.Cases)
+            if (ResolveNodeType(context, c.Body) is { } body)
+                arms.Add(body);
+        if (swt.DefaultCase is not null && ResolveNodeType(context, swt.DefaultCase) is { } fallback)
+            arms.Add(fallback);
+        if (arms.Count == 0)
+            return null;
+        bool lift = arms.Any(IsNullableType);
+        var peeled = arms.Select(arm => PeelNullable(context, arm)).ToList();
+        var common = peeled.GetCommonType(context.TypeSystem);
+        return common is null ? arms[0] : Lift(context, common, lift);
+    }
+
     private static ITypeDefinition? ResolveConditionalType(AnalysisContext context, Conditional cond) {
         var ifTrue = ResolveNodeType(context, cond.IfTrue);
+        var ifFalse = ResolveNodeType(context, cond.IfFalse);
+        // #803: C# lifts the conditional when one arm is T? and the other converts to T,
+        // and the conditional's type is then T?. The tree does not state the lift, so
+        // analysis names it here; without this the root was the non-nullable arm's type
+        // and a null arm read back as a bare word.
+        if (LiftedConditional(context, ifTrue, ifFalse) is { } lifted)
+            return lifted;
         if (ifTrue is not null && ifTrue.GetRuntimeType() != typeof(void))
             return ifTrue;
-        return ResolveNodeType(context, cond.IfFalse) ?? ifTrue;
+        return ifFalse ?? ifTrue;
+    }
+
+    /// <summary>The nullable arm of a conditional whose other arm converts to its underlying
+    /// type: the conditional's own type. Null when neither arm lifts the other.</summary>
+    private static ITypeDefinition? LiftedConditional(
+        AnalysisContext context, ITypeDefinition? first, ITypeDefinition? second) =>
+        NullableArmOfConditional(context, first, second)
+        ?? NullableArmOfConditional(context, second, first);
+
+    private static ITypeDefinition? NullableArmOfConditional(
+        AnalysisContext context, ITypeDefinition? nullableArm, ITypeDefinition? other) {
+        if (nullableArm is null || other is null || !IsNullableType(nullableArm) || IsNullableType(other))
+            return null;
+        var underlying = PeelNullable(context, nullableArm);
+        var converts = context.TypeSystem.IsAssignableWithoutConversion(underlying, other)
+            || context.TypeSystem.Conversion(other, underlying) is { Kind: ConversionOperatorKind.Implicit };
+        return converts ? nullableArm : null;
     }
 
     private static bool IsVoidYieldNode(Node node) =>

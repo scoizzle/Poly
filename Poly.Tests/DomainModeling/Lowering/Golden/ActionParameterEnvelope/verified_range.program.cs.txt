@@ -52,6 +52,7 @@ app.MapPost("/api/gauges/{id}/setlevel", async (int id, SetLevelDto dto, TDbCtx 
         var result = entity.SetLevel(dto.V);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -59,6 +60,10 @@ app.MapPost("/api/gauges/{id}/setlevel", async (int id, SetLevelDto dto, TDbCtx 
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Gauge' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -78,6 +83,7 @@ app.MapPost("/api/gauges/{id}/setpeak", async (int id, SetPeakDto dto, TDbCtx db
         var result = entity.SetPeak(dto.V);
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -85,6 +91,10 @@ app.MapPost("/api/gauges/{id}/setpeak", async (int id, SetPeakDto dto, TDbCtx db
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Gauge' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {
@@ -104,6 +114,7 @@ app.MapPost("/api/gauges/{id}/surge", async (int id, TDbCtx db) => {
         var result = entity.Surge();
         if (result.IsSuccess)
         {
+            db.BumpVersions(entity);
             await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
@@ -111,6 +122,10 @@ app.MapPost("/api/gauges/{id}/surge", async (int id, TDbCtx db) => {
         {
             return Problem(result.Error!);
         }
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        return Problem(Poly.Runtime.DomainFailure.Conflict($"Concurrency conflict on 'Gauge' '{id}': the row changed after this request read it, so the request was not applied; retry it."));
     }
     catch (Exception ex)
     {

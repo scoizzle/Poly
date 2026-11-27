@@ -20,6 +20,19 @@ public class DbContextGeneratorTests {
         return nl < 0 ? poly : poly[..(nl + 1)] + "uses persistence\n" + poly[(nl + 1)..];
     }
 
+    /// <summary>As <see cref="ParseDomain"/>, on the product catalog, so <c>uses sqlite</c> resolves and <c>Decimal</c>
+    /// maps to the pack's <c>TEXT</c> column type.</summary>
+    private static Domain ParseSqliteDomain(string poly) {
+        var tree = DslSyntaxTree.Parse(poly);
+        var session = DomainSession.Create(
+            tree.Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds) with { Authoring = true });
+        var changes = new PolyDslParser(poly, session).Parse();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+        if (!result.Succeeded)
+            throw new InvalidOperationException("Domain evolution failed");
+        return result.Root!;
+    }
+
     private static Domain ParseDomain(string poly) {
         poly = WithPersistence(poly);
         var ctx = ExtensionCatalog.Core.Authoring;
@@ -301,6 +314,38 @@ public class DbContextGeneratorTests {
         OnModelCreating(domain).FindInvocations("HasCheckConstraint")
             .Select(i => i.Arguments[1] is Constant { Value: string sql } ? sql : "")
             .ToList();
+
+    /// <summary>#559: SQLite stores a <c>Decimal</c> as TEXT, where a bare comparison to a numeric bound is a text
+    /// comparison (<c>'9' &gt; '1000000'</c>), so the CHECK compares the stored value numerically, and the bound becomes a
+    /// REAL literal so both sides round together (an INTEGER bound above 2^53 is compared exactly and would refuse the
+    /// value at the bound). A <c>Number</c> column has a numeric store type and keeps its plain comparison, as does a
+    /// <c>Decimal</c> on a pack whose decimal column is numeric (<c>decimal</c>).</summary>
+    [Test]
+    public async Task CheckSql_DecimalStoredAsText_ComparesNumerically() {
+        var domain = ParseSqliteDomain("""
+            domain Test
+            uses sqlite
+            Item: entity {
+              Price: Decimal range(0, 1000000)
+              Fee: Decimal range(0.00, 100.00)
+              High: Decimal range(9007199254740993, 9007199254741000)
+              Band: Decimal range(-100, -1)
+              Qty: Number range(1, 10)
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Single(c => c.Contains("price", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(price AS REAL) >= 0.0 AND CAST(price AS REAL) <= 1000000.0");
+        await Assert.That(checks.Single(c => c.Contains("fee", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(fee AS REAL) >= 0.00 AND CAST(fee AS REAL) <= 100.00");
+        await Assert.That(checks.Single(c => c.Contains("high", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(high AS REAL) >= 9007199254740993.0 AND CAST(high AS REAL) <= 9007199254741000.0");
+        await Assert.That(checks.Single(c => c.Contains("band", StringComparison.Ordinal)))
+            .IsEqualTo("CAST(band AS REAL) >= -100.0 AND CAST(band AS REAL) <= -1.0");
+        await Assert.That(checks.Single(c => c.Contains("qty", StringComparison.Ordinal)))
+            .IsEqualTo("qty >= 1 AND qty <= 10");
+    }
 
     /// <summary>V-05b T3: a declared bound above 2^53 reaches the CHECK text exactly, never rounded
     /// through <c>double</c> to <c>…992</c>.</summary>

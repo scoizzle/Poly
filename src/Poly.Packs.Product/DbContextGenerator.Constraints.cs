@@ -75,11 +75,45 @@ public sealed partial class DbContextGenerator {
     private static string FormatBound(decimal d) =>
         d.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>The same bound as a REAL literal (<c>1000000.0</c>), for a CHECK whose column side is
+    /// <c>CAST(… AS REAL)</c>. SQLite compares an INTEGER literal with a REAL exactly, without rounding the integer, so a
+    /// whole-number bound above 2^53 (which no double holds) would refuse the value at the bound; a REAL literal is
+    /// parsed by the same routine as the cast, and the two sides round together. The digits and the declared scale are
+    /// unchanged.</summary>
+    private static string FormatRealBound(decimal d) {
+        var text = FormatBound(d);
+        return text.Contains('.') ? text : text + ".0";
+    }
+
+    /// <summary>True when this numeric column is stored in a text-affinity column: SQLite maps <c>Decimal</c> to
+    /// <c>TEXT</c>, the one store there that keeps every digit. Its CHECK must compare the value as a number (#559).
+    /// This is SQLite's mapping today; a pack that maps a range-checked <c>Decimal</c> to text on a dialect whose
+    /// <c>REAL</c> is not an IEEE double (SQL Server's is single precision) must extend this CHECK for its dialect, not
+    /// inherit it.</summary>
+    private static bool StoresNumberAsText(StorageColumn column) =>
+        string.Equals(column.DomainType, "Decimal", StringComparison.Ordinal)
+        && string.Equals(column.ColumnType, "TEXT", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Builds the SQL predicate for a verified column's CHECK constraint.</summary>
-    private static string CheckSql(string columnName, ValueRange verified) {
+    /// <remarks>
+    /// A TEXT-affinity value compares to a numeric literal as text, so <c>declared &lt;= 1000000</c> was false for every
+    /// value above <c>'1'</c> and SQLite refused valid decimals at <c>SaveChanges</c> (#559). The stored decimal is still a
+    /// number, so its CHECK compares it as one: <c>CAST(column AS REAL)</c>, and the bound is a REAL literal for the same
+    /// reason. Both sides are then the same correctly-rounded double, and rounding is monotone, so a value inside the
+    /// declared range is never refused. The CHECK is a floor that never contradicts <c>Create</c>, never a second stricter
+    /// guard: a value that differs from a bound beyond REAL's 15–17 significant digits may pass it, and <c>Create</c> still
+    /// refuses that value in the domain. It is not a type guard either: text that is not a number casts to <c>0.0</c>, so
+    /// it passes a range that contains 0 (a write outside the module, where <c>Create</c> does not run). Every numeric store
+    /// type keeps its plain comparison.
+    /// </remarks>
+    private static string CheckSql(StorageColumn column) {
+        var verified = column.VerifiedRange!;
+        var text = StoresNumberAsText(column);
+        var value = text ? $"CAST({column.ColumnName} AS REAL)" : column.ColumnName;
+        string Bound(decimal bound) => text ? FormatRealBound(bound) : FormatBound(bound);
         var parts = new List<string>();
-        if (verified.Min is not null) parts.Add($"{columnName} >= {FormatBound(verified.Min.Value)}");
-        if (verified.Max is not null) parts.Add($"{columnName} <= {FormatBound(verified.Max.Value)}");
+        if (verified.Min is not null) parts.Add($"{value} >= {Bound(verified.Min.Value)}");
+        if (verified.Max is not null) parts.Add($"{value} <= {Bound(verified.Max.Value)}");
         return string.Join(" AND ", parts);
     }
 }

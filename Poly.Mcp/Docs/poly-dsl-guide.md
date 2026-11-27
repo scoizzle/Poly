@@ -1954,6 +1954,18 @@ There is no `DELETE` route and no delete effect in the DSL, so delete behaviour 
 uses the generated DbContext directly. A database file created before this change has a different schema
 (nullable keys, no delete action) and must be recreated.
 
+**A `Decimal` range on SQLite.** SQLite has no exact decimal store, so a `Decimal` column is `TEXT`, the
+only form there that keeps every digit. SQLite compares a `TEXT` column to a numeric literal as text
+(`'9' > '1000000'`), so the CHECK compares the value numerically instead: the column and both bounds are REALs
+— `CAST(column AS REAL) >= 0.0 AND CAST(column AS REAL) <= 1000000.0` — and SQLite parses the bound the way it
+casts the value. Both sides are then the same correctly-rounded double, and rounding is monotone, so a value
+inside the declared range is never refused. A whole-number bound above 2^53 is printed with a `.0` for exactly
+that reason: an INTEGER literal is compared exactly, without rounding, and would refuse the value at the bound.
+The CHECK is a floor that never contradicts `Create`, which stays the guard: a value that differs from a bound
+beyond REAL's 15–17 significant digits can pass it, and `Create` still refuses that value in the domain. It is not
+a type check: text that is not a number casts to `0.0` and passes a range that contains 0 (only a write outside the
+module can put it there; `Create` never does).
+
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport emits them as DTO validation attributes (metadata on the contract;
 the module enforces the same envelopes the domain declares):
@@ -2277,8 +2289,6 @@ What the id does not cover, and what that costs:
 - **A stage `require` at create**: it is not checked when an instance is created (#576, L-17).
 - **`assign Qty to Dec * 2`** (a Number target, a Decimal operand): analysis accepts it and the generated C# does not
   compile (T-07).
-- **A `Decimal` with a `range`** (SQLite host): it is stored as TEXT with a CHECK, so a valid create can fail: a `POST`
-  of crm `Product` (`ListPrice: Decimal range(0, 100000000)`) and of hotel `RoomType` answers `500` (#559, row P-05).
 - **An entity with no required scalar** (generated app): the host does not compile (`ItemDto` could not be found), for
   an entity of only optional properties and for one of only defaulted properties (P-11; #588, #641).
 - **An entity whose required link targets an entity with no natural key** (generated app) has no `POST` route, so it

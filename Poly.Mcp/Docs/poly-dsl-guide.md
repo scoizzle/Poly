@@ -1722,7 +1722,8 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
   are seen, overlapping ranges are the author's problem. A bare name that is no property, parameter or
   enum member is an error (**DMMAT004**).
 - Malformed forms (`match { }`, an arm with no `->`, an empty condition or value, a stray or trailing
-  `,`) fail with a positioned parse error.
+  `,`) fail with a positioned parse error at the token that faults, and a `DMMAT00x` finding is
+  positioned on the `match` keyword; the message never restates the position.
 - Lowers to a nested conditional; simulation and printed C# agree. Arms are lazy in the result
   (only the chosen value is selected), but a quantifier inside an arm is evaluated up front.
 - Not shipped: matching on a scrutinee (`match X { "a" -> … }`), patterns, and constant-folding of

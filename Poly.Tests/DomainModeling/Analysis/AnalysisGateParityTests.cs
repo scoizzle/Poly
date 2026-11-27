@@ -1000,6 +1000,27 @@ public class AnalysisGateParityTests {
         await Assert.That(result.AnalysisSummary).Contains(refusal).Because(result.ToString());
     }
 
+    /// <summary>
+    /// Re-probed on the base after negation became arithmetic (#1033): <c>-(match { … })</c> over a match that may be
+    /// absent analysed clean, and the printed C# did not compile (CS0266, <c>long?</c> into <c>long</c>). Negation is
+    /// the same arithmetic spine as <c>+ - * / %</c>, so analysis refuses it at the match and no door prints it.
+    /// </summary>
+    [Test]
+    public async Task NegatedAbsentMatchIntoRequiredNumber_IsRefusedAtAnalysis_NotPrintedAsCS0266() {
+        const string dsl = """
+            domain T
+            Flag: entity {
+              On: Boolean default(true)
+              N: Number default(0)
+              Go: action { assign N to -(match { On -> 1, else -> null }) }
+            }
+            """;
+        var result = GateParity.Check(dsl, SimStep.Create("Flag", """{"On":true}""", "f"));
+
+        await Assert.That(result.Analysis).IsFalse().Because(result.ToString());
+        await Assert.That(result.Holds).IsTrue().Because(result.ToString());
+    }
+
     private static (Domain Domain, SumExpr Sum) SumDomain() {
         var sum = (SumExpr)DomainExpression.Sum("items", "Amount");
         var item = new Entity("Item", [new Property("Amount", new DomainTypeReference("Decimal"), [])], [], [], []);

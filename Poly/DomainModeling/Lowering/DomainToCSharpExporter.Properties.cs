@@ -14,6 +14,12 @@ public sealed partial class DomainToCSharpExporter {
         var props = new List<PropertyDefinitionNode>();
         foreach (var prop in valueType.Properties) {
             var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
+            // A value member is required unless it is marked optional, and the DSL marks none
+            // optional. An enum is a CLR value type with no way to carry absence, so the printed
+            // record declares it nullable and the action-boundary guard enforces requiredness,
+            // the way Create's nullable slot parameter does.
+            if (TryResolveEnumType(domain, metadata, prop.Type.TypeName, out _))
+                propRef = new OptionalTypeReference(propRef);
             props.Add(new PropertyDefinitionNode(
                 prop.Name, propRef,
                 Getter: new PropertyGetterDefinitionNode(),

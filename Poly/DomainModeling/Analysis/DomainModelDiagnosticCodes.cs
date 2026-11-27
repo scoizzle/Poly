@@ -74,6 +74,15 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string OwnedTargetMultipleOwners = "DMSTR010";
 
+    /// <summary>
+    /// A value type used as an action payload (an action parameter, or a contract payload bound to
+    /// one) contains itself, directly or through other value types: <c>Link { Next: Link }</c>, or
+    /// <c>A { B: B }</c> with <c>B { A: A }</c>. The payload's member constraints are checked
+    /// recursively, so the walk never terminates and Lower cannot produce a sound guard. An error,
+    /// positioned on the parameter; the fix is to break the cycle.
+    /// </summary>
+    public const string SelfContainingValuePayload = "DMSTR011";
+
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";

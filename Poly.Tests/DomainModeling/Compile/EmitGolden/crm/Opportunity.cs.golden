@@ -538,6 +538,14 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfCapture(ChargeRequest request)
     {
+        if (request == null)
+        {
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'request' is required.", "Opportunity.Capture"));
+        }
+        if (request.Currency == null)
+        {
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Currency' is required.", "request.Currency"));
+        }
         if (this.CurrentStage != OpportunityStage.Commit)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Capture' requires stage 'Commit' on entity 'Opportunity'.", "Opportunity.Capture", "Commit"));

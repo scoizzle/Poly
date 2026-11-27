@@ -124,6 +124,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
 
         ReportStoredValueTypeProperties(context, domain);
 
+        // F3: a self-containing value type used as an action payload cannot lower its recursive guards.
+        ReportSelfContainingValuePayloads(context, domain);
+
         ReportKeyDesignations(context, domain);
     }
 
@@ -612,6 +615,73 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             }
         }
     }
+
+    /// <summary>
+    /// F3: a value type used as an action payload (an action parameter, or a contract payload
+    /// bound to one) whose containment reaches itself, directly or through other value types.
+    /// Lower's payload guard walk (<c>ValuePayloadGuardWriter</c>) recurses member by member, so
+    /// a cycle never terminates and Lower throws after a clean analyze. Fail closed here, on the
+    /// parameter, naming the cycle and the fix.
+    /// </summary>
+    private static void ReportSelfContainingValuePayloads(AnalysisContext context, Domain domain) {
+        var valueTypes = new Dictionary<string, ValueType>(StringComparer.Ordinal);
+        foreach (var valueType in domain.Types.OfType<ValueType>())
+            valueTypes.TryAdd(valueType.Name, valueType);
+        foreach (var contract in domain.ImportedContracts)
+            foreach (var valueType in contract.Types)
+                valueTypes.TryAdd(valueType.Name, valueType);
+        if (valueTypes.Count == 0)
+            return;
+
+        foreach (var entity in domain.Types.OfType<Entity>())
+            DomainAnalysis.ForEachAction(entity, action => {
+                foreach (var parameter in action.Parameters) {
+                    if (!valueTypes.TryGetValue(parameter.Type.TypeName, out var payload))
+                        continue;
+                    if (FindContainmentCycle(payload, valueTypes) is not { } cycle)
+                        continue;
+                    context.ReportError(
+                        parameter,
+                        $"Action parameter '{parameter.Name}' of action '{action.Name}' has value type " +
+                        $"'{payload.Name}', which contains itself ({FormatCycle(cycle)}). The payload's " +
+                        "member constraints are checked recursively, so a self-containing value type cannot " +
+                        "be lowered soundly. Break the cycle: remove the member that points back to a value " +
+                        "type already in the cycle.",
+                        DomainModelDiagnosticCodes.SelfContainingValuePayload);
+                }
+            });
+    }
+
+    /// <summary>
+    /// The first containment cycle reachable from <paramref name="root"/>, as a name path that
+    /// starts and ends at the repeated type (<c>Link -&gt; Link</c>, <c>A -&gt; B -&gt; A</c>), or
+    /// <c>null</c> when the walk is acyclic.
+    /// </summary>
+    private static IReadOnlyList<string>? FindContainmentCycle(
+        ValueType root, IReadOnlyDictionary<string, ValueType> valueTypes) {
+        var path = new List<string>();
+        var onPath = new HashSet<string>(StringComparer.Ordinal);
+
+        IReadOnlyList<string>? Walk(ValueType type) {
+            if (!onPath.Add(type.Name)) {
+                var start = path.IndexOf(type.Name);
+                return [.. path.GetRange(start, path.Count - start), type.Name];
+            }
+            path.Add(type.Name);
+            foreach (var property in type.Properties) {
+                if (valueTypes.TryGetValue(property.Type.TypeName, out var next) && Walk(next) is { } cycle)
+                    return cycle;
+            }
+            path.RemoveAt(path.Count - 1);
+            onPath.Remove(type.Name);
+            return null;
+        }
+
+        return Walk(root);
+    }
+
+    private static string FormatCycle(IReadOnlyList<string> cycle) =>
+        string.Join(" -> ", cycle.Select(static name => $"'{name}'"));
 
     /// <summary>
     /// S11: lowering names a nav's C# member <c>PascalCase(nav.Name)</c>; the create-in

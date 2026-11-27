@@ -135,6 +135,10 @@ public sealed partial class DomainToCSharpExporter {
         var nodes = new List<Node>();
         var locals = new List<Node>();
 
+        // A value-type payload is checked where it enters the action (#612/#571): the same
+        // ConstraintCheckWriter checks a create runs, so both hosts refuse the same members.
+        nodes.AddRange(ValuePayloadGuardWriter.Guards(entity, action, domain, analysis, actionResultType));
+
         // Loop-guard backstop shares NoteAutomaticStage with the simulator.
         if (EffectHelpers.HasAutomaticTransitions(entity))
             nodes.Add(new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain")));

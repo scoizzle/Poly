@@ -3,6 +3,7 @@ using Poly.DomainModeling.Ontology;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
+using Modulo = Poly.DomainModeling.Ontology.Modulo;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
@@ -39,6 +40,7 @@ public abstract class DomainExpressionDispatch<TResult> {
     protected virtual TResult Add(Add e) => Default();
     protected virtual TResult Multiply(Multiply e) => Default();
     protected virtual TResult Divide(Divide e) => Default();
+    protected virtual TResult Modulo(Modulo e) => Default();
     protected virtual TResult MatchExpr(MatchExpr e) => Default();
     protected virtual TResult FunctionCall(FunctionCall e) => Default();
     protected virtual TResult RelationshipNavigation(RelationshipNavigation e) => Default();
@@ -75,6 +77,7 @@ public abstract class DomainExpressionDispatch<TResult> {
         Add e => Add(e),
         Multiply e => Multiply(e),
         Divide e => Divide(e),
+        Modulo e => Modulo(e),
         MatchExpr e => MatchExpr(e),
         FunctionCall e => FunctionCall(e),
         RelationshipNavigation e => RelationshipNavigation(e),

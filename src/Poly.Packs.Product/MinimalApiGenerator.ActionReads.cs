@@ -112,7 +112,7 @@ internal sealed class ActionReadsWalker {
     private static readonly (NodeKindClass Class, Type[] Kinds)[] KindTable = [
         (NodeKindClass.ScalarOnly, [
             typeof(Ast.Nodes.Add), typeof(Ast.Nodes.Subtract), typeof(Ast.Nodes.Multiply), typeof(Ast.Nodes.Divide),
-            typeof(Modulo), typeof(UnaryMinus), typeof(Ast.Nodes.And), typeof(Ast.Nodes.Or), typeof(Ast.Nodes.Not),
+            typeof(Ast.Nodes.Modulo), typeof(UnaryMinus), typeof(Ast.Nodes.And), typeof(Ast.Nodes.Or), typeof(Ast.Nodes.Not),
             typeof(Equal), typeof(NotEqual), typeof(GreaterThan), typeof(GreaterThanOrEqual), typeof(LessThan),
             typeof(LessThanOrEqual), typeof(BitwiseAnd), typeof(BitwiseOr), typeof(BitwiseXor), typeof(BitwiseNot),
             typeof(ShiftLeft), typeof(ShiftRight), typeof(PopCount), typeof(InterpolatedString), typeof(TypeIs),

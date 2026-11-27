@@ -234,6 +234,23 @@ public sealed class CSharpExportCompileTests {
 
     // L-22b: the navigation prints internal (the surface stays closed), the pack maps it explicitly, and the whole
     // host compiles with warnings as errors. A8 pins the F2 consequence: Create and Create{Nav} are internal too.
+    // #913: a `Time` property prints `TimeOnly`, which is the file's only System type when the document has no
+    // Date, DateTime, TimeSpan or Guid property — so the `using System;` inference has to list TimeOnly too.
+    [Test]
+    public async Task Export_WhenTimeIsTheOnlySystemType_EmitsUsingSystemAndCompiles() {
+        var e = Export("""
+            domain Slot
+            Meeting: entity {
+              Starts: Time
+            }
+            """);
+
+        var meeting = e.Files.Single(f => string.Equals(f.FileName, "Meeting.cs", StringComparison.Ordinal)).Source;
+        await Assert.That(meeting).Contains("TimeOnly");
+        await Assert.That(meeting).Contains("using System;");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
     [Test]
     public async Task Export_WhenPublicEntityHasManyNavToInternalEntity_NavigationIsInternalAndMappedAndCompiles() {
         var e = ExportHost("""

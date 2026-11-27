@@ -178,7 +178,9 @@ public sealed class HttpFileGenerator {
                 var comma = i < ia.Parameters.Count - 1 ? "," : "";
                 var property = ActionDtoPropertyName(param);
                 if (param.IsEntityRef)
-                    sb.AppendLine($"    \"{property}\": \"example-{ToCamelCase(param.DomainType)}-id\"{comma}");
+                    // The target's route key, with the JSON kind its DTO member binds: the same value the target's
+                    // create sample posts for it, so a Number key is a number and not a quoted string (#940).
+                    sb.AppendLine($"    \"{property}\": {EntityKeyExampleJson(_storageLookup[param.DomainType])}{comma}");
                 else
                     sb.AppendLine($"    \"{property}\": {GetExampleJsonValueForTransportParam(param)}{comma}");
             }
@@ -194,6 +196,12 @@ public sealed class HttpFileGenerator {
     /// <summary>JSON key for an action body: the PascalCase DTO property.</summary>
     private static string ActionDtoPropertyName(BehaviorParameter param) =>
         param.IsEntityRef ? Pascalize(param.Name) + "Id" : Pascalize(param.Name);
+
+    /// <summary>An entity argument's body value: the target's route key as <see cref="GetExampleJsonValue(Property)"/>
+    /// prints it (a JSON number, boolean, or quoted literal), or the route's id example for a shadow key — which has no
+    /// value a client could know (P-12).</summary>
+    private string EntityKeyExampleJson(StorageEntity store) =>
+        MinimalApiGenerator.RouteKeyFor(store).Property is { } key ? GetExampleJsonValue(key) : GetKeyExample(store);
 
     private static string GetKeyExample(StorageEntity store) {
         var key = MinimalApiGenerator.RouteKeyFor(store);

@@ -131,10 +131,16 @@ public sealed partial class MinimalApiGenerator {
                 if (param.IsEntityRef) {
                     // Two parameters of one entity type each get their own local: the first keeps the type's name.
                     var lv = FreshLocal(locals, ToCamelCase(param.DomainType));
-                    tryBody.Add(Init(lv, LoadByRouteKey(
-                        Pluralize(param.DomainType),
-                        _storageLookup[param.DomainType],
-                        new Member(new Variable("dto"), ActionDtoPropertyName(param)))));
+                    // An absent key is no target, as the create route treats a missing link: a shadow key's
+                    // `FindAsync(null)` throws, and a natural key's null finds nothing either way.
+                    Node given = new Member(new Variable("dto"), ActionDtoPropertyName(param));
+                    tryBody.Add(Init(lv, new Conditional(
+                        new Equal(given, new Constant(null!)),
+                        new Constant(null!),
+                        LoadByRouteKey(
+                            Pluralize(param.DomainType),
+                            _storageLookup[param.DomainType],
+                            given))));
                     tryBody.Add(new IfStatement(new Equal(new Variable(lv), new Constant(null!)),
                         new Block(new Return(ProblemResponse(404, "Not Found", $"{param.DomainType} not found")))));
                     if (reads?.Roots.FirstOrDefault(r => r.Name == param.Name) is { } parameterReads) {

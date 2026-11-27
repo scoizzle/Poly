@@ -243,19 +243,19 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 4. check ────────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. Returns proven, violated, or unknown: proven only when every write was verified against its range, length, pattern or equals constraints (unique, required and enum membership are checked elsewhere), unknown (with the count of unverified findings) while any write could not be: bound the source, widen the target, or guard a non-parameter write; a Text or Number action parameter written into a bounded property stays unknown until parameter constraints exist. Findings carry the element path and the analyzer's message. Does not change the model. Use poly_define to fix a violation.")]
+    [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. An expression is probed against the model's own functions and enums; every property it reads needs a value in bindings, and an expression that reads none needs no bindings. Returns proven, violated, or unknown: proven only when every write was verified against its range, length, pattern or equals constraints (unique, required and enum membership are checked elsewhere), unknown (with the count of unverified findings) while any write could not be: bound the source, widen the target, or guard a non-parameter write; a Text or Number action parameter written into a bounded property stays unknown until parameter constraints exist. Findings carry the element path and the analyzer's message. Does not change the model. Use poly_define to fix a violation.")]
     public PolyResponse Check(
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("Optional element path to focus, e.g. \"Product\" or \"Product.Submit\".")] string? select = null,
         [Description("Optional JSON object of action arguments; argument-specific proofs are not implemented yet and return unknown.")] string? args = null,
-        [Description("Optional DSL expression fragment to evaluate, e.g. \"Total > 100\". Requires bindings.")] string? expression = null,
-        [Description("Optional JSON object of property values for expression.")] string? bindings = null) {
+        [Description("Optional DSL expression fragment to evaluate, e.g. \"Total > 100\". The model's functions and enums are in scope. Each property it reads needs a value in bindings; an expression that reads none needs no bindings.")] string? expression = null,
+        [Description("Optional JSON object of property values for expression, keyed by property name, e.g. \"{\\\"Total\\\":150}\".")] string? bindings = null) {
         if (!TryWorkspace(workspace, out var workspaceState))
             return WorkspaceRequired();
 
         if (!string.IsNullOrWhiteSpace(expression)) {
             var evaluated = _oracle.OracleExpression(
-                expression, string.IsNullOrWhiteSpace(bindings) ? "{}" : bindings);
+                expression, string.IsNullOrWhiteSpace(bindings) ? "{}" : bindings, workspaceState.Domain);
             var result = evaluated.Success
                 ? JsonSerializer.SerializeToNode(evaluated.Data)?["result"]?.GetValue<bool>()
                 : null;

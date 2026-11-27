@@ -768,10 +768,16 @@ transition. Entity-level actions, entity-level `when` handlers and a `for` body 
 source stage, so a transition there must match every exit-block target. A transition that follows
 another transition, an `invoke`, a `create`, a `create in`, a `for … invoke` or a branch holding a
 transition counts as leaving whatever stage the instance may then be in, so it must match every
-exit-block target too. The rule is conservative: guards are not analysed (every existing transition
-counts, including one under an `if`), and an `invoke` before a hop makes it dynamic even when the
-callee is pure. Making the exit-block transition target the same stage as the hop passes the rule,
-and that transition is redundant: the hop owns the landing, so the target's entry effects and
+exit-block target too. Guard analysis is one provable exclusion: when an entity-level action
+requires a policy whose negation the stage requires (`Go: action require InB` beside
+`A: stage require not InB`), the lowered body refuses the action before any effect runs, so it
+cannot leave that stage and does not count against the stage's exit-block target. Every other
+transition counts, including one under an `if` the analysis cannot decide, and two policies that
+contradict each other without naming one another (`Mode is "b"` against `Mode is "c"`) are not
+analysed either, so that document is still refused: the rule stays conservative wherever the
+guard is not a policy and its own negation. An `invoke` before a hop makes it dynamic even when
+the callee is pure. Making the exit-block transition target the same stage as the hop passes the
+rule, and that transition is redundant: the hop owns the landing, so the target's entry effects and
 subscriber notify run once, and the effects after the transition in the exit block still run before
 the landing.
 

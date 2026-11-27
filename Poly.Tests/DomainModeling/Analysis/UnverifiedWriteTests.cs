@@ -798,6 +798,25 @@ public class UnverifiedWriteTests {
     }
 
     [Test]
+    public async Task NegatedUnboundedParameter_ReasonIsUnknownBound() {
+        // Negation has an interval transfer (and the operand has none here), so the reason is a missing
+        // bound, not an operator analysis does not model.
+        var result = Parse("""
+            domain Test
+            Stock: entity {
+              Reserved: Number range(0, 100000)
+              Release: action (qty: Number) { assign Reserved to -qty }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Reserved");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+    }
+
+    [Test]
     public async Task NestedUnmodelledOperator_ReasonIsUnsupportedOperator() {
         // A call has no interval row and is nested inside an Add: the reason is the operator analysis
         // does not model, not "UnknownBound" from the top-level Add. (This was `Q / 2 + 1` until

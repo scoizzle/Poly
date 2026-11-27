@@ -35,6 +35,17 @@ public class FunctionDiagnosticPlacementTests {
     }
 
     [Test]
+    public async Task NegatedParameter_IsAPureFunctionBody() {
+        var result = Compile("""
+            domain P
+            function Neg(x: Number): Number = -x
+            """);
+
+        await Assert.That(result.Diagnostics.Where(d => d.IsError).ToList()).IsEmpty()
+            .Because("a negated parameter is arithmetic, which a pure function body may use");
+    }
+
+    [Test]
     public async Task ImpureBody_IsPlacedOnTheFunctionDeclaration() {
         var error = Compile(ImpureBody).Diagnostics.Single(d => d.Code == "DMFUN005");
 

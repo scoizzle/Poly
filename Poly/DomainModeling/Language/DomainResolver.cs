@@ -228,7 +228,26 @@ public sealed partial class DomainResolver : DslCursor {
             Advance();
             return name;
         }
-        throw Error($"Expected property name, got '{Shown(Current)}'");
+        // `Name: Type` is the only shape here, so a reserved word only reads as a name when the colon follows.
+        throw Error(PeekIs(TokenKind.Colon) && ReservedMemberWord(Current) is { Length: > 0 } reserved
+            ? $"'{reserved}' is a reserved word and cannot name a property; " +
+              $"rename it (e.g. '{char.ToUpperInvariant(reserved[0])}{reserved[1..]}' or a synonym)."
+            : $"Expected property name, got '{Shown(Current)}'");
+    }
+
+    /// <summary>
+    /// The word a DSL keyword token spells when it cannot name a member — <c>from</c>, <c>to</c>, <c>entity</c>,
+    /// and every other keyword — or <c>""</c> for a token that could never be a word (<c>Identifier</c> included,
+    /// since the callers report those generically). The primitive type keywords are legal property names
+    /// (<c>Text: Text</c>), so they are not reserved here.
+    /// </summary>
+    private static string ReservedMemberWord(DslToken token) {
+        if (token.Kind is TokenKind.Identifier or TokenKind.Number or TokenKind.StringLiteral
+            or TokenKind.Text or TokenKind.NumberType or TokenKind.BooleanType
+            or TokenKind.EndOfFile)
+            return "";
+        var word = DslTokenText.Word(token);
+        return word.Length > 0 && char.IsLetter(word[0]) ? word : "";
     }
 
     // ── Helpers ───────────────────────────────────────────────

@@ -152,7 +152,6 @@ public sealed partial class DbContextGenerator {
         _ => value,
     };
 
-    /// <summary>Builds Syntax IR for a collection navigation's property access mode config.</summary>
     /// <summary>Formats a numeric bound for a SQL CHECK constraint. The decimal keeps its declared
     /// scale (<c>range(0.00, 100.00)</c> prints <c>0.00</c>), and every digit is exact (V-05b S3/A13).</summary>
     private static string FormatBound(decimal d) =>

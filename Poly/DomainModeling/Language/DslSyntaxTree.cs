@@ -1,3 +1,5 @@
+using Poly.Grammar;
+
 namespace Poly.DomainModeling.Language;
 
 /// <summary>
@@ -97,8 +99,10 @@ public sealed record DslSyntaxTree(string Name, IReadOnlyList<string> Uses, IRea
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var i = 2;
         while (TryReadUse(tokens, i, out var id, out var version, out var next)) {
-            if (!seen.Add(id))
-                throw new FormatException($"Domain lists extension '{id}' more than once.");
+            if (!seen.Add(id)) {
+                var at = tokens[i + 1];
+                throw GrammarError.Error($"Domain lists extension '{id}' more than once.", at.Line, at.Col);
+            }
             uses.Add(id);
             versions.Add(version);
             i = next;

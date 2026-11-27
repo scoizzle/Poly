@@ -473,7 +473,7 @@ U	domain A\nuses http "v\\"1"\n	name=[A]	uses=[http]	versions=[v"1]	headerEnd=5
 U	domain A\nuses temporal 2024-11-20\n	name=[A]	uses=[temporal]	versions=[2024-11-20]	headerEnd=9
 U	domain A\nuses http 1.2.3\n	name=[A]	uses=[http]	versions=[1.2.3]	headerEnd=7
 U	domain A\nuses http 1.2 .3\n	name=[A]	uses=[http]	versions=[1.2]	headerEnd=5
-U	domain A\nuses http\nuses http\n	ERR FormatException: Domain lists extension 'http' more than once.
+U	domain A\nuses http\nuses http\n	ERR GrammarException: Domain lists extension 'http' more than once. (line 3, col 6)
 U	domain A\nuses http v1\nuses temporal\n	name=[A]	uses=[http|temporal]	versions=[v1]|<none>	headerEnd=7
 U	domain A\nuses http\n1.2\n	name=[A]	uses=[http]	versions=<none>	headerEnd=4
 U	domain A\n	name=[A]	uses=[]	versions=	headerEnd=2

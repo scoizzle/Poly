@@ -209,6 +209,7 @@ public sealed class DslExpressionParser {
         private void Primary() {
             var match = _c.MatchRule("expr-primary")
                 ?? throw _c.Error($"Expected expression, got '{Describe(_c.Current)}'");
+            RejectUnsupportedAggregate(match);
             var pattern = match.PatternName;
             if (pattern is not "group" and not "not") {
                 // Session folds override pattern payload (library Now vs core ident-shaped clock).
@@ -257,6 +258,53 @@ public sealed class DslExpressionParser {
                     throw new InvalidOperationException(
                         $"Cannot fold primary '{match.RuleName}/{pattern}'.");
             }
+        }
+
+        /// <summary>
+        /// The quantifier/aggregate spellings the guide does not ship: <c>first Rel where …</c>, <c>count filter Rel where …</c>
+        /// and <c>sum Rel (expr)</c>. The expression boundary would report "Expected RBrace" at the leftover token; name the
+        /// unsupported form and the supported spelling at its opening word instead (#505).
+        /// </summary>
+        private void RejectUnsupportedAggregate(MatchResult<DslToken, DslTokenKind> match) {
+            switch (match.PatternName) {
+                case "path" when PathNames(match) is [var first, var rel]
+                    && first == "first"
+                    && DslGrammar.IsWhereIdent(_c.Peek(match.Tokens.Count)): {
+                        throw ErrorAt(PathWord(match, 0),
+                            $"'first' is not supported; use 'any', 'all', 'none', or 'count' with 'where' " +
+                            $"(e.g. 'any {rel} where …').");
+                    }
+                case "count-bare" when CaptureText(match, "rel") == "filter"
+                    && _c.Peek(2).Kind == DslTokenKind.Identifier
+                    && DslGrammar.IsWhereIdent(_c.Peek(3)): {
+                        throw ErrorAt(CaptureToken(match, "rel"),
+                            $"'filter' is not supported; write 'count {_c.Peek(2).Name()} where …' to count the matching " +
+                            "related entities, or 'any … where …'.");
+                    }
+                case "ident" when AggregateTakesExpression(match): {
+                        var word = match.Tokens[0].Name();
+                        throw ErrorAt(match.Tokens[0], word switch {
+                            "sum" => "'sum' takes a relationship and a property name (sum Rel Prop); " +
+                                "an expression after it is not supported.",
+                            "count" => "'count' takes a relationship and an optional 'where' condition " +
+                                "(count Rel where …); an expression is not supported.",
+                            _ => $"'{word}' takes a relationship and a 'where' condition " +
+                                $"({word} Rel where …); an expression is not supported.",
+                        });
+                    }
+            }
+        }
+
+        /// <summary>An aggregate word the quantifier rows did not take, followed by a relationship and an expression.</summary>
+        private bool AggregateTakesExpression(MatchResult<DslToken, DslTokenKind> match) {
+            var token = match.Tokens[0];
+            if (token.Kind != DslTokenKind.Identifier)
+                return false;
+            if (token.Name() is not ("any" or "all" or "none" or "count" or "sum"))
+                return false;
+            var next = _c.Peek(1);
+            return next.Kind == DslTokenKind.LParen
+                || (next.Kind == DslTokenKind.Identifier && _c.Peek(2).Kind == DslTokenKind.LParen);
         }
 
         private void Leaf(MatchResult<DslToken, DslTokenKind> match, DomainExpression value, int height = 0) {

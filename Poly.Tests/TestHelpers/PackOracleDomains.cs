@@ -827,6 +827,26 @@ public static class PackOracleDomains {
         """,
         "/api/things");
 
+    /// <summary>#654 Minimal reproduction. <c>DateTime + Duration value</c> in an action body runs on the generated
+    /// HTTP host. Stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain Slots654 { get; } = new(
+        "Slots654",
+        """
+        domain Slots
+        uses temporal
+        uses sqlite
+        uses http
+
+        Slot: entity {
+          Name: Text unique
+          Start: DateTime
+          Len: Duration
+          Stop: DateTime optional
+          Extend: action { assign Stop to Start + Len }
+        }
+        """,
+        "/api/slots");
+
     /// <summary>E-10a (#924): an enum and an entity named like C# keywords. Stays out of <see cref="All"/>.</summary>
     public static PackOracleDomain KeywordNames924 { get; } = new(
         "KeywordNames924",

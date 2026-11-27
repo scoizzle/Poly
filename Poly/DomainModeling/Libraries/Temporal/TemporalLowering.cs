@@ -15,8 +15,8 @@ internal static class TemporalLowering {
         meaning.Lowering.Register(new TodayLowering());
         meaning.Lowering.Register(new DateOperationLowering());
         meaning.Lowering.Register(new DurationLowering());
-        meaning.Lowering.Register(new DateAddDaysLowering(typeof(Add), subtract: false));
-        meaning.Lowering.Register(new DateAddDaysLowering(typeof(Subtract), subtract: true));
+        meaning.Lowering.Register(new DateOffsetLowering(typeof(Add), subtract: false));
+        meaning.Lowering.Register(new DateOffsetLowering(typeof(Subtract), subtract: true));
         meaning.Defaults.Register(new NowDefaultResolver());
         meaning.Defaults.Register(new TodayDefaultResolver());
         meaning.Defaults.Register(new DurationDefaultResolver());
@@ -109,14 +109,16 @@ internal static class TemporalLowering {
     }
 
     /// <summary>
-    /// <c>DueDate + 14</c> / <c>DueDate - 7</c> → AddDays. Claims only date-typed
-    /// property left operands; other Add/Subtract stay core arithmetic.
+    /// <c>DueDate + 14</c> / <c>DueDate - 7</c> → AddDays, and <c>StartsAt + Length</c> / <c>S - L</c> with a
+    /// <c>Duration</c> operand → <c>Add(TimeSpan)</c> / <c>Subtract(TimeSpan)</c> (#654). The count and difference
+    /// shapes claim only a date-typed property left operand; a Duration offset also claims a clock node, a parameter
+    /// and an already-folded date operation, as analysis accepts them. Other Add/Subtract stay core arithmetic.
     /// </summary>
-    private sealed class DateAddDaysLowering : IExpressionLoweringHandler {
+    private sealed class DateOffsetLowering : IExpressionLoweringHandler {
         public Type ExpressionType { get; }
         private readonly bool _subtract;
 
-        public DateAddDaysLowering(Type expressionType, bool subtract) {
+        public DateOffsetLowering(Type expressionType, bool subtract) {
             ExpressionType = expressionType;
             _subtract = subtract;
         }
@@ -139,8 +141,21 @@ internal static class TemporalLowering {
                 leftExpr = a.Left;
                 rightExpr = a.Right;
             }
+            if (propertyTypeResolver is null)
+                return false;
+            if (OperandTypeName(rightExpr, propertyTypeResolver) is "Duration" or "TimeSpan") {
+                // A Duration is a TimeSpan on the C# surface: DateTime.Add/Subtract(TimeSpan) is the one
+                // lowering the simulator and the printed C# share. Analysis refuses a Date left, so an
+                // unresolved or Date left is not a shape to lower here.
+                if (ResolveDateClrFamily(leftExpr, propertyTypeResolver) is not DateClrFamily.DateTime)
+                    return false;
+                var date = route(leftExpr);
+                var duration = route(rightExpr);
+                result = new Invoke(new Member(date, _subtract ? "Subtract" : "Add"), duration);
+                return true;
+            }
             if (leftExpr is not PropertyAccess pa
-                || propertyTypeResolver?.Invoke(pa.Name) is not { } typeName)
+                || propertyTypeResolver.Invoke(pa.Name) is not { } typeName)
                 return false;
             var family = FamilyFromTypeName(typeName);
             if (family is not DateClrFamily.DateOnly and not DateClrFamily.DateTime)
@@ -288,6 +303,11 @@ internal static class TemporalLowering {
             return FamilyFromTypeName(typeName);
         if (dateExpr is DateOperation nested)
             return ResolveDateClrFamily(nested.Date, propertyTypeResolver);
+        // A nested offset (`(StartsAt + Gap) + Gap2`) keeps the family of its own left operand.
+        if (dateExpr is Add nestedAdd)
+            return ResolveDateClrFamily(nestedAdd.Left, propertyTypeResolver);
+        if (dateExpr is Subtract nestedSubtract)
+            return ResolveDateClrFamily(nestedSubtract.Left, propertyTypeResolver);
         return DateClrFamily.Unknown;
     }
 
@@ -296,6 +316,26 @@ internal static class TemporalLowering {
         ParameterAccess pa => pa.Name,
         _ => null,
     };
+
+    /// <summary>
+    /// The declared type name of a right operand that is a property, a parameter, or a date difference
+    /// (<c>Stamp + (Finished - Started)</c>, a <c>TimeSpan</c>).
+    /// </summary>
+    private static string? OperandTypeName(
+        DomainExpression operand, Func<string, string?> propertyTypeResolver) {
+        if (DateOperandName(operand) is { } name)
+            return propertyTypeResolver(name);
+        if (operand is Subtract difference
+            && DateOperandName(difference.Left) is { } leftName
+            && DateOperandName(difference.Right) is { } rightName
+            && propertyTypeResolver(leftName) is { } leftType
+            && propertyTypeResolver(rightName) is { } rightType
+            && FamilyFromTypeName(leftType) is var family
+            && family is not DateClrFamily.Unknown
+            && family == FamilyFromTypeName(rightType))
+            return "Duration";
+        return null;
+    }
 
     private static DateClrFamily FamilyFromTypeName(string typeName) => typeName switch {
         "Date" or "DateOnly" => DateClrFamily.DateOnly,

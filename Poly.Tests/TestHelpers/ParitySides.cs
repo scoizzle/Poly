@@ -252,6 +252,12 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         if (value is null || target.IsInstanceOfType(value))
             return value;
         var enumType = Nullable.GetUnderlyingType(target) ?? target;
+        if (enumType == typeof(decimal) && value is long or int or double or float)
+            return Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
+        if (enumType == typeof(long) && value is int)
+            return (long)(int)value;
+        if (enumType == typeof(int) && value is long l && l is >= int.MinValue and <= int.MaxValue)
+            return (int)l;
         if (enumType.IsEnum) {
             // A defined member name parses. A non-member lands as an undefined member so the
             // module's own member guard runs, the way a hand-written caller passing an
@@ -271,7 +277,7 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         foreach (var (name, field) in fields) {
             var prop = target.GetProperty(name, AnyInstance)
                 ?? throw new ArgumentException($"'{target.Name}' has no property '{name}'.");
-            prop.SetValue(instance, field);
+            prop.SetValue(instance, Materialize(field, prop.PropertyType));
         }
         return instance;
     }

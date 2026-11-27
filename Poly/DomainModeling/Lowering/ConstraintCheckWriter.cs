@@ -126,6 +126,36 @@ internal static class ConstraintCheckWriter {
         ConstraintCheckStyle style,
         Node value,
         bool nullableValue,
+        bool includeRequired) =>
+        ChecksFor(prop, RequiredApplies(entity, prop, domain, analysis), domain, analysis, style, value,
+            nullableValue, includeRequired);
+
+    /// <summary>
+    /// The checks for one value-type member. A value-type member is required unless it carries
+    /// <see cref="OptionalConstraint"/> (the DSL marks it required, so this is the API shape);
+    /// there is no <see cref="EntityStructureMetadata"/> to read, so <paramref name="required"/>
+    /// is the caller's published requiredness fact.
+    /// </summary>
+    internal static IReadOnlyList<Check> ChecksForValueMember(
+        Property prop,
+        bool required,
+        Domain domain,
+        INodeMetadataProvider analysis,
+        ConstraintCheckStyle style,
+        Node value,
+        bool nullableValue,
+        bool includeRequired) =>
+        ChecksFor(prop, required && CanBeNull(prop, domain), domain, analysis, style, value,
+            nullableValue, includeRequired);
+
+    private static IReadOnlyList<Check> ChecksFor(
+        Property prop,
+        bool requiredApplies,
+        Domain domain,
+        INodeMetadataProvider analysis,
+        ConstraintCheckStyle style,
+        Node value,
+        bool nullableValue,
         bool includeRequired) {
         var checks = new List<Check>();
         var system = TargetOf(domain);
@@ -133,7 +163,7 @@ internal static class ConstraintCheckWriter {
         if (!system.DecidesConstraintApplicability()
             && prop.Constraints.Any(static c => c is RangeConstraint or LengthConstraint or PatternConstraint))
             throw new InvalidOperationException(
-                $"The target type system '{system.GetType().Name}' declares no constraint applicability, so the constraints on '{entity.Name}.{prop.Name}' cannot be guarded.");
+                $"The target type system '{system.GetType().Name}' declares no constraint applicability, so the constraints on '{prop.Name}' cannot be guarded.");
         var isText = system.LengthApplies(prop.Type.TypeName);
         var isNumber = system.RangeApplies(prop.Type.TypeName);
         var isBinaryFloat = isNumber && system.Bind(prop.Type.TypeName) is { } bound && system.Spell(bound) is "Float" or "Float32";
@@ -147,12 +177,12 @@ internal static class ConstraintCheckWriter {
         // above returned), so a `!= null` conjunct there is dead and leaves the local maybe-null
         // (CS8601). Length and pattern share the one rule.
         Node? AssignValuePresence() => isAssign
-            ? (RequiredApplies(entity, prop, domain, analysis)
+            ? (requiredApplies
                 ? null
                 : new NotEqual(value, new Constant(null)))
             : CreatePresence();
 
-        if (includeRequired && RequiredApplies(entity, prop, domain, analysis))
+        if (includeRequired && requiredApplies)
             checks.Add(RequiredCheck(prop.Name, value));
 
         foreach (var constraint in prop.Constraints) {
@@ -350,6 +380,10 @@ internal static class ConstraintCheckWriter {
     private static Poly.Introspection.ITypeSystem TargetOf(Domain domain) => RuntimeAnalysisCache.Session(domain).TargetTypeSystem;
 
     private static bool IsText(Property prop, Domain domain) => TargetOf(domain).LengthApplies(prop.Type.TypeName);
+
+    /// <summary>A required value can still be null in CLR terms: Text/Binary or any nullable domain type.</summary>
+    private static bool CanBeNull(Property prop, Domain domain) =>
+        IsText(prop, domain) || IsNullableDomainType(prop.Type.TypeName, domain);
 
     /// <summary>True when the domain type maps to a nullable CLR type (string or reference type).</summary>
     private static bool IsNullableDomainType(string typeName, Domain domain) {

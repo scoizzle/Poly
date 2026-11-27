@@ -127,8 +127,9 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
         RelationshipNavigation navigation => !IsPathPrefixPredicate(navigation.TargetProperty)
             && NavigationReadMayBeAbsent(navigation, binderEntity),
         MatchExpr match => match.Arms.Select(a => a.Value).Append(match.Else).Any(arm => MayBeAbsent(arm, binderEntity)),
-        Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide or Ontology.Modulo =>
-            value.Children.OfType<DomainExpression>().Any(operand => MayBeAbsent(operand, binderEntity)),
+        Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide or Ontology.Modulo
+            or Ontology.Negate =>
+                value.Children.OfType<DomainExpression>().Any(operand => MayBeAbsent(operand, binderEntity)),
         _ => false,
     };
 

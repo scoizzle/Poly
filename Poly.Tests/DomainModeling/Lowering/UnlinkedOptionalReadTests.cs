@@ -344,6 +344,35 @@ public class UnlinkedOptionalReadTests {
         await AssertAnswers(linked, new() { ["ScoreOdd"] = true });
     }
 
+    /// <summary>A negated read through an unlinked hop is absent like every other arithmetic: the comparison
+    /// answers the absent rule instead of dereferencing the missing advisor, on both hosts.</summary>
+    [Test]
+    public async Task Policy_NegationThroughUnlinkedHop_AnswersTheAbsentRule_OnBothHosts() {
+        const string dsl = """
+            domain Neg
+            Advisor: entity { Score: Number }
+            Customer: entity {
+              Name: Text
+              advisor: Advisor optional
+              ScoreNeg: policy { 0 > -(advisor Score) }
+            }
+            """;
+        var scenario = ParityScenario.FromDsl(dsl, "NegationThroughHop");
+
+        var unlinked = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("Name", "Ada"));
+            side.EvaluatePolicy("ScoreNeg");
+        });
+        await AssertAnswers(unlinked, new() { ["ScoreNeg"] = false });
+
+        var linked = await scenario.AssertAgree(side => {
+            var advisor = side.Create("Advisor", ("Score", 1L));
+            side.Create("Customer", ("Name", "Ada"), ("advisor", advisor));
+            side.EvaluatePolicy("ScoreNeg");
+        });
+        await AssertAnswers(linked, new() { ["ScoreNeg"] = true });
+    }
+
     static async Task AssertAnswers(IReadOnlyList<ParityOutcome> outcomes, Dictionary<string, bool> expected) {
         foreach (var (policy, answer) in expected) {
             var actual = outcomes.First(o => o.Step == $"policy {policy}");

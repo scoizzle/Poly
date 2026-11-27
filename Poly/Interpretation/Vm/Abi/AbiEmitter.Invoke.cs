@@ -774,16 +774,17 @@ public static partial class AbiEmitter {
     private static readonly ConditionalWeakTable<Node, Dictionary<CompilationMode, Action<VmState>[]>> AstCallables = new();
 
     /// <summary>
-    /// The most actions one invoke chain may hold (#1115). An invoked action's body is compiled into
-    /// the caller's frame, so compile depth follows the chain. This counted limit is a cheap early refusal
-    /// for the plain chain only: how much stack a link spends depends on how deeply its invoke is nested,
-    /// so <see cref="Poly.Analysis.ExecutionStack.EnsureCompileFrame"/> bounds the actual stack use and
-    /// can refuse a nested chain at fewer links. Each action contributes two inline frames (its wrapper
-    /// and its <c>__BodyOf</c> body), which is what <see cref="MaxInlineInvokeFrames"/> counts.
+    /// The deepest invoke chain the emitter will compile, in actions (#1115, #1121). An invoked action's body
+    /// is compiled into the caller's frame, so compile nesting follows the chain; this counts the callables
+    /// whose compiles are in progress on this thread. An action has two compile levels (its wrapper and its
+    /// <c>__BodyOf</c> body), so <see cref="MaxInlineInvokeFrames"/> allows this many actions. A wide fan-out
+    /// shares one depth, so only a genuinely deep chain is refused. How much stack a link spends depends on how
+    /// deeply its invoke is nested, so <see cref="Poly.Analysis.ExecutionStack.EnsureCompileFrame"/> bounds the
+    /// actual stack use and can refuse a nested chain at fewer links.
     /// </summary>
     internal const int MaxInvokeChainActions = 256;
 
-    /// <summary>The inline-frame budget: an action's wrapper plus its body.</summary>
+    /// <summary>The inline-frame budget: two compiled callables per action.</summary>
     private const int MaxInlineInvokeFrames = MaxInvokeChainActions * 2;
 
     /// <summary>
@@ -797,6 +798,10 @@ public static partial class AbiEmitter {
     // slot here; everything compiled under an outermost call is published together
     // when that call succeeds.
     [ThreadStatic] private static List<(Node Key, CompilationMode Mode, Action<VmState>[] Slot)>? _astPending;
+
+    // How many callables this thread is compiling right now (#1121). This is the current invoke-chain
+    // depth: a fan-out compiles one callee at a time, so its siblings do not add to it.
+    [ThreadStatic] private static int _astInlineDepth;
 
     private static readonly MethodInfo InvokeAstFunctionInfo =
         typeof(AbiEmitter).GetMethod(nameof(InvokeAstFunction),
@@ -1122,9 +1127,12 @@ public static partial class AbiEmitter {
             if (ReferenceEquals(entry.Key, key) && entry.Mode == mode)
                 return entry.Slot;
         }
-        // The compile started from link 1, so this callee is link pending.Count + 2. A chain past
-        // the counted limit is refused here, before more frames are pushed (#1115).
-        if (pending.Count + 2 > MaxInlineInvokeFrames)
+        // The compile started from link 1, so this callee is link _astInlineDepth + 1. Depth, not the
+        // pending count, is the chain length: every action the outermost compile reaches is pending, so
+        // counting those refused a shallow fan-out as "too deep" (#1121). A chain past the counted limit
+        // is refused here, before more frames are pushed (#1115).
+        var depth = _astInlineDepth + 1;
+        if (depth > MaxInlineInvokeFrames)
             throw new InvokeChainTooDeepException(
                 "VM compile rejected: the invoke chain is too deep — the simulator inlines invoked bodies and stops at "
                 + $"{MaxInvokeChainActions} actions{CallableName(key)}. Shorten the chain.");
@@ -1133,6 +1141,7 @@ public static partial class AbiEmitter {
         var outermost = start == 0;
         var slot = new Action<VmState>[1];
         pending.Add((key, mode, slot));
+        _astInlineDepth = depth;
         try {
             var lambdas = new List<Lambda>();
             CollectLambdas(body, lambdas);
@@ -1191,6 +1200,11 @@ public static partial class AbiEmitter {
             // outermost call drops the whole pending set, whose slots stay empty.
             pending.Clear();
             throw;
+        }
+        finally {
+            // Pop this link on every path, including the unwinding refusal. The stack budget leaves a
+            // quarter of the parse stack for this unwind (#1115).
+            _astInlineDepth = depth - 1;
         }
 
         if (outermost) {

@@ -102,9 +102,9 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.WonCount).HasColumnName("wonCount").HasColumnType("INTEGER");
     b.Property(x => x.OpenPipeline).HasColumnName("openPipeline").HasColumnType("TEXT");
     b.Property(x => x.ClosedTickets).HasColumnName("closedTickets").HasColumnType("INTEGER");
-    b.Metadata.FindNavigation(nameof(Account.Contacts))!.SetPropertyAccessMode(PropertyAccessMode.Field);
-    b.Metadata.FindNavigation(nameof(Account.Opportunities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
-    b.Metadata.FindNavigation(nameof(Account.Tickets))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Contacts")!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Opportunities")!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Tickets")!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
         modelBuilder.Entity<Contact>(b => {
     b.ToTable("Contacts");
@@ -124,9 +124,9 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("TEXT");
     b.Property(x => x.CloseBy).HasColumnName("closeBy").HasColumnType("TEXT");
     b.Property(x => x.Probability).HasColumnName("probability").HasColumnType("INTEGER");
-    b.Metadata.FindNavigation(nameof(Opportunity.Activities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
-    b.Metadata.FindNavigation(nameof(Opportunity.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
-    b.Metadata.FindNavigation(nameof(Opportunity.Quotes))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Activities")!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Lines")!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Quotes")!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
         modelBuilder.Entity<Activity>(b => {
     b.ToTable("Activities");
@@ -141,14 +141,14 @@ internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.HasKey("Id");
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("TEXT");
-    b.Metadata.FindNavigation(nameof(Quote.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Lines")!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
         modelBuilder.Entity<Campaign>(b => {
     b.ToTable("Campaigns");
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Metadata.FindNavigation(nameof(Campaign.Members))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Members")!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
         modelBuilder.Entity<CampaignMember>(b => {
     b.ToTable("CampaignMembers");

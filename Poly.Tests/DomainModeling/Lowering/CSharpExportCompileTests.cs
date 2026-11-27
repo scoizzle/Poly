@@ -259,7 +259,32 @@ public sealed class CSharpExportCompileTests {
         var db = DbContextText(e);
         await Assert.That(db).Contains("b.HasMany(e => e.Lines).WithOne()");
         await Assert.That(db.IndexOf("HasMany(", StringComparison.Ordinal))
-            .IsLessThan(db.IndexOf("FindNavigation(nameof(Order.Lines))", StringComparison.Ordinal));
+            .IsLessThan(db.IndexOf("FindNavigation(\"Lines\")", StringComparison.Ordinal));
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    // #1012: inside a class deriving from DbContext, `nameof(Entry.Children)` binds Entry to the inherited method
+    // DbContext.Entry<TEntity>(TEntity) (CS0119). The navigation's entity is spelled `<namespace>.<name>` there, as
+    // every other host file spells a generated domain type.
+    [Test]
+    public async Task ExportHost_EntityNamedLikeADbContextMember_QualifiesTheNameofAndCompiles() {
+        var e = ExportHost("""
+            domain Filesystem
+            uses sqlite
+            uses http
+
+            Entry: entity {
+              Name: Text unique
+              Size: Number range(0, )
+              children: many owned Entry
+              Directory: stage {
+                Put: action (child: Text) { create in children { Name: child Size: 0 } }
+              }
+              File: stage { }
+            }
+            """);
+
+        await Assert.That(DbContextText(e)).Contains("FindNavigation(\"Children\")");
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 

@@ -61,8 +61,8 @@ internal class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.CurrentBorrowCount).HasColumnName("currentBorrowCount").HasColumnType("INTEGER");
     b.Property(x => x.OutstandingFines).HasColumnName("outstandingFines").HasColumnType("INTEGER");
     b.HasIndex(x => x.Email).IsUnique();
-    b.Metadata.FindNavigation(nameof(Patron.Loans))!.SetPropertyAccessMode(PropertyAccessMode.Field);
-    b.Metadata.FindNavigation(nameof(Patron.Fines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Loans")!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation("Fines")!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
         modelBuilder.Entity<Loan>(b => {
     b.ToTable("Loans");

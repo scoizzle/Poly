@@ -2521,10 +2521,6 @@ What the id does not cover, and what that costs:
 
 ### Known wrong
 
-- **An absent value assigned into an `optional` Number** (simulator): the printed module stores null, the simulator
-  stores `0` when the write sits inside a branch, so `assign Seen to advisor Score` on an unlinked hop disagrees there;
-  a `Text` target stores absent on both. The rule itself is in *an unlinked optional navigation reads as absent*
-  (section 10). Not yet removed: the simulator's optional value-type slot has to carry the assigned null.
 - **`==` on a value type** (simulator): it compares the JSON text of an argument payload, so equal values with their
   fields in another order, or `2` against `2.0` in a `Decimal` field, are unequal there; the generated C# is right.
   Removed by X-06.

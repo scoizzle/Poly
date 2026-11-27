@@ -61,7 +61,11 @@ public sealed partial class EffectLoweringPass {
                 ? AssignConstraintFailure(ConstraintCheckWriter.FailureSpec(
                     ConstraintCheckWriter.RequiredCheck(assignProp!.Name, new Constant(null)),
                     _entity.Name, assignProp.Name))
-                : new Assignment(target.Value, new Constant(null));
+                // The absent value is the slot's own null, never the word 0 a bare null constant is in a
+                // value-type slot: an optional Number target stores absent, as the printed C# does.
+                : new Assignment(target.Value, assignProp is null
+                    ? new Constant(null)
+                    : TargetTypeAdapter.Adapt(new Constant(null), assignProp.Type, _context));
             assignment = new IfStatement(presence.Guard, new Block([assignment]), new Block([absent]));
         }
 

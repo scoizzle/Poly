@@ -198,9 +198,25 @@ public class UnlinkedOptionalReadTests {
         """;
 
     /// <summary>
-    /// An assign from an unlinked hop stores absent in an optional target, on both hosts. The Text target is the
-    /// #936 example (P-13b); an optional <em>Number</em> target is blocked in the simulator, which stores <c>0</c>
-    /// for a null written through a branch while the printed module stores null (reported on #936).
+    /// An assign from an unlinked hop stores absent in an optional target, on both hosts: the Text target is
+    /// the #936 example (P-13b), and the optional <em>Number</em> target is the same absent value in a
+    /// value-type slot, not the <c>0</c> a bare null constant lowers to.
+    /// </summary>
+    [Test]
+    public async Task Assign_ToOptionalNumberTarget_UnlinkedOptionalHop_StoresAbsent() {
+        var scenario = ParityScenario.FromDsl(AssignDsl, "UnlinkedAssignOptionalNumber");
+        var outcomes = await scenario.AssertAgree(side => {
+            side.Create("Customer", ("MustScore", 7L));
+            side.Invoke("Snapshot");
+        });
+
+        await Assert.That(outcomes[^1].Success).IsTrue()
+            .Because($"{outcomes[^1].FailureKind} {outcomes[^1].Message}");
+        await Assert.That(outcomes[^1].State["Seen"]).IsNull();
+    }
+
+    /// <summary>
+    /// An assign from an unlinked hop stores absent in an optional Text target, on both hosts (#936, P-13b).
     /// </summary>
     [Test]
     public async Task Assign_ToOptionalTarget_UnlinkedOptionalHop_StoresAbsent() {

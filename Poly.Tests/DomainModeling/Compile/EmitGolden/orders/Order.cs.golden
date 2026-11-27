@@ -253,6 +253,16 @@ internal class Order : Poly.Runtime.IActionScoped
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'customer' is required.", "Order.customer"));
         }
         var __customer = customer;
+        if (items != null)
+        {
+            foreach (var __itemsElement in items)
+            {
+                if (__itemsElement == null)
+                {
+                    return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'items' contains a null element.", "Order.items"));
+                }
+            }
+        }
         if (cancelReason == null)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'CancelReason' is required.", "Order.CancelReason"));

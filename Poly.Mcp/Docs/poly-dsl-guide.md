@@ -558,7 +558,10 @@ Cardinality: `one` (default, can be omitted), `many`.
 (`holder: Holder via tickets optional`). A required to-one must be bound when the entity is
 created (DMEFF011 above), and creating it with a null navigation fails with a Required
 failure on every host. A collection is never required, so `optional` on `many` is a
-positioned parse error. An **owned single part must be written `optional`**
+positioned parse error; its *elements* are still checked, and `Create` refuses a null element in
+a `many` argument with a Required failure (`'legs' contains a null element.`, `elementPath`
+`Shipment.legs`), so a policy that counts the collection (`count legs > 0`) is not satisfied by a
+null and no null reaches the stored list. An **owned single part must be written `optional`**
 (`hq: owned Address optional`): it is filled by `create in` after its owner exists, so it can
 never be required at create; a bare `hq: owned Address` is a positioned parse error. Use a
 policy (`policy { hq exists }`) to require it at a later stage. A bare navigation to the

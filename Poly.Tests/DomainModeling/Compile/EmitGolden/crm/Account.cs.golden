@@ -543,6 +543,36 @@ internal class Account : Poly.Runtime.IActionScoped
         }
         var __wonCount = (wonCount == null ? 0L : (long)wonCount);
         var __openPipeline = (openPipeline == null ? 0m : (decimal)openPipeline);
+        if (contacts != null)
+        {
+            foreach (var __contactsElement in contacts)
+            {
+                if (__contactsElement == null)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Required("'contacts' contains a null element.", "Account.contacts"));
+                }
+            }
+        }
+        if (opportunities != null)
+        {
+            foreach (var __opportunitiesElement in opportunities)
+            {
+                if (__opportunitiesElement == null)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Required("'opportunities' contains a null element.", "Account.opportunities"));
+                }
+            }
+        }
+        if (tickets != null)
+        {
+            foreach (var __ticketsElement in tickets)
+            {
+                if (__ticketsElement == null)
+                {
+                    return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Required("'tickets' contains a null element.", "Account.tickets"));
+                }
+            }
+        }
         var __closedTickets = (closedTickets == null ? 0L : (long)closedTickets);
         var created = new Account(__name, __industry, parent, __wonCount, __openPipeline, hq, contacts, opportunities, tickets, __closedTickets);
         Poly.Runtime.ActionScope.Create(created, "Account");

@@ -199,7 +199,8 @@ public class ActionScopeEmitTests {
         var (cs, _) = Print(Dsl, "ActionScopeNames");
         // L-03c adds `__depth`, the notify cascade's entry depth (a local of Notify{Stage}Subscribers).
         // L-08b adds the effective-value local of each Required or Defaulted create slot (`__` + the slot).
-        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+|code|label|score)$");
+        // #564 adds the element local of each `many` create slot's null check (`__` + the slot + `Element`).
+        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+|code|label|score|\w+Element)$");
         var stray = Regex.Matches(cs, @"\b__\w+").Select(m => m.Value).Where(n => !allowed.IsMatch(n)).Distinct().ToList();
         await Assert.That(string.Join(",", stray)).IsEqualTo("");
 

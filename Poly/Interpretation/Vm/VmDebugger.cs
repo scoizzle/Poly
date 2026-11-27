@@ -109,7 +109,7 @@ public sealed class VmDebugger : IDisposable {
         _stepRequested = true;
 
         _execution = Task.Run(() => {
-            try { _program.Delegate(_state); }
+            try { Interpreter.RunDelegate(_state); }
             catch (Exception ex) { _executionException = ex; }
             finally { _completed.Set(); _hookReady.Set(); }
         });

@@ -12,8 +12,9 @@ namespace Poly.Interpretation.Vm;
 /// Runtime calls (<see cref="Invoke"/>) and emitted function bodies agree on this
 /// layout: <c>FramePos</c> is the first argument slot, a parameter is read at
 /// <c>FramePos + index</c>, and the result is written to <c>slots[FramePos]</c>.
-/// A call that returns restores the frame state; a call that throws abandons the
-/// run, and <see cref="Interpreter"/> restores it once at the entry point. A
+/// A call that returns restores the frame state; a throw that leaves the program is
+/// restored once at <see cref="Interpreter"/>'s entry point, and one a guest catch
+/// handles is restored by the emitted catch handler. A
 /// catch-and-rethrow in this frame would make a deep unwind cost thousands of bytes
 /// per live level, so the refusal thrown for a chain too deep could overflow the very
 /// stack it protects (#1115).
@@ -98,8 +99,9 @@ internal static class VmCall {
 
     /// <summary>Run <paramref name="function"/> in a new frame and return the result
     /// it wrote at <c>slots[FramePointer]</c>. Restores the frame pointer, closure,
-    /// and stack pointer when the body returns; a body that throws abandons the run,
-    /// and <see cref="Interpreter"/> restores the entry state once.</summary>
+    /// and stack pointer when the body returns. A throw that leaves the program is
+    /// restored once at <see cref="Interpreter"/>'s entry point; one a guest catch
+    /// handles is restored by that emitted catch handler.</summary>
     public static long Invoke(
         VmState state, Action<VmState> function, ReadOnlySpan<long> args, int closureHandle = 0) {
         // A nested call recurses on the CLR stack, so an invoke chain's depth is bounded by what the calling
@@ -130,7 +132,8 @@ internal static class VmCall {
         state.ClosureHandle = closureHandle;
         // No catch here. A catch-and-rethrow at every live frame makes an unwind cost thousands of bytes per level,
         // so a depth refusal thrown 1,365 links deep aborted the stack it was protecting on linux/amd64 (#1115);
-        // the entry point restores the frame state once instead.
+        // a throw that leaves the program is restored at the entry point instead, and one a guest catch handles is
+        // restored by that emitted catch handler.
         function(state);
         long result = slots[framePos];
         state.FramePos = savedFp;

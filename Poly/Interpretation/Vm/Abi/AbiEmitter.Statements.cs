@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
@@ -630,6 +631,9 @@ public static partial class AbiEmitter {
             Throw(exVar));
     }
 
+    private static readonly MethodInfo ValueStackSetStackPointer =
+        typeof(VmValueStack).GetMethod(nameof(VmValueStack.SetStackPointer), [typeof(int)])!;
+
     private static Expression EmitTryCatchFinally(TryCatchFinally tcf, Context ctx) {
         // A try/finally whose try block yields cannot be a CLR try: the CLR will not jump into one
         // to resume. It is lowered to a frame flag and an explicit cleanup (see EmitLoweredFinally).
@@ -640,13 +644,40 @@ public static partial class AbiEmitter {
                 () => CompileNode(finallyBlock, ctx).Code);
         ctx.EnterUnresumable();
         try {
-            var tryBody = CompileNode(tcf.TryBlock, ctx).Code;
-            Expression? finallyBody = null;
-            if (tcf.FinallyBlock != null) {
-                finallyBody = CompileNode(tcf.FinallyBlock, ctx).Code;
-            }
+            // A callee entered through VmCall.Invoke leaves its frame state behind when it
+            // throws: the stack pointer sits at the callee extent and FramePos and
+            // ClosureHandle name the callee's frame. Nothing rewinds that on the way out
+            // (the entry point restores only a throw that leaves the program), so a guest
+            // catch that handles it must restore the enclosing frame before its body runs.
+            // An exception no catch here handles still has to leave the frame restored for
+            // a finally body that runs (and may call) before propagating to an outer catch,
+            // so the finally is covered by a fault handler: it restores on the exception
+            // path only. Restoring on a normal or return completion would move the stack
+            // pointer off the result word the caller reads.
+            using var savedSpLease = ctx.LeaseHelper(typeof(int), "_savedSp");
+            using var savedClosureLease = ctx.LeaseHelper(typeof(int), "_savedClosure");
+            using var savedFpLease = ctx.LeaseHelper(typeof(int), "_savedFp");
+            var savedSp = savedSpLease.Local;
+            var savedClosure = savedClosureLease.Local;
+            var savedFp = savedFpLease.Local;
+            var saveFrame = Block(
+                Assign(savedSp, ctx.SlotsStackPointer),
+                Assign(savedClosure, ctx.ClosureHandle),
+                Assign(savedFp, ctx.FramePosLocal));
+            var restoreFrame = Block(
+                Call(Property(ctx.State, nameof(VmState.Stack)), ValueStackSetStackPointer, savedSp),
+                Assign(ctx.ClosureHandle, savedClosure),
+                Assign(ctx.FramePosLocal, savedFp),
+                Assign(Property(ctx.State, nameof(VmState.FramePos)), savedFp),
+                Empty());
+            var tryBody = Block(saveFrame, CompileNode(tcf.TryBlock, ctx).Code);
+            var finallyBody = tcf.FinallyBlock != null
+                ? CompileNode(tcf.FinallyBlock, ctx).Code
+                : null;
             if (tcf.CatchClauses == null || tcf.CatchClauses.Count == 0) {
-                return finallyBody != null ? TryFinally(tryBody, finallyBody) : tryBody;
+                return finallyBody != null
+                    ? TryFinally(TryFault(tryBody, restoreFrame), finallyBody)
+                    : tryBody;
             }
             // Catch bodies are void. A value-producing try (an assignment, an await)
             // has to match, or Expression.TryCatch rejects the tree.
@@ -675,6 +706,7 @@ public static partial class AbiEmitter {
                         bodyExpr
                     );
                 }
+                catchBodyExpr = Block(restoreFrame, catchBodyExpr);
                 var catchStores = ctx.EmitScopeStores();
                 var catchObservation = WhenDebugHookAttached(ctx, catchStores);
                 if (catchObservation is not null)
@@ -686,7 +718,8 @@ public static partial class AbiEmitter {
                         : Block(catchBodyExpr, Empty())));
             }
             if (finallyBody != null) {
-                return TryCatchFinally(tryBody, finallyBody, catchBlocks.ToArray());
+                return TryFinally(TryFault(TryCatch(tryBody, catchBlocks.ToArray()), restoreFrame),
+                    finallyBody);
             }
             return TryCatch(tryBody, catchBlocks.ToArray());
         }

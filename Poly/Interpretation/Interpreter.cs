@@ -232,12 +232,13 @@ public static class Interpreter {
     }
 
     /// <summary>
-    /// Runs the compiled delegate and restores the entry frame state once if it throws. A failed run abandons its
-    /// frames, so this is the one place the restore is needed: a catch-and-rethrow in every call frame
+    /// Runs the compiled delegate and restores the entry frame state once if it throws. A throw that leaves the
+    /// program is restored here, at the one entry point: a catch-and-rethrow in every call frame
     /// (<see cref="VmCall"/>) made an unwind cost thousands of bytes per live level, so a depth refusal thrown deep
-    /// in an invoke chain overflowed the stack it was protecting (#1115).
+    /// in an invoke chain overflowed the stack it was protecting (#1115). A throw that a guest catch handles is
+    /// restored by that emitted catch handler instead.
     /// </summary>
-    private static void RunDelegate(VmState state) {
+    internal static void RunDelegate(VmState state) {
         try {
             state.Program.Delegate(state);
         }

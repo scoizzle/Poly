@@ -1765,9 +1765,8 @@ public class PackOracleTests {
     }
 
     /// <summary>P-12a fix round: an optional unique Date key is a <c>DateOnly?</c>, and the generated host compiles with it
-    /// (it did not, CS1501, with the unguarded ISO format) and serves. The create path is not exercised: on this host every
-    /// create of such an entity answers 409 Unique (and an optional unique Text key kills the host at boot, a
-    /// <c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.</summary>
+    /// (it did not, CS1501, with the unguarded ISO format) and serves. #611/#634: an absent optional unique value is not a
+    /// key, so a create that omits it succeeds; before the fix every such create answered 409 Unique.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
@@ -1777,6 +1776,12 @@ public class PackOracleTests {
 
         using var list = await oracle.Client.GetAsync("/api/slots");
         await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        using var first = await PostJsonAsync(oracle, "/api/slots", "Name", "one");
+        await Assert.That((int)first.StatusCode).IsEqualTo(201);
+        using var second = await PostJsonAsync(oracle, "/api/slots", "Name", "two");
+        await Assert.That((int)second.StatusCode).IsEqualTo(201)
+            .Because("a second instance may omit an optional unique value");
     }
 
     /// <summary>P-12a: the GET body of a keyed entity carries every declared scalar and the stage, under the member

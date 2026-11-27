@@ -38,6 +38,12 @@ public sealed partial class DomainExpressionLoweringPass {
             .Select((a, i) => (Condition: RouteCondition(a.Condition), Value: Arm(a.Value, target, typing.ArmTypes[i], toDecimal, slot)))
             .ToList();
         var otherwise = Arm(m.Else, target, typing.ArmTypes[^1], toDecimal, slot);
+        // An arm value that reads through an unlinked hop is absent (#936): the arm's own presence guard decides
+        // whether the value is read at all, so the chain never dereferences a missing hop. The guard is the same
+        // one a consumer of the match asks for, evaluated lazily inside the branch that selects the arm.
+        var presences = m.Arms.Select(a => PresenceOf(a.Value, _currentSubject))
+            .Append(PresenceOf(m.Else, _currentSubject))
+            .ToList();
         if (slot is not null) {
             var result = _names.Next("match");
             // A nested match that can be absent fills its own local with statements of its own: they run inside the branch of the arm
@@ -46,11 +52,16 @@ public sealed partial class DomainExpressionLoweringPass {
                 arm is MatchExpr inner && _analysis.GetMetadata<MatchTypingMetadata>(inner) is { Unified.Optional: true };
             LoweredExpression Hoisted(LoweredExpression lowered, DomainExpression arm) =>
                 Lazy(arm) ? lowered with { Statements = [] } : lowered;
-            Node Take(LoweredExpression lowered, DomainExpression arm) =>
-                new Block([.. Lazy(arm) ? lowered.Statements : [], new Assignment(result, lowered.Value)]);
-            Node chain = Take(otherwise, m.Else);
+            Node Take(LoweredExpression lowered, DomainExpression arm, ValuePresence presence) {
+                var present = new Block(
+                    [.. Lazy(arm) ? lowered.Statements : [], new Assignment(result, lowered.Value)]);
+                return presence.Guard is { } guard
+                    ? new IfStatement(guard, present)
+                    : (Node)present;
+            }
+            Node chain = Take(otherwise, m.Else, presences[^1]);
             for (var i = arms.Count - 1; i >= 0; i--)
-                chain = new IfStatement(arms[i].Condition.Value, Take(arms[i].Value, m.Arms[i].Value), new Block([chain]));
+                chain = new IfStatement(arms[i].Condition.Value, Take(arms[i].Value, m.Arms[i].Value, presences[i]), new Block([chain]));
             var parts = LoweredExpression.Combine(
                 [.. arms.SelectMany((a, i) => new[] { a.Condition, Hoisted(a.Value, m.Arms[i].Value) }), Hoisted(otherwise, m.Else)], result);
             return new LoweredExpression(

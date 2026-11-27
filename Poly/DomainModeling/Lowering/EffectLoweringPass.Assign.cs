@@ -38,6 +38,20 @@ public sealed partial class EffectLoweringPass {
             ? assignProp.Name
             : null;
 
+        // A value read through an unlinked optional hop is absent (#936): an optional target stores absent,
+        // a required target fails the same Required the assign guard gives a null value. The value is read
+        // only on the present branch, so an unlinked hop is never dereferenced.
+        var presence = _expressionPass.PresenceOf(a.Value, Subject);
+        var requiredTarget = assignProp is not null && EntityStructureAnalyzer.IsRequired(assignProp);
+        // A match over an absent-able arm lowers to an optional local; the guard above proves it has a value,
+        // so the present branch writes the target's own type (the word the printed module declares).
+        if (requiredTarget && presence.ThroughHop && presence.Guard is not null
+            && ContainsOptionalMatch(a.Value))
+            value = value with {
+                Value = new TypeCast(value.Value,
+                    DomainToCSharpExporter.MapDomainTypeRef(assignProp!.Type, _domain, _analysis))
+            };
+
         var needsConstraintWrap = assignProp is not null
             && HasAssignableConstraints(assignProp)
             && !SatisfiesAssignConstraints(assignProp, value.Value)
@@ -51,12 +65,7 @@ public sealed partial class EffectLoweringPass {
                 uniqueName,
                 _expressionPass.MayBeAbsent(a.Value, name => _binderEntities?.GetValueOrDefault(name)));
 
-        // A value read through an unlinked optional hop is absent (#936): an optional target stores absent,
-        // a required target fails the same Required the assign guard gives a null value. The value is read
-        // only on the present branch, so an unlinked hop is never dereferenced.
-        var presence = _expressionPass.PresenceOf(a.Value, Subject);
         if (presence.ThroughHop && presence.Guard is not null) {
-            var requiredTarget = assignProp is not null && EntityStructureAnalyzer.IsRequired(assignProp);
             Node absent = requiredTarget
                 ? AssignConstraintFailure(ConstraintCheckWriter.FailureSpec(
                     ConstraintCheckWriter.RequiredCheck(assignProp!.Name, new Constant(null)),
@@ -71,6 +80,15 @@ public sealed partial class EffectLoweringPass {
 
         return LoweredExpression.Before([target, value], assignment);
     }
+    /// <summary>
+    /// True when <paramref name="value"/> is, or contains, a <c>match</c> whose analysed type can be absent. Such a
+    /// match lowers to an optional local, so a required assign target needs the present value's own type on the
+    /// guarded branch (the guard proves the local has a value).
+    /// </summary>
+    private bool ContainsOptionalMatch(DomainExpression value) =>
+        (value is MatchExpr match && _analysis.GetMetadata<MatchTypingMetadata>(match) is { Unified.Optional: true })
+        || value.Children.OfType<DomainExpression>().Any(ContainsOptionalMatch);
+
     /// <summary>
     /// True when a constant/enum-member RHS provably satisfies every emit-time
     /// constraint on the property, so the assignment needs no fail-before-mutate

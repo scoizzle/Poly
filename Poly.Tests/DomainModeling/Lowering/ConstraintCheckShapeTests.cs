@@ -44,7 +44,22 @@ public class ConstraintCheckShapeTests {
     }
 
     [Test]
-    public async Task Assign_PatternGuard_KeepsNullConjunct() {
+    public async Task Assign_OptionalPatternGuard_KeepsNullConjunct() {
+        var (domain, _) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Tag: entity {
+              Code: Text pattern("^[A-Z]{3}$") optional
+              Relabel: action (code: Text) { assign Code to code }
+            }
+            """);
+        var cs = PrintAssign(domain, "Tag", "Code", "code");
+
+        await Assert.That(cs).Contains(
+            "if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
+    }
+
+    [Test]
+    public async Task Assign_RequiredPatternGuard_HasNoDeadNullConjunct() {
         var (domain, _) = EvolvedDomain.FromDsl("""
             domain Lab
             Tag: entity {
@@ -54,8 +69,11 @@ public class ConstraintCheckShapeTests {
             """);
         var cs = PrintAssign(domain, "Tag", "Code", "code");
 
+        // #546: the Required guard above already returned, so a `!= null` conjunct here is dead —
+        // and it left the value maybe-null for the assignment after it (CS8601 in a strict build).
         await Assert.That(cs).Contains(
-            "if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
+            "if (!System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
+        await Assert.That(cs).DoesNotContain("!= null &&");
     }
 
     [Test]

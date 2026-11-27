@@ -143,6 +143,15 @@ internal static class ConstraintCheckWriter {
         Node? CreatePresence() =>
             nullableValue ? new NotEqual(value, new Constant(null)) : null;
 
+        // Assign's value presence: a required property's value is non-null already (the Required guard
+        // above returned), so a `!= null` conjunct there is dead and leaves the local maybe-null
+        // (CS8601). Length and pattern share the one rule.
+        Node? AssignValuePresence() => isAssign
+            ? (RequiredApplies(entity, prop, domain, analysis)
+                ? null
+                : new NotEqual(value, new Constant(null)))
+            : CreatePresence();
+
         if (includeRequired && RequiredApplies(entity, prop, domain, analysis))
             checks.Add(RequiredCheck(prop.Name, value));
 
@@ -166,11 +175,7 @@ internal static class ConstraintCheckWriter {
                     // Assign optional length groups under one `value != null` guard (an empty
                     // string is a value, so its length is checked); create carries per-check
                     // presence instead.
-                    var lengthPresence = isAssign
-                        ? (RequiredApplies(entity, prop, domain, analysis)
-                            ? null
-                            : new NotEqual(value, new Constant(null)))
-                        : CreatePresence();
+                    var lengthPresence = AssignValuePresence();
                     if (l.MinLength > 0)
                         checks.Add(new Check(Kind.LengthMinimum,
                             new LessThan(lenAccess, new Constant((long)l.MinLength)),
@@ -184,16 +189,14 @@ internal static class ConstraintCheckWriter {
                     break;
 
                 case PatternConstraint p when isText:
-                    // Assign null-guards IsMatch unconditionally; create only for optional slots.
-                    var patternPresence = isAssign
-                        ? new NotEqual(value, new Constant(null))
-                        : CreatePresence();
+                    // The Required guard above already returned, so a required value needs no
+                    // `!= null` conjunct here (it was dead, and left the value maybe-null: CS8601).
                     checks.Add(new Check(Kind.Pattern,
                         new Syntactic.Not(
                             new Invoke(
                                 new Member(style.RegexStatic(), "IsMatch"),
                                 [value, new Constant(AnchorEnd(p.Pattern))])),
-                        patternPresence,
+                        AssignValuePresence(),
                         new Constant($"'{prop.Name}' does not match the required pattern.")));
                     break;
 

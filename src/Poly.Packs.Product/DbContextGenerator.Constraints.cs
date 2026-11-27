@@ -30,15 +30,22 @@ public sealed partial class DbContextGenerator {
         }
 
         // Enum columns store the int backing value. The CLR type name is not a SQL type.
+        // A declared length is expressed by HasMaxLength. An explicit HasColumnType would carry the
+        // provider's unbounded type (nvarchar(max)) and stay on the column, so the unique index EF builds
+        // for it is invalid (SQL Server error 1919); a length-bounded Text therefore leaves the type to EF,
+        // which derives nvarchar(n) from the max length (#590). An unbounded Text keeps its mapped type.
         var columnType = col.ColumnType;
         if (col.IsEnum
             && (string.Equals(columnType, col.ClrTypeName, StringComparison.Ordinal)
                 || string.Equals(columnType, col.DomainType, StringComparison.Ordinal)))
             columnType = "INTEGER";
-        chain = new Invoke(
-            new Member(chain, "HasColumnType"),
-            new Constant(columnType)
-        );
+        var derivesTypeFromLength = col.MaxLength is not null && col.DomainType is "Text" or "String";
+        if (!derivesTypeFromLength) {
+            chain = new Invoke(
+                new Member(chain, "HasColumnType"),
+                new Constant(columnType)
+            );
+        }
         if (col.IsEnum) {
             chain = new Invoke(new Member(chain, "HasConversion")) {
                 TypeArguments = [TypeReference.To(typeof(int))]
@@ -55,14 +62,6 @@ public sealed partial class DbContextGenerator {
             chain = new Invoke(
                 new Member(chain, "HasMaxLength"),
                 new Constant((int)col.MaxLength.Value)
-            );
-        }
-        else if ((propName.Equals("Email", StringComparison.Ordinal)
-                  || propName.Equals("EmailAddress", StringComparison.Ordinal))
-                 && col.Constraints.Any(c => c is PatternConstraint)) {
-            chain = new Invoke(
-                new Member(chain, "HasMaxLength"),
-                new Constant(256)
             );
         }
 

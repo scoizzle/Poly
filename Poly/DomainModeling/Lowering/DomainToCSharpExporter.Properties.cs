@@ -32,12 +32,13 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// True when the mapped CLR type is a non-nullable reference type (currently the
-    /// only one is <c>Text → string</c>), which the parameterless EF-materialization
-    /// ctor leaves unset and would otherwise raise CS8618.
+    /// True when the mapped CLR type is a non-nullable reference type (<c>Text → string</c> and
+    /// <c>Binary → byte[]</c>), which the parameterless EF-materialization ctor leaves unset
+    /// and would otherwise raise CS8618.
     /// </summary>
     private static bool IsNonNullableReferenceScalar(Node propRef) =>
-        propRef is TypeDefinitionReference stated && Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(stated.TypeDefinition) is "Text";
+        propRef is TypeDefinitionReference stated
+        && Poly.DomainModeling.Meaning.DomainTypeSystem.WordOf(stated.TypeDefinition) is "Text" or "Binary";
 
     private static bool IsDomainValueType(Domain domain, string typeName) =>
         domain.Types.OfType<ValueType>().Any(v =>

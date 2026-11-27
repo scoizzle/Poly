@@ -191,6 +191,124 @@ public sealed class ValuePayloadConstraintParityTests {
         await Assert.That(outcomes[1].Message).Contains("'Level' is required.");
     }
 
+    const string BinaryMissingMemberDsl = """
+        domain PayloadBinary
+
+        Blob: value {
+          Data: Binary
+          Label: Text
+        }
+
+        Order: entity {
+          Paid: Boolean optional
+          Pay: action (b: Blob) {
+            assign Paid to true
+          }
+        }
+        """;
+
+    /// <summary>
+    /// B1: an absent required Binary member reads null on both hosts, so the required guard
+    /// refuses it; the simulator used to read <c>Missing</c>, pass the guard, and succeed
+    /// where the printed C# failed.
+    /// </summary>
+    [Test]
+    public async Task PayloadMissingBinaryMember_FailsRequiredOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl(BinaryMissingMemberDsl, "PayloadMissingBinary")
+            .AssertAgree(side => {
+                side.Create("Order");
+                side.Invoke("Pay", ("b", new Dictionary<string, object?> { ["Label"] = "x" }));
+            });
+
+        await Assert.That(outcomes[1].ExceptionType).IsNull();
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[1].Message).Contains("'Data' is required.");
+    }
+
+    const string NestedMissingMemberDsl = """
+        domain PayloadNested
+
+        Money: value {
+          Amount: Decimal range(0, 1000)
+          Currency: Text length(3, 3)
+        }
+
+        Payment: value {
+          Price: Money
+          Note: Text
+        }
+
+        Order: entity {
+          Paid: Boolean optional
+          Pay: action (p: Payment) {
+            assign Paid to true
+          }
+        }
+        """;
+
+    /// <summary>
+    /// B2: an absent required nested value member reads null on both hosts, so the required
+    /// guard refuses it instead of the simulator throwing the <c>Missing</c> cast.
+    /// </summary>
+    [Test]
+    public async Task PayloadMissingNestedValueMember_FailsRequiredOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl(NestedMissingMemberDsl, "PayloadMissingNested")
+            .AssertAgree(side => {
+                side.Create("Order");
+                side.Invoke("Pay", ("p", new Dictionary<string, object?> { ["Note"] = "n" }));
+            });
+
+        await Assert.That(outcomes[1].ExceptionType).IsNull();
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[1].Message).Contains("'Price' is required.");
+    }
+
+    const string OptionalEntityReadDsl = """
+        domain OptionalEntityRead
+
+        Tier: enum { Gold, Silver }
+
+        Customer: entity {
+          Name: Text
+          Note: Text optional
+          Level: Tier optional
+          NoteAbsent: policy { Note is null }
+          LevelAbsent: policy { Level is null }
+        }
+        """;
+
+    /// <summary>
+    /// S-a: the absent-key rule is VM-wide, not payload-only. An unset optional Text entity
+    /// property reads null on every modeled read.
+    /// </summary>
+    [Test]
+    public async Task UnsetOptionalEntityText_ReadsNullOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl(OptionalEntityReadDsl, "OptionalEntityText")
+            .AssertAgree(side => {
+                side.Create("Customer", ("Name", "a"));
+                side.EvaluatePolicy("NoteAbsent");
+            });
+
+        await Assert.That(outcomes[1].State["NoteAbsent"]).IsEqualTo("True")
+            .Because("an absent Text is null on every modeled read, not just a payload member");
+    }
+
+    /// <summary>
+    /// S-a: an unset optional enum entity property reads null on every modeled read, not a
+    /// <c>Missing</c> member the enum guard would report.
+    /// </summary>
+    [Test]
+    public async Task UnsetOptionalEntityEnum_ReadsNullOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl(OptionalEntityReadDsl, "OptionalEntityEnum")
+            .AssertAgree(side => {
+                side.Create("Customer", ("Name", "a"));
+                side.EvaluatePolicy("LevelAbsent");
+            });
+
+        await Assert.That(outcomes[1].State["LevelAbsent"]).IsEqualTo("True")
+            .Because("an absent enum is null on every modeled read, not just a payload member");
+    }
+
     [Test]
     public async Task ContractDeclaredPayloadMemberAboveItsRange_FailsTheSameOnBothHosts() {
         var outcomes = await ParityScenario.FromDsl(ContractDsl, "PayloadContractRange")

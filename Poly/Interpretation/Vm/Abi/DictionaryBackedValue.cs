@@ -44,26 +44,21 @@ internal static class DictionaryBackedValue {
 
     /// <summary>
     /// Value used when a dictionary key is absent and the member has no constant
-    /// default. A converted value type uses that conversion's zero.
-    /// <see cref="System.Reflection.Missing"/> cannot be the other branch of a
+    /// default, for every modeled read: an entity member and a value-payload member
+    /// alike. A reference-typed target reads <c>null</c>, the absence a required guard
+    /// and a <c>null</c> test can see. A converted value type uses that conversion's
+    /// zero. <see cref="System.Reflection.Missing"/> cannot be the other branch of a
     /// value-type read: unboxing the condition then casts the zero to <c>Missing</c>.
     /// </summary>
     internal static Expression MissingKeyFallback(ITypeDefinition targetType) {
-        // Text is a reference type: an absent key is the absence of a value, so it reads
-        // null (the owner ruling that null is absence) and the required guard can see it.
-        if (RuntimeTypeOf(targetType) == typeof(string))
+        var runtime = RuntimeTypeOf(targetType);
+        // Text, Binary, and every modeled enum or value record are reference types at
+        // runtime, and an unset T? is null too: an absent key is the absence of a value
+        // (the owner ruling that null is absence), so the guard sees it instead of
+        // Missing, which the required guard would pass and a nested read would cast.
+        if (runtime is null || !runtime.IsValueType || Nullable.GetUnderlyingType(runtime) is not null)
             return Expression.Constant(null, typeof(object));
-        // An unset optional value is null. Nullable<T> has no primitive, so the
-        // value-type zero below would not apply and Missing cannot convert to T?.
-        if (targetType.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null)
-            return Expression.Constant(null, typeof(object));
-        // A modeled enum has no CLR zero here; absence is null, which the value-payload
-        // required guard reads, never a Missing member the enum guard would report.
-        if (targetType is Poly.Interpretation.Analysis.Semantics.AstTypeDefinition {
-            Form: Poly.Ast.Nodes.TypeDeclarationForm.Enum
-        })
-            return Expression.Constant(null, typeof(object));
-        var convert = ConvertMethod(RuntimeTypeOf(targetType));
+        var convert = ConvertMethod(runtime);
         if (convert is null || !convert.ReturnType.IsValueType)
             return Expression.Convert(Expression.Constant(System.Reflection.Missing.Value), typeof(object));
         var zero = Activator.CreateInstance(convert.ReturnType)!;

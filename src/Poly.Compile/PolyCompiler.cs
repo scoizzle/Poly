@@ -302,10 +302,9 @@ public sealed class PolyCompiler {
                 ok = false;
                 continue;
             }
-            if (!_options.Catalog.Contains(id)) {
+            if (_options.Catalog.ExtensionError(id) is { } refusal) {
                 diags.Add(ExtensionDiagnostic(build, tree, id, occurrence: 1, Severities.Error,
-                    DiagnosticCodes.UnknownExtension,
-                    $"Unknown domain extension '{id}'. Record only ids this catalog can resolve."));
+                    DiagnosticCodes.UnknownExtension, refusal));
                 ok = false;
             }
         }

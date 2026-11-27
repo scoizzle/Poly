@@ -21,7 +21,7 @@ GET http://localhost:5201/api/accounts/1/hq/1
 GET http://localhost:5201/api/products
 
 ### Get product by Sku
-GET http://localhost:5201/api/products/example-value
+GET http://localhost:5201/api/products/example-sku
 
 ### Create a new product
 POST http://localhost:5201/api/products
@@ -39,7 +39,7 @@ Content-Type: application/json
 GET http://localhost:5201/api/leads
 
 ### Get lead by Email
-GET http://localhost:5201/api/leads/example-value
+GET http://localhost:5201/api/leads/user@test.com
 
 ### Create a new lead
 POST http://localhost:5201/api/leads
@@ -47,15 +47,15 @@ Content-Type: application/json
 
 {
     "Name": "sample",
-    "Email": "example-email",
+    "Email": "user@test.com",
     "Company": "sample"
 }
 
 ### Action: Convert
-POST http://localhost:5201/api/leads/example-value/convert
+POST http://localhost:5201/api/leads/user@test.com/convert
 
 ### Action: Disqualify
-POST http://localhost:5201/api/leads/example-value/disqualify
+POST http://localhost:5201/api/leads/user@test.com/disqualify
 
 ### ──────────── Accounts ────────────
 
@@ -129,13 +129,13 @@ POST http://localhost:5201/api/accounts/1/restore
 GET http://localhost:5201/api/accounts/1/contacts
 
 ### Get contact by id for account
-GET http://localhost:5201/api/accounts/1/contacts/example-value
+GET http://localhost:5201/api/accounts/1/contacts/user@test.com
 
 ### Action: Retire
-POST http://localhost:5201/api/accounts/1/contacts/example-value/retire
+POST http://localhost:5201/api/accounts/1/contacts/user@test.com/retire
 
 ### Action: Reactivate
-POST http://localhost:5201/api/accounts/1/contacts/example-value/reactivate
+POST http://localhost:5201/api/accounts/1/contacts/user@test.com/reactivate
 
 ### ──────────── Opportunities ────────────
 

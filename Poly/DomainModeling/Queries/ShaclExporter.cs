@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -239,7 +238,13 @@ public static class ShaclExporter {
                     shape["x-poly-unique"] = true;
                     break;
                 case DefaultValueConstraint defaultValue:
-                    shape["x-poly-default"] = DefaultText(defaultValue.Expression);
+                    // One typed literal of the property's own datatype, so the default reads as the value it is; an
+                    // enum member is its IRI, as sh:in writes it. A runtime default has no static value on any door
+                    // and is omitted (#553).
+                    if (DefaultValueFacts.TryRead(defaultValue, property, byName, out var literal, out var enumMember))
+                        shape["x-poly-default"] = enumMember is not null && type is EnumType enumOfDefault
+                            ? EnumMemberNode(enumMember, enumOfDefault, typeIris)
+                            : Literal(literal, type);
                     break;
                 case RequiredConstraint:
                 case OptionalConstraint:
@@ -263,16 +268,22 @@ public static class ShaclExporter {
         if (type is EnumType enumType
             && equality.ExpectedValue is string member
             && enumType.MemberNames.Contains(member, StringComparer.Ordinal)) {
-            var term = TermFacets.Read(enumType.MemberFacets.GetValueOrDefault(member));
-            values.Add(new JsonObject {
-                ["@id"] = term?.Iri
-                    ?? DomainIris.Join(typeIris[enumType.Name], term?.Term ?? member),
-            });
+            values.Add(EnumMemberNode(member, enumType, typeIris));
             return values;
         }
 
         values.Add(Literal(equality.ExpectedValue, type));
         return values;
+    }
+
+    /// <summary>An enum member as the IRI the RDFS export gives it: the shape's <c>sh:in</c> and a default name it the
+    /// same way.</summary>
+    private static JsonObject EnumMemberNode(
+        string member, EnumType enumType, IReadOnlyDictionary<string, string> typeIris) {
+        var term = TermFacets.Read(enumType.MemberFacets.GetValueOrDefault(member));
+        return new JsonObject {
+            ["@id"] = term?.Iri ?? DomainIris.Join(typeIris[enumType.Name], term?.Term ?? member),
+        };
     }
 
     /// <summary>A typed literal; RDF-term equality needs the same datatype the shape declares.</summary>
@@ -298,12 +309,4 @@ public static class ShaclExporter {
         else
             shape["x-poly-" + keyword["sh:".Length..]] = node;
     }
-
-    private static string DefaultText(DomainExpression expression) => expression switch {
-        Literal { Value: null } => "null",
-        Literal { Value: string text } => $"\"{text}\"",
-        Literal { Value: { } value } => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "",
-        PropertyAccess access => access.Name,
-        _ => "…",
-    };
 }

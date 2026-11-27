@@ -61,10 +61,10 @@ internal class Loan : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkOverdue' requires stage 'Active' on entity 'Loan'.", "Loan.MarkOverdue", "Active"));
         }
         this.CurrentStage = LoanStage.Overdue;
-        var notify0 = this.NotifyOverdueSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyOverdueSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Loan.MarkOverdue"));
+            return DomainResult.Failure(__notify0.Error!.At("Loan.MarkOverdue"));
         }
         return DomainResult.Success();
     }
@@ -109,9 +109,9 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             this._patronLoansOverdueSubscribers = new List<Patron>();
         }
-        foreach (var existing in this._patronLoansOverdueSubscribers)
+        foreach (var __existing in this._patronLoansOverdueSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -125,12 +125,12 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             if (this._patronLoansOverdueSubscribers != null)
             {
-                foreach (var sub in this._patronLoansOverdueSubscribers)
+                foreach (var __sub in this._patronLoansOverdueSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachLoanOverdue(this);
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachLoanOverdue(this);
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -185,13 +185,13 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 500.", "Loan.Amount"));
         }
-        var created = new Loan(__book, __patron, __amount);
-        Poly.Runtime.ActionScope.Create(created, "Loan");
+        var __created = new Loan(__book, __patron, __amount);
+        Poly.Runtime.ActionScope.Create(__created, "Loan");
         if (patron != null)
         {
-            patron.AttachLoans(created);
+            patron.AttachLoans(__created);
         }
-        return DomainResult<Loan>.Success(created);
+        return DomainResult<Loan>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {

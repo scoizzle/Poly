@@ -105,10 +105,10 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         this.ReturnedAt = DateTime.UtcNow;
         this.CurrentStage = LoanStage.Returned;
-        var notify0 = this.NotifyReturnedSubscribers();
-        if (!notify0.IsSuccess)
+        var __notify0 = this.NotifyReturnedSubscribers();
+        if (!__notify0.IsSuccess)
         {
-            return DomainResult.Failure(notify0.Error!.At("Loan.Return"));
+            return DomainResult.Failure(__notify0.Error!.At("Loan.Return"));
         }
         return DomainResult.Success();
     }
@@ -119,9 +119,9 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             this._patronLoansOverdueSubscribers = new List<Patron>();
         }
-        foreach (var existing in this._patronLoansOverdueSubscribers)
+        foreach (var __existing in this._patronLoansOverdueSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -135,9 +135,9 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             this._patronLoansReturnedSubscribers = new List<Patron>();
         }
-        foreach (var existing in this._patronLoansReturnedSubscribers)
+        foreach (var __existing in this._patronLoansReturnedSubscribers)
         {
-            if (object.ReferenceEquals(existing, subscriber))
+            if (object.ReferenceEquals(__existing, subscriber))
             {
                 return;
             }
@@ -151,12 +151,12 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             if (this._patronLoansOverdueSubscribers != null)
             {
-                foreach (var sub in this._patronLoansOverdueSubscribers)
+                foreach (var __sub in this._patronLoansOverdueSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachLoanOverdue();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachLoanOverdue();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -174,12 +174,12 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             if (this._patronLoansReturnedSubscribers != null)
             {
-                foreach (var sub in this._patronLoansReturnedSubscribers)
+                foreach (var __sub in this._patronLoansReturnedSubscribers)
                 {
-                    var handlerResult0 = sub.WhenEachLoanReturned();
-                    if (!handlerResult0.IsSuccess)
+                    var __handlerResult0 = __sub.WhenEachLoanReturned();
+                    if (!__handlerResult0.IsSuccess)
                     {
-                        return handlerResult0;
+                        return __handlerResult0;
                     }
                 }
             }
@@ -232,18 +232,18 @@ internal class Loan : Poly.Runtime.IActionScoped
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Required("'borrower' is required.", "Loan.borrower"));
         }
         var __borrower = borrower;
-        var created = new Loan(status, __dueDate, returnedAt, timesRenewed, __book, __borrower);
-        Poly.Runtime.ActionScope.Create(created, "Loan");
-        var __entry = created.__EnterInitialStage();
+        var __created = new Loan(status, __dueDate, returnedAt, timesRenewed, __book, __borrower);
+        Poly.Runtime.ActionScope.Create(__created, "Loan");
+        var __entry = __created.__EnterInitialStage();
         if (!__entry.IsSuccess)
         {
             return DomainResult<Loan>.Failure(__entry.Error!);
         }
         if (borrower != null)
         {
-            borrower.AttachLoans(created);
+            borrower.AttachLoans(__created);
         }
-        return DomainResult<Loan>.Success(created);
+        return DomainResult<Loan>.Success(__created);
     }
     private int EnterNotifyCascade(string stageName)
     {

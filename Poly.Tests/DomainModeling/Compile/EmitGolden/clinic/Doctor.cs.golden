@@ -48,10 +48,10 @@ internal class Doctor : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StartShift' requires a linked 'schedule' on entity 'Doctor'.", "Doctor.schedule"));
         }
-        var invoke0 = this.Schedule.Open();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Schedule.Open();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("Doctor.StartShift"));
+            return DomainResult.Failure(__invoke0.Error!.At("Doctor.StartShift"));
         }
         return DomainResult.Success();
     }
@@ -111,10 +111,10 @@ internal class Doctor : Poly.Runtime.IActionScoped
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.", "Doctor.LicenseNo"));
         }
-        var created = new Doctor(__name, __licenseNo, __schedule);
-        Poly.Runtime.ActionScope.Create(created, "Doctor");
+        var __created = new Doctor(__name, __licenseNo, __schedule);
+        Poly.Runtime.ActionScope.Create(__created, "Doctor");
         db.Record("Doctor", "LicenseNo", __licenseNo);
-        return DomainResult<Doctor>.Success(created);
+        return DomainResult<Doctor>.Success(__created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)
     {

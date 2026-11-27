@@ -80,13 +80,13 @@ internal class Section : Poly.Runtime.IActionScoped
     }
     private DomainResult<WaitOffer> __BodyOfCreateWaitlist(Student? student)
     {
-        var waitOfferResult = WaitOffer.Create(student, this);
-        if (!waitOfferResult.IsSuccess)
+        var __waitOfferResult = WaitOffer.Create(student, this);
+        if (!__waitOfferResult.IsSuccess)
         {
-            return DomainResult<WaitOffer>.Failure(waitOfferResult.Error!);
+            return DomainResult<WaitOffer>.Failure(__waitOfferResult.Error!);
         }
-        var waitOffer = waitOfferResult.Value;
-        return DomainResult<WaitOffer>.Success(waitOffer);
+        var __waitOffer = __waitOfferResult.Value;
+        return DomainResult<WaitOffer>.Success(__waitOffer);
     }
     internal void AttachWaitlist(WaitOffer child)
     {
@@ -162,13 +162,13 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult<WaitOffer>.Failure(Poly.Runtime.DomainFailure.Stage("'Queue' requires stage 'Open' on entity 'Section'.", "Section.Queue", "Open"));
         }
-        var create0 = this.CreateWaitlist(who);
-        if (!create0.IsSuccess)
+        var __create0 = this.CreateWaitlist(who);
+        if (!__create0.IsSuccess)
         {
-            return DomainResult<WaitOffer>.Failure(create0.Error!.At("Section.Queue"));
+            return DomainResult<WaitOffer>.Failure(__create0.Error!.At("Section.Queue"));
         }
-        var created1 = create0.Value;
-        return DomainResult<WaitOffer>.Success(created1);
+        var __created1 = __create0.Value;
+        return DomainResult<WaitOffer>.Success(__created1);
     }
     internal DomainResult StaffLeave()
     {
@@ -208,10 +208,10 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StaffLeave' requires a linked 'instructor' on entity 'Section'.", "Section.instructor"));
         }
-        var invoke0 = this.Instructor.GoOnLeave();
-        if (!invoke0.IsSuccess)
+        var __invoke0 = this.Instructor.GoOnLeave();
+        if (!__invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.Error!.At("Section.StaffLeave"));
+            return DomainResult.Failure(__invoke0.Error!.At("Section.StaffLeave"));
         }
         return DomainResult.Success();
     }
@@ -359,10 +359,10 @@ internal class Section : Poly.Runtime.IActionScoped
         var __course = course;
         var __offeredSeats = (offeredSeats == null ? 0L : (long)offeredSeats);
         var __waitCleared = (waitCleared == null ? 0L : (long)waitCleared);
-        var created = new Section(__cap, __seatsTaken, __offeringTerm, __course, instructor, enrollments, waitlist, __offeredSeats, __waitCleared);
-        Poly.Runtime.ActionScope.Create(created, "Section");
-        created.InitializeSubscriptions();
-        return DomainResult<Section>.Success(created);
+        var __created = new Section(__cap, __seatsTaken, __offeringTerm, __course, instructor, enrollments, waitlist, __offeredSeats, __waitCleared);
+        Poly.Runtime.ActionScope.Create(__created, "Section");
+        __created.InitializeSubscriptions();
+        return DomainResult<Section>.Success(__created);
     }
     private void InitializeSubscriptions()
     {

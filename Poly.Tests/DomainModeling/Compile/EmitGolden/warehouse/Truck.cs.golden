@@ -69,16 +69,16 @@ internal class Truck : Poly.Runtime.IActionScoped
     }
     private DomainResult __BodyOfLoad(long weight)
     {
-        var assignValue0 = this.CurrentLoad + weight;
-        if (assignValue0 < 0L)
+        var __assignValue0 = this.CurrentLoad + weight;
+        if (__assignValue0 < 0L)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be >= 0.", "Truck.CurrentLoad"));
         }
-        if (assignValue0 > 40000L)
+        if (__assignValue0 > 40000L)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be <= 40000.", "Truck.CurrentLoad"));
         }
-        this.CurrentLoad = assignValue0;
+        this.CurrentLoad = __assignValue0;
         return DomainResult.Success();
     }
     internal DomainResult Dispatch()
@@ -190,14 +190,14 @@ internal class Truck : Poly.Runtime.IActionScoped
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Vin' value is already used on another 'Truck'.", "Truck.Vin"));
         }
-        var created = new Truck(__vin, __maxLoad, __currentLoad, __status, __warehouse, deliveries);
-        Poly.Runtime.ActionScope.Create(created, "Truck");
+        var __created = new Truck(__vin, __maxLoad, __currentLoad, __status, __warehouse, deliveries);
+        Poly.Runtime.ActionScope.Create(__created, "Truck");
         if (warehouse != null)
         {
-            warehouse.AttachTrucks(created);
+            warehouse.AttachTrucks(__created);
         }
         db.Record("Truck", "Vin", __vin);
-        return DomainResult<Truck>.Success(created);
+        return DomainResult<Truck>.Success(__created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)
     {

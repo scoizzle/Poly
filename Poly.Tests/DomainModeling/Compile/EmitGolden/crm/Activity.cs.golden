@@ -129,13 +129,13 @@ internal class Activity : Poly.Runtime.IActionScoped
             return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Required("'opportunity' is required.", "Activity.opportunity"));
         }
         var __opportunity = opportunity;
-        var created = new Activity(__subject, __dueOn, __opportunity);
-        Poly.Runtime.ActionScope.Create(created, "Activity");
+        var __created = new Activity(__subject, __dueOn, __opportunity);
+        Poly.Runtime.ActionScope.Create(__created, "Activity");
         if (opportunity != null)
         {
-            opportunity.AttachActivities(created);
+            opportunity.AttachActivities(__created);
         }
-        return DomainResult<Activity>.Success(created);
+        return DomainResult<Activity>.Success(__created);
     }
     public object __Snapshot()
     {

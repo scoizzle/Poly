@@ -190,9 +190,7 @@ public class GeneratedHandlerNameCollisionTests {
     }
 
     // Closing-round probe (b): an action parameter named like a numbered generated local. `result0` holds (refused or
-    // compiles; it compiles) for a fan-out `for … invoke`, on master and here. The other numbered locals (assignValue0,
-    // create0, invoke0, target0) and a member named like the bare Create's `created` or another entity's stage enum
-    // are accepted by analysis and do not compile, on master too: reported, not asserted.
+    // compiles; it compiles) for a fan-out `for … invoke`, on master and here.
     [Test]
     public async Task ActionParameter_NamedResult0_BesideAFanOutForInvoke_IsRefusedOrCompiles() {
         const string dsl = """
@@ -211,5 +209,90 @@ public class GeneratedHandlerNameCollisionTests {
         var (errors, compile) = Verdict(dsl, "Result0");
 
         await Assert.That(errors.Count == 0 ? compile : "").IsEqualTo("");
+    }
+
+    // ── #889 / #927 / #516: every lowered local is `__`-prefixed, so no author name collides with one ──
+
+    /// <summary>The four documents #889 records, one per numbered <c>LocalNames.Next</c> local: analysis accepted each
+    /// and the printed C# did not compile (CS0136), because the parameter and the lowered local shared a name.</summary>
+    private static readonly (string Name, string Dsl, string Entity, string Action)[] NumberedLocalDocuments = [
+        ("assignValue0", """
+            domain P
+            Doc: entity {
+              Score: Number range(0, 10) default(0)
+              Bump: action (assignValue0: Number) { assign Score to Score + 1 }
+            }
+            """, "Doc", "Bump"),
+        ("create0", """
+            domain P
+            Holder: entity {
+              kids: many Kid
+              Make: action (create0: Number) { create in kids { } }
+            }
+            Kid: entity {
+              holder: Holder via kids
+            }
+            """, "Holder", "Make"),
+        ("invoke0", """
+            domain P
+            Doc: entity {
+              Score: Number default(0)
+              Inner: action { assign Score to 1 }
+              Outer: action (invoke0: Number) { invoke Inner }
+            }
+            """, "Doc", "Outer"),
+        ("target0", """
+            domain P
+            Holder: entity {
+              kids: many Kid
+              Run: action (target0: Number) { for k in kids { invoke k.Go } }
+            }
+            Kid: entity {
+              N: Number default(0)
+              holder: Holder via kids
+              Go: action { assign N to 1 }
+            }
+            """, "Holder", "Run"),
+    ];
+
+    /// <summary>A property named <c>Created</c> is an author name, not a reserved one: the bare factory's local for the
+    /// new instance must not meet the slot's <c>__created</c> effective value, and the constructor must not meet the
+    /// <c>created</c> parameter. Both hosts create, with the authored value.</summary>
+    [Test]
+    public async Task Property_NamedCreated_CreatesOnBothHosts() {
+        const string dsl = """
+            domain P
+            Doc: entity { Created: Text }
+            """;
+
+        var (vm, printed) = ParityScenario.FromDsl(dsl, "CreatedProperty")
+            .Run(side => side.Create("Doc", ("Created", "t")));
+
+        await Assert.That(vm[0].Success).IsTrue();
+        await Assert.That(printed[0].Success).IsTrue();
+        foreach (var outcome in new[] { vm[0], printed[0] })
+            await Assert.That(outcome.State["Created"]).IsEqualTo("t");
+    }
+
+    /// <summary>An action parameter named like a numbered lowered local compiles and runs on both hosts.</summary>
+    [Test]
+    public async Task ActionParameter_NamedANumberedGeneratedLocal_CompilesAndRunsOnBothHosts() {
+        var problems = new List<string>();
+        foreach (var (name, dsl, entity, action) in NumberedLocalDocuments) {
+            try {
+                var (vm, printed) = ParityScenario.FromDsl(dsl, "Numbered" + name).Run(side => {
+                    side.Create(entity);
+                    side.Invoke(action, (name, 1L));
+                });
+                foreach (var outcome in new[] { vm[1], printed[1] })
+                    if (!outcome.Success)
+                        problems.Add($"{name}: {outcome.Step} failed: {outcome.Message ?? outcome.ExceptionType}");
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) {
+                problems.Add($"{name}: {ex.Message.Split('\n')[0]}");
+            }
+        }
+
+        await Assert.That(string.Join("\n", problems)).IsEqualTo("");
     }
 }

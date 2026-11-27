@@ -85,7 +85,7 @@ public sealed class ContractSpliceTests {
 
         await Assert.That(cs.Contains("StripeAdapters", StringComparison.Ordinal)).IsFalse();
         await Assert.That(cs.Contains("Contract endpoint 'Stripe.Charge' request:", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(cs.Contains("if (!adapterResult.IsSuccess)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs.Contains("if (!__adapterResult.IsSuccess)", StringComparison.Ordinal)).IsTrue();
     }
 
     [Test]

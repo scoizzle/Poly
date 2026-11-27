@@ -1022,8 +1022,9 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
   after the `for`. The DMREL002 analysis warning below still reports a collection no code
   writes. (Why the rule changed: `docs/decisions/2026-10-17-for-zero-records-is-a-no-op.md`.)
 - **Some predicates are rejected at analysis:** a `for` predicate policy that reads a
-  path-prefix hop is rejected ("reads a path-prefix hop"): an unlinked hop simulates false
-  but the export dereferences null. One that tests `exists` on a property (not a
+  path-prefix hop is rejected ("reads a path-prefix hop"). A hop read answers absent since
+  #936, so the refusal is now conservative rather than a host difference; the `for` form has
+  no cross-host pin of its own yet, so it stays refused. One that tests `exists` on a property (not a
   relationship) is rejected ("tests 'exists' on a property") wherever every quantifier
   on the way to it resolves: on the record itself, or on a related record inside an
   `any`/`all`/`none`/`count` body. Simulate and export disagree on whether an unset
@@ -1335,6 +1336,27 @@ Cross-entity **writes** via assign are **banned** — only local entity properti
 | Absence | `not certificate exists` | `Not(Exists(...))` / `NotExists` — store-aware when target is a relationship |
 | Multi-predicate | `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation` with `And` body |
 
+**An unlinked `optional` navigation reads as absent.** `advisor Score` where `advisor` is declared `optional`
+and the instance has no advisor is the same absent value an omitted `optional` property has, and every position
+treats it that way (#936):
+
+- a comparison answers the optional-value rule above: `advisor Score > 1` and `advisor Score is 1` are false,
+  `advisor Score is not 1` and `advisor Name is not "Pat"` are **true**, and `advisor Due is null` is true while
+  `advisor Due is not null` is false — the last two are how an absent read is tested;
+- a policy, an action `require` or a stage `require` that reads it is false, so the action is refused with `Policy`
+  (`400` over HTTP), and the same predicate under `require not` is **true**, as `not (OptDue < Today)` is true
+  while the optional date is absent;
+- an `assign` into an `optional` target stores absent (`assign Note to advisor Name` leaves `Note` null); into a
+  required target it fails `Required` (`'Target' is required.`) and changes nothing;
+- an `invoke Rel.Action` on an unlinked link stays a `Required` refusal: there is no instance to run the action on,
+  and a silent no-op would skip an effect the document asked for.
+
+`exists` follows the same rule: `exists advisor mentor` is false while `advisor` or `mentor` is unlinked, and
+`not exists advisor mentor` is true. One host gap remains: an absent value assigned into an `optional` **Number**
+target is `0` in the simulator and null in the printed module (an absent `Text` target agrees), listed under
+*Known wrong*.
+
+
 <!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 assignee Active
@@ -1491,7 +1513,7 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 - Cross-entity writes (nav path as assign target) are banned.
 - **Path-prefix / owned / quantifier / Rel exists** require session instances + links when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
 
-  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same session instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against the linked instances. **Fail closed:** missing `instanceId`, instance, or domain metadata. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `oracle_expression` is a fragment probe on a synthetic bag — not named-policy evaluate.
+  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same session instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against the linked instances. **Fail closed:** missing `instanceId`, instance, or domain metadata. Empty links: a path-prefix read is absent, so its comparison answers the optional rule (#936, section 10); `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `oracle_expression` is a fragment probe on a synthetic bag — not named-policy evaluate.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
@@ -2236,11 +2258,10 @@ What the id does not cover, and what that costs:
 
 - **Two creates with the same unique value, at once** (every host with a unique index): one answers `500` instead of
   `409 Unique`, because the unique index refuses the second save after the host's check has passed. Removed by P-09.
-- **A read through a to-one link that is not linked** (both hosts) answers differently by position. A guard, a policy
-  read or an `invoke` refuses the action with `Required` (`400` over HTTP). A comparison through the unlinked hop is
-  false for every operator, `!=` and `is not` included, whereas an absent value at the end of a set link makes `!=`
-  true. An `assign` from it fails: the simulator reports `Member 'Score' requires a non-null instance`, and over HTTP
-  the generated C# throws and the host answers `500`. Removed by #936.
+- **An absent value assigned into an `optional` Number** (simulator): the printed module stores null, the simulator
+  stores `0` when the write sits inside a branch, so `assign Seen to advisor Score` on an unlinked hop disagrees there;
+  a `Text` target stores absent on both. The rule itself is in *an unlinked optional navigation reads as absent*
+  (section 10). Not yet removed: the simulator's optional value-type slot has to carry the assigned null.
 - **`==` on a value type** (simulator): it compares the JSON text of an argument payload, so equal values with their
   fields in another order, or `2` against `2.0` in a `Decimal` field, are unequal there; the generated C# is right.
   Removed by X-06.

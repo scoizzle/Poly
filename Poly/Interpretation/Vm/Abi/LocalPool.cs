@@ -204,10 +204,14 @@ internal sealed class EmitScope : IDisposable {
         var local = _ctx.HoldRing(slotType);
         _yielded = _ctx.RingDepth - 1;
         // A ulong or enum result is a word, not an assignment to a long local's CLR
-        // type. An IEEE slot already matches and keeps the value itself.
+        // type. An IEEE slot already matches and keeps the value itself. A typed int slot
+        // stores the number, so an enum or a smaller integral type narrows to it rather
+        // than encoding the word the slot cannot hold (#907).
         var stored = local.Type == value.Type
             ? value
-            : RingCodec.ToFrame(value, value.Type, _ctx.HeapLocal);
+            : local.Type == typeof(int)
+                ? RingCodec.AsRepresentation(value, typeof(int))
+                : RingCodec.ToFrame(value, value.Type, _ctx.HeapLocal);
         return Place(local, stored);
     }
 

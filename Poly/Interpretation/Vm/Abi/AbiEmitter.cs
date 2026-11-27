@@ -726,6 +726,7 @@ public static partial class AbiEmitter {
     private static Type CSharpBinaryNumericType(Type left, Type right, bool shift) {
         if (shift)
             return left == typeof(ulong) ? typeof(ulong)
+                : left == typeof(uint) ? typeof(uint)
                 : RingCodec.IsInt32Width(left) ? typeof(int) : typeof(long);
         if (left == typeof(bool) || right == typeof(bool))
             throw RejectBinary(left, right);
@@ -884,10 +885,11 @@ public static partial class AbiEmitter {
             ResolvedOperandType(left, ctx), ResolvedOperandType(right, ctx));
 
     /// <summary>The width one operand's own arithmetic runs at: <c>int</c> for the types C#
-    /// promotes to 32 bits, the word otherwise.</summary>
+    /// promotes to 32 bits, <c>uint</c> for the 32-bit unsigned set, the word otherwise.</summary>
     private static Type IntegerWidthOf(Node node, Context ctx) {
         var type = ResolvedOperandType(node, ctx);
         return type == typeof(ulong) ? typeof(ulong)
+            : type == typeof(uint) ? typeof(uint)
             : RingCodec.IsInt32Width(type) ? typeof(int) : typeof(long);
     }
 
@@ -1055,6 +1057,7 @@ public static partial class AbiEmitter {
             throw new InvalidOperationException(
                 "VM compile rejected: cannot resolve the width of a nullable arithmetic operand.");
         return underlying == typeof(ulong) ? typeof(ulong)
+            : underlying == typeof(uint) ? typeof(uint)
             : RingCodec.IsInt32Width(underlying) ? typeof(int) : typeof(long);
     }
 

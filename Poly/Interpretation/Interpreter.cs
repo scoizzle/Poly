@@ -265,8 +265,17 @@ public static class Interpreter {
             return InterpreterResult.Void;
 
         if (rootKind == PrimValueKind.StackScalar) {
-            if (clr == typeof(double) || clr == typeof(float))
+            // The word is not the number for two shapes: a single-precision value stores a double's IEEE bits of the
+            // float, and an unsigned 64-bit value stores its bitcast. Answer the type the program states, which is the
+            // CLR value C# computes; every other word is the number itself.
+            if (clr == typeof(double))
                 return InterpreterResult.FromValue(BitConverter.Int64BitsToDouble(raw));
+            if (clr == typeof(float))
+                return InterpreterResult.FromValue((float)BitConverter.Int64BitsToDouble(raw));
+            if (clr == typeof(ulong))
+                return InterpreterResult.FromValue(unchecked((ulong)raw));
+            if (clr == typeof(nuint))
+                return InterpreterResult.FromValue(unchecked((nuint)(ulong)raw));
             // A temporal word is the value, not the bits. DateTime.FromBinary keeps Kind.
             if (clr is not null && LocalType.Of(clr) is LocalType.TemporalLocal { IsWord: true } temporal)
                 return InterpreterResult.FromValue(temporal.Read(raw));

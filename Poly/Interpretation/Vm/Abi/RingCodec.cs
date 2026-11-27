@@ -69,8 +69,19 @@ internal static class RingCodec {
                 + $"operand (left={left?.Name ?? "unresolved"}, right={right?.Name ?? "unresolved"}).");
         if (IsInt64Width(left) || IsInt64Width(right))
             return typeof(long);
-        return IsInt32Width(left) && IsInt32Width(right) ? typeof(int) : typeof(long);
+        if (IsInt32Width(left) && IsInt32Width(right))
+            return typeof(int);
+        // C#'s unsigned 32-bit set: uint beside a byte, a ushort, a char or a uint promotes to uint, so the
+        // operation wraps at 32 bits. Beside an int, an sbyte, a short or a long it promotes to long instead.
+        if ((left == typeof(uint) && IsUnsigned32OrSmaller(right)) || (right == typeof(uint) && IsUnsigned32OrSmaller(left)))
+            return typeof(uint);
+        return typeof(long);
     }
+
+    /// <summary>The types C# keeps in <c>uint</c> beside a <c>uint</c>: the unsigned types narrower than
+    /// <c>uint</c>, plus <c>uint</c> itself and <c>char</c>, which converts to it.</summary>
+    private static bool IsUnsigned32OrSmaller(Type type) =>
+        type == typeof(uint) || type == typeof(byte) || type == typeof(ushort) || type == typeof(char);
 
     /// <summary>An IEEE <c>double</c> expression as its ring slot: the raw bit
     /// pattern. The one writer of the double-to-long bitcast.</summary>

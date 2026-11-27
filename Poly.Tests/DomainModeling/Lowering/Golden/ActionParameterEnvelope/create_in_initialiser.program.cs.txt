@@ -26,9 +26,24 @@ using (var scope = app.Services.CreateScope())
     await SeedAsync(db);
 }
 
-app.MapGet("/api/orders", async (TDbCtx db) => await db.Orders.ToListAsync());
+app.MapGet("/api/orders", async (TDbCtx db) => {
+    var orders = await db.Orders.ToListAsync();
+    foreach (var order in orders)
+    {
+        await db.Entry(order).Collection(e => e.Lines).LoadAsync();
+    }
+    return orders;
+});
 
-app.MapGet("/api/orders/{id}", async (int id, TDbCtx db) => (await db.Orders.FindAsync(id) is T.Order order ? Results.Ok(order) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/orders/{id}", async (int id, TDbCtx db) => {
+    var order = await db.Orders.FindAsync(id);
+    if (order == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(order).Collection(e => e.Lines).LoadAsync();
+    return Results.Ok(order);
+});
 
 app.MapPost("/api/orders", async (OrderDto dto, TDbCtx db) => {
     var orderResult = T.Order.Create(null);
@@ -48,6 +63,10 @@ app.MapGet("/api/orders/{id}/lines", async (int id, TDbCtx db) => {
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
+    foreach (var orderLine in parent.Lines.ToList())
+    {
+        await db.Entry(orderLine).Reference(e => e.Order).LoadAsync();
+    }
     return Results.Ok(parent.Lines);
 });
 
@@ -63,6 +82,7 @@ app.MapGet("/api/orders/{id}/lines/{orderLineId}", async (int id, int orderLineI
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Order).LoadAsync();
     return Results.Ok(child);
 });
 

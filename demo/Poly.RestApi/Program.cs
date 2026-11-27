@@ -65,9 +65,26 @@ app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
     return Results.Created(string.Concat("/api/books/", System.Uri.EscapeDataString(bookResult.Value.ISBN)), bookResult.Value);
 });
 
-app.MapGet("/api/patrons", async (LibraryDbContext db) => await db.Patrons.ToListAsync());
+app.MapGet("/api/patrons", async (LibraryDbContext db) => {
+    var patrons = await db.Patrons.ToListAsync();
+    foreach (var patron in patrons)
+    {
+        await db.Entry(patron).Collection(e => e.Loans).LoadAsync();
+        await db.Entry(patron).Collection(e => e.Fines).LoadAsync();
+    }
+    return patrons;
+});
 
-app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Library.Patron patron ? Results.Ok(patron) : StatusProblem(404, "Not Found")));
+app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => {
+    var patron = await db.Patrons.FirstOrDefaultAsync(e => e.Email == email);
+    if (patron == null)
+    {
+        return StatusProblem(404, "Not Found");
+    }
+    await db.Entry(patron).Collection(e => e.Loans).LoadAsync();
+    await db.Entry(patron).Collection(e => e.Fines).LoadAsync();
+    return Results.Ok(patron);
+});
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
     var patronResult = Library.Patron.Create(db, dto.Name, dto.Email, null, null, dto.MaxItems, null, null, null, null);
@@ -102,6 +119,11 @@ app.MapGet("/api/patrons/{email}/loans", async (string email, LibraryDbContext d
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Loans).LoadAsync();
+    foreach (var loan in parent.Loans.ToList())
+    {
+        await db.Entry(loan).Reference(e => e.Book).LoadAsync();
+        await db.Entry(loan).Reference(e => e.Borrower).LoadAsync();
+    }
     return Results.Ok(parent.Loans);
 });
 
@@ -117,6 +139,8 @@ app.MapGet("/api/patrons/{email}/loans/{id}", async (string email, int id, Libra
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Book).LoadAsync();
+    await db.Entry(child).Reference(e => e.Borrower).LoadAsync();
     return Results.Ok(child);
 });
 
@@ -127,6 +151,10 @@ app.MapGet("/api/patrons/{email}/fines", async (string email, LibraryDbContext d
         return StatusProblem(404, "Not Found");
     }
     await db.Entry(parent).Collection(e => e.Fines).LoadAsync();
+    foreach (var fine in parent.Fines.ToList())
+    {
+        await db.Entry(fine).Reference(e => e.Patron).LoadAsync();
+    }
     return Results.Ok(parent.Fines);
 });
 
@@ -142,6 +170,7 @@ app.MapGet("/api/patrons/{email}/fines/{id}", async (string email, int id, Libra
     {
         return StatusProblem(404, "Not Found");
     }
+    await db.Entry(child).Reference(e => e.Patron).LoadAsync();
     return Results.Ok(child);
 });
 

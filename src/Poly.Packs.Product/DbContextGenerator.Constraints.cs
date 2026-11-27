@@ -75,11 +75,19 @@ public sealed partial class DbContextGenerator {
     private static string FormatBound(decimal d) =>
         d.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>Quotes a column identifier for a SQL expression. Double quotes are the standard
+    /// form every shipped provider accepts (SQLite, SQL Server with <c>QUOTED_IDENTIFIER ON</c>,
+    /// PostgreSQL), and an unquoted name that is a keyword (<c>Limit</c>, <c>Order</c>, <c>Group</c>)
+    /// is a syntax error in the DDL (#632). An embedded quote is doubled, per the SQL standard.</summary>
+    private static string QuoteIdentifier(string name) =>
+        "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+
     /// <summary>Builds the SQL predicate for a verified column's CHECK constraint.</summary>
     private static string CheckSql(string columnName, ValueRange verified) {
+        var column = QuoteIdentifier(columnName);
         var parts = new List<string>();
-        if (verified.Min is not null) parts.Add($"{columnName} >= {FormatBound(verified.Min.Value)}");
-        if (verified.Max is not null) parts.Add($"{columnName} <= {FormatBound(verified.Max.Value)}");
+        if (verified.Min is not null) parts.Add($"{column} >= {FormatBound(verified.Min.Value)}");
+        if (verified.Max is not null) parts.Add($"{column} <= {FormatBound(verified.Max.Value)}");
         return string.Join(" AND ", parts);
     }
 }

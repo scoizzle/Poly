@@ -1884,6 +1884,9 @@ function Square(a: Number): Number = a * a
   error.
 - A call evaluates to the function's declared return type. Simulation and printed C# agree:
   lowering binds each argument to the parameter and lowers the body there.
+- A call is inlined where it is written; generated C# has no method for the function, so a C#
+  caller cannot call it by name. The body is lowered at the call site, so the printed code and
+  the simulator still agree.
 - Fail-closed diagnostics (all errors): `DMFUN001` unknown function, `DMFUN002` wrong number of
   arguments, `DMFUN003` argument type not assignable to the parameter type, `DMFUN004`
   recursion (direct or through other functions), `DMFUN005` impure body, `DMFUN006` body vs

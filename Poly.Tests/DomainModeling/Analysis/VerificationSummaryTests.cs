@@ -609,12 +609,17 @@ public class VerificationSummaryTests {
         await Assert.That(row.Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
         await Assert.That(row.Property).IsEqualTo("Notes");
         await Assert.That(row.Constraint).IsEqualTo("length(0, 50)");
+        // A Text with no `length(...)` is [0, +∞) since #1040, but a context with no postcondition is
+        // still a missing bound (that rule predates the interval), so this action — which has no stage
+        // context — keeps UnknownBound rather than reading a length interval where no value exists.
         await Assert.That(row.Reason).IsEqualTo(UnverifiedReason.UnknownBound);
     }
 
     [Test]
     public async Task Division_IsUnknown() {
-        // #579: `/` is not modelled by the interval flow; the write is unverified, never proven.
+        // #579 was fixed by knowing `/` has no interval; #1040 gives it one, so the write is now a
+        // known range that can fall outside ([0, 5] against range(0, 3)) — still unverified, so the
+        // verdict stays unknown, never proven.
         var result = Parse("""
             domain Test
             Box: entity {
@@ -627,12 +632,13 @@ public class VerificationSummaryTests {
         var summary = result.Analysis.GetVerification(result.Root);
 
         await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
-        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.UnsupportedOperator);
+        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
     }
 
     [Test]
     public async Task MatchResult_IsUnknown() {
-        // #608: a `match` result has no interval, so the write is unverified, never proven.
+        // #608 was fixed by never guessing a match's value; #1040 hulls the arms ([1, 500]), which can
+        // fall outside range(0, 100) — still unverified, so the verdict stays unknown, never proven.
         var result = Parse("""
             domain Test
             Inv: entity {
@@ -646,7 +652,7 @@ public class VerificationSummaryTests {
         var summary = result.Analysis.GetVerification(result.Root);
 
         await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
-        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.UnsupportedOperator);
+        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
     }
 
     [Test]

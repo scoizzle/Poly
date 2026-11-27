@@ -28,9 +28,8 @@ public static partial class AbiEmitter {
     /// </summary>
     private static Expression EmitInvoke(Invoke invoke, Context ctx) {
         // An AST callee's body is compiled into the caller's frame (TryCompileAstCallable), so this
-        // recursion follows the whole invoke chain (#1115). Probe what is left so a chain too deep for
-        // the compile thread is the typed failure, never an abort.
-        Poly.Analysis.ExecutionStack.Ensure();
+        // recursion follows the whole invoke chain (#1115). The depth is counted there; the probe this
+        // call used to make could not stop a chain the compile thread's stack was already too small for.
         // Handle Invoke(Member(instance, "Method"), args) — resolve the method
         // and call it directly via CLR reflection, bypassing full lambda handling.
         if (invoke.Delegate is Member member) {
@@ -774,6 +773,31 @@ public static partial class AbiEmitter {
     private static readonly object AstCallableGate = new();
     private static readonly ConditionalWeakTable<Node, Dictionary<CompilationMode, Action<VmState>[]>> AstCallables = new();
 
+    // How many AST callables this thread is compiling into the frame it started from (#1115). The
+    // emitter inlines each invoked body, so this follows an invoke chain; past
+    // MaxInlineInvokeFrames the chain is refused with a typed failure rather than recursing into the
+    // stack overflow the old remaining-stack probe could not reliably prevent.
+    [ThreadStatic] private static int _astInlineDepth;
+
+    /// <summary>
+    /// The most actions one invoke chain may hold (#1115). An invoked action's body is compiled into
+    /// the caller's frame, so compile depth follows the chain; this counted limit is well below the
+    /// ~344 links at which the 16 MB compile stack overflows (measured in Debug). Each action in the
+    /// chain contributes two inline frames (its wrapper and its <c>__BodyOf</c> body), which is what
+    /// <see cref="MaxInlineInvokeFrames"/> counts.
+    /// </summary>
+    public const int MaxInvokeChainActions = 256;
+
+    /// <summary>The inline-frame budget: an action's wrapper plus its body.</summary>
+    private const int MaxInlineInvokeFrames = MaxInvokeChainActions * 2;
+
+    /// <summary>
+    /// A legal invoke chain too deep for the emitter to inline (#1115). Unlike
+    /// <see cref="UnresumableBodyRejection"/> this is not a body-shape reject: no caller can fall back
+    /// to a name dispatch and run the right body, so every enclosing compile rethrows it.
+    /// </summary>
+    internal sealed class InvokeChainTooDeepException(string message) : InvalidOperationException(message);
+
     // Slots this thread is compiling, outermost first. A recursive call finds its own
     // slot here; everything compiled under an outermost call is published together
     // when that call succeeds.
@@ -1103,10 +1127,17 @@ public static partial class AbiEmitter {
             if (ReferenceEquals(entry.Key, key) && entry.Mode == mode)
                 return entry.Slot;
         }
+        // The compile started from link 1, so this callee is link _astInlineDepth + 2. A chain past
+        // the counted limit is refused here, before more frames are pushed (#1115).
+        if (_astInlineDepth + 2 > MaxInlineInvokeFrames)
+            throw new InvokeChainTooDeepException(
+                "VM compile rejected: the invoke chain is too deep — the simulator inlines invoked bodies and stops at "
+                + $"{MaxInvokeChainActions} actions{CallableName(key)}. Shorten the chain.");
 
         var start = pending.Count;
         var slot = new Action<VmState>[1];
         pending.Add((key, mode, slot));
+        _astInlineDepth++;
         try {
             var lambdas = new List<Lambda>();
             CollectLambdas(body, lambdas);
@@ -1143,7 +1174,7 @@ public static partial class AbiEmitter {
             // Drop this slot and everything compiled under it: those bodies may
             // call this slot, which stays empty.
             pending.RemoveRange(start, pending.Count - start);
-            if (ex is UnresumableBodyRejection)
+            if (ex is UnresumableBodyRejection or InvokeChainTooDeepException)
                 throw;
             if (ex is not (InvalidOperationException or NotSupportedException))
                 throw;
@@ -1160,6 +1191,9 @@ public static partial class AbiEmitter {
             rejection = ex.Message;
             return null;
         }
+        finally {
+            _astInlineDepth--;
+        }
 
         if (start == 0) {
             lock (AstCallableGate) {
@@ -1170,6 +1204,13 @@ public static partial class AbiEmitter {
         }
         return slot;
     }
+
+    /// <summary>The refusal's site: the name of the callable the emitter stopped at, when it has one.</summary>
+    private static string CallableName(Node key) => key switch {
+        MethodDefinitionNode method => $" while compiling '{method.Name}'",
+        ConstructorDefinitionNode => " while compiling a constructor",
+        _ => "",
+    };
 
     /// <summary>
     /// True when <paramref name="body"/> is one call (or return of a call) on a type's

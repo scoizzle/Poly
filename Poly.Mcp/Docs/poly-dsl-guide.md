@@ -2470,6 +2470,9 @@ What an author or a client may rely on in this release, what may still change, a
 ### Stable
 
 - **The DSL** as this guide documents it.
+- **An invoke chain of at most 256 actions**: the simulator compiles each invoked body into its caller's frame, so a
+  longer chain is refused with a typed failure that names the limit and says to shorten the chain (a legal 200-link
+  chain runs; no host aborts on a deeper one).
 - **The JSON body of an entity**: its declared scalars (camel-cased member names) and, when the entity has stages,
   `currentStage`. A `Binary` member is base64, System.Text.Json's own `byte[]` encoding (#905).
 - **The HTTP failure shape**: a failure the domain raises is ProblemDetails whose `title` is the failure kind (see

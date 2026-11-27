@@ -443,6 +443,26 @@ public class CSharpWriterUnitTests {
         await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(once))).IsEqualTo(once);
     }
 
+    // issue 822: the reader folded typeof's operand as source text, so the writer escaped the keyword as an
+    // identifier (`typeof(@decimal)`); folding it as a type keeps the reference the writer prints.
+    [Test]
+    public async Task Read_Write_TypeofKeywordType_IsUnchanged() {
+        const string source =
+            "public class C\n" +
+            "{\n" +
+            "    public object M()\n" +
+            "    {\n" +
+            "        return typeof(decimal);\n" +
+            "    }\n" +
+            "}";
+
+        var round = CSharpLanguage.Write(CSharpLanguage.Read(source));
+
+        await Assert.That(round).Contains("typeof(decimal);");
+        await Assert.That(round).DoesNotContain("typeof(@decimal)");
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(round))).IsEqualTo(round);
+    }
+
     // ── E-03 / A14 item 4: every regenerated unit golden survives Write(Read(x)) unchanged ──
 
     public static IEnumerable<string> UnitGoldenFiles() {
@@ -456,26 +476,8 @@ public class CSharpWriterUnitTests {
             .Order(StringComparer.Ordinal);
     }
 
-    // Findings, not exemptions (issue 822, row E-11, theme E): each file below diverges today for the stated
-    // reason, and the test below pins that it still does, so fixing the reader or writer removes the row.
-    private const string RoundTripRow = "issue 822, row E-11";
-
-    private static readonly Dictionary<string, string> KnownRoundTripFindings = new(StringComparer.Ordinal) {
-        ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm-dslcompiler/Program.cs.golden"] =
-            RoundTripRow + ": the [Range(typeof(decimal), ...)] attribute (first difference, line 1366) does not round-trip",
-    };
-
-    [Test]
-    public async Task KnownRoundTripFindings_EveryKeyNamesAnExistingGolden() {
-        var root = AppContext.BaseDirectory;
-        while (root is not null && !File.Exists(Path.Combine(root, "docs/CORE.md")))
-            root = Directory.GetParent(root)?.FullName;
-        foreach (var key in KnownRoundTripFindings.Keys)
-            await Assert.That(File.Exists(Path.Combine(root!, key))).IsTrue().Because($"{key} is not a golden file");
-        await Assert.That(UnitGoldenFiles().Select(p => p.Replace('\\', '/')).ToHashSet())
-            .IsSupersetOf(KnownRoundTripFindings.Keys);
-    }
-
+    // Issue 822 closed the last row E-11→E-03 finding (`[Range(typeof(decimal), …)]`, `DateTime.UtcNow`), so the
+    // finding table and the test that kept each row honest are gone: every unit golden below is asserted unchanged.
     [Test]
     [MethodDataSource(nameof(UnitGoldenFiles))]
     public async Task Write_Read_UnitGolden_IsUnchanged(string relativePath) {
@@ -486,9 +488,6 @@ public class CSharpWriterUnitTests {
 
         var round = CSharpLanguage.Write(CSharpLanguage.Read(golden));
 
-        if (KnownRoundTripFindings.TryGetValue(relativePath.Replace('\\', '/'), out var finding))
-            await Assert.That(round).IsNotEqualTo(golden).Because($"known finding no longer reproduces: {finding}");
-        else
-            await Assert.That(round).IsEqualTo(golden);
+        await Assert.That(round).IsEqualTo(golden);
     }
 }

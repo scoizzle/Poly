@@ -71,7 +71,10 @@ Content-Type: application/json
 
 {
     "Name": "sample",
-    "Industry": "Technology"
+    "Industry": "Technology",
+    "WonCount": 0,
+    "OpenPipeline": 0.0,
+    "ClosedTickets": 0
 }
 
 ### Action: PlaceHq
